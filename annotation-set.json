@@ -1,0 +1,587 @@
+[
+  {
+    "utterance": "stop",
+    "referenceIntent": "AMAZON.StopIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "cancel",
+    "referenceIntent": "AMAZON.CancelIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "that's enough for now",
+    "referenceIntent": "AMAZON.CancelIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "help",
+    "referenceIntent": "AMAZON.HelpIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "what can you do",
+    "referenceIntent": "AMAZON.HelpIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play that again",
+    "referenceIntent": "AMAZON.RepeatIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "start from the beginning",
+    "referenceIntent": "AMAZON.StartOverIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "take me home",
+    "referenceIntent": "AMAZON.NavigateHomeIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "yes please",
+    "referenceIntent": "AMAZON.YesIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "no thanks",
+    "referenceIntent": "AMAZON.NoIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play the latest world news",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "world news"
+      }
+    ]
+  },
+  {
+    "utterance": "do you have anything on gardening",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "gardening"
+      }
+    ]
+  },
+  {
+    "utterance": "play me something about local history",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "local history"
+      }
+    ]
+  },
+  {
+    "utterance": "play something new",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "start my daily listen",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play from my followed creators",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play a podcast",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "format",
+        "value": "podcast"
+      }
+    ]
+  },
+  {
+    "utterance": "play me the newspaper",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "format",
+        "value": "newspaper"
+      }
+    ]
+  },
+  {
+    "utterance": "play me some comedy",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "comedy"
+      }
+    ]
+  },
+  {
+    "utterance": "do you have any sport",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "sport"
+      }
+    ]
+  },
+  {
+    "utterance": "show me poetry",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "poetry"
+      }
+    ]
+  },
+  {
+    "utterance": "play local content",
+    "referenceIntent": "PlayLocalIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "what's happening near me",
+    "referenceIntent": "PlayLocalIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play content near Manchester",
+    "referenceIntent": "PlayLocalIntent",
+    "referenceSlots": [
+      {
+        "name": "localQuery",
+        "value": "Manchester"
+      }
+    ]
+  },
+  {
+    "utterance": "surprise me",
+    "referenceIntent": "PlayRecommendationIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play trending content",
+    "referenceIntent": "PlayRecommendationIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "recommend something relaxing",
+    "referenceIntent": "PlayRecommendationIntent",
+    "referenceSlots": [
+      {
+        "name": "recommendationQuery",
+        "value": "something relaxing"
+      }
+    ]
+  },
+  {
+    "utterance": "discover jazz",
+    "referenceIntent": "PlayRecommendationIntent",
+    "referenceSlots": [
+      {
+        "name": "recommendationQuery",
+        "value": "jazz"
+      }
+    ]
+  },
+  {
+    "utterance": "show me more",
+    "referenceIntent": "ShowMoreBrowseIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "what comes next",
+    "referenceIntent": "ShowMoreBrowseIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play content from the BBC",
+    "referenceIntent": "PlayByOrganizationIntent",
+    "referenceSlots": [
+      {
+        "name": "organizationQuery",
+        "value": "the BBC"
+      }
+    ]
+  },
+  {
+    "utterance": "show me recordings from the local council",
+    "referenceIntent": "PlayByOrganizationIntent",
+    "referenceSlots": [
+      {
+        "name": "organizationQuery",
+        "value": "the local council"
+      }
+    ]
+  },
+  {
+    "utterance": "what's this about",
+    "referenceIntent": "WhatsThisAboutIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "tell me about this recording",
+    "referenceIntent": "WhatsThisAboutIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play something by Jane Smith",
+    "referenceIntent": "PlayByCreatorIntent",
+    "referenceSlots": [
+      {
+        "name": "creatorQuery",
+        "value": "Jane Smith"
+      }
+    ]
+  },
+  {
+    "utterance": "give me the latest from the gardening club",
+    "referenceIntent": "PlayByCreatorIntent",
+    "referenceSlots": [
+      {
+        "name": "creatorQuery",
+        "value": "the gardening club"
+      }
+    ]
+  },
+  {
+    "utterance": "anything by David Attenborough",
+    "referenceIntent": "PlayByCreatorIntent",
+    "referenceSlots": [
+      {
+        "name": "creatorQuery",
+        "value": "David Attenborough"
+      }
+    ]
+  },
+  {
+    "utterance": "what's new",
+    "referenceIntent": "BrowseContentIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "what dropped today",
+    "referenceIntent": "BrowseContentIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "what's trending",
+    "referenceIntent": "WhatsTrendingIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "what are people listening to",
+    "referenceIntent": "WhatsTrendingIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "set playback speed to 2",
+    "referenceIntent": "SetPlaybackSpeedIntent",
+    "referenceSlots": [
+      {
+        "name": "speed",
+        "value": "2"
+      }
+    ]
+  },
+  {
+    "utterance": "play at 1.5 speed",
+    "referenceIntent": "SetPlaybackSpeedIntent",
+    "referenceSlots": [
+      {
+        "name": "speed",
+        "value": "1.5"
+      }
+    ]
+  },
+  {
+    "utterance": "normal speed",
+    "referenceIntent": "SetPlaybackSpeedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "speed up",
+    "referenceIntent": "IncreaseSpeedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play faster",
+    "referenceIntent": "IncreaseSpeedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "slow down",
+    "referenceIntent": "DecreaseSpeedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "play it slower",
+    "referenceIntent": "DecreaseSpeedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "rewind",
+    "referenceIntent": "RewindIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "rewind 30 seconds",
+    "referenceIntent": "RewindIntent",
+    "referenceSlots": [
+      {
+        "name": "time",
+        "value": "PT30S"
+      }
+    ]
+  },
+  {
+    "utterance": "go back 10",
+    "referenceIntent": "RewindIntent",
+    "referenceSlots": [
+      {
+        "name": "number",
+        "value": "10"
+      }
+    ]
+  },
+  {
+    "utterance": "fast forward",
+    "referenceIntent": "FastForwardIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "skip ahead 2 minutes",
+    "referenceIntent": "FastForwardIntent",
+    "referenceSlots": [
+      {
+        "name": "time",
+        "value": "PT2M"
+      }
+    ]
+  },
+  {
+    "utterance": "jump forward 15",
+    "referenceIntent": "FastForwardIntent",
+    "referenceSlots": [
+      {
+        "name": "number",
+        "value": "15"
+      }
+    ]
+  },
+  {
+    "utterance": "that was brilliant",
+    "referenceIntent": "FeedbackEnjoyedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "really enjoyed that",
+    "referenceIntent": "FeedbackEnjoyedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "it was okay",
+    "referenceIntent": "FeedbackSomewhatIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "not bad",
+    "referenceIntent": "FeedbackSomewhatIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "not for me",
+    "referenceIntent": "FeedbackNotEnjoyedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "that was dull",
+    "referenceIntent": "FeedbackNotEnjoyedIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "skip the rating",
+    "referenceIntent": "SkipFeedbackIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "I'd rather not say",
+    "referenceIntent": "SkipFeedbackIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "turn on notifications",
+    "referenceIntent": "EnableNotificationsIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "let me know when there's new content",
+    "referenceIntent": "EnableNotificationsIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "turn off notifications",
+    "referenceIntent": "DisableNotificationsIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "stop sending me alerts",
+    "referenceIntent": "DisableNotificationsIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "do I have any notifications",
+    "referenceIntent": "HearNotificationsIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "check my notifications",
+    "referenceIntent": "HearNotificationsIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "who made this",
+    "referenceIntent": "WhoIsCreatorIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "who am I listening to",
+    "referenceIntent": "WhoIsCreatorIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "follow this creator",
+    "referenceIntent": "FollowCreatorIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "I want more from this creator",
+    "referenceIntent": "FollowCreatorIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "unfollow this creator",
+    "referenceIntent": "UnfollowCreatorIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "stop following",
+    "referenceIntent": "UnfollowCreatorIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "report this content",
+    "referenceIntent": "ReportContentIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "this is inappropriate",
+    "referenceIntent": "ReportContentIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "report this creator",
+    "referenceIntent": "ReportCreatorIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "next",
+    "referenceIntent": "AMAZON.NextIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "previous",
+    "referenceIntent": "AMAZON.PreviousIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "what's the weather in Paris",
+    "referenceIntent": "AMAZON.FallbackIntent",
+    "referenceSlots": []
+  },
+  {
+    "utterance": "I live in Manchester",
+    "referenceIntent": "SetLocationIntent",
+    "referenceSlots": [
+      {
+        "name": "location",
+        "value": "Manchester"
+      }
+    ]
+  },
+  {
+    "utterance": "my town is Norwich",
+    "referenceIntent": "SetLocationIntent",
+    "referenceSlots": [
+      {
+        "name": "location",
+        "value": "Norwich"
+      }
+    ]
+  },
+  {
+    "utterance": "Leeds",
+    "referenceIntent": "SetLocationIntent",
+    "referenceSlots": [
+      {
+        "name": "location",
+        "value": "Leeds"
+      }
+    ]
+  },
+  {
+    "utterance": "play the latest sport by Alan Ross",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "sport by Alan Ross"
+      }
+    ]
+  },
+  {
+    "utterance": "put on some comedy",
+    "referenceIntent": "PlayContentIntent",
+    "referenceSlots": [
+      {
+        "name": "topic",
+        "value": "comedy"
+      }
+    ]
+  },
+  {
+    "utterance": "change my location to Bristol",
+    "referenceIntent": "SetLocationIntent",
+    "referenceSlots": [
+      {
+        "name": "location",
+        "value": "Bristol"
+      }
+    ]
+  },
+  {
+    "utterance": "I've moved to Cardiff",
+    "referenceIntent": "SetLocationIntent",
+    "referenceSlots": [
+      {
+        "name": "location",
+        "value": "Cardiff"
+      }
+    ]
+  },
+  {
+    "utterance": "change my location",
+    "referenceIntent": "SetLocationIntent",
+    "referenceSlots": []
+  }
+]

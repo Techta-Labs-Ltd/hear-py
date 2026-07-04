@@ -1,0 +1,834 @@
+# Skill utterances — invocation: "test development"
+
+## Custom intents
+
+### PlayContentIntent (67)  — slots: {topic}:AMAZON.SearchQuery, {format}:ContentFormat
+- play the latest {topic}
+- play me the latest {topic}
+- play me the newest {topic}
+- play me the most recent {topic}
+- play me recent {topic}
+- find me the latest {topic}
+- find me {topic}
+- play the newest {topic}
+- play the most recent {topic}
+- play recent {topic}
+- play the latest
+- play {topic}
+- play some {topic}
+- I want {topic}
+- give me {topic}
+- do you have anything on {topic}
+- anything about {topic}
+- anything on {topic}
+- something about {topic}
+- something on {topic}
+- do you have {topic}
+- find something about {topic}
+- play me something on {topic}
+- play me something about {topic}
+- play something on {topic}
+- play something about {topic}
+- play
+- play something
+- start
+- start playing
+- listen
+- start listening
+- play me something
+- play for me
+- give me something new
+- start something fresh
+- start my daily listen
+- play content
+- play anything
+- read me something
+- give me something to listen to
+- hear something
+- play from my followed creators
+- play from followed creators
+- play something from my followed creators
+- listen to my followed creators
+- let me listen
+- play audio
+- play {format}
+- play a {format}
+- play the {format}
+- find a {format}
+- find me a {format}
+- put on a {format}
+- play today's {format}
+- play me a {format}
+- play me the {format}
+- play me latest {topic}
+- play latest {topic}
+- get me the latest {topic}
+- play me some {topic}
+- give me some {topic}
+- I would like some {topic}
+- put on some {topic}
+- show me {topic}
+- do you have any {topic}
+- any {topic} please
+
+### PlayLocalIntent (31)  — slots: {localQuery}:AMAZON.SearchQuery
+- play local
+- play local content
+- play near me
+- play near {localQuery}
+- play community
+- play community content
+- play from my community
+- play from my area
+- play content near me
+- play content near {localQuery}
+- play local {localQuery}
+- find local content
+- find content near me
+- find content near {localQuery}
+- show me local content
+- show me content near me
+- what's local
+- what's on near me
+- what's on near {localQuery}
+- what's happening near me
+- what's happening near {localQuery}
+- what's happening locally
+- local content
+- nearby content
+- content near me
+- content near {localQuery}
+- near me
+- something near me
+- nearby audio
+- local audio
+- local recordings
+
+### PlayRecommendationIntent (19)  — slots: {recommendationQuery}:AMAZON.SearchQuery
+- play trending content
+- play popular content
+- play top picks
+- play recommendations
+- play trending {recommendationQuery}
+- play popular {recommendationQuery}
+- surprise me
+- hit me with something
+- put something on
+- discover something new
+- discover {recommendationQuery}
+- find me something good
+- find me something {recommendationQuery}
+- curate something
+- curate {recommendationQuery}
+- recommend something
+- what do you recommend
+- recommend {recommendationQuery}
+- what's good
+
+### ShowMoreBrowseIntent (9)
+- show me more
+- what are the next ones
+- what are the next results
+- next ones
+- more recordings
+- more content
+- what else did you find
+- keep going
+- what comes next
+
+### PlayByOrganizationIntent (11)  — slots: {organizationQuery}:AMAZON.SearchQuery
+- play from the {organizationQuery}
+- play content from {organizationQuery}
+- play content from the {organizationQuery}
+- play recordings from {organizationQuery}
+- play recordings from the {organizationQuery}
+- play by {organizationQuery}
+- content from {organizationQuery}
+- show me content from {organizationQuery}
+- show me recordings from {organizationQuery}
+- play from the {organizationQuery} organisation
+- play from the {organizationQuery} organization
+
+### WhatsThisAboutIntent (11)
+- what's this about
+- what is this about
+- what is this content about
+- what's this all about
+- what's it about
+- what's this content about
+- tell me about this recording
+- tell me about this content
+- what is this recording about
+- describe this recording
+- tell me what this is about
+
+### PlayByCreatorIntent (33)  — slots: {creatorQuery}:AMAZON.SearchQuery
+- play from {creatorQuery}
+- play something by {creatorQuery}
+- play something from {creatorQuery}
+- play me something from {creatorQuery}
+- play me something by {creatorQuery}
+- something from {creatorQuery}
+- something by {creatorQuery}
+- content by {creatorQuery}
+- I want to hear {creatorQuery}
+- play me {creatorQuery}
+- find {creatorQuery}
+- anything by {creatorQuery}
+- anything from {creatorQuery}
+- show me recordings by {creatorQuery}
+- play latest recording from {creatorQuery}
+- play the latest recording from {creatorQuery}
+- play latest from {creatorQuery}
+- play the latest from {creatorQuery}
+- play recording from {creatorQuery}
+- play a recording from {creatorQuery}
+- play the latest recording by {creatorQuery}
+- play latest recording by {creatorQuery}
+- play the latest by {creatorQuery}
+- play latest by {creatorQuery}
+- latest recording from {creatorQuery}
+- the latest recording from {creatorQuery}
+- latest from {creatorQuery}
+- the latest from {creatorQuery}
+- give me the latest from {creatorQuery}
+- give me the latest recording from {creatorQuery}
+- hear the latest from {creatorQuery}
+- play the newest from {creatorQuery}
+- play newest recording from {creatorQuery}
+
+### BrowseContentIntent (12)
+- what's on
+- what's available
+- what have you got
+- what's new
+- any new content
+- what's been published
+- any new episodes
+- what's fresh
+- what dropped today
+- let me hear what's new
+- show me what you've got
+- what's going on today
+
+### WhatsTrendingIntent (19)
+- what's trending
+- what is trending
+- tell me what's trending
+- what's popular
+- what is popular
+- tell me what's popular
+- what's hot
+- what is hot
+- what are people listening to
+- what is everyone listening to
+- top content
+- show me trending
+- show me what's trending
+- read me the trending list
+- what's trending right now
+- what's on trend
+- trending audio
+- popular picks
+- most popular right now
+
+### SetPlaybackSpeedIntent (19)  — slots: {speed}:AMAZON.NUMBER
+- set speed to {speed}
+- set play speed to {speed}
+- set play back speed to {speed}
+- set playback speed to {speed}
+- set play back speed {speed}
+- play back speed {speed}
+- play at {speed} speed
+- change speed to {speed}
+- change playback speed to {speed}
+- {speed} times speed
+- play at {speed} x
+- set rate to {speed}
+- {speed} x speed
+- {speed} times normal speed
+- at {speed} x
+- normal speed
+- regular speed
+- reset speed
+- normal playback speed
+
+### IncreaseSpeedIntent (15)
+- speed up
+- speed it up
+- play faster
+- make it faster
+- increase the speed
+- increase speed
+- increase playback speed
+- go faster
+- faster
+- double speed
+- double the speed
+- can you play it faster
+- play it faster
+- play this faster
+- speak faster
+
+### DecreaseSpeedIntent (14)
+- slow down
+- slow it down
+- play slower
+- make it slower
+- decrease the speed
+- decrease speed
+- decrease playback speed
+- go slower
+- slower
+- half speed
+- can you slow it down
+- play it slower
+- play this slower
+- speak slower
+
+### RewindIntent (25)  — slots: {time}:AMAZON.DURATION, {number}:AMAZON.NUMBER
+- rewind
+- rewind {time}
+- rewind {number}
+- rewind by {time}
+- rewind by {number}
+- go back {time}
+- go back {number}
+- go back {number} seconds
+- skip back
+- skip back {time}
+- skip back {number}
+- jump back
+- jump back {time}
+- jump back {number}
+- back {number} seconds
+- back {time}
+- rewind {number} seconds
+- wind back
+- go back a bit
+- rewind a bit
+- take it back {number} seconds
+- back it up
+- back it up {number} seconds
+- rewind to {time}
+- back {number} minutes
+
+### FastForwardIntent (25)  — slots: {time}:AMAZON.DURATION, {number}:AMAZON.NUMBER
+- fast forward
+- fast forward {time}
+- fast forward {number}
+- fast forward by {time}
+- fast forward by {number}
+- go forward {time}
+- go forward {number}
+- skip forward {time}
+- skip forward {number}
+- jump forward
+- jump forward {time}
+- jump forward {number}
+- skip ahead
+- skip ahead {time}
+- skip ahead {number}
+- forward {number} seconds
+- forward {time}
+- fast forward {number} seconds
+- wind forward
+- go ahead {number} seconds
+- skip {number} seconds ahead
+- jump ahead
+- jump ahead {number} seconds
+- forward {number} minutes
+- skip {number} minutes
+
+### FeedbackEnjoyedIntent (42)
+- enjoyed
+- I enjoyed it
+- yes I enjoyed it
+- I liked it
+- that was great
+- loved it
+- great
+- good one
+- brilliant
+- amazing
+- fantastic
+- that was good
+- really good
+- excellent
+- wonderful
+- superb
+- I loved that
+- that was brilliant
+- very good
+- top notch
+- smashing
+- cracking
+- well done
+- that was lovely
+- really enjoyed that
+- thoroughly enjoyed it
+- that was ace
+- absolutely loved it
+- five stars
+- thumbs up
+- I thought it was great
+- that was interesting
+- it was fire
+- that slapped
+- that was class
+- proper good
+- mint
+- wicked
+- sick
+- big up
+- quality
+- banger
+
+### FeedbackSomewhatIntent (28)
+- somewhat
+- it was okay
+- kind of
+- sort of
+- not bad
+- alright
+- so so
+- average
+- it was alright
+- it was fine
+- could be better
+- fair enough
+- decent
+- middling
+- passable
+- nothing special
+- it was okay I suppose
+- not great not terrible
+- meh
+- mixed feelings
+- it was reasonable
+- fairly good
+- it was mid
+- mid
+- on the fence
+- I can take it or leave it
+- six out of ten
+- it was standard
+
+### FeedbackNotEnjoyedIntent (31)
+- not enjoyed
+- did not enjoy it
+- did not like it
+- bad
+- not for me
+- terrible
+- change it
+- not interested
+- awful
+- dreadful
+- rubbish
+- boring
+- didn't enjoy it
+- didn't like it
+- not my cup of tea
+- disliked it
+- that was poor
+- waste of time
+- not good
+- I hated that
+- that was dull
+- thumbs down
+- I didn't care for that
+- no good
+- that was naff
+- that was trash
+- not my thing
+- I'll pass on that
+- dead
+- that was dead
+- that was pants
+
+### SkipFeedbackIntent (18)
+- skip
+- never mind
+- ignore that
+- skip feedback
+- move on
+- don't bother
+- I don't want to rate
+- no comment
+- pass
+- skip the rating
+- carry on
+- I'd rather not say
+- just play the next one
+- whatever
+- doesn't matter
+- skip it
+- not bothered
+- can't be bothered
+
+### EnableNotificationsIntent (29)
+- turn on notifications
+- enable notifications
+- notify me
+- send me alerts
+- alert me when there is new content
+- let me know when new content is available
+- set notifications
+- set notification
+- notification
+- I want to get a notification
+- set a notification
+- subscribe to notifications
+- sign me up for alerts
+- keep me updated
+- tell me when there is new stuff
+- send me updates
+- I want alerts
+- let me know when something new comes out
+- alert me to new episodes
+- new content alerts
+- ping me when there's new content
+- update me
+- keep me in the loop
+- I want to know when new stuff drops
+- set up notifications for me
+- notify me about new content
+- alert me when creators post
+- I want push notifications
+- remind me when there's something new
+
+### DisableNotificationsIntent (22)
+- turn off notifications
+- disable notifications
+- stop notifying me
+- stop alerts
+- no more notifications
+- cancel notification
+- cancel notifications
+- stop notification
+- stop notifications
+- delete notification
+- delete notifications
+- remove notifications
+- I don't want notifications
+- stop sending me alerts
+- no more alerts
+- switch off notifications
+- turn notifications off
+- remove alerts
+- mute notifications
+- silence notifications
+- no updates
+- stop the updates
+
+### WhoIsCreatorIntent (30)
+- who is the creator
+- who made this
+- who created this
+- who is the author
+- who recorded this
+- who is speaking
+- credit
+- credits
+- who is this by
+- who is the narrator
+- tell me about the creator
+- who published this
+- who is this person
+- who am I listening to
+- who is talking
+- who wrote this
+- whose voice is this
+- who's this
+- tell me who this is
+- what creator is this
+- who produced this
+- who's the artist
+- what's the name of the creator
+- who uploaded this
+- give me the credits
+- tell me about the author
+- who is behind this
+- name of the creator
+- give me creator info
+- who's responsible for this
+
+### FollowCreatorIntent (26)
+- follow this creator
+- follow them
+- subscribe to this creator
+- I want to follow this creator
+- follow
+- subscribe
+- follow this person
+- follow this author
+- I like this creator
+- add this creator to my list
+- keep me updated on this creator
+- follow this narrator
+- I want more from this creator
+- save this creator
+- follow this artist
+- follow this voice
+- I want to hear more from them
+- remember this creator
+- add them to my favourites
+- favourite this creator
+- bookmark this creator
+- I love this creator
+- save them
+- keep this creator
+- add this creator to my followed list
+- more from this person
+
+### UnfollowCreatorIntent (15)
+- unfollow this creator
+- unfollow them
+- unsubscribe
+- stop following this creator
+- remove this creator
+- unfollow
+- I don't want to follow this creator anymore
+- take this creator off my list
+- unsubscribe from this creator
+- stop following
+- remove from following
+- drop this creator
+- remove them
+- I'm done with this creator
+- unsubscribe from them
+
+### ReportContentIntent (20)
+- report this content
+- flag this content
+- report this
+- flag this
+- this is inappropriate
+- report
+- I want to report this
+- this content is offensive
+- this is not appropriate
+- flag for review
+- mark this as inappropriate
+- this shouldn't be here
+- this is wrong
+- report this audio
+- report this recording
+- this is harmful
+- this is dangerous
+- this content is problematic
+- flag this audio
+- I want to flag this
+
+### ReportCreatorIntent (14)
+- report this creator
+- flag this creator
+- report the creator
+- report the author
+- this creator is inappropriate
+- report this person
+- flag this person
+- I want to report the creator
+- this person shouldn't be on here
+- report the narrator
+- report this artist
+- flag this author
+- this creator is offensive
+- report the producer
+
+### HearNotificationsIntent (10)
+- do I have any notifications
+- check my notifications
+- what are my notifications
+- any notifications
+- what's in my notifications
+- tell me about my notifications
+- show me my notifications
+- anything new from my creators
+- what's new from people I follow
+- show more
+
+### SetLocationIntent (34)  — slots: {location}:AMAZON.GB_CITY
+- {location}
+- it's {location}
+- I'm in {location}
+- I live in {location}
+- I'm from {location}
+- my town is {location}
+- my city is {location}
+- my location is {location}
+- set my location to {location}
+- set my town to {location}
+- change my location to {location}
+- update my location to {location}
+- my area is {location}
+- I've moved to {location}
+- I moved to {location}
+- I now live in {location}
+- change my town to {location}
+- change my city to {location}
+- update my town to {location}
+- change my location
+- change my town
+- change my city
+- update my location
+- update my town
+- set a new location
+- I want to change my location
+- I want to update my location
+- I need to change my location
+- I've moved
+- I have moved
+- I moved
+- my location has changed
+- change where I am
+- update where I live
+
+## Built-in (AMAZON.*) intents
+
+### AMAZON.CancelIntent (17)
+- cancel
+- quit
+- exit
+- goodbye
+- close
+- shut down
+- end
+- finish
+- leave
+- I'm done
+- that's enough
+- close hear
+- bye
+- see you later
+- see ya
+- I'm off
+- log off
+
+### AMAZON.HelpIntent (21)
+- help
+- what can I say
+- what can you do
+- functions
+- tell me about this
+- about this skill
+- what are my options
+- how does this work
+- what should I say
+- instructions
+- give me some tips
+- how do I use this
+- what features do you have
+- what commands are there
+- what else can I do
+- teach me
+- guide me
+- walk me through it
+- help me out
+- I need help
+- assist me
+
+### AMAZON.StopIntent (11)
+- stop
+- stop playing
+- stop the audio
+- enough
+- hush
+- silence
+- mute
+- shut it
+- stop everything
+- cut it
+- that'll do
+
+### AMAZON.NextIntent (0)
+- _(no custom samples — uses Amazon's built-in phrases)_
+
+### AMAZON.PreviousIntent (0)
+- _(no custom samples — uses Amazon's built-in phrases)_
+
+### AMAZON.RepeatIntent (18)
+- repeat
+- play again
+- say that again
+- replay
+- play it again
+- one more time
+- play that again
+- repeat that
+- again
+- replay that
+- can you play that again
+- I want to hear that again
+- listen to that again
+- from the top
+- replay this one
+- play this one again
+- repeat this recording
+- let me hear that again
+
+### AMAZON.StartOverIntent (9)
+- start over
+- restart
+- from the beginning
+- begin again
+- start from the start
+- play from the beginning
+- go to the start
+- back to the beginning
+- start fresh
+
+### AMAZON.NavigateHomeIntent (7)
+- home
+- go home
+- main menu
+- go to the beginning
+- take me home
+- back to the start
+- start menu
+
+### AMAZON.YesIntent (16)
+- yes
+- yeah
+- yep
+- sure
+- absolutely
+- definitely
+- of course
+- yes please
+- go ahead
+- do it
+- affirmative
+- uh huh
+- yes I did
+- I did
+- correct
+- right
+
+### AMAZON.NoIntent (13)
+- no
+- nah
+- nope
+- no thanks
+- not really
+- I don't think so
+- negative
+- no way
+- absolutely not
+- not at all
+- I didn't
+- no I didn't
+- wrong
+
+### AMAZON.FallbackIntent (0)
+- _(no custom samples — uses Amazon's built-in phrases)_
+
+## Custom slot types
+
+### ContentFormat
+- **newspaper** — talking newspaper, news paper
+- **podcast** — podcasts
+
+---
+**Total: 741 sample utterances across 38 intents.**

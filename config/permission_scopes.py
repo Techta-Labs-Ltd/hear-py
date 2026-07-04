@@ -1,0 +1,8 @@
+DEVICE_ADDRESS = "alexa::device_address:all:read"
+NOTIFICATIONS_WRITE = "alexa::notifications:write"
+REMINDERS_READWRITE = "alexa::alerts:reminders:skill:readwrite"
+GEOLOCATION_READ = "alexa::devices:all:geolocation:read"
+PROFILE_NAME_READ = "alexa::profile:name:read"
+PROFILE_GIVEN_NAME_READ = "alexa::profile:given_name:read"
+PROFILE_FAMILY_NAME_READ = "alexa::profile:family_name:read"
+PROFILE_EMAIL_READ = "alexa::profile:email:read"

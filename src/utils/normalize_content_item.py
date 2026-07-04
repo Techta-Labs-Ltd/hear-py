@@ -1,0 +1,352 @@
+from __future__ import annotations
+
+import re
+
+def nullable_string(value):
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
+
+
+def is_id_like_label(value) -> bool:
+    if not isinstance(value, str):
+        return True
+    t = value.strip()
+    if not t:
+        return True
+    if re.search(r"\d{3,}[_-]post", t, re.I):
+        return True
+    if re.search(r"[_-]post\d+", t, re.I):
+        return True
+    if re.search(r"track\d+", t, re.I) and re.search(r"post|_", t):
+        return True
+    if re.search(r"\s", t):
+        return False
+    if len(t) <= 12:
+        return False
+    if re.search(r"[_/\\\.:]", t):
+        return True
+    if re.search(r"\d{4,}", t):
+        return True
+    if re.match(r"^[a-z0-9-]+$", t, re.I) and re.search(r"\d", t) and len(t) > 16:
+        return True
+    return False
+
+
+def is_weak_title(value) -> bool:
+    """Check whether a title is weak/generic and should not be spoken."""
+    if not isinstance(value, str):
+        return True
+    t = value.strip()
+    if not t:
+        return True
+    if re.match(r"^test\s*\d*$", t, re.I):
+        return True
+    if re.match(r"^test\s+\d+$", t, re.I):
+        return True
+    if re.match(r"^untitled$", t, re.I):
+        return True
+    if re.match(r"^recording\s*\d*$", t, re.I):
+        return True
+    if _is_breadcrumb_title(t):
+        return True
+    return False
+
+
+def _is_breadcrumb_title(value: str) -> bool:
+    """Check whether a title is a breadcrumb path (contains >)."""
+    if not isinstance(value, str):
+        return False
+    return ">" in value.strip()
+
+
+def prefer_readable(*candidates) -> str | None:
+    """Pick the most human-readable candidate from a series of values."""
+    first_any = None
+    first_non_id = None
+    for candidate in candidates:
+        s = nullable_string(candidate)
+        if not s:
+            continue
+        if first_any is None:
+            first_any = s
+        if not is_id_like_label(s) and not is_weak_title(s):
+            return s
+        if first_non_id is None and not is_id_like_label(s):
+            first_non_id = s
+    return first_non_id or first_any
+
+
+def derive_locality_string(item: dict) -> str | None:
+    return nullable_string(item.get("locality"))
+
+
+def _first_search_phrase(item: dict) -> str | None:
+    """Get the first search phrase from a content item."""
+    phrases = item.get("searchPhrases")
+    if not isinstance(phrases, list):
+        return None
+    for p in phrases:
+        s = nullable_string(p)
+        if s:
+            return s
+    return None
+
+
+def _themes_label(item: dict) -> str | None:
+    """Build a label from theme tags."""
+    themes = item.get("themes")
+    if not isinstance(themes, list) or not themes:
+        return None
+    parts = [nullable_string(t) for t in themes[:2]]
+    parts = [p for p in parts if p]
+    return ", ".join(parts) if parts else None
+
+
+def _pick_curated_title(item: dict) -> str | None:
+    return prefer_readable(
+        nullable_string(item.get("shortDescription")),
+        _first_search_phrase(item),
+        _themes_label(item),
+    )
+
+
+def _pick_display_title(item: dict) -> str:
+    actual = prefer_readable(
+        item.get("displayTitle"),
+        item.get("spokenTitle"),
+        item.get("title"),
+    )
+    if actual and not is_weak_title(actual) and not is_id_like_label(actual):
+        return actual
+    curated = _pick_curated_title(item)
+    if curated and not is_weak_title(curated) and not is_id_like_label(curated):
+        return curated
+    return actual or curated or "a local recording"
+
+
+def pick_spoken_title(item: dict) -> str:
+    return _pick_display_title(item)
+
+
+def is_bad_credit_name(value) -> bool:
+    """Check whether a credit name is unusable for spoken output."""
+    if not value:
+        return True
+    raw = str(value).strip()
+    if not raw:
+        return True
+    if is_id_like_label(raw):
+        return True
+    t = raw.lower()
+    if re.match(r"^(super\s+)?admin(istrator)?$", t) or t in ("unknown", "system", "admin"):
+        return True
+    if len(raw) > 48:
+        return True
+    words = [w for w in raw.split() if w]
+    if len(words) > 5:
+        return True
+    if len(words) >= 5 and raw == t:
+        return True
+    if re.match(r"^(really|so|scared)\s+", raw, re.I):
+        return True
+    if re.match(r"^(really|so|scared)$", raw, re.I):
+        return True
+    if re.search(r"\b(the force|right help|coming from|so happy to be)\b", t):
+        return True
+    if len(words) >= 3 and raw == t and re.search(r"\b(from|coming|happy|force|help|right)\b", t):
+        return True
+    return False
+
+
+def _is_independent_org(name) -> bool:
+    n = str(name or "").strip().lower()
+    return n in ("independent", "independent creator")
+
+
+def _extract_creator_name(item: dict) -> str | None:
+    creator = item.get("creator")
+    if isinstance(creator, dict):
+        return nullable_string(creator.get("name"))
+    return nullable_string(creator)
+
+
+def _extract_creator_id(item: dict) -> str | None:
+    creator = item.get("creator")
+    if isinstance(creator, dict):
+        return creator.get("id") or None
+    return item.get("creatorId") or None
+
+
+def _pick_organization_name(item: dict) -> str | None:
+    org = item.get("organization")
+    if isinstance(org, dict):
+        name = nullable_string(org.get("name"))
+        if name:
+            return name
+    return None
+
+
+def _is_organization_publisher(item: dict) -> bool:
+    if not isinstance(item, dict):
+        return False
+    org = _pick_organization_name(item)
+    return bool(org and not _is_independent_org(org) and not is_bad_credit_name(org))
+
+
+def pick_attribution_kind(item: dict) -> str:
+    if _is_organization_publisher(item):
+        return "organization"
+    creator = _extract_creator_name(item)
+    if creator and not is_bad_credit_name(creator):
+        return "creator"
+    return "creator"
+
+
+def pick_attribution_credit(item: dict) -> str | None:
+    creator = _extract_creator_name(item)
+    org = _pick_organization_name(item)
+    org_pub = _is_organization_publisher(item)
+    if org_pub and org and not is_bad_credit_name(org) and not _is_independent_org(org):
+        return org
+    if creator and not is_bad_credit_name(creator):
+        return creator
+    if org and not is_bad_credit_name(org) and not _is_independent_org(org):
+        return org
+    return None
+
+
+def pick_content_credit(item: dict) -> str | None:
+    """Pick the content credit for playback attribution."""
+    return pick_attribution_credit(item)
+
+
+def pick_menu_credit(item: dict) -> str | None:
+    """Pick the menu credit for browse listing display."""
+    return pick_attribution_credit(item)
+
+
+def pick_main_topic(item: dict) -> str | None:
+    return nullable_string(item.get("mainTopic"))
+
+
+def pick_summary(item: dict) -> str | None:
+    return nullable_string(item.get("shortDescription"))
+
+
+def _pick_playback_speeds(item: dict) -> list | None:
+    if isinstance(item.get("playback_speed"), list) and item["playback_speed"]:
+        return item["playback_speed"]
+    return None
+
+
+def _pick_track_title(track: dict, parent_item: dict | None = None) -> str | None:
+    candidates = [
+        track.get("title"),
+        track.get("shortDescription"),
+        parent_item.get("shortDescription") if parent_item else None,
+    ]
+    return prefer_readable(*[c for c in candidates if c is not None]) or nullable_string(track.get("title"))
+
+
+def _pick_duration_secs(source: dict) -> int | None:
+    if not isinstance(source, dict):
+        return None
+    for key in ("durationSecs", "duration_secs"):
+        v = source.get(key)
+        if isinstance(v, (int, float)) and v > 0:
+            return int(v)
+    return None
+
+
+def _normalize_track(track, parent_item=None):
+    """Normalize a single track entry within a multi-track content item."""
+    if not isinstance(track, dict):
+        return track
+    track_category = track.get("category") or track.get("categorySlug") or (isinstance(track.get("categories"), list) and track["categories"][0] if track.get("categories") else None) or None
+    return {
+        **track,
+        "id": track.get("id") or None,
+        "title": _pick_track_title(track, parent_item),
+        "audioUrl": track.get("audioUrl") or None,
+        "category": track_category,
+        "tags": track.get("tags") if isinstance(track.get("tags"), list) else [],
+        "playback_speed": track.get("playback_speed") if isinstance(track.get("playback_speed"), list) else None,
+        "durationSecs": _pick_duration_secs(track),
+    }
+
+
+def normalize_content_item(item: dict) -> dict:
+    if not isinstance(item, dict):
+        return item
+    tracks = [_normalize_track(t, item) for t in item.get("tracks", [])] if isinstance(item.get("tracks"), list) else []
+    return {
+        **item,
+        "id": item.get("id") or None,
+        "title": nullable_string(item.get("title")),
+        "displayTitle": _pick_display_title(item),
+        "spokenTitle": pick_spoken_title(item),
+        "summary": pick_summary(item),
+        "creator": _extract_creator_name(item),
+        "creatorId": _extract_creator_id(item),
+        "type": item.get("type") or ("publication" if tracks else "single"),
+        "category": item.get("category") or (isinstance(item.get("categories"), list) and item["categories"][0] if item.get("categories") else None) or None,
+        "categories": item.get("categories") if isinstance(item.get("categories"), list) else [],
+        "tags": item.get("tags") if isinstance(item.get("tags"), list) else [],
+        "audioUrl": item.get("audioUrl") or None,
+        "tracks": tracks,
+        "playback_speed": _pick_playback_speeds(item),
+        "durationSecs": _pick_duration_secs(item),
+    }
+
+
+def is_playable_content_item(item: dict) -> bool:
+    """Whether a content item can actually be played.
+
+    Requires an id plus real audio: a single item with a top-level ``audioUrl``,
+    or a publication with at least one track that has an ``audioUrl``. A
+    publication with no (playable) tracks — and any single with no audio — is
+    not playable and must be filtered out of results.
+    """
+    if not isinstance(item, dict) or not item.get("id"):
+        return False
+    if item.get("audioUrl"):
+        return True
+    tracks = item.get("tracks") or []
+    if isinstance(tracks, list) and any(
+        isinstance(t, dict) and t.get("audioUrl") for t in tracks
+    ):
+        return True
+    return False
+
+
+def normalize_content_items(items) -> list:
+    """Normalize a list of raw content items, dropping any that are not
+    playable (e.g. a publication that came back with no tracks)."""
+    if not isinstance(items, list):
+        return []
+    normalized = (normalize_content_item(i) for i in items if i)
+    return [i for i in normalized if is_playable_content_item(i)]
+
+
+def content_title_for_speech(item: dict) -> str | None:
+    if not isinstance(item, dict):
+        return None
+    title = item.get("spokenTitle") or item.get("displayTitle") or nullable_string(item.get("title"))
+    if title and not is_id_like_label(title) and not is_weak_title(title):
+        return _humanize_spoken_title_safe(title) or title
+    curated = _pick_curated_title(item)
+    if curated and not is_weak_title(curated) and not is_id_like_label(curated):
+        return _humanize_spoken_title_safe(curated) or curated
+    return curated or "a local recording"
+
+
+def _humanize_spoken_title_safe(value: str) -> str | None:
+    """Safely clean a title for speech output."""
+    if not isinstance(value, str):
+        return None
+    t = value.strip()
+    if not t or is_id_like_label(t):
+        return None
+    return t

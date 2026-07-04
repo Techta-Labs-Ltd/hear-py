@@ -1,0 +1,22 @@
+# Build artifacts / local cruft — keep the image lean and builds fast
+build/
+.git/
+.github/
+.venv/
+venv/
+tests/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Not needed at runtime (Alexa model, docs, local config)
+en-GB.json
+annotation-set.json
+annotation-set.csv
+utterances.md
+PROJECT_MAP.txt
+*.md
+.env
+.env.example
+template.yaml
+scripts/deploy.sh

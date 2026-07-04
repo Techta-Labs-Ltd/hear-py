@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  Stage:
+    Type: String
+    Default: production
+    AllowedValues: [development, staging, production]
+  AlexaSkillId:
+    Type: String
+    Description: Alexa Skill ID
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    MemorySize: 512
+    Timeout: 8
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+    Layers:
+      - !Sub arn:aws:lambda:${AWS::Region}:650790810013:layer:hear-deps:1
+
+Resources:
+  HearSkillFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Python-${Stage}
+      Handler: main.handler
+      CodeUri: ./
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: hear-alexa-skill
+          POWERTOOLS_LOG_LEVEL: INFO
+      Events:
+        AlexaTrigger:
+          Type: AlexaSkill
+          Properties:
+            SkillId: !Ref AlexaSkillId
+        ApiGatewayWebhook:
+          Type: Api
+          Properties:
+            Path: /webhook/{proxy+}
+            Method: POST
+            RestApiId: !Ref WebhookApi
+
+  WebhookApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+      Name: !Sub hear-webhook-${Stage}
+
+  OutboundConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Outbound-Python-${Stage}
+      Handler: src.webhooks.outbound_consumer.handler
+      CodeUri: ./
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt OutboundQueue.Arn
+            BatchSize: 10
+
+  OutboundQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-webhook-out-python-${Stage}
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 1209600
+
+Outputs:
+  SkillFunctionArn:
+    Value: !GetAtt HearSkillFunction.Arn
+  WebhookEndpoint:
+    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook
+  OutboundQueueUrl:
+    Value: !Ref OutboundQueue
