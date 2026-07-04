@@ -37,6 +37,9 @@ jobs:
       - name: Run tests
         run: pytest tests/ -q
 
+      - name: Import smoke test (catches broken imports before deploy)
+        run: python -c "import main; print('main imported OK')"
+
   deploy:
     needs: test            # deploy only if tests pass
     runs-on: ubuntu-latest

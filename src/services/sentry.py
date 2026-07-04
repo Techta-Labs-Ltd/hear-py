@@ -3,7 +3,7 @@ from config import settings
 from src.utils.speech import ERROR_GENERIC
 
 import sentry_sdk
-from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration, capture_handler
+from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 
 
 def sentry_enabled() -> bool:
@@ -91,14 +91,10 @@ def last_resort_skill_response() -> dict:
 
 
 def wrap_lambda_handler(handler):
-    """Wrap a Lambda handler with Sentry instrumentation when available.
+    """Return the handler unchanged.
 
-    Returns the original handler unchanged if Sentry is not configured.
+    With sentry-sdk 2.x, ``AwsLambdaIntegration`` (configured in
+    :func:`init_sentry`) instruments the Lambda handler automatically, so no
+    manual wrapping is required.
     """
-    if not sentry_enabled():
-        return handler
-
-    try:
-        return capture_handler(handler)
-    except Exception:
-        return handler
+    return handler
