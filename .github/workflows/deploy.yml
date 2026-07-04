@@ -40,12 +40,24 @@ jobs:
           docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
-      - name: Update Lambda function code
+      - name: Deploy to Lambda (create on first run, update after)
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+          SOURCE_FUNCTION: Hear   # copy role + env vars from the existing function
         run: |
-          aws lambda update-function-code \
-            --function-name "$FUNCTION_NAME" \
-            --image-uri "${{ steps.build.outputs.image }}" \
-            --region "$AWS_REGION"
-          aws lambda wait function-updated \
-            --function-name "$FUNCTION_NAME" \
-            --region "$AWS_REGION"
+          if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "Updating existing $FUNCTION_NAME"
+            aws lambda update-function-code \
+              --function-name "$FUNCTION_NAME" --image-uri "$IMAGE" --region "$AWS_REGION"
+          else
+            echo "Creating $FUNCTION_NAME (cloning role + env from $SOURCE_FUNCTION)"
+            ROLE=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$AWS_REGION" --query Role --output text)
+            ENVJSON=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$AWS_REGION" --query Environment --output json)
+            aws lambda create-function \
+              --function-name "$FUNCTION_NAME" \
+              --package-type Image --code ImageUri="$IMAGE" \
+              --role "$ROLE" --environment "$ENVJSON" \
+              --timeout 30 --memory-size 1024 --architectures x86_64 \
+              --region "$AWS_REGION"
+          fi
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS_REGION"
