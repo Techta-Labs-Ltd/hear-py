@@ -149,6 +149,17 @@ class ResponseBuilder:
         self._response["shouldEndSession"] = bool(value)
         return self
 
+    # ask-sdk-style alias used by some handlers
+    def with_should_end_session(self, value: bool) -> "ResponseBuilder":
+        return self.set_should_end_session(value)
+
+    def with_ask_for_permissions_consent_card(self, permissions) -> "ResponseBuilder":
+        self._response["card"] = {
+            "type": "AskForPermissionsConsent",
+            "permissions": list(permissions or []),
+        }
+        return self
+
     def add_directive(self, directive: Any) -> "ResponseBuilder":
         if directive:
             self._response.setdefault("directives", []).append(

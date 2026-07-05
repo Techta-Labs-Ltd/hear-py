@@ -23,8 +23,21 @@ def _normalize_audio_item_metadata(metadata: dict | None) -> dict | None:
     }
 
 
-def build_play_directive(*, url=None, token=None, offset_ms: int = 0, prev_token=None, metadata=None, progress_report: bool = False, duration_secs=None, handler_input=None) -> dict | None:
-    """Build an AudioPlayer.Play directive with optional progress report configuration."""
+def build_play_directive(options=None, *, url=None, token=None, offset_ms: int = 0, prev_token=None, metadata=None, progress_report: bool = False, duration_secs=None, handler_input=None) -> dict | None:
+    """Build an AudioPlayer.Play directive with optional progress report configuration.
+
+    Accepts either keyword arguments or a single options dict (camelCase keys),
+    for compatibility with call sites ported from JavaScript.
+    """
+    if isinstance(options, dict):
+        url = options.get("url", url)
+        token = options.get("token", token)
+        offset_ms = options.get("offsetMs", options.get("offset_ms", offset_ms))
+        prev_token = options.get("prevToken", options.get("prev_token", prev_token))
+        metadata = options.get("metadata", metadata)
+        progress_report = options.get("progressReport", options.get("progress_report", progress_report))
+        duration_secs = options.get("durationSecs", options.get("duration_secs", duration_secs))
+        handler_input = options.get("handlerInput", options.get("handler_input", handler_input))
     if not url or not token:
         return None
     if handler_input and url:
