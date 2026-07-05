@@ -8,7 +8,7 @@ from ask_sdk_model import Response
 
 from src.services.persistence import get_store, update_store
 from src.utils.skill_request import get_request_type, get_intent_name
-from src.utils.speech import ssml, escape_ssml_lite, FALLBACK_SPEECH
+from src.utils.speech import ssml, escape_ssml_lite, FALLBACK_SPEECH, WELCOME_REPROMPT
 from src.handlers.intents import PlayContentHandler, PlayByCreatorHandler, PlayByOrganizationHandler, BrowseContentHandler, ShowMoreBrowseHandler, WhatsTrendingHandler, TownCaptureHandler, SetLocationHandler
 from src.handlers.feedback import FeedbackEnjoyedHandler, FeedbackNotEnjoyedHandler, FeedbackSomewhatHandler, SkipFeedbackHandler
 
@@ -83,7 +83,11 @@ class IntentDispatchHandler(AbstractRequestHandler):
         if handler_cls:
             return handler_cls().handle(handler_input)
 
-        return handler_input.response_builder.speak(FALLBACK_SPEECH).get_response()
+        return handler_input.response_builder \
+            .speak(FALLBACK_SPEECH) \
+            .reprompt(WELCOME_REPROMPT) \
+            .set_should_end_session(False) \
+            .get_response()
 
     def _handle_unclear(self, handler_input: HandlerInput, nlp_data: dict) -> Response:
         """Handle an unclear intent by offering suggestions to the user."""

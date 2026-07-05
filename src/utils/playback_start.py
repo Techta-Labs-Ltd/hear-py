@@ -27,6 +27,7 @@ from src.utils.listen_tracker import finalize_previous_track_if_any
 from src.utils.normalize_content_item import content_title_for_speech, pick_content_credit
 from src.utils.speech import (
     ssml, humanize_spoken_title, get_mid_playback_prompt, NO_CONTENT_AVAILABLE,
+    WELCOME_REPROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,8 @@ async def start_playback(
     if not prepared:
         return handler_input.response_builder \
             .speak(ssml(NO_CONTENT_AVAILABLE)) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
+            .set_should_end_session(False) \
             .response
 
     track_info = prepared["trackInfo"]
@@ -132,6 +135,8 @@ async def start_playback(
         logger.error("Hear: start_playback missing token contentId=%s", content.get("id"))
         return handler_input.response_builder \
             .speak(ssml(NO_CONTENT_AVAILABLE)) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
+            .set_should_end_session(False) \
             .response
 
     store = get_store(handler_input)

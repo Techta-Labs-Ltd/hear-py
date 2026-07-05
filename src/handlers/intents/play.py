@@ -491,6 +491,8 @@ class PlayContentHandler(AbstractRequestHandler):
             if not _get_user_id(handler_input):
                 return handler_input.response_builder \
                     .speak(ssml(ERROR_GENERIC)) \
+                    .reprompt(WELCOME_REPROMPT) \
+                    .set_should_end_session(False) \
                     .response
 
             active_store = get_store(handler_input)
