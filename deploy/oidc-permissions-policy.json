@@ -22,32 +22,61 @@
       "Resource": "arn:aws:ecr:eu-west-1:650790810013:repository/hear-python"
     },
     {
-      "Sid": "LambdaRead",
+      "Sid": "CloudFormation",
       "Effect": "Allow",
-      "Action": [
-        "lambda:GetFunction",
-        "lambda:GetFunctionConfiguration"
-      ],
-      "Resource": [
-        "arn:aws:lambda:eu-west-1:650790810013:function:Hear-Python-dev",
-        "arn:aws:lambda:eu-west-1:650790810013:function:Hear"
-      ]
+      "Action": "cloudformation:*",
+      "Resource": "*"
     },
     {
-      "Sid": "LambdaWrite",
+      "Sid": "StackResources",
       "Effect": "Allow",
       "Action": [
-        "lambda:CreateFunction",
-        "lambda:UpdateFunctionCode",
-        "lambda:UpdateFunctionConfiguration"
+        "lambda:*",
+        "apigateway:*",
+        "sqs:*",
+        "logs:*"
       ],
-      "Resource": "arn:aws:lambda:eu-west-1:650790810013:function:Hear-Python-dev"
+      "Resource": "*"
     },
     {
-      "Sid": "PassExecRole",
+      "Sid": "IamForStackRoles",
       "Effect": "Allow",
-      "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::650790810013:role/service-role/Hear-role-dncjs2lm"
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:PassRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::650790810013:role/hear-py-*"
+    },
+    {
+      "Sid": "SsmSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:eu-west-1:650790810013:parameter/hear/*"
+    },
+    {
+      "Sid": "KmsDecryptViaSsm",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "ssm.eu-west-1.amazonaws.com"
+        }
+      }
     }
   ]
 }

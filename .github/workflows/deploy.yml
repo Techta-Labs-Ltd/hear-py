@@ -12,7 +12,9 @@ permissions:
 env:
   AWS_REGION: eu-west-1
   ECR_REPO: hear-python
-  FUNCTION_NAME: Hear-Python-dev
+  STAGE: development
+  STACK_NAME: hear-py-development
+  ALEXA_SKILL_ID: amzn1.ask.skill.502ef74e-db9f-485f-acdd-13d23c895e59
 
 jobs:
   test:
@@ -66,24 +68,35 @@ jobs:
           docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy to Lambda (create on first run, update after)
+      - name: Deploy CloudFormation stack
         env:
           IMAGE: ${{ steps.build.outputs.image }}
-          SOURCE_FUNCTION: Hear   # copy role + env vars from the existing function
         run: |
-          if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
-            echo "Updating existing $FUNCTION_NAME"
-            aws lambda update-function-code \
-              --function-name "$FUNCTION_NAME" --image-uri "$IMAGE" --region "$AWS_REGION"
-          else
-            echo "Creating $FUNCTION_NAME (cloning role + env from $SOURCE_FUNCTION)"
-            ROLE=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$AWS_REGION" --query Role --output text)
-            ENVJSON=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$AWS_REGION" --query Environment --output json)
-            aws lambda create-function \
-              --function-name "$FUNCTION_NAME" \
-              --package-type Image --code ImageUri="$IMAGE" \
-              --role "$ROLE" --environment "$ENVJSON" \
-              --timeout 30 --memory-size 1024 --architectures x86_64 \
-              --region "$AWS_REGION"
-          fi
-          aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS_REGION"
+          get() { aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION"; }
+          HEAR_API_KEY=$(get "/hear/$STAGE/HEAR_API_KEY")
+          RESOLVER_API_KEY=$(get "/hear/$STAGE/RESOLVER_API_KEY")
+          WEBHOOK_SECRET=$(get "/hear/$STAGE/WEBHOOK_SECRET")
+          WEBHOOK_OUTBOUND_SECRET=$(get "/hear/$STAGE/WEBHOOK_OUTBOUND_SECRET")
+          SENTRY_DSN=$(get "/hear/$STAGE/SENTRY_DSN")
+          for v in "$HEAR_API_KEY" "$RESOLVER_API_KEY" "$WEBHOOK_SECRET" "$WEBHOOK_OUTBOUND_SECRET" "$SENTRY_DSN"; do echo "::add-mask::$v"; done
+
+          aws cloudformation deploy \
+            --template-file template.yaml \
+            --stack-name "$STACK_NAME" \
+            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+            --region "$AWS_REGION" \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              Stage="$STAGE" \
+              ImageUri="$IMAGE" \
+              AlexaSkillId="$ALEXA_SKILL_ID" \
+              HearApiKey="$HEAR_API_KEY" \
+              ResolverApiKey="$RESOLVER_API_KEY" \
+              WebhookSecret="$WEBHOOK_SECRET" \
+              WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
+              SentryDsn="$SENTRY_DSN"
+
+      - name: Stack outputs
+        run: |
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" --query "Stacks[0].Outputs" --output table

@@ -1,43 +1,85 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
+Description: Hear Alexa skill (Python) — container image, Alexa trigger, webhook API, and outbound SQS pipeline.
 
 Parameters:
   Stage:
     Type: String
-    Default: production
+    Default: development
     AllowedValues: [development, staging, production]
+  ShortStage:
+    Type: String
+    Default: dev
+    Description: Short suffix used in function names (keeps existing Hear-Python-dev name).
+  ImageUri:
+    Type: String
+    Description: ECR image URI the CI pushed (account.dkr.ecr.region.amazonaws.com/hear-python:sha)
   AlexaSkillId:
     Type: String
-    Description: Alexa Skill ID
+    Default: ""
+    Description: Alexa Skill ID; when set, the Alexa trigger is wired to this skill.
+
+  # --- Secrets (pulled from SSM SecureString by CI and passed in as NoEcho) ---
+  HearApiKey:            { Type: String, NoEcho: true, Default: "" }
+  ResolverApiKey:        { Type: String, NoEcho: true, Default: "" }
+  WebhookSecret:         { Type: String, NoEcho: true, Default: "" }
+  WebhookOutboundSecret: { Type: String, NoEcho: true, Default: "" }
+  SentryDsn:             { Type: String, NoEcho: true, Default: "" }
+
+Conditions:
+  HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
 
 Globals:
   Function:
-    Runtime: python3.12
-    Architectures: [arm64]
-    MemorySize: 512
-    Timeout: 8
+    MemorySize: 1024
+    Timeout: 30
+    Architectures: [x86_64]
+    Tracing: Active
     Environment:
       Variables:
         STAGE: !Ref Stage
-    Layers:
-      - !Sub arn:aws:lambda:${AWS::Region}:650790810013:layer:hear-deps:1
+        NODE_ENV: !Ref Stage
+        SENTRY_ENVIRONMENT: !Ref Stage
+        # --- non-secret config ---
+        HEAR_API_URL: https://alexa.hear.surf/api/v1
+        HEAR_API_PATH_PREFIX: alexa
+        HEAR_CLIENT_VERSION: alexa-skill
+        HEAR_DDB_REGION: eu-west-1
+        HEAR_DDB_TABLE: hear-service
+        SETTINGS_TABLE: hear_settings
+        NOTIFICATIONS_TABLE: hear_notifications
+        HEAR_PERSISTENCE_DRIVER: dynamodb
+        HEAR_PERSISTENCE_CONDITIONAL: "0"
+        HEAR_PERSISTENCE_TTL_DAYS: "180"
+        HEAR_AUDIO_SPEED_PARAM: speed
+        RESOLVER_HOST: 69.30.85.114
+        RESOLVER_PORT: "22180"
+        RESOLVER_TLS: "0"
+        RESOLVER_DEFAULT_COUNTRY: gb
+        WEBHOOK_OUTBOUND_URL: https://alexa.hear.surf/api/v1/webhooks/event
+        SQS_OUT_QUEUE_URL: !Ref OutboundQueue
+        # --- secrets (from SSM via CI) ---
+        HEAR_API_KEY: !Ref HearApiKey
+        RESOLVER_API_KEY: !Ref ResolverApiKey
+        WEBHOOK_SECRET: !Ref WebhookSecret
+        WEBHOOK_OUTBOUND_SECRET: !Ref WebhookOutboundSecret
+        SENTRY_DSN: !Ref SentryDsn
+        POWERTOOLS_SERVICE_NAME: hear-alexa-skill
+        POWERTOOLS_LOG_LEVEL: INFO
 
 Resources:
   HearSkillFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub Hear-Python-${Stage}
-      Handler: main.handler
-      CodeUri: ./
-      Environment:
-        Variables:
-          POWERTOOLS_SERVICE_NAME: hear-alexa-skill
-          POWERTOOLS_LOG_LEVEL: INFO
+      FunctionName: !Sub Hear-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: hear-service }
+        - DynamoDBCrudPolicy: { TableName: hear_settings }
+        - DynamoDBCrudPolicy: { TableName: hear_notifications }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
       Events:
-        AlexaTrigger:
-          Type: AlexaSkill
-          Properties:
-            SkillId: !Ref AlexaSkillId
         ApiGatewayWebhook:
           Type: Api
           Properties:
@@ -45,24 +87,21 @@ Resources:
             Method: POST
             RestApiId: !Ref WebhookApi
 
+  # Alexa Skills Kit invoke permission (only when a Skill ID is provided)
+  AlexaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasAlexaSkillId
+    Properties:
+      FunctionName: !Ref HearSkillFunction
+      Action: lambda:InvokeFunction
+      Principal: alexa-appkit.amazon.com
+      EventSourceToken: !Ref AlexaSkillId
+
   WebhookApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: !Ref Stage
       Name: !Sub hear-webhook-${Stage}
-
-  OutboundConsumerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub Hear-Outbound-Python-${Stage}
-      Handler: src.webhooks.outbound_consumer.handler
-      CodeUri: ./
-      Events:
-        SQSTrigger:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt OutboundQueue.Arn
-            BatchSize: 10
 
   OutboundQueue:
     Type: AWS::SQS::Queue
@@ -71,10 +110,29 @@ Resources:
       VisibilityTimeout: 60
       MessageRetentionPeriod: 1209600
 
+  OutboundConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Outbound-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: [ "src.webhooks.outbound_consumer.handler" ]
+      Policies:
+        - SQSPollerPolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt OutboundQueue.Arn
+            BatchSize: 10
+
 Outputs:
   SkillFunctionArn:
+    Description: Set this as the skill's Default Endpoint in the Alexa console
     Value: !GetAtt HearSkillFunction.Arn
   WebhookEndpoint:
+    Description: Inbound webhook base URL
     Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook
   OutboundQueueUrl:
     Value: !Ref OutboundQueue
