@@ -678,12 +678,17 @@ class NoIntentHandler(AbstractRequestHandler):
 
         update_store(handler_input, {
             "awaitingSearchConfirmation": False,
+            "pendingSearchIntent": None,
+            "pendingSearchQuery": None,
+            "pendingSearchSlots": {},
             "pendingSuggestions": [],
             "suggestionIndex": 0,
             "excludedSuggestions": [],
         })
         return handler_input.response_builder \
-            .speak(ssml(CONFIRM_NO)) \
+            .speak(ssml("No problem. What would you like to listen to instead?")) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
+            .set_should_end_session(False) \
             .response
 
     def _handle_list_mode_no(self, handler_input, store):

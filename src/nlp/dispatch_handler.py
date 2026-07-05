@@ -21,6 +21,11 @@ DISPATCHABLE_INTENTS: list[str] = [
     "town_capture", "location_set", "unclear",
 ]
 
+# Query-driven intents that are confirmed with the user before any search runs.
+# Broad "show me stuff" intents (trending/browse/following/show_more) act
+# immediately since there is no specific entity that could be misheard.
+CONFIRMABLE_INTENTS: set[str] = {"creator", "organization", "category", "general", "local"}
+
 NON_DISPATCHABLE_INTENTS: list[str] = [
     "ReportContentIntent", "ReportCreatorIntent",
     "FollowCreatorIntent", "UnfollowCreatorIntent", "WhoIsCreatorIntent", "WhatsThisAboutIntent",
@@ -60,6 +65,10 @@ class IntentDispatchHandler(AbstractRequestHandler):
         if intent == "unclear":
             return self._handle_unclear(handler_input, nlp_data)
 
+        if intent in CONFIRMABLE_INTENTS:
+            pending = attrs.get("_pendingConfirmation")
+            if pending and pending.get("confirmText"):
+                return self._ask_search_confirmation(handler_input, nlp_data, pending)
 
         dispatch_map = {
             "trending": WhatsTrendingHandler,
@@ -86,6 +95,30 @@ class IntentDispatchHandler(AbstractRequestHandler):
         return handler_input.response_builder \
             .speak(FALLBACK_SPEECH) \
             .reprompt(WELCOME_REPROMPT) \
+            .set_should_end_session(False) \
+            .get_response()
+
+    def _ask_search_confirmation(self, handler_input: HandlerInput, nlp_data: dict, pending: dict) -> Response:
+        """Confirm the classified search with the user before running it.
+
+        Stores the pending intent/query/slots so ``YesIntentHandler`` can
+        execute the search on confirmation, and ``NoIntentHandler`` can offer
+        the alternatives instead.
+        """
+        confirm_text = pending.get("confirmText")
+        update_store(handler_input, {
+            "awaitingSearchConfirmation": True,
+            "pendingSearchIntent": pending.get("intent") or nlp_data.get("intent"),
+            "pendingSearchQuery": pending.get("query") or "",
+            "pendingSearchSlots": pending.get("slots") or nlp_data.get("slots") or {},
+            "pendingSuggestions": pending.get("alternatives") or [],
+            "suggestionIndex": 0,
+        })
+        logger.info("Hear: search confirmation asked intent=%s text=%s",
+                    pending.get("intent"), confirm_text)
+        return handler_input.response_builder \
+            .speak(ssml(f"Did you want me to play {escape_ssml_lite(confirm_text)}?")) \
+            .reprompt(ssml("Say yes to go ahead, or no for other options.")) \
             .set_should_end_session(False) \
             .get_response()
 
