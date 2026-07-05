@@ -25,27 +25,32 @@ async def _forward_to_backend(url: str, secret: str, envelope: dict):
 
 
 def handler(event: dict, context=None):
-    """AWS Lambda handler for consuming SQS outbound events and forwarding them via HTTP."""
+    """AWS Lambda handler for consuming SQS outbound events and forwarding them via HTTP.
+
+    Uses SQS partial-batch responses: only messages that fail to forward are
+    returned in ``batchItemFailures`` so they alone are retried (and, after the
+    queue's maxReceiveCount, land in the DLQ). Successful and unparseable
+    messages are acknowledged (deleted) so a poison message can't loop forever.
+    """
     url = settings.WEBHOOK_OUTBOUND_URL or ""
     secret = settings.WEBHOOK_OUTBOUND_SECRET or ""
 
     if not url:
-        return
+        return {"batchItemFailures": []}
 
     async def _run():
         records = event.get("Records") or []
-        errors = []
+        failures = []
         for record in records:
             try:
                 envelope = json.loads(record.get("body") or "{}")
             except (json.JSONDecodeError, TypeError):
-                continue
+                continue  # unparseable — acknowledge (don't retry a poison message)
             try:
                 await _forward_to_backend(url, secret, envelope)
-            except Exception as e:
-                errors.append({"event": envelope.get("event"), "status": getattr(getattr(e, "response", None), "status_code", None)})
-        if errors:
-            raise Exception(f"Outbound consumer partial failure: {len(errors)} of {len(records)} messages failed")
+            except Exception:
+                failures.append({"itemIdentifier": record.get("messageId")})
+        return {"batchItemFailures": failures}
 
     loop = asyncio.get_event_loop()
     if loop.is_running():

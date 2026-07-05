@@ -107,7 +107,16 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub hear-webhook-out-python-${Stage}
-      VisibilityTimeout: 60
+      VisibilityTimeout: 180          # >= 6x the function timeout
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OutboundDLQ.Arn
+        maxReceiveCount: 5            # after 5 failed attempts -> DLQ
+
+  OutboundDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-webhook-out-python-${Stage}-dlq
       MessageRetentionPeriod: 1209600
 
   OutboundConsumerFunction:
@@ -126,6 +135,8 @@ Resources:
           Properties:
             Queue: !GetAtt OutboundQueue.Arn
             BatchSize: 10
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
 
 Outputs:
   SkillFunctionArn:
