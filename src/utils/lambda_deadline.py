@@ -46,9 +46,8 @@ def compute_bounded_api_timeout_ms(handler_input, reserve_ms: int = 400) -> int:
 def api_options(handler_input) -> int:
     """Bounded per-call API timeout (ms) derived from the remaining Lambda budget.
 
-    Passed as the ``timeout_ms`` argument to API helpers such as
-    ``get_content_by_id`` so single content look-ups stay within the invocation
-    deadline.
+    Passed as the ``timeout_ms`` argument to API helpers so look-ups stay
+    within the invocation deadline.
     """
     return compute_bounded_api_timeout_ms(handler_input)
 

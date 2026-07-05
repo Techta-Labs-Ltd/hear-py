@@ -51,7 +51,7 @@ async def play_next_queued_item(handler_input, *, speak_intro: bool = True, intr
         snapshot = next(
             (i for i in (store_snap.get("pendingBrowseItems") or [])
              if isinstance(i, dict) and i.get("id") == (content.get("id") or (raw.get("id") if isinstance(raw, dict) else None))),
-            raw if (isinstance(raw, dict) and (raw.get("spokenTitle") or raw.get("displayTitle") or raw.get("title"))) else None,
+            raw if (isinstance(raw, dict) and raw.get("title")) else None,
         )
         if snapshot:
             content = {
@@ -68,8 +68,6 @@ async def play_next_queued_item(handler_input, *, speak_intro: bool = True, intr
 
         title = (
             content_title_for_speech(content)
-            or (raw.get("spokenTitle") if isinstance(raw, dict) else None)
-            or (raw.get("displayTitle") if isinstance(raw, dict) else None)
             or (raw.get("title") if isinstance(raw, dict) else None)
         )
         credit = pick_content_credit(content) or (raw.get("creator") if isinstance(raw, dict) else None)

@@ -4,7 +4,7 @@ import time
 import uuid
 import httpx
 from config import settings
-from src.utils.normalize_content_item import normalize_content_item, normalize_content_items
+from src.utils.normalize_content_item import normalize_content_items
 
 _CLIENT: httpx.AsyncClient | None = None
 
@@ -77,8 +77,8 @@ def _normalize_search_response(data: dict) -> dict:
     results = normalize_content_items(raw_results)
     return {
         "results": results,
-        "total_hits": data.get("total_hits") if isinstance(data.get("total_hits"), (int, float)) else len(results),
-        "total_pages": data.get("total_pages") if isinstance(data.get("total_pages"), (int, float)) else None,
+        "total_hits": data.get("total") if isinstance(data.get("total"), (int, float)) else len(results),
+        "total_pages": data.get("totalPages") if isinstance(data.get("totalPages"), (int, float)) else None,
         "page": data.get("page") if isinstance(data.get("page"), (int, float)) else 0,
         "client_message": data.get("client_message") if data.get("client_message") is not None else None,
         "search_relaxation": data.get("search_relaxation") if data.get("search_relaxation") is not None else None,
@@ -126,14 +126,6 @@ async def search(payload: dict | None = None, timeout_ms: int | None = None) -> 
         "search_relaxation": None,
         "failed": True,
     }
-
-
-async def get_content_by_id(content_id: str, timeout_ms: int | None = None) -> dict | None:
-    """Fetch a single content item and return it normalized."""
-    status, data = await _request("GET", f"/content/{content_id}", timeout_ms=timeout_ms)
-    if status == 200 and isinstance(data, dict):
-        return normalize_content_item(data)
-    return None
 
 
 async def save_feedback(

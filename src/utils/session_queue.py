@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.api import get_content_by_id
-
 
 def clone_browse_menu_item(item) -> dict | None:
     if not isinstance(item, dict):
@@ -102,14 +100,9 @@ def is_same_browse_session(prev: dict | None, catalog: dict | None, intent: str 
 
 
 async def resolve_queue_item_for_playback(item, options: dict | None = None) -> dict | None:
-    """Resolve full content for a queue item, fetching from the API if necessary."""
+    """Resolve full content for a queue item."""
     if not isinstance(item, dict):
         return None
     if item.get("audioUrl") or (isinstance(item.get("tracks"), list) and item["tracks"]):
         return item
-    if not item.get("id"):
-        return None
-    try:
-        return await get_content_by_id(item["id"])
-    except Exception:
-        return None
+    return None

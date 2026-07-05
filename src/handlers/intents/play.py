@@ -16,7 +16,7 @@ from src.services.persistence import (
     get_store, update_store, set_browse_catalog, get_browse_catalog,
     init_queue, clear_queue, recent_exclude_filters,
 )
-from src.services.api import search, get_content_by_id
+from src.services.api import search
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import (
     ssml, escape_ssml_lite, NO_CONTENT_AVAILABLE, SEARCH_UNAVAILABLE,

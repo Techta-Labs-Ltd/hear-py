@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from config import settings
-from src.services.api import search as api_search, get_content_by_id
+from src.services.api import search as api_search
 from src.services.persistence import get_store, update_store, append_to_queue, set_browse_catalog, get_browse_catalog
 from src.utils.audio import resolve_track_audio
 from src.utils.browse_catalog import catalog_search_context, has_more_server_pages, build_catalog_from_search_result

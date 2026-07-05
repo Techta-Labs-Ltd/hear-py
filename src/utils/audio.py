@@ -128,7 +128,7 @@ def find_speed_url(speeds: list | None, target_speed: float) -> str | None:
         diff = abs(entry["speed"] - target_speed)
         if diff < closest_diff and diff < 0.15:
             closest_diff = diff
-            closest = entry.get("audio_url") or entry.get("audioUrl")
+            closest = entry.get("audioUrl")
     return closest
 
 

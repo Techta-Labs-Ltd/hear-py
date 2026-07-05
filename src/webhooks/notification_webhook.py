@@ -39,7 +39,7 @@ async def handle_notification_webhook(event: dict) -> dict:
         "organisation": parsed.get("organisation") or "",
         "category": parsed.get("category") or "",
         "audioUrl": parsed.get("audioUrl") or "",
-        "duration": parsed.get("duration") or 0,
+        "duration": parsed.get("durationSecs") or 0,
         "publishedAt": parsed.get("publishedAt") or now,
         "ttl": ttl,
     }
@@ -84,7 +84,7 @@ async def check_notifications(user_id: str) -> list:
                 "organisation": item.get("organisation") or "",
                 "category": item.get("category") or "",
                 "audioUrl": item.get("audioUrl") or "",
-                "duration": item.get("duration") or 0,
+                "duration": item.get("durationSecs") or 0,
                 "publishedAt": item.get("publishedAt") or 0,
             })
         return result

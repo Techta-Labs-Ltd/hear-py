@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from src.services.api import get_content_by_id
 from src.services.persistence import get_store
-from src.utils.audio import build_play_directive, resolve_track_audio, resolve_audio_url_for_speed, resolve_effective_playback_speed
+from src.utils.audio import build_play_directive, resolve_audio_url_for_speed, resolve_effective_playback_speed
 from src.utils.content_playback import has_queued_tracks, queue_parent_for_token_fallback
 from src.utils.speech import ssml, RESUMING, NOTHING_TO_RESUME, WELCOME_REPROMPT
 
@@ -65,16 +64,13 @@ async def resume_current_track(handler_input, *, ack_speech: str | None = None) 
 
 
 async def _resolve_resume_playback(store: dict) -> dict | None:
-    """Fetch the last-played content item from the API for resuming."""
-    content_id = store.get("currentContentId") or store.get("feedbackContentId")
-    if content_id:
-        content = await get_content_by_id(content_id)
-        if content:
-            resolved = resolve_track_audio(content, store.get("currentTrackIndex") or 0)
-            if resolved:
-                return {
-                    "audioUrl": resolved["audioUrl"],
-                    "token": resolved["token"],
-                    "metadata": {"title": content.get("title") or "Hear", "subtitle": store.get("feedbackContentTitle") or ""},
-                }
+    """Resolve the last-played content item from locally stored data."""
+    audio_url = store.get("lastAudioUrl")
+    token = store.get("lastToken")
+    if audio_url and token:
+        return {
+            "audioUrl": audio_url,
+            "token": token,
+            "metadata": {"title": store.get("currentContentTitle") or store.get("feedbackContentTitle") or "Hear", "subtitle": store.get("feedbackContentTitle") or ""},
+        }
     return None

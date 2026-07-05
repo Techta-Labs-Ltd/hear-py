@@ -397,7 +397,7 @@ def _browse_item_snapshot(item: dict) -> dict | None:
         "id": item.get("id"),
         "title": item.get("title"),
         "displayTitle": spoken or item.get("displayTitle"),
-        "spokenTitle": spoken or item.get("spokenTitle"),
+        "spokenTitle": spoken,
         "creator": credit or item.get("creator"),
         "summary": item.get("summary") or None,
         "category": item.get("category") or None,

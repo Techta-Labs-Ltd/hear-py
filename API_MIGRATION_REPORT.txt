@@ -1,0 +1,264 @@
+================================================================================
+HEAR-PY API MIGRATION REPORT
+Removal of get_content_by_id and stale/new API field mismatches
+================================================================================
+Date: July 2026
+================================================================================
+
+
+1. REMOVE get_content_by_id
+================================================================================
+
+WHAT IT WAS:
+  src/services/api.py:131-136
+  async def get_content_by_id(content_id, timeout_ms)
+  -> GET /content/{id} then normalize_content_item()
+
+WHY IT'S DEAD:
+  The new search API already returns every field inline in the results array
+  (audioUrl, durationSecs, tracks, playback_speed, creator, organization,
+  shortDescription, etc.). There is no longer any reason to make a second
+  HTTP call to fetch content by ID — all data arrives in search results.
+
+FILES TO REMOVE IMPORTS FROM (9 files):
+
+  src/handlers/intents/play.py            (line 19  - imported but unused)
+  src/handlers/intents/playback.py        (line 18)
+  src/handlers/intents/social.py          (line 22)
+  src/handlers/intents/system.py          (line 57)
+  src/utils/session_queue.py              (line 3)
+  src/utils/feedback_resume.py            (line 3)
+  src/utils/publication_tracks.py         (line 3)
+  src/handlers/audio/playback_finished.py (line 20)
+  src/utils/browse_navigation.py          (line 4  - imported but unused)
+
+CALL SITES TO REFACTOR (8 locations):
+
+  A) src/handlers/intents/playback.py
+     _resolve_resume_playback (lines 105-129)
+     Currently fetches content from API using parent_key and resume_token.
+     Should use locally stored data from the persistence store instead
+     (currentPublication, currentTracks, etc. which are already full content
+     dicts from search results).
+
+  B) src/handlers/intents/playback.py
+     Previous track handler (line 743)
+     Fetches history[i] by ID from API.
+     playHistory items are already full content dicts saved from search
+     results. Can be used directly without an API call.
+
+  C) src/handlers/intents/social.py
+     WhatsThisAboutHandler (line 369)
+     Fetches from about_id.
+     currentSummary, currentContentTitle, and currentCreator are already
+     stored in persistence from the search result that started playback.
+
+  D) src/handlers/intents/system.py
+     Yes/No handler (line 292)
+     Fetches item["id"] from API.
+     The item dict is already a full content dict from the queue or
+     browse catalog (populated by search results). Use it directly.
+
+  E) src/utils/session_queue.py
+     _resolve_full_content (line 113)
+     Fetches by item["id"] when content lacks audioUrl/tracks.
+     With the new API, queue items always arrive with full data. If an
+     item is incomplete, it should simply return None or the item as-is.
+
+  F) src/utils/feedback_resume.py
+     _resolve_resume_playback (line 71)
+     Fetches from currentContentId/feedbackContentId.
+     The full content dict is already stored when playback starts. Use
+     the persisted data directly.
+
+  G) src/utils/publication_tracks.py
+     Publication track resolution (line 61)
+     Fetches publication by parent_id from API.
+     currentTracks is already persisted from the search result that
+     started playback. Use store data.
+
+  H) src/handlers/audio/playback_finished.py
+     Duration resolver (line 71)
+     Fetches content from API to resolve durationSecs.
+     The content dict available locally from the play session already
+     contains durationSecs.
+
+  I) src/utils/lambda_deadline.py
+     Line 50 - docstring mentions get_content_by_id.
+     Remove the stale comment reference.
+
+  J) PROJECT_MAP.txt
+     Lines 467, 1862, 1929 - stale documentation references.
+     Remove or update.
+
+
+2. FIX SEARCH PAGINATION (HIGH PRIORITY)
+================================================================================
+
+WHAT'S BROKEN:
+  src/services/api.py:80-81
+  _normalize_search_response reads data.get("total_hits") and
+  data.get("total_pages") from the API response.
+
+  The new API returns:
+    { "total": 50, "totalPages": 1, ... }
+
+  The code reads snake_case keys that do not exist:
+    data.get("total_hits")   -> always None, falls back to len(results)
+    data.get("total_pages")  -> always None
+
+IMPACT:
+  - Pagination logic in browse_catalog.py and play.py is broken
+  - "Show more" / "next page" in browse will not work correctly
+  - Total result counts are approximated from page length instead of
+    reflecting the actual server total
+
+FIX:
+  src/services/api.py lines 80-81
+  Change data.get("total_hits")  -> data.get("total")
+  Change data.get("total_pages") -> data.get("totalPages")
+  Also fix the error fallback on lines 122-123
+
+DOWNSTREAM CONSUMERS (use "total_hits" and "total_pages" keys from
+the normalized result):
+  src/utils/browse_catalog.py        lines 133, 137
+  src/handlers/intents/play.py       lines 258, 299
+
+
+3. FIX NOTIFICATION DURATION (HIGH PRIORITY)
+================================================================================
+
+WHAT'S BROKEN:
+  src/webhooks/notification_webhook.py lines 42, 87
+  Reads parsed.get("duration") and item.get("duration")
+
+  The new API uses durationSecs, not duration.
+
+IMPACT:
+  Duration will always be 0 in notification payloads.
+  Surrounding fields already use new-API naming (audioUrl, creator, etc.).
+
+FIX:
+  line 42:  parsed.get("duration") -> parsed.get("durationSecs")
+  line 87:  item.get("duration")   -> item.get("durationSecs")
+
+
+4. FIX TRACK-LEVEL CREATOR (HIGH PRIORITY)
+================================================================================
+
+WHAT'S BROKEN:
+  src/handlers/audio/playback_nearly_finished.py line 191
+  Reads track.get("creator")
+
+  In the new API, track objects contain:
+    id, title, categories, tags, audioUrl, shortDescription, durationSecs,
+    playback_speed
+
+  There is NO creator field at the track level. Creator only exists at
+  the parent content item level.
+
+IMPACT:
+  feedbackCreator will always be None for track-based content (publications
+  with tracks array). This affects feedback submission metadata.
+
+FIX:
+  line 191: track.get("creator") -> track.get("creator") or store.get("feedbackCreator")
+  (fall back to the parent content's creator from persistence)
+
+
+5. STALE FALLBACK CODE — DEAD WITH NEW API (MEDIUM PRIORITY)
+================================================================================
+
+A) src/services/persistence.py lines 399-400
+   Falls back to item.get("displayTitle") and item.get("spokenTitle")
+   from raw items. The new API has no such fields. The spoken variable
+   already comes from content_title_for_speech() which handles this.
+   -> Remove the raw-item fallbacks.
+
+B) src/utils/queue_advance.py lines 54, 59-60, 71-72
+   Falls back to raw.get("spokenTitle") / raw.get("displayTitle").
+   Queue items should always be normalized. These fields don't exist
+   in new-API raw data.
+   -> Remove the raw fallbacks.
+
+C) src/handlers/audio/playback_finished.py lines 76-77
+   Falls back to bare duration (milliseconds) if durationSecs is absent.
+   This was a backward-compat path for an old API format that returned
+   duration in milliseconds. New API always returns durationSecs.
+   -> Remove the bare duration fallback.
+
+D) src/utils/audio.py lines 118, 264
+   Falls back to audio_url (snake_case) if audioUrl (camelCase) is absent.
+   The new API always uses audioUrl. Dead fallback.
+   -> Remove audio_url fallback.
+
+
+6. CREATOR FIELD TYPE — OBJECT vs STRING (AWARENESS)
+================================================================================
+
+The new API returns creator as an object:
+  "creator": { "id": "...", "name": "Super Admin" }
+
+normalize_content_item.py already handles this correctly via
+_extract_creator_name() which extracts the name string from the dict.
+
+However, these locations read item.get("creator") directly and could
+receive a dict instead of a string if the item hasn't been normalized:
+  src/handlers/audio/playback_failed.py  lines 103, 108
+  src/handlers/intents/system.py         lines 335, 380, 625
+  src/utils/browse_navigation.py         line 91
+  src/utils/queue_advance.py             line 75
+
+These are currently safe because they receive already-normalized items
+(from get_content_by_id or from stored queue data). Once get_content_by_id
+is removed, ensure all paths normalize content items before storing them
+so creator is always a string by the time it's read.
+
+
+7. SUMMARY OF FILES TOUCHED
+================================================================================
+
+ Phase  File                                        Lines
+ -----  ----                                        -----
+   1    src/services/api.py                         80-81, 122-123, 131-136
+   1    src/handlers/intents/play.py                19
+   1    src/handlers/intents/playback.py             18, 105-129, 743
+   1    src/handlers/intents/social.py               22, 366-375
+   1    src/handlers/intents/system.py               57, 289-296
+   1    src/utils/session_queue.py                   3, 105-115
+   1    src/utils/feedback_resume.py                 3, 67-79
+   1    src/utils/publication_tracks.py              3, 55-69
+   1    src/handlers/audio/playback_finished.py      20, 65-79
+   1    src/utils/browse_navigation.py               4
+   1    src/utils/lambda_deadline.py                 50
+   1    PROJECT_MAP.txt                              467, 1862, 1929
+   3    src/webhooks/notification_webhook.py         42, 87
+   4    src/handlers/audio/playback_nearly_finished.py 191
+   5    src/services/persistence.py                  399-400
+   5    src/utils/queue_advance.py                   54, 59-60, 71-72
+   5    src/utils/audio.py                           118, 264
+
+ TOTAL: 18 files
+
+
+8. WHAT DOES NOT NEED CHANGING
+================================================================================
+
+  src/utils/normalize_content_item.py
+    Correctly bridges old-to-new API field names:
+      shortDescription -> summary (synthetic internal field)
+      creator.name     -> creator (object -> string)
+      categories[0]    -> category (singular)
+    All callers go through this normalization, so it works fine.
+
+  src/utils/speech.py
+    Uses the word "description" in human-facing spoken text strings.
+    This is NOT a data field access — no change needed.
+
+  creator/credit field handling in play-by-creator/play-by-organization
+    Already works because it goes through normalize_content_item or
+    uses _extract_creator_name / pick_content_credit properly.
+
+================================================================================
+END OF REPORT
+================================================================================

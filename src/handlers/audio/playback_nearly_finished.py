@@ -188,7 +188,7 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
                     "playbackTrackId": track.get("id"),
                     "feedbackCategory": track.get("category") or store.get("feedbackCategory"),
                     "feedbackContentTitle": track.get("title"),
-                    "feedbackCreator": track.get("creator"),
+                    "feedbackCreator": track.get("creator") or store.get("feedbackCreator"),
                     "currentTotalTracks": resolved_track.get("total"),
                     "currentDurationSecs": track_duration,
                 })

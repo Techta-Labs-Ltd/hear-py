@@ -15,7 +15,7 @@ from src.services.persistence import (
     get_browse_catalog, record_listening_event, clear_queue,
     reset_queue_items_completed, bump_queue_items_completed, peek_has_next_queue_item,
 )
-from src.services.api import search, get_content_by_id
+from src.services.api import search
 from src.services.alexa_api_client import get_alexa_user_id
 from src.services.flush_previous_track import flush_previous_track
 from src.utils.skill_request import get_request_type, get_intent_name
@@ -43,7 +43,7 @@ from src.utils.listen_tracker import close_listen_segment
 from src.utils.feedback_gate import block_if_awaiting_feedback, enforce_interaction_gate
 from src.utils.content_playback import (
     has_queued_tracks, queue_parent_for_token_fallback,
-    resolve_track_index_for_token, is_multi_track_item, is_finished_token_last_in_session,
+    is_finished_token_last_in_session,
 )
 from src.utils.publication_tracks import (
     has_more_publication_tracks, resolve_publication_track_at_index,
@@ -60,7 +60,7 @@ from src.utils.browse_navigation import (
 )
 from src.utils.search_filters import SearchPayload
 from src.utils.lambda_deadline import (
-    compute_search_timeout_ms, api_options, has_budget_for_api,
+    compute_search_timeout_ms, has_budget_for_api,
 )
 from src.utils.normalize_content_item import (
     content_title_for_speech, pick_content_credit, normalize_content_items,
@@ -103,37 +103,34 @@ def _speed_change_ack_speech(requested_speed, variants):
 
 
 async def _resolve_resume_playback(store: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Attempt to resolve playback media details for a resume operation."""
-    content = None
+    """Attempt to resolve playback media details for a resume operation from locally stored data."""
     resume_token = resolve_active_playback_token(store)
-    parent_key = store.get("playbackParentId") or store.get("currentPublicationId")
-    if parent_key:
-        try:
-            content = await get_content_by_id(parent_key)
-        except Exception:
-            content = None
-    if not content and resume_token:
-        try:
-            content = await get_content_by_id(resume_token)
-        except Exception:
-            content = None
-    if not content:
+    tracks = store.get("currentTracks") or []
+    track_idx = store.get("currentTrackIndex", 0)
+    track = tracks[track_idx] if track_idx < len(tracks) and tracks else None
+
+    if track and track.get("audioUrl"):
+        token = track.get("id") or resume_token or store.get("lastToken")
+        return {
+            "audioUrl": track["audioUrl"],
+            "token": token,
+            "metadata": {
+                "title": track.get("title") or store.get("currentContentTitle") or store.get("feedbackContentTitle") or "Hear",
+                "subtitle": store.get("feedbackContentTitle") or "",
+            },
+        }
+
+    audio_url = store.get("lastAudioUrl")
+    token = resume_token or store.get("lastToken")
+    if not audio_url or not token:
         return None
-    idx = resolve_track_index_for_token(content, resume_token or store.get("lastToken")) \
-        if is_multi_track_item(content) else (store.get("currentTrackIndex", 0))
-    track_info = resolve_track_audio(content, idx)
-    token = resume_token or track_info.get("token")
-    audio_url = track_info.get("audioUrl")
-    if is_multi_track_item(content) and idx < len(content.get("tracks", [])):
-        tr = content["tracks"][idx]
-        if tr and tr.get("audioUrl"):
-            audio_url = tr["audioUrl"]
     return {
         "audioUrl": audio_url,
         "token": token,
-        "metadata": build_content_metadata(
-            content, track_info.get("trackTitle"), track_info.get("effectiveCategory"),
-        ),
+        "metadata": {
+            "title": store.get("currentContentTitle") or store.get("feedbackContentTitle") or "Hear",
+            "subtitle": store.get("feedbackContentTitle") or "",
+        },
     }
 
 
@@ -261,7 +258,7 @@ async def _handle_relative_speed_step(handler_input: HandlerInput, direction: st
 
         update_store(handler_input, {"playbackSpeed": next_speed["speed"]})
         try:
-            url_key = next_speed.get("audio_url") or next_speed.get("audioUrl")
+            url_key = next_speed.get("audioUrl")
             restarted = await _restart_current_playback_at_speed(
                 handler_input, next_speed["speed"], url_key,
             )
@@ -731,25 +728,16 @@ class PreviousIntentHandler(AbstractRequestHandler):
             return browse_prev
 
         history = [
-            entry if isinstance(entry, str) else (entry.get("id") if isinstance(entry, dict) else None)
-            for entry in (store.get("playHistory") or [])
+            entry for entry in (store.get("playHistory") or [])
+            if isinstance(entry, dict) and entry.get("audioUrl")
         ]
-        history = [h for h in history if h]
 
-        for i in range(1, len(history)):
-            if not has_budget_for_api(handler_input):
-                break
-            try:
-                content = await get_content_by_id(history[i], api_options(handler_input))
-                if not content or not content.get("audioUrl"):
-                    continue
-                return await start_playback(
-                    handler_input, content,
-                    PLAYING_PREVIOUS(content.get("title", "")),
-                )
-            except Exception:
-                cleaned = [h for idx, h in enumerate(history) if idx != i]
-                update_store(handler_input, {"playHistory": cleaned})
+        if len(history) > 1:
+            content = history[1]
+            return await start_playback(
+                handler_input, content,
+                PLAYING_PREVIOUS(content.get("title", "")),
+            )
 
         return handler_input.response_builder \
             .speak(NO_PREVIOUS) \

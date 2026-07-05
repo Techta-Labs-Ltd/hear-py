@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from src.services.api import get_content_by_id
-from src.services.store_core import update_store
-from src.utils.normalize_content_item import normalize_content_item
-
 
 def get_publication_track_total(store: dict) -> int:
     if not store:
@@ -46,7 +42,7 @@ def slim_publication_track(track) -> dict | None:
 
 
 async def resolve_publication_track_at_index(handler_input, store: dict, track_index: int) -> dict | None:
-    """Resolve a publication track at the given index, fetching from API if needed."""
+    """Resolve a publication track at the given index from locally stored data."""
     total = get_publication_track_total(store)
     if track_index < 0 or track_index >= total:
         return None
@@ -54,20 +50,4 @@ async def resolve_publication_track_at_index(handler_input, store: dict, track_i
     track = tracks[track_index] if track_index < len(tracks) else None
     if track and track.get("audioUrl"):
         return {"track": track, "tracks": tracks, "total": total}
-    parent_id = store.get("playbackParentId") or store.get("currentPublicationId")
-    if not parent_id:
-        return None
-    try:
-        raw = await get_content_by_id(parent_id)
-        content = normalize_content_item(raw)
-        if not content or not content.get("tracks"):
-            return None
-        tracks = content["tracks"]
-        resolved_total = len(tracks)
-        update_store(handler_input, {"currentTracks": tracks, "currentTotalTracks": resolved_total})
-        track = tracks[track_index] if track_index < len(tracks) else None
-        if track and track.get("audioUrl"):
-            return {"track": track, "tracks": tracks, "total": resolved_total}
-    except Exception:
-        return None
     return None

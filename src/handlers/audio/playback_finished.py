@@ -17,7 +17,6 @@ from src.services.persistence import (
     mark_feedback_asked, dismiss_feedback_prompt, bump_queue_items_completed,
     peek_has_next_queue_item,
 )
-from src.services.api import get_content_by_id
 from src.services.alexa_api_client import send_playback_events, get_alexa_user_id
 from src.services.alexa_reminders import has_reminder_permission, schedule_feedback_reminder_if_needed
 from src.utils.skill_request import get_request_type
@@ -51,44 +50,20 @@ async def _resolve_duration_secs_for_finish(store, token):
     if isinstance(store.get("currentDurationSecs"), (int, float)) and store.get("currentDurationSecs", 0) > 0:
         return store["currentDurationSecs"]
 
-    candidates = [
-        store.get("playbackParentId"),
-        store.get("currentPublicationId"),
-        store.get("playbackTrackId"),
-        token,
-        store.get("lastToken"),
-        store.get("feedbackContentId"),
-    ]
-    candidates = [c for c in candidates if c]
+    tracks = store.get("currentTracks") or []
+    idx = store.get("currentTrackIndex", 0)
+    if idx < len(tracks):
+        tr = tracks[idx]
+        if tr and isinstance(tr.get("durationSecs"), (int, float)) and tr["durationSecs"] > 0:
+            return tr["durationSecs"]
 
-    seen = set()
-    for id_val in candidates:
-        key = str(id_val)
-        if key in seen:
+    for tr in tracks:
+        if not tr or not tr.get("id"):
             continue
-        seen.add(key)
-        try:
-            content = await get_content_by_id(key)
-            if not content:
-                continue
-            if isinstance(content.get("durationSecs"), (int, float)) and content["durationSecs"] > 0:
-                return content["durationSecs"]
-            if isinstance(content.get("duration"), (int, float)) and content["duration"] > 0:
-                return content["duration"] / 1000 if content["duration"] > 10000 else content["duration"]
-            tracks = content.get("tracks")
-            if isinstance(tracks, list) and tracks:
-                idx = store.get("currentTrackIndex", 0)
-                by_idx = tracks[idx] if idx < len(tracks) else None
-                if by_idx and isinstance(by_idx.get("durationSecs"), (int, float)) and by_idx["durationSecs"] > 0:
-                    return by_idx["durationSecs"]
-                for tr in tracks:
-                    if not tr or not tr.get("id"):
-                        continue
-                    if tr["id"] == token or tr["id"] == store.get("playbackTrackId"):
-                        if isinstance(tr.get("durationSecs"), (int, float)) and tr["durationSecs"] > 0:
-                            return tr["durationSecs"]
-        except Exception:
-            pass
+        if tr["id"] == token or tr["id"] == store.get("playbackTrackId"):
+            if isinstance(tr.get("durationSecs"), (int, float)) and tr["durationSecs"] > 0:
+                return tr["durationSecs"]
+
     return None
 
 

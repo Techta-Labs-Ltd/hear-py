@@ -54,7 +54,6 @@ from src.handlers.intents.play import BrowseContentHandler
 from src.handlers.feedback.enjoyed import FeedbackEnjoyedHandler
 from src.handlers.intents.social import FollowCreatorHandler
 from src.handlers.intents.play import discover_content_via_search, auto_play_first_from_search
-from src.services.api import get_content_by_id
 from src.handlers.intents.play import WhatsTrendingHandler
 from src.handlers.intents.play import ShowMoreBrowseHandler
 from src.handlers.feedback.not_enjoyed import FeedbackNotEnjoyedHandler
@@ -286,19 +285,10 @@ class YesIntentHandler(AbstractRequestHandler):
                 .speak(ssml(NO_TRACKS_AVAILABLE)) \
                 .response
 
-        content = None
-        if item.get("id"):
-            try:
-                content = await get_content_by_id(item["id"])
-            except Exception:
-                content = None
-        if not content:
-            content = item
-
         update_store(handler_input, {"listModeActive": False})
         await clear_feedback(handler_input)
 
-        return await start_playback(handler_input, content, "", 0)
+        return await start_playback(handler_input, item, "", 0)
 
     async def _handle_notification_choice(self, handler_input, store):
         """Queue pending notification tracks and optionally auto-play."""

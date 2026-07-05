@@ -19,7 +19,6 @@ from src.services.persistence import (
     get_store, update_store, is_following, add_followed_creator,
     remove_followed_creator, clear_feedback, dismiss_feedback_prompt,
 )
-from src.services.api import get_content_by_id
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import (
     ssml, escape_ssml_lite, is_bad_credit, CREATOR_CREDIT, CREATOR_CREDIT_UNKNOWN,
@@ -33,9 +32,6 @@ from src.utils.speech import (
 )
 from src.utils.feedback_gate import block_if_awaiting_feedback, enforce_interaction_gate
 from src.utils.feedback_flow import idle_next_response
-from src.utils.normalize_content_item import (
-    content_title_for_speech, pick_content_credit, pick_summary,
-)
 from src.utils.playback_context import (
     read_audio_player_context, is_audio_player_active,
     build_report_context, snapshot_report_context,
@@ -334,15 +330,6 @@ class ReportCreatorHandler(AbstractRequestHandler):
                 .response
 
 
-def _resolve_about_content_id(store: Dict[str, Any]) -> Optional[str]:
-    """Resolve the best content ID to use for the 'what's this about' query."""
-    if not store:
-        return None
-    return store.get("currentPublicationId") \
-        or store.get("playbackParentId") \
-        or store.get("currentContentId") \
-        or store.get("feedbackContentId")
-
 
 class WhatsThisAboutHandler(AbstractRequestHandler):
     """Describes what the currently playing content is about."""
@@ -362,17 +349,6 @@ class WhatsThisAboutHandler(AbstractRequestHandler):
         summary = store.get("currentSummary")
         title = store.get("currentContentTitle") or store.get("feedbackContentTitle")
         creator = store.get("currentCreator") or store.get("feedbackCreator")
-
-        about_id = _resolve_about_content_id(store)
-        if about_id and not summary:
-            try:
-                content = await get_content_by_id(about_id)
-                if content:
-                    summary = pick_summary(content) or summary
-                    title = content_title_for_speech(content) or title
-                    creator = pick_content_credit(content) or creator
-            except Exception:
-                pass
 
         if creator and is_bad_credit(creator):
             creator = None
