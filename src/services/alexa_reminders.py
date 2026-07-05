@@ -18,9 +18,9 @@ def has_reminder_permission(handler_input) -> bool:
 def _get_service_client(handler_input) -> dict | None:
     try:
         sys = handler_input.request_envelope.context.System
-        if not sys.api_endpoint or not sys.api_access_token:
+        if not sys.apiEndpoint or not sys.apiAccessToken:
             return None
-        return {"endpoint": str(sys.api_endpoint).rstrip("/"), "token": sys.api_access_token}
+        return {"endpoint": str(sys.apiEndpoint).rstrip("/"), "token": sys.apiAccessToken}
     except Exception:
         return None
 

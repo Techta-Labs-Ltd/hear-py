@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import re
 
+from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
+
 from src.nlp.classifier import classify_utterance
 from src.nlp.dynamic_data import is_loaded as dynamic_data_loaded, load as load_dynamic_data
 from src.nlp.grpc_blocklist import is_gated_for_grpc, GATED_INTENTS
@@ -46,7 +48,7 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     return None
 
 
-class NlpInterceptor:
+class NlpInterceptor(AbstractRequestInterceptor):
     """Request interceptor that performs NLP classification on incoming Alexa intents."""
 
     async def process(self, handler_input) -> None:

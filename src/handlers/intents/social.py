@@ -52,8 +52,8 @@ def _gate_social_intent(handler_input: HandlerInput):
 def _get_user_id(handler_input: HandlerInput) -> Optional[str]:
     """Extract Alexa user ID from the request context."""
     ctx = handler_input.request_envelope.context
-    if ctx and hasattr(ctx, "system") and ctx.system and ctx.system.user:
-        return ctx.system.user.user_id
+    if ctx and hasattr(ctx, "System") and ctx.System and ctx.System.user:
+        return ctx.System.user.userId
     return None
 
 
@@ -265,7 +265,7 @@ class ReportContentHandler(AbstractRequestHandler):
         device_id = None
         try:
             locale = handler_input.request_envelope.request.locale
-            device_id = handler_input.request_envelope.context.system.device.device_id
+            device_id = handler_input.request_envelope.context.System.device.deviceId
         except Exception:
             pass
 

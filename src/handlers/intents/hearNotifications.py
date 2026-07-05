@@ -30,9 +30,9 @@ class HearNotificationsHandler(AbstractRequestHandler):
             return gated
 
         store = get_store(handler_input)
-        user_id = handler_input.request_envelope.context.system.user.user_id \
-            if handler_input.request_envelope.context and handler_input.request_envelope.context.system \
-            and handler_input.request_envelope.context.system.user else None
+        user_id = handler_input.request_envelope.context.System.user.userId \
+            if handler_input.request_envelope.context and handler_input.request_envelope.context.System \
+            and handler_input.request_envelope.context.System.user else None
 
         if not store.get("notificationsEnabled"):
             return handler_input.response_builder \

@@ -1,17 +1,17 @@
 from __future__ import annotations
+from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from src.services.persistence import get_store
 from src.webhooks.notification_webhook import check_notifications
 
 
-class NotificationMiddleware:
+class NotificationMiddleware(AbstractRequestInterceptor):
     """Check for pending notifications on launch and attach them to request attrs.
 
     If a blocking interaction (feedback / still-listening / continue-after-flag)
     is active the notifications are deferred rather than announced immediately.
     """
 
-    @staticmethod
-    async def process(handler_input) -> None:
+    async def process(self, handler_input) -> None:
         try:
             request_type = handler_input.request_envelope.request.type
         except Exception:

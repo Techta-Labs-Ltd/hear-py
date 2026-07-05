@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
+
 _DISPATCHABLE: set[str] = {"trending", "local", "creator", "organization", "category", "browse", "following", "general"}
 
 
@@ -137,17 +139,8 @@ def _build_search_params(nlp: dict | None) -> dict | None:
     return {"intent": nlp["intent"], "query": query, "slots": slots}
 
 
-class ConfirmationMiddleware:
-    """Middleware that builds a human-readable confirmation phrase from the NLU intent.
-
-    When the NLU classifies an intent as one of the dispatchable types, this
-    middleware builds a natural-language confirmation (e.g. "Did you say X?")
-    and stores it in ``_pendingConfirmation`` on the request attributes so the
-    handler can decide whether to confirm before searching.
-    """
-
-    @staticmethod
-    def process(handler_input) -> None:
+class ConfirmationMiddleware(AbstractRequestInterceptor):
+    def process(self, handler_input) -> None:
         try:
             request_type = handler_input.request_envelope.request.type
         except Exception:

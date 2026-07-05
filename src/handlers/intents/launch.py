@@ -80,8 +80,8 @@ PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ
 def _get_user_id(handler_input: HandlerInput) -> Optional[str]:
     """Extract Alexa user ID from the request context."""
     ctx = handler_input.request_envelope.context
-    if ctx and hasattr(ctx, "system") and ctx.system:
-        return ctx.system.user.user_id if ctx.system.user else None
+    if ctx and hasattr(ctx, "System") and ctx.System:
+        return ctx.System.user.userId if ctx.System.user else None
     return None
 
 

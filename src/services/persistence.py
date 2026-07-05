@@ -2,6 +2,9 @@ from __future__ import annotations
 import time
 import asyncio
 from copy import deepcopy
+
+from ask_sdk_core.dispatch_components import AbstractRequestInterceptor, AbstractResponseInterceptor
+
 from config import settings
 # DEFAULT_STORE / get_store / update_store live in the leaf module store_core so
 # that low-level modules (alexa_reminders, publication_tracks) can share them
@@ -603,11 +606,10 @@ def build_persisted_snapshot(store: dict) -> dict:
     return snapshot
 
 
-class LoadPersistenceInterceptor:
+class LoadPersistenceInterceptor(AbstractRequestInterceptor):
     """Request interceptor that loads persisted session state into request attributes."""
 
-    @staticmethod
-    async def process(handler_input) -> None:
+    async def process(self, handler_input) -> None:
 
         if getattr(handler_input.request_envelope.request, "type", None) == "CanFulfillIntentRequest":
             handler_input.attributes_manager.request_attributes = {"_store": merge_initial_store({}), "_dirty": False}
@@ -641,11 +643,10 @@ class LoadPersistenceInterceptor:
         handler_input.attributes_manager.request_attributes = {"_store": store, "_dirty": False}
 
 
-class SavePersistenceInterceptor:
+class SavePersistenceInterceptor(AbstractResponseInterceptor):
     """Response interceptor that saves the session store to persistent attributes."""
 
-    @staticmethod
-    async def process(handler_input) -> None:
+    async def process(self, handler_input) -> None:
         try:
             attrs = handler_input.attributes_manager.request_attributes
             if not attrs.get("_dirty"):

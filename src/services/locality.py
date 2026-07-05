@@ -25,12 +25,12 @@ async def get_device_address(handler_input) -> dict | None:
     """Fetch the device's country-and-postal-code address via the Alexa API."""
     try:
         sys = handler_input.request_envelope.context.System
-        if not sys.api_endpoint or sys.api_access_token is None or not (sys.device and sys.device.deviceId):
+        if not sys.apiEndpoint or sys.apiAccessToken is None or not (sys.device and sys.device.deviceId):
             return None
     except Exception:
         return None
-    api_endpoint = sys.api_endpoint
-    api_access_token = sys.api_access_token
+    api_endpoint = sys.apiEndpoint
+    api_access_token = sys.apiAccessToken
     device_id = sys.device.deviceId
     try:
         async with httpx.AsyncClient() as client:
@@ -87,13 +87,13 @@ async def _fetch_profile_setting_with_status(
 ) -> dict:
     try:
         sys = handler_input.request_envelope.context.System
-        if not sys.api_endpoint or sys.api_access_token is None:
+        if not sys.apiEndpoint or sys.apiAccessToken is None:
             return {"value": None, "status": 0}
     except Exception:
         return {"value": None, "status": 0}
 
-    api_endpoint = sys.api_endpoint
-    api_access_token = sys.api_access_token
+    api_endpoint = sys.apiEndpoint
+    api_access_token = sys.apiAccessToken
 
     try:
         async with httpx.AsyncClient() as client:

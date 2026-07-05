@@ -32,7 +32,7 @@ NOTIFICATIONS = {"PERMISSION_SCOPE": NOTIFICATIONS_WRITE}
 def has_notification_permission(handler_input: HandlerInput) -> bool:
     """Check whether the user has granted notification permissions."""
     try:
-        permissions = handler_input.request_envelope.context.system.user.permissions
+        permissions = handler_input.request_envelope.context.System.user.permissions
         if not permissions or not permissions.scopes:
             return False
         return permissions.scopes.get(NOTIFICATIONS["PERMISSION_SCOPE"], {}).get("status") == "GRANTED"
@@ -68,8 +68,8 @@ async def ensure_subscription(handler_input: HandlerInput, store: Optional[Dict[
         store = get_store(handler_input)
 
     ctx = handler_input.request_envelope.context
-    alexa_user_id = ctx.system.user.user_id if ctx.system and ctx.system.user else None
-    device_id = ctx.system.device.device_id if ctx.system and ctx.system.device else None
+    alexa_user_id = ctx.System.user.userId if ctx.System and ctx.System.user else None
+    device_id = ctx.System.device.deviceId if ctx.System and ctx.System.device else None
     if not alexa_user_id or not device_id:
         return {"ok": False, "reason": "missing_identity"}
 
@@ -85,7 +85,7 @@ async def ensure_subscription(handler_input: HandlerInput, store: Optional[Dict[
             "creatorIds": [c.get("id") for c in (store.get("followedCreators") or []) if c.get("id")],
             "locality": store.get("locality"),
             "timestamp": int(time.time() * 1000),
-            "apiEndpoint": ctx.system.api_endpoint if ctx.system else None,
+            "apiEndpoint": ctx.System.apiEndpoint if ctx.System else None,
             "locale": locale,
         }, {"awaitQueue": True})
         update_store(handler_input, {"notificationsEnabled": True, "deviceId": device_id})
@@ -178,9 +178,9 @@ class DisableNotificationsHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        user_id = handler_input.request_envelope.context.system.user.user_id \
-            if handler_input.request_envelope.context and handler_input.request_envelope.context.system \
-            and handler_input.request_envelope.context.system.user else None
+        user_id = handler_input.request_envelope.context.System.user.userId \
+            if handler_input.request_envelope.context and handler_input.request_envelope.context.System \
+            and handler_input.request_envelope.context.System.user else None
         if not user_id:
             return handler_input.response_builder \
                 .speak(ERROR_GENERIC) \

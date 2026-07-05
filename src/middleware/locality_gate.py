@@ -1,13 +1,13 @@
 from __future__ import annotations
+from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from src.utils.skill_request import get_request_type
 from src.services.persistence import get_store
 
 
-class LocalityGateMiddleware:
+class LocalityGateMiddleware(AbstractRequestInterceptor):
     """Block 'local' intent requests when no locality data is available."""
 
-    @staticmethod
-    def process(handler_input) -> None:
+    def process(self, handler_input) -> None:
         request_type = get_request_type(handler_input)
         if request_type != "IntentRequest":
             return
