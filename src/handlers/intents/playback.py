@@ -351,7 +351,7 @@ class SetPlaybackSpeedHandler(AbstractRequestHandler):
         try:
             speed_raw = get_slot_value(handler_input, "speed")
         except Exception:
-            slots = handler_input.request_envelope.request.intent.slots if \
+            slots = handler_input.request_envelope.request.intent.get("slots") if \
                 hasattr(handler_input.request_envelope.request, "intent") else {}
             slot = slots.get("speed") if slots else None
             speed_raw = slot.value if slot and slot.value else None

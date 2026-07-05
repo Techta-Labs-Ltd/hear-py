@@ -21,7 +21,7 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     """Extract the best raw utterance text from the Alexa intent slots."""
     request = handler_input.request_envelope.request if handler_input.request_envelope else None
     intent = request.intent if request else None
-    slots = intent.slots if intent else None
+    slots = intent.get("slots") if intent else None
     if not slots:
         return None
 

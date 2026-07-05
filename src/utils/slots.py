@@ -8,7 +8,7 @@ from src.utils.skill_request import get_request_type, get_intent_name
 def extract_speed_slot(handler_input) -> float | None:
     """Extract and normalize a playback speed value from the intent slots."""
     try:
-        slots = (handler_input.request_envelope.request.intent.slots if handler_input.request_envelope.request.intent else None) or {}
+        slots = (handler_input.request_envelope.request.intent.get("slots") if handler_input.request_envelope.request.intent else None) or {}
         speed_slot = slots.get("speed")
         raw = (speed_slot.value if speed_slot else None) or ""
         return normalise_speed(raw)
@@ -19,7 +19,7 @@ def extract_speed_slot(handler_input) -> float | None:
 def extract_seek_slot(handler_input) -> dict:
     """Extract a seek offset in milliseconds from the intent slots."""
     try:
-        slots = (handler_input.request_envelope.request.intent.slots if handler_input.request_envelope.request.intent else None) or {}
+        slots = (handler_input.request_envelope.request.intent.get("slots") if handler_input.request_envelope.request.intent else None) or {}
         duration_val = (slots.get("time").value if slots.get("time") else None) or None
         number_val = (slots.get("number").value if slots.get("number") else None) or None
     except Exception:

@@ -121,7 +121,7 @@ def build_search_filters(handler_input, store: dict | None = None, *, q: str = "
 def extract_slot_value(handler_input, slot_name: str) -> str:
     """Extract a slot value from the Alexa request, checking resolutions if needed."""
     try:
-        slots = (handler_input.request_envelope.request.intent.slots if handler_input.request_envelope.request.intent else None) or {}
+        slots = (handler_input.request_envelope.request.intent.get("slots") if handler_input.request_envelope.request.intent else None) or {}
         slot = slots.get(slot_name)
         if slot and slot.value is not None and str(slot.value).strip():
             return str(slot.value).strip()

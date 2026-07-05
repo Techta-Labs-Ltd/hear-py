@@ -68,7 +68,7 @@ def _summarize_intent_slots(handler_input: HandlerInput) -> Dict[str, Any]:
     """Extract slot values from the Alexa intent."""
     slots = None
     try:
-        slots = handler_input.request_envelope.request.intent.slots
+        slots = handler_input.request_envelope.request.intent.get("slots")
     except Exception:
         pass
     if not slots or not isinstance(slots, dict):
@@ -100,7 +100,7 @@ def _extract_slot_value(handler_input: HandlerInput, slot_name: str) -> Optional
 def _raw_search_phrase(handler_input: HandlerInput) -> Optional[str]:
     """Get the raw query slot value from the intent."""
     try:
-        return handler_input.request_envelope.request.intent.slots.get("query", None).value
+        return handler_input.request_envelope.request.intent.get("slots", {}).get("query", None).value
     except Exception:
         pass
     return None

@@ -247,7 +247,7 @@ def resolve_seek_ms(handler_input) -> int:
     """Extract a seek offset in ms from the intent slots or fall back to default."""
     try:
         intent = handler_input.request_envelope.request.intent
-        slots = (intent.slots if intent else None) or {}
+        slots = (intent.get("slots") if intent else None) or {}
         duration_val = (slots.get("time") or {}).get("value") if isinstance(slots.get("time"), dict) else None
         number_val = (slots.get("number") or {}).get("value") if isinstance(slots.get("number"), dict) else None
         from_duration = parse_duration_to_ms(duration_val)

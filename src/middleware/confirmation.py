@@ -94,7 +94,7 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
 
 def _extract_raw_utterance_from_attrs(handler_input) -> str | None:
     try:
-        slots = handler_input.request_envelope.request.intent.slots
+        slots = handler_input.request_envelope.request.intent.get("slots")
     except Exception:
         return None
     if not slots:
