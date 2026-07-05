@@ -227,23 +227,46 @@ def _normalize_play_history_entry(entry) -> dict | None:
     if isinstance(entry, str):
         return {"id": entry}
     if isinstance(entry, dict) and entry.get("id"):
+        if entry.get("audioUrl"):
+            return {
+                "id": str(entry["id"]),
+                "title": entry.get("title"),
+                "audioUrl": entry.get("audioUrl"),
+                "durationSecs": entry.get("durationSecs") if "durationSecs" in entry else None,
+                "tracks": entry.get("tracks") if entry.get("tracks") else None,
+                "playback_speed": entry.get("playback_speed") if entry.get("playback_speed") else None,
+                "creator": entry.get("creator"),
+                "category": entry.get("category"),
+                "summary": entry.get("summary"),
+            }
         return {"id": str(entry["id"])}
     return None
 
 
-def add_to_history(handler_input, content_id, recording_id: str | None = None) -> dict:
-    """Insert *content_id* at the front of the play history, deduping and capping."""
+def add_to_history(handler_input, content_or_id, recording_id: str | None = None) -> dict:
+    """Insert an entry at the front of the play history, deduping and capping.
+
+    Accepts a full content dict (to store a playable snapshot) or a plain
+    content-id string/dict for backward compatibility.
+    """
     store = get_store(handler_input)
     history = [_normalize_play_history_entry(e) for e in (store.get("playHistory") or [])]
     history = [h for h in history if h is not None]
-    cid = str(content_id) if content_id is not None else None
+    if isinstance(content_or_id, dict) and content_or_id.get("audioUrl"):
+        entry = _normalize_play_history_entry(content_or_id)
+        if not entry:
+            return store
+        cid = entry["id"]
+    else:
+        cid = str(content_or_id) if content_or_id is not None else None
+        entry = {"id": cid} if cid else None
     if not cid:
         return store
     for i, h in enumerate(history):
         if h["id"] == cid:
             history.pop(i)
             break
-    history.insert(0, {"id": cid})
+    history.insert(0, entry)
     cap = settings.max_history
     return update_store(handler_input, {"playHistory": history[:cap]})
 

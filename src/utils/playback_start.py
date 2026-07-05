@@ -104,7 +104,7 @@ def prepare_playback_audio_and_store(
         "currentDurationSecs": track_duration,
     })
 
-    add_to_history(handler_input, content.get("id"), {})
+    add_to_history(handler_input, content)
     audio_url = resolve_audio_url_for_speed(track_info["audioUrl"], effective_speed, current_speeds)
 
     return {"trackInfo": track_info, "audioUrl": audio_url}
