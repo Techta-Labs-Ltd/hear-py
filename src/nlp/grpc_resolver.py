@@ -31,6 +31,6 @@ async def resolve(utterance: str | None, country_code: str | None = None) -> dic
         details = getattr(err, "details", lambda: None)() if callable(getattr(err, "details", None)) else getattr(err, "details", None)
         logger.warning(
             "Hear: gRPC resolve failed — falling back to local NLP",
-            extra={"code": code, "message": details or str(getattr(err, "message", err))},
+            extra={"error_code": code, "error_message": details or str(getattr(err, "message", err))},
         )
         return None

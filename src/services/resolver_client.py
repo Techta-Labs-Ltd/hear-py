@@ -48,14 +48,7 @@ class ResolverClient:
         country_code: str | None = None,
         timeout_ms: int | None = None,
     ) -> dict:
-        """Resolve an NLU utterance via the gRPC resolver service.
-
-        Not implemented yet — requires stubs generated from ``resolver.proto``.
-        """
-        self._channel_or_build()
-        _ = timeout_ms or settings.RESOLVER_RESOLVE_TIMEOUT_MS
-        _ = self._metadata()
-        raise NotImplementedError(
+        raise Exception(
             "gRPC resolve call not implemented — resolver.proto stubs must be generated first"
         )
 
