@@ -16,7 +16,7 @@ from src.services.api import resolve_locality
 from src.utils.speech import (
     ssml, ONBOARDING_ASK_PERMISSION, ONBOARDING_CONSENT_CARD_SENT,
     ONBOARDING_LOCATION_DENIED, ONBOARDING_FETCHING_LOCATION, ONBOARDING_DISCOVERY,
-    ONBOARDING_RESOLVE_FAILED, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
+    LOCATION_NOT_FOUND, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
     TOWN_NOT_UNDERSTOOD, TOWN_GOT_IT, REPROMPT_CITY, TOWN_SKIPPED, REPROMPT_NO_CITY,
     WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY, WELCOME_RETURN_GENERIC,
     ONBOARDING_NO_LOCAL_CONTENT, ONBOARDING_DISCOVERY_NATIONAL,
@@ -113,11 +113,11 @@ async def resume_after_location_grant(handler_input: HandlerInput, store: Dict[s
         logger.warning("Hear: resume_after_location_grant failed %s", err)
 
     update_store(handler_input, {
-        "onboardingStage": ONBOARDING_ASK_TOWN,
-        "onboardingRetries": 0,
+        "awaitingLocationChoice": True,
+        "onboardingStage": "await_location_choice",
     })
     return handler_input.response_builder \
-        .speak(ssml(ONBOARDING_RESOLVE_FAILED)) \
+        .speak(ssml(LOCATION_NOT_FOUND)) \
         .set_should_end_session(False) \
         .response
 

@@ -14,3 +14,14 @@ def get_intent_name(handler_input) -> str | None:
     request = envelope.get("request", {})
     intent = request.get("intent")
     return intent.get("name") if intent else None
+
+
+def get_user_id(handler_input) -> str | None:
+    """Extract the Alexa user ID from the request context."""
+    try:
+        ctx = handler_input.request_envelope.context
+    except Exception:
+        return None
+    if ctx and getattr(ctx, "System", None) and ctx.System.user:
+        return ctx.System.user.userId
+    return None

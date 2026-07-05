@@ -95,9 +95,9 @@ class IntentDispatchHandler(AbstractRequestHandler):
 
         if not suggestions:
             return handler_input.response_builder.speak(
-                ssml("Sorry, I didn't catch that. You can say play news, what's trending, browse by category, or play from a creator.")
+                ssml("Sorry, I didn't catch that. You can say play followed by a topic, what's trending, or play from a creator by name. What would you like?")
             ).reprompt(
-                ssml("Try saying play the latest news, trending content, or browse by category.")
+                ssml("Try saying what's trending, or play followed by a topic.")
             ).set_should_end_session(False).get_response()
 
         update_store(handler_input, {"pendingNlpSuggestion": suggestions})

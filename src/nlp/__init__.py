@@ -25,7 +25,11 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     if not slots:
         return None
 
-    if alexa_intent == "PlayByCreatorIntent":
+    if alexa_intent == "PlayLocalIntent":
+        priority_order = ["localQuery", "topic", "category", "creatorQuery", "organizationQuery", "listPickPhrase", "feedbackPhrase"]
+    elif alexa_intent == "PlayRecommendationIntent":
+        priority_order = ["recommendationQuery", "topic", "category", "creatorQuery", "organizationQuery", "listPickPhrase", "feedbackPhrase"]
+    elif alexa_intent == "PlayByCreatorIntent":
         priority_order = ["creatorQuery", "topic", "organizationQuery", "listPickPhrase", "category", "feedbackPhrase"]
     elif alexa_intent == "PlayByOrganizationIntent":
         priority_order = ["organizationQuery", "topic", "creatorQuery", "listPickPhrase", "category", "feedbackPhrase"]
@@ -75,6 +79,16 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 loc_slots = intent_obj.slots if intent_obj else {}
                 loc_slot = loc_slots.get("location") if loc_slots else None
                 town = str(loc_slot.value).strip() if loc_slot and loc_slot.value else None
+
+                grpc_town = None
+                if town:
+                    grpc_result = await grpc_resolve(town)
+                    if grpc_result and grpc_result.get("slots"):
+                        g_slots = grpc_result["slots"]
+                        grpc_town = g_slots.get("townName") or g_slots.get("placeName") or g_slots.get("city")
+                        if grpc_town:
+                            town = str(grpc_town).strip()
+
                 attrs = handler_input.attributes_manager.request_attributes
                 attrs["_nlp"] = {
                     "intent": "location_set",
@@ -84,9 +98,10 @@ class NlpInterceptor(AbstractRequestInterceptor):
                     "needsRedirect": False,
                     "confidence": "high",
                     "slots": {"townName": town} if town else {},
+                    "grpcResolved": bool(grpc_town),
                 }
                 handler_input.attributes_manager.request_attributes = attrs
-                logger.info("Hear: SetLocationIntent captured", extra={"town": town})
+                logger.info("Hear: SetLocationIntent captured", extra={"town": town, "grpcResolved": bool(grpc_town)})
                 return
 
             raw = _extract_raw_utterance(handler_input, alexa_intent)
@@ -155,7 +170,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
                         "confidence": grpc_result["confidence"],
                         "slots": grpc_result["slots"],
                         "alternatives": grpc_result.get("alternatives"),
-                        "suggestions": grpc_result.get("alternatives") if grpc_result["intent"] == "unclear" else None,
+                        "suggestions": grpc_result.get("alternatives") or None,
                         "grpcResolved": True,
                         "grpcResolvedInMs": grpc_result.get("resolvedInMs", 0),
                     }

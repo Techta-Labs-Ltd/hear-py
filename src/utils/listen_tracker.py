@@ -9,6 +9,7 @@ from src.services.api import record_playback_events
 from src.utils.search_filters import build_user_field
 from src.utils.playback_timing import resolve_finished_event_timing
 from src.services.listener_config import is_listener_api_enabled
+from src.utils.skill_request import get_user_id as _get_user_id
 from src.webhooks.dispatch import dispatch
 
 PLAYBACK_EVENT_TYPES = {
@@ -497,13 +498,6 @@ def attach_feedback_to_last_listen(handler_input, *, track_id=None, feedback=Non
         for entry in (store.get("recentTrackListens") or [])
     ]
     return update_store(handler_input, {"recentTrackListens": log})
-
-
-def _get_user_id(handler_input) -> str | None:
-    try:
-        return handler_input.request_envelope.context.System.user.userId or None
-    except Exception:
-        return None
 
 
 def _get_device_id(handler_input) -> str | None:

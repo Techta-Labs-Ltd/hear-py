@@ -40,10 +40,10 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
         if category and city:
             return "new " + category + " near " + city
         if category:
-            return "new " + category + " to browse"
+            return "new in " + category
         if city:
             return "what\u2019s new near " + city
-        return "to browse what\u2019s available"
+        return "browse content"
 
     if intent == "following":
         return category + " from your followed creators" if category else "your followed creators"

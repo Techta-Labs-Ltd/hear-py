@@ -5,7 +5,6 @@ TownCaptureHandler - Captures town name during onboarding.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -30,7 +29,7 @@ from src.services.flush_previous_track import flush_previous_track
 from src.services.alexa_reminders import cancel_feedback_reminder
 from src.webhooks.settings import get_settings
 from src.webhooks.notification_webhook import group_notifications_by_creator, build_notification_speech
-from src.utils.skill_request import get_request_type, get_intent_name
+from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
     ssml, escape_ssml_lite, humanize_spoken_title, get_mid_playback_prompt,
     NO_CONTENT_AVAILABLE, WELCOME_FIRST, WELCOME_FIRST_HAS_CITY,
@@ -38,7 +37,7 @@ from src.utils.speech import (
     LAUNCH_PENDING_FEEDBACK, FEEDBACK_AWAITING_REPROMPT,
     STILL_LISTENING_PROMPT, STILL_LISTENING_REPROMPT,
     LAUNCH_RESUME_FLAGGED_PROMPT, FLAGGED_CONTINUE_REPROMPT,
-    NOTIFICATIONS_SHOW_MORE,
+    NOTIFICATIONS_SHOW_MORE, ONBOARDING_TOWN_CONFIRM,
 )
 from src.utils.normalize_content_item import (
     content_title_for_speech, pick_content_credit, normalize_content_items,
@@ -71,18 +70,11 @@ from src.handlers.intents.onboarding import (
 from src.utils.playback_start import (
     extract_playback_speeds, prepare_playback_audio_and_store, start_playback,
 )
+from src.utils.background import run_background
 
 logger = logging.getLogger(__name__)
 MAX_TOWN_ATTEMPTS = 3
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
-
-
-def _get_user_id(handler_input: HandlerInput) -> Optional[str]:
-    """Extract Alexa user ID from the request context."""
-    ctx = handler_input.request_envelope.context
-    if ctx and hasattr(ctx, "System") and ctx.System:
-        return ctx.System.user.userId if ctx.System.user else None
-    return None
 
 
 def _read_cached_locality(store: Dict[str, Any]) -> Optional[str]:
@@ -169,7 +161,7 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
             .response
 
     if store.get("awaitingFeedback") and (store.get("feedbackContentTitle") or store.get("feedbackPromptText")):
-        cancel_feedback_reminder(handler_input)
+        await cancel_feedback_reminder(handler_input)
         title_humanized = humanize_spoken_title(store.get("feedbackContentTitle")) or "that track"
         creator_escaped = escape_ssml_lite(store.get("feedbackCreator") or "the creator")
         fb_prompt = LAUNCH_PENDING_FEEDBACK(title_humanized, creator_escaped, user_name)
@@ -242,10 +234,10 @@ def _schedule_launch_background_work(handler_input: HandlerInput, store: Dict[st
         logger.info("Hear: launch background work skipped")
         return
 
-    asyncio.ensure_future(ensure_subscription(handler_input, store))
+    run_background(ensure_subscription(handler_input, store), "ensure_subscription")
 
     if store.get("awaitingNotificationOptIn") and has_notification_permission(handler_input):
-        asyncio.ensure_future(complete_notification_opt_in(handler_input))
+        run_background(complete_notification_opt_in(handler_input), "notification_opt_in")
 
 
 class LaunchRequestHandler(AbstractRequestHandler):
@@ -268,8 +260,9 @@ class LaunchRequestHandler(AbstractRequestHandler):
                 await flush_previous_track(get_alexa_user_id(handler_input), None, handler_input)
             else:
                 logger.info("Hear: launch flushPreviousTrack deferred")
-                asyncio.ensure_future(
+                run_background(
                     flush_previous_track(get_alexa_user_id(handler_input), None, handler_input),
+                    "launch_flush_previous_track",
                 )
 
             return await _handle_launch_request_body(handler_input)
@@ -326,8 +319,8 @@ class SetLocationHandler(AbstractRequestHandler):
     """
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
-        # Invoked via the NLP dispatch_map, not registered directly.
-        return False
+        attrs = handler_input.attributes_manager.get_request_attributes()
+        return bool(attrs) and attrs.get("_nlp", {}).get("intent") == "location_set"
 
     async def handle(self, handler_input: HandlerInput):
         store = get_store(handler_input)
@@ -336,11 +329,17 @@ class SetLocationHandler(AbstractRequestHandler):
         town = (nlp.get("slots", {}) or {}).get("townName")
 
         if town:
-            # Persist + dispatch user.location_updated webhook, acknowledge.
-            return await finalize_town_captured(handler_input, store, town)
+            update_store(handler_input, {
+                "pendingLocationConfirm": {"city": town},
+                "awaitingLocationConfirm": True,
+                "onboardingStage": "await_location_confirm",
+            })
+            return handler_input.response_builder \
+                .speak(ssml(ONBOARDING_TOWN_CONFIRM(town))) \
+                .reprompt(ssml("Say yes to confirm, or no to set a different town.")) \
+                .set_should_end_session(False) \
+                .response
 
-        # No town in the utterance ("change my location") -> ask for it and
-        # reuse the existing ask_town capture flow for the follow-up answer.
         update_store(handler_input, {
             "onboardingStage": ONBOARDING_ASK_TOWN,
             "onboardingTownAttempts": 0,

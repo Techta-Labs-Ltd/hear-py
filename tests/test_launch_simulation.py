@@ -119,14 +119,14 @@ class TestSpeechStrings:
     def test_welcome_return_named_is_lambda(self):
         result = WELCOME_RETURN_NAMED("John", "London")
         assert "John" in result
-        assert "London" in result
+        assert "Welcome back" in result
 
     def test_welcome_return_city_is_lambda(self):
         result = WELCOME_RETURN_CITY("London")
-        assert "London" in result
+        assert "Welcome back" in result
 
     def test_welcome_return_generic(self):
-        assert "What would you like to listen to" in WELCOME_RETURN_GENERIC
+        assert "What would you like" in WELCOME_RETURN_GENERIC
 
     def test_error_generic(self):
         assert "didn't quite catch" in ERROR_GENERIC

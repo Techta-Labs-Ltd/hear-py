@@ -34,7 +34,10 @@ from src.utils.speech import (
     FEEDBACK_FOLLOW_DECLINED, FOLLOW_CREATOR_NOTIFICATION_DECLINED,
     FOLLOW_NOTIFICATION_DECLINED_GENERIC, ASK_LISTEN_FIRST, ASK_LISTEN_NEXT,
     END_OF_LIST, NO_TRACKS_AVAILABLE, QUEUE_FINISHED, QUEUE_NEXT_ANNOUNCE,
+    LOCATION_ASK_CITY, LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
 )
+from src.services.api import save_location
+from src.handlers.intents.onboarding import ONBOARDING_ASK_TOWN
 from src.utils.audio import build_stop_directive
 from src.utils.playback_user_events import emit_user_playback_event, USER_PLAYBACK_EVENT_TYPES
 from src.utils.feedback_gate import enforce_interaction_gate
@@ -151,6 +154,23 @@ class YesIntentHandler(AbstractRequestHandler):
         store = get_store(handler_input)
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
 
+        # 0a. Location onboarding choice — user agrees to give their city
+        if store.get("awaitingLocationChoice"):
+            update_store(handler_input, {
+                "onboardingStage": ONBOARDING_ASK_TOWN,
+                "onboardingTownAttempts": 0,
+                "awaitingLocationChoice": False,
+            })
+            return handler_input.response_builder \
+                .speak(ssml(LOCATION_ASK_CITY)) \
+                .reprompt(ssml(LOCATION_ASK_CITY)) \
+                .set_should_end_session(False) \
+                .response
+
+        # 0b. Location confirmation — user confirms the town to save
+        if store.get("awaitingLocationConfirm"):
+            return await self._confirm_location(handler_input, store)
+
         # 1. Search confirmation
         if store.get("awaitingSearchConfirmation") or session_attrs.get("awaitingSearchConfirmation"):
             return await self._handle_search_confirmation(handler_input, store, session_attrs)
@@ -196,6 +216,50 @@ class YesIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder \
             .speak(WELCOME_REPROMPT) \
             .reprompt(WELCOME_REPROMPT) \
+            .set_should_end_session(False) \
+            .response
+
+    async def _confirm_location(self, handler_input, store):
+        """Confirm and persist the pending location, calling the backend to save it."""
+        pending = store.get("pendingLocationConfirm") or {}
+        city = pending.get("city")
+        if not city:
+            update_store(handler_input, {
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "onboardingStage": None,
+            })
+            return handler_input.response_builder \
+                .speak(ssml(LOCATION_RETRY)) \
+                .set_should_end_session(False) \
+                .response
+
+        user_id = get_alexa_user_id(handler_input)
+        resolved = None
+        if user_id:
+            try:
+                resolved = await save_location(user_id, city)
+            except Exception as err:
+                logger.warning("Hear: save_location failed %s", err)
+
+        final_city = (resolved.get("city") if resolved else None) or city
+        update_store(handler_input, {
+            "userCity": final_city,
+            "locality": (resolved.get("locality") if resolved else None) or final_city,
+            "userState": resolved.get("state") if resolved else None,
+            "userCountry": resolved.get("country") if resolved else None,
+            "latitude": resolved.get("latitude") if resolved else None,
+            "longitude": resolved.get("longitude") if resolved else None,
+            "onboardingComplete": True,
+            "onboardingStage": None,
+            "locationSource": "manual",
+            "localityResolvedAt": _current_timestamp_ms(),
+            "awaitingLocationConfirm": False,
+            "pendingLocationConfirm": None,
+        })
+        return handler_input.response_builder \
+            .speak(ssml(LOCATION_CONFIRMED(final_city))) \
+            .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
             .set_should_end_session(False) \
             .response
 
@@ -511,6 +575,31 @@ class NoIntentHandler(AbstractRequestHandler):
         store = get_store(handler_input)
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
 
+        # 0a. Location onboarding choice declined
+        if store.get("awaitingLocationChoice"):
+            update_store(handler_input, {
+                "awaitingLocationChoice": False,
+                "onboardingStage": None,
+            })
+            return handler_input.response_builder \
+                .speak(ssml(LOCATION_DECLINED)) \
+                .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
+                .set_should_end_session(False) \
+                .response
+
+        # 0b. Location confirmation rejected — ask for a different town
+        if store.get("awaitingLocationConfirm"):
+            update_store(handler_input, {
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "onboardingStage": None,
+            })
+            return handler_input.response_builder \
+                .speak(ssml(LOCATION_RETRY)) \
+                .reprompt(ssml("Which town or city should I set?")) \
+                .set_should_end_session(False) \
+                .response
+
         # 1. Search confirmation
         if store.get("awaitingSearchConfirmation") or session_attrs.get("awaitingSearchConfirmation"):
             return self._handle_search_no(handler_input, store, session_attrs)
@@ -675,8 +764,8 @@ class NoIntentHandler(AbstractRequestHandler):
 
         update_store(handler_input, {"pendingNlpSuggestion": None})
         return handler_input.response_builder \
-            .speak(ssml("No problem. You can say play what's new, trending content, browse by category, or search for a topic.")) \
-            .reprompt(ssml("Try saying play the latest news, or browse by category.")) \
+            .speak(ssml("No problem. You can say what's trending, play followed by a topic, or play from a creator.")) \
+            .reprompt(ssml("Try saying what's trending, or play news.")) \
             .set_should_end_session(False) \
             .response
 

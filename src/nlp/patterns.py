@@ -72,6 +72,8 @@ ALEXA_TO_NLP = {
     "PlayByCreatorIntent": "creator",
     "PlayByOrganizationIntent": "organization",
     "WhatsTrendingIntent": "trending",
+    "PlayRecommendationIntent": "trending",
+    "PlayLocalIntent": "local",
     "BrowseContentIntent": "browse",
     "ShowMoreBrowseIntent": "show_more",
     "SetLocationIntent": "location_set",

@@ -121,27 +121,27 @@ def is_bad_credit(value) -> bool:
 # ── Welcome / Onboarding ───────────────────────────────────────────
 
 WELCOME_FIRST_ASK_TOWN = lambda name: (
-    f"Hello {escape_ssml_lite(name)}, welcome to Hear. Where are you based?"
-    if name else "Hello, welcome to Hear. Where are you based?"
+    f"Hello {escape_ssml_lite(name)}, welcome to Hear. Which town or city are you in?"
+    if name else "Hello, welcome to Hear. Which town or city are you in?"
 )
 
 WELCOME_FIRST_HAS_CITY = lambda name, city=None: (
-    f"Hello {escape_ssml_lite(name)}, welcome to Hear. What would you like to listen to?"
-    if name else "Hello, welcome to Hear. What would you like to listen to?"
+    f"Hello {escape_ssml_lite(name)}, welcome to Hear. You can say what's trending, play news, or play from a creator. What would you like?"
+    if name else "Hello, welcome to Hear. You can say what's trending, play news, or play from a creator. What would you like?"
 )
 
-WELCOME_RETURN = lambda name=None: "Welcome back to Hear. Say a category, a creator, or a town."
+WELCOME_RETURN = lambda name=None: "Welcome back to Hear. You can say play news, or what's trending. What would you like?"
 
 WELCOME_FIRST = lambda name=None: (
-    f"Hello {escape_ssml_lite(name)}, welcome to Hear. Say a category, a creator, or a town."
-    if name else "Hello, welcome to Hear. Say a category, a creator, or a town."
+    f"Hello {escape_ssml_lite(name)}, welcome to Hear. You can say play news, or what's trending. What would you like?"
+    if name else "Hello, welcome to Hear. You can say play news, or what's trending. What would you like?"
 )
 
 TOWN_GOT_IT = lambda city: f"{escape_ssml_lite(city) or 'your area'} it is. What would you like to listen to?"
 
 TOWN_SKIPPED = "Okay. What would you like to listen to?"
 
-TOWN_NOT_UNDERSTOOD = "Sorry, just the town name please. Like London or Manchester. Or say skip."
+TOWN_NOT_UNDERSTOOD = "Just the town name please — like London or Manchester. Or say skip if you'd rather not."
 
 TOWN_HELP = "Just say your town name, like London or Manchester. Or say skip."
 
@@ -161,13 +161,13 @@ REPROMPT_ASK_TOWN = "Where are you based? Or say skip."
 
 HELP_ONBOARDING = "You can say the latest, what's popular, what's on, or things like play news and play sport."
 
-COMMUNITY_NEEDS_TOWN = "I'll need your town to find local stories. Want to set that up?"
+COMMUNITY_NEEDS_TOWN = "I'll need your town to find local content. Would you like to set that up?"
 
-WELCOME_REPROMPT = "You can say play the latest news, browse by location, or play from my followed creators."
+WELCOME_REPROMPT = "You can say play followed by a topic, or what's trending. What would you like?"
 
 LAUNCH_CHOICE_OUTRO = "Say the first one, the second one, or the third one. You can also say play number one, play number two, or play number three."
 
-WELCOME_ERROR = "Welcome to Hear. I'm having trouble loading content right now. Try again in a moment."
+WELCOME_ERROR = "Welcome to Hear. I'm having a bit of trouble loading content at the moment. You can try again shortly."
 
 # ── Playback Speed ──────────────────────────────────────────────────
 
@@ -198,7 +198,7 @@ def _build_queue_next(title, creator, position, total):
     return "Next up."
 
 
-QUEUE_FINISHED = "That was the last one in your queue. Say play, what is trending, or what is on for more."
+QUEUE_FINISHED = "That was the last one. Say what's trending for popular tracks, or play something."
 
 STILL_LISTENING_PROMPT = "You've been listening for a while. Would you like to keep going?"
 STILL_LISTENING_REPROMPT = "Say yes to keep listening, or no to stop."
@@ -233,13 +233,13 @@ SEARCH_RELAXED_INTRO = lambda query: _build_search_relaxed(query)
 def _build_search_no_match(query) -> str:
     safe = escape_ssml_lite(str(query).strip()) if query else ""
     if safe:
-        return f"I could not find anything for {safe}. Try another creator or topic, or say what is trending."
-    return "I could not find anything matching that. Try another creator or topic, or say what is trending."
+        return f"I couldn't find anything for {safe} right now. You could try a different topic, or say what's trending. What would you like?"
+    return "I couldn't find anything right now. You could try a different topic, or say what's trending. What would you like?"
 
 
 SEARCH_NO_MATCH = lambda query: _build_search_no_match(query)
 
-SEARCH_UNAVAILABLE = "I could not reach Hear right now. Please try again in a moment."
+SEARCH_UNAVAILABLE = "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."
 
 # ── Browse / Catalog ────────────────────────────────────────────────
 
@@ -286,7 +286,7 @@ def build_now_playing_phrase(title, creator=None) -> str:
 LOCAL_CONTENT_FOUND = lambda locality, title, creator: f"Here is the latest from {locality}. {build_now_playing_phrase(title, creator)}"
 LOCAL_CONTENT_FALLBACK = lambda title, creator=None: build_now_playing_phrase(title, creator)
 
-NO_CONTENT_AVAILABLE = "There is no content available right now. Please check back later."
+NO_CONTENT_AVAILABLE = "There's no content available at the moment. You can try again shortly."
 CONTENT_NOT_READY = "That one isn't ready to play yet. Try another number."
 
 CATEGORY_PLAYING = lambda category, title, creator: f"Playing {category}. {build_now_playing_phrase(title, creator)}"
@@ -298,7 +298,7 @@ POST_TRACK_BROWSE_INTRO = lambda: "That has finished. Here is what is available.
 # ── Resume / Seek ───────────────────────────────────────────────────
 
 RESUMING = "Resuming where you left off."
-NOTHING_TO_RESUME = "Nothing to resume. Say what is on to hear choices, then say play number one to start."
+NOTHING_TO_RESUME = "Nothing to resume. Say what's trending, or play something to get started."
 
 REWOUND = lambda seconds: f"Rewound {seconds} seconds."
 FAST_FORWARDED = lambda seconds: f"Skipped forward {seconds} seconds."
@@ -461,28 +461,25 @@ def _build_community_intro(locality, total_hits) -> str:
 
 PLAY_COMMUNITY_INTRO = lambda locality=None, total_hits=None: _build_community_intro(locality, total_hits)
 
-PLAY_CHOICE_INVALID = "That number is not on the current list. Say show me more to hear more choices, or pick a number you heard."
+PLAY_CHOICE_INVALID = "That number isn't in the list. Say show me more, or pick a number you heard."
 PLAY_LIST_REPROMPT = "Which one would you like? Say the first one, the second one, or the third one."
-PLAY_NO_PENDING_LIST = "Say what is on or what is trending to hear a list of titles first. Then say the first one or play number one."
-PLAY_CREATOR_PROMPT = "Who would you like to hear? Try play from and then the creator name."
-PLAY_PICK_FROM_LIST_INTRO = "You already have a list. Pick one by saying the first one, the second one, or play number one."
-BROWSE_ACTIVE_NOT_NOTIFICATIONS = "You still have a list to browse. Say show me more, or say play number one."
+PLAY_NO_PENDING_LIST = "Say what's trending first, then pick the first one or say play number one."
+PLAY_CREATOR_PROMPT = "Which creator would you like to hear?"
+PLAY_PICK_FROM_LIST_INTRO = "Here's what I found. Say the first one, the second one, or play number one."
+BROWSE_ACTIVE_NOT_NOTIFICATIONS = "You've got some results already. Say show me more, or play number one."
 
 # ── Fallback / Help / Generic ───────────────────────────────────────
 
-FALLBACK_SPEECH = "Sorry, I did not catch that. Try saying play, what is trending, what is on, or ask for help."
+FALLBACK_SPEECH = "Sorry, I didn't catch that. You can say play news, play from a creator by name, or what's trending. What would you like?"
 
 HELP = (
-    "Here's what you can do on Hear. After listening, say enjoyed, it was okay, or not enjoyed to rate a track. "
-    "Say follow this creator to follow them and get notified when they publish. "
-    "Say unfollow this creator to stop following. "
-    "Say report this creator if you think the content is inappropriate. "
-    "Say turn on notifications or turn off notifications to manage your alerts. "
-    "What would you like to do?"
+    "Here's what you can do: say what's trending for popular tracks, play followed by a topic, "
+    "or play from a talking newspaper by name. Rate tracks by saying enjoyed, it was okay, or not enjoyed. "
+    "Would you like to try something?"
 )
 
 GOODBYE = "Thanks for listening to Hear. Goodbye."
-ERROR_GENERIC = "Sorry, I didn't quite catch that. Let's try again \u2014 you can say play the latest news, browse by location, or play from your followed creators."
+ERROR_GENERIC = "Sorry, I didn't quite catch that. You can say play followed by a topic, or what's trending. What would you like?"
 LOOP_SHUFFLE_UNAVAILABLE = "Looping and shuffle are not available on Hear yet. Say next, repeat, or pause."
 
 # ── Notifications Summary ───────────────────────────────────────────
@@ -520,23 +517,29 @@ NO_TRACKS_AVAILABLE = "Welcome to Hear. There are no tracks available right now.
 
 # ── Onboarding ──────────────────────────────────────────────────────
 
-ONBOARDING_ASK_PERMISSION = "Hi, welcome to Hear. I can pull up audio from your local community \u2014 news, sport, talking newspapers and more. Mind if I grab your location to get started?"
-ONBOARDING_CONSENT_CARD_SENT = "I\u2019ve popped a card in your Alexa app \u2014 just open it up and tap to share your location. Or if you\u2019d rather skip that, just tell me your town and I\u2019ll go from there."
+ONBOARDING_ASK_PERMISSION = "Welcome to Hear. I can bring you the latest audio from your local community \u2014 news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright?"
+ONBOARDING_CONSENT_CARD_SENT = "I've sent a card to your Alexa app \u2014 open it and tap to share your location. If you'd rather not, you can just tell me your town and I'll take it from there."
 ONBOARDING_LOCATION_DENIED = "No worries. Which town or city are you in?"
 ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
-ONBOARDING_RESOLVE_FAILED = "Hmm, got something back but couldn\u2019t quite place it. Which town or city are you in?"
 ONBOARDING_TOWN_CONFIRM = lambda city: f"Did you say {escape_ssml_lite(city)}?"
 ONBOARDING_TOWN_RETRY = "Sorry, didn\u2019t quite catch that. Say your town or city again."
-ONBOARDING_TOWN_GIVE_UP = "I\u2019m having a bit of trouble catching that one. Not to worry though, you can still browse everything. What would you like to listen to?"
+ONBOARDING_TOWN_GIVE_UP = "I'm having trouble catching that. Not to worry \u2014 you can still browse everything. Say what's trending to get started. What would you like?"
+
+# \u2500\u2500 Location (set / confirm / resolution failure) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+LOCATION_NOT_FOUND = "I couldn't find your location from your account. Would you like to tell me which city you're in so I can find content from your area?"
+LOCATION_ASK_CITY = "Which town or city are you in?"
+LOCATION_DECLINED = "No problem. What would you like to listen to?"
+LOCATION_CONFIRMED = lambda city: f"Great, your current location has now been set to {escape_ssml_lite(city)}. If you want to listen to content or tracks from {escape_ssml_lite(city)}, you can just say play something from my community. Would you like to listen to something from your community?"
+LOCATION_RETRY = "No problem. Which city should I set instead?"
 ONBOARDING_DISCOVERY = lambda city, count: f"Right, so you\u2019re near {escape_ssml_lite(city)} \u2014 nice one. I\u2019ve got {count} channels from your local community on here. You can ask for what\u2019s on in {escape_ssml_lite(city)}, pick a category like news or sport, or play from a local talking newspaper. What would you like to listen to?"
 ONBOARDING_NO_LOCAL_CONTENT = lambda city: f"So you\u2019re near {escape_ssml_lite(city)} \u2014 got it. No local channels in your area just yet, but there\u2019s loads from communities all over the country. Ask for news or sport, play from a talking newspaper, or say what\u2019s trending. What would you like to listen to?"
 ONBOARDING_DISCOVERY_NATIONAL = "Right, you\u2019re all set. Ask for news or sport, play from a talking newspaper, or say what\u2019s trending and I\u2019ll find something for you. What would you like to listen to?"
 
 # ── Welcome Return ──────────────────────────────────────────────────
 
-WELCOME_RETURN_NAMED = lambda user_name, city: f"Hey {escape_ssml_lite(user_name)}, good to have you back. What would you like to listen to? You could hear what\u2019s on in {escape_ssml_lite(city)}, ask for news or sport, or play from a local talking newspaper."
-WELCOME_RETURN_CITY = lambda city: f"Good to have you back. What would you like to listen to? You could hear what\u2019s on in {escape_ssml_lite(city)}, ask for news or sport, or play from a local talking newspaper."
-WELCOME_RETURN_GENERIC = "Good to have you back. What would you like to listen to? You could ask for news or sport, play from a talking newspaper, or say what\u2019s trending."
+WELCOME_RETURN_NAMED = lambda user_name, city=None: f"Welcome back to Hear, {escape_ssml_lite(user_name)}. You can say what's trending, play news, or play from a talking newspaper. What would you like?"
+WELCOME_RETURN_CITY = lambda city=None: "Welcome back to Hear. You can say what's trending, play news, or play from a talking newspaper. What would you like?"
+WELCOME_RETURN_GENERIC = "Welcome back to Hear. You can say what's trending, or play news. What would you like?"
 
 # ── Confirm ─────────────────────────────────────────────────────────
 

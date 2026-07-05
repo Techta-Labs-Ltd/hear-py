@@ -26,8 +26,7 @@ from src.utils.playback_user_events import consume_suppressed_playback_event
 
 from src.webhooks.notification_webhook import mark_track_heard
 from src.utils.queue_refill import maybe_refill_session_queue
-
-import asyncio
+from src.utils.background import run_background
 
 logger = logging.getLogger(__name__)
 FEEDBACK_TOKEN_PREFIX = "FEEDBACK_PROMPT:"
@@ -131,9 +130,6 @@ class PlaybackStartedHandler(AbstractRequestHandler):
 
             begin_listen_segment(handler_input, {"token": token, "offsetMs": offset_ms})
 
-            try:
-                asyncio.ensure_future(maybe_refill_session_queue(handler_input, store))
-            except Exception:
-                pass
+            run_background(maybe_refill_session_queue(handler_input, store), "refill_session_queue")
 
         return handler_input.response_builder.response

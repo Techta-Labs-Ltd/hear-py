@@ -1,11 +1,3 @@
-"""
-Social intent handlers: creator info, follow/unfollow, report content/creator, about.
-
-Contains 6 handlers:
-- WhoIsCreatorHandler      - FollowCreatorHandler       - UnfollowCreatorHandler
-- ReportContentHandler     - ReportCreatorHandler       - WhatsThisAboutHandler
-"""
-
 from __future__ import annotations
 
 import logging
@@ -19,7 +11,7 @@ from src.services.persistence import (
     get_store, update_store, is_following, add_followed_creator,
     remove_followed_creator, clear_feedback, dismiss_feedback_prompt,
 )
-from src.utils.skill_request import get_request_type, get_intent_name
+from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
     ssml, escape_ssml_lite, is_bad_credit, CREATOR_CREDIT, CREATOR_CREDIT_UNKNOWN,
     NO_CREATOR_TO_FOLLOW, ALREADY_FOLLOWING, IDLE_NEXT_REPROMPT, FOLLOW_CREATOR,
@@ -47,14 +39,6 @@ logger = logging.getLogger(__name__)
 def _gate_social_intent(handler_input: HandlerInput):
     """Apply feedback and interaction gates for social intents."""
     return block_if_awaiting_feedback(handler_input) or enforce_interaction_gate(handler_input)
-
-
-def _get_user_id(handler_input: HandlerInput) -> Optional[str]:
-    """Extract Alexa user ID from the request context."""
-    ctx = handler_input.request_envelope.context
-    if ctx and hasattr(ctx, "System") and ctx.System and ctx.System.user:
-        return ctx.System.user.userId
-    return None
 
 
 def _current_timestamp_ms() -> int:

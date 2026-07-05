@@ -17,7 +17,7 @@ from src.services.persistence import (
     init_queue, clear_queue, recent_exclude_filters,
 )
 from src.services.api import search
-from src.utils.skill_request import get_request_type, get_intent_name
+from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
     ssml, escape_ssml_lite, NO_CONTENT_AVAILABLE, SEARCH_UNAVAILABLE,
     SEARCH_NO_MATCH, WELCOME_REPROMPT, PLAY_NO_PENDING_LIST, BROWSE_EXHAUSTED,
@@ -54,14 +54,6 @@ logger = logging.getLogger(__name__)
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
 
 _DEFAULT_SEARCH_PAGE_LIMIT = settings.search_page_limit
-
-
-def _get_user_id(handler_input: HandlerInput) -> Optional[str]:
-    """Extract Alexa user ID from the request context."""
-    ctx = handler_input.request_envelope.context
-    if ctx and hasattr(ctx, "System") and ctx.System and ctx.System.user:
-        return ctx.System.user.userId
-    return None
 
 
 def _summarize_intent_slots(handler_input: HandlerInput) -> Dict[str, Any]:
@@ -460,7 +452,6 @@ class WhatsTrendingHandler(AbstractRequestHandler):
                 .response
 
         active_store = get_store(handler_input)
-        pass
 
         search_result = await discover_content_via_search(handler_input)
         if not search_result.get("results"):
@@ -498,7 +489,6 @@ class PlayContentHandler(AbstractRequestHandler):
                     .response
 
             active_store = get_store(handler_input)
-            pass
 
             raw_phrase = _raw_search_phrase(handler_input)
             search_q = None
@@ -607,7 +597,6 @@ class PlayByCreatorHandler(AbstractRequestHandler):
                 .response
 
         active_store = get_store(handler_input)
-        pass
 
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
@@ -620,13 +609,11 @@ class PlayByCreatorHandler(AbstractRequestHandler):
             return await ShowMoreBrowseHandler().handle(handler_input)
 
         if not creator_query:
-            search_result = await discover_content_via_search(handler_input, {"q": "", "intent": "general"})
-            if not search_result.get("results"):
-                return _build_search_outcome_response(handler_input, search_result)
-            response = await auto_play_first_from_search(handler_input, search_result, {
-                "discoveryIntent": "PlayContentIntent", "q": "",
-            })
-            return response or _build_no_content_response(handler_input)
+            return handler_input.response_builder \
+                .speak(ssml("Which creator would you like to hear?")) \
+                .reprompt(ssml("Just say their name.")) \
+                .set_should_end_session(False) \
+                .response
 
         search_result = await discover_content_via_search(handler_input, {
             "q": creator_query, "intent": "creator",
@@ -688,7 +675,6 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 .response
 
         active_store = get_store(handler_input)
-        pass
 
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
@@ -700,13 +686,11 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             return await ShowMoreBrowseHandler().handle(handler_input)
 
         if not org_query:
-            search_result = await discover_content_via_search(handler_input, {"q": "", "intent": "general"})
-            if not search_result.get("results"):
-                return _build_search_outcome_response(handler_input, search_result)
-            response = await auto_play_first_from_search(handler_input, search_result, {
-                "discoveryIntent": "PlayContentIntent", "q": "",
-            })
-            return response or _build_no_content_response(handler_input)
+            return handler_input.response_builder \
+                .speak(ssml("Which talking newspaper would you like?")) \
+                .reprompt(ssml("Just say the name.")) \
+                .set_should_end_session(False) \
+                .response
 
         search_result = await discover_content_via_search(handler_input, {
             "q": org_query, "intent": "organization",
@@ -770,7 +754,6 @@ class BrowseContentHandler(AbstractRequestHandler):
                 .response
 
         active_store = get_store(handler_input)
-        pass
 
         browse_q = _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input) or ""
 
