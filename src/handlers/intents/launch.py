@@ -34,9 +34,11 @@ from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import (
     ssml, escape_ssml_lite, humanize_spoken_title, get_mid_playback_prompt,
     NO_CONTENT_AVAILABLE, WELCOME_FIRST, WELCOME_FIRST_HAS_CITY,
-    WELCOME_ERROR, ERROR_GENERIC, REPROMPT_NO_CITY, LAUNCH_PENDING_FEEDBACK,
-    FEEDBACK_AWAITING_REPROMPT, STILL_LISTENING_PROMPT, STILL_LISTENING_REPROMPT,
-    LAUNCH_RESUME_FLAGGED_PROMPT, FLAGGED_CONTINUE_REPROMPT, NOTIFICATIONS_SHOW_MORE,
+    WELCOME_ERROR, WELCOME_REPROMPT, ERROR_GENERIC, REPROMPT_NO_CITY,
+    LAUNCH_PENDING_FEEDBACK, FEEDBACK_AWAITING_REPROMPT,
+    STILL_LISTENING_PROMPT, STILL_LISTENING_REPROMPT,
+    LAUNCH_RESUME_FLAGGED_PROMPT, FLAGGED_CONTINUE_REPROMPT,
+    NOTIFICATIONS_SHOW_MORE,
 )
 from src.utils.normalize_content_item import (
     content_title_for_speech, pick_content_credit, normalize_content_items,
@@ -257,6 +259,8 @@ class LaunchRequestHandler(AbstractRequestHandler):
         if not user_id:
             return handler_input.response_builder \
                 .speak(ssml(ERROR_GENERIC)) \
+                .reprompt(ssml(WELCOME_REPROMPT)) \
+                .set_should_end_session(False) \
                 .response
 
         try:

@@ -184,6 +184,8 @@ class DisableNotificationsHandler(AbstractRequestHandler):
         if not user_id:
             return handler_input.response_builder \
                 .speak(ERROR_GENERIC) \
+                .reprompt(WELCOME_REPROMPT) \
+                .set_should_end_session(False) \
                 .response
 
         try:

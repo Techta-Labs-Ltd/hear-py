@@ -176,6 +176,8 @@ class FollowCreatorHandler(AbstractRequestHandler):
             logger.warning("Follow creator error: %s", err)
             return handler_input.response_builder \
                 .speak(ERROR_GENERIC) \
+                .reprompt(WELCOME_REPROMPT) \
+                .set_should_end_session(False) \
                 .response
 
 
@@ -223,6 +225,8 @@ class UnfollowCreatorHandler(AbstractRequestHandler):
             logger.warning("Unfollow creator error: %s", err)
             return handler_input.response_builder \
                 .speak(ERROR_GENERIC) \
+                .reprompt(WELCOME_REPROMPT) \
+                .set_should_end_session(False) \
                 .response
 
 
@@ -283,6 +287,8 @@ class ReportContentHandler(AbstractRequestHandler):
             logger.warning("Report content error: %s", err)
             return handler_input.response_builder \
                 .speak(ERROR_GENERIC) \
+                .reprompt(WELCOME_REPROMPT) \
+                .set_should_end_session(False) \
                 .response
 
 
@@ -327,6 +333,8 @@ class ReportCreatorHandler(AbstractRequestHandler):
             logger.warning("Report creator error: %s", err)
             return handler_input.response_builder \
                 .speak(ERROR_GENERIC) \
+                .reprompt(WELCOME_REPROMPT) \
+                .set_should_end_session(False) \
                 .response
 
 
