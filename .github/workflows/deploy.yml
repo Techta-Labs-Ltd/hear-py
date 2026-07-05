@@ -37,8 +37,8 @@ jobs:
       - name: Run tests
         run: pytest tests/ -q
 
-      - name: Import smoke test (catches broken imports before deploy)
-        run: python -c "import main; print('main imported OK')"
+      - name: Import + build smoke test (catches import & registration bugs)
+        run: python -c "import main; main._build_skill(); print('main imports + skill builds OK')"
 
   deploy:
     needs: test            # deploy only if tests pass
