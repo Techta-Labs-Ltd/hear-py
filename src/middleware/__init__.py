@@ -87,9 +87,9 @@ def register_middleware(builder) -> None:
     precedence over them.
     """
     for handler_cls in GATE_HANDLERS:
-        builder.add_request_handler(handler_cls)
+        builder.add_request_handler(handler_cls())
 
-    builder.add_exception_handler(ErrorHandler)
+    builder.add_exception_handler(ErrorHandler())
 
     for interceptor_cls in REQUEST_INTERCEPTORS:
         builder.add_global_request_interceptor(interceptor_cls())
