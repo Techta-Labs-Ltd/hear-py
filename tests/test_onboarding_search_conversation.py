@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -236,8 +237,11 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     )
     chained_builder.add_directive.assert_called_once()
     directive = chained_builder.add_directive.call_args.args[0]
-    assert directive.object_type == "Dialog.ElicitSlot"
-    assert directive.slot_to_elicit == "organizationQuery"
+    assert directive == {
+        "type": "Dialog.ElicitSlot",
+        "slotToElicit": "organizationQuery",
+    }
+    json.dumps(directive)
     discover.assert_not_awaited()
 
 

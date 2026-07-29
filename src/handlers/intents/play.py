@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_model.dialog import ElicitSlotDirective
 from config import settings
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
@@ -775,9 +774,10 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             return handler_input.response_builder \
                 .speak(ssml(ASK_TALKING_NEWSPAPER)) \
                 .reprompt(ssml(ASK_TALKING_NEWSPAPER_REPROMPT)) \
-                .add_directive(ElicitSlotDirective(
-                    slot_to_elicit="organizationQuery",
-                )) \
+                .add_directive({
+                    "type": "Dialog.ElicitSlot",
+                    "slotToElicit": "organizationQuery",
+                }) \
                 .set_should_end_session(False) \
                 .response
 
