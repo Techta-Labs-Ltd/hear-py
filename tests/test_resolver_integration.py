@@ -97,3 +97,27 @@ def test_ambiguous_alias_candidates_are_exposed_to_alexa(monkeypatch):
             {"type": "organization", "id": "org-2", "name": "Burnley Publisher"},
         ],
     }]
+
+
+def test_resolved_organization_keeps_a_spoken_display_name(monkeypatch):
+    from src.resolver.taxonomy import TaxonomyRecord
+
+    manager = TaxonomyManager()
+    manager._snapshot = TaxonomySnapshot("tnf", [
+        TaxonomyRecord(
+            "category", "sport", slug="sport",
+        ),
+        TaxonomyRecord(
+            "organization",
+            "Talking News Federation",
+            "org-tnf",
+            aliases=("tnf",),
+        ),
+    ])
+    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+
+    result = resolve_for_alexa("play me latest sport from tnf")
+
+    assert result["slots"]["category"] == "sport"
+    assert result["slots"]["organizationIds"] == ["org-tnf"]
+    assert result["slots"]["organizationName"] == "Talking News Federation"

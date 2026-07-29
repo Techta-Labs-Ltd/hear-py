@@ -65,10 +65,34 @@ def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "
         slots["category"] = plan.category_slugs[0]
     if plan.creator_ids:
         slots["creatorIds"] = plan.creator_ids
+        slots["creatorName"] = next(
+            (
+                entity.canonical_value
+                for entity in plan.entities
+                if entity.entity_type == "creator"
+            ),
+            None,
+        )
     if plan.organization_ids:
         slots["organizationIds"] = plan.organization_ids
+        slots["organizationName"] = next(
+            (
+                entity.canonical_value
+                for entity in plan.entities
+                if entity.entity_type == "organization"
+            ),
+            None,
+        )
     if plan.publication_ids:
         slots["publicationIds"] = plan.publication_ids
+        slots["publicationName"] = next(
+            (
+                entity.canonical_value
+                for entity in plan.entities
+                if entity.entity_type == "publication"
+            ),
+            None,
+        )
     if plan.city:
         slots["city"] = plan.city
     return {

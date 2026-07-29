@@ -138,7 +138,12 @@ def _build_search_outcome_response(handler_input: HandlerInput, search_result: O
             .response
     search_payload = (search_result or {}).get("_search_payload") or {}
     if search_payload.get("query") or search_payload.get("q") or search_payload.get("filter"):
-        requested = search_payload.get("query") or search_payload.get("q") or "that request"
+        requested = (
+            (search_result or {}).get("_request_label")
+            or search_payload.get("query")
+            or search_payload.get("q")
+            or "that request"
+        )
         return handler_input.response_builder \
             .speak(ssml(SEARCH_NO_MATCH(requested))) \
             .reprompt(ssml(WELCOME_REPROMPT)) \
@@ -235,6 +240,19 @@ async def discover_content_via_search(
 
     result = await search(payload, timeout_ms=timeout_ms)
     result["_search_payload"] = dict(payload)
+    category_name = str(nlp_slots.get("category") or "").strip()
+    source_name = str(
+        nlp_slots.get("organizationName")
+        or nlp_slots.get("creatorName")
+        or nlp_slots.get("publicationName")
+        or ""
+    ).strip()
+    if category_name and source_name:
+        result["_request_label"] = f"{category_name} from {source_name}"
+    elif category_name or source_name:
+        result["_request_label"] = category_name or source_name
+    elif query:
+        result["_request_label"] = query
     if result and isinstance(result.get("results"), list):
         result["results"] = normalize_content_items(result["results"])
     return result
