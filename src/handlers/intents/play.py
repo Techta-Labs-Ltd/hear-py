@@ -746,7 +746,11 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
         # stable across turns.  Resolve every named talking-newspaper request
         # through the organization-scoped resolver before deciding whether it
         # can be confirmed or searched.
-        if org_query and not resolved_org:
+        if (
+            org_query
+            and not resolved_org
+            and not nlp_slots.get("organizationFollowUp")
+        ):
             resolved = resolve_organization_follow_up(str(org_query))
             resolved_slots = resolved.get("slots") or {}
             if resolved_slots.get("organizationIds"):

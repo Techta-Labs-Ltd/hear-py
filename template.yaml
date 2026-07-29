@@ -78,6 +78,11 @@ Resources:
       FunctionName: !Sub Hear-Python-${ShortStage}
       PackageType: Image
       ImageUri: !Ref ImageUri
+      # The resolver builds a large immutable taxonomy index during cold
+      # initialization.  Two GB supplies a full vCPU and materially reduces
+      # Alexa's first-turn latency; the outbound worker remains at the global
+      # one-GB default.
+      MemorySize: 2048
       Policies:
         - DynamoDBCrudPolicy: { TableName: hear-service }
         - DynamoDBCrudPolicy: { TableName: hear_settings }
