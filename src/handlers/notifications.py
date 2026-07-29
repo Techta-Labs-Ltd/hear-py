@@ -73,7 +73,7 @@ async def ensure_subscription(handler_input: HandlerInput, store: Optional[Dict[
     try:
         locale = handler_input.request_envelope.request.locale \
             if hasattr(handler_input.request_envelope, "request") else None
-        await dispatch("notification.subscribed", {
+        dispatch("notification.subscribed", {
             "userId": alexa_user_id,
             "listenerId": store.get("listenerId"),
             "deviceId": device_id,
@@ -179,7 +179,7 @@ class DisableNotificationsHandler(AbstractRequestHandler):
                 .response
 
         try:
-            await dispatch("notification.unsubscribed", {
+            dispatch("notification.unsubscribed", {
                 "userId": user_id,
                 "listenerId": store.get("listenerId"),
                 "timestamp": int(time.time() * 1000),

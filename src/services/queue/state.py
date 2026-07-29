@@ -4,6 +4,7 @@ import time
 import uuid
 
 from src.services.storage.persistence import get_store, update_store
+from src.utils.normalize_content_item import is_playable_content_item
 
 
 def read_playback_queue(store: dict) -> dict | None:
@@ -72,3 +73,25 @@ def set_queue_index_for_content(handler_input, content_id: str) -> int | None:
 
 def clear_playback_queue(handler_input) -> None:
     update_store(handler_input, {"playbackQueue": None})
+
+
+def cached_queue_content(store: dict, content_id: str) -> dict | None:
+    """Resolve a queued item from the persisted search catalog without I/O."""
+    if not isinstance(store, dict) or not content_id:
+        return None
+    sources = [
+        (store.get("browseCatalog") or {}).get("items"),
+        store.get("pendingBrowseItems"),
+        store.get("browseQueueItems"),
+    ]
+    for items in sources:
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if (
+                isinstance(item, dict)
+                and item.get("contentId") == content_id
+                and is_playable_content_item(item)
+            ):
+                return dict(item)
+    return None

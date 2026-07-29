@@ -181,7 +181,11 @@ async def resolve_locality(payload: dict | None = None) -> dict | None:
     return None
 
 
-async def sync_listener(profile: dict) -> dict | None:
+async def sync_listener(
+    profile: dict,
+    *,
+    timeout_ms: int | None = None,
+) -> dict | None:
     """Register or update a listener through the documented sync endpoint."""
     alexa_user_id = profile.get("alexaUserId") if isinstance(profile, dict) else None
     if not alexa_user_id:
@@ -190,5 +194,6 @@ async def sync_listener(profile: dict) -> dict | None:
         "POST",
         _build_alexa_relative_path("listeners/sync"),
         profile,
+        timeout_ms,
     )
     return data if status == 200 and isinstance(data, dict) else None

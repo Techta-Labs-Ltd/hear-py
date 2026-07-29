@@ -14,6 +14,10 @@ from src.utils.speech import (
     FEEDBACK_FOLLOW_DECLINED,
 )
 from src.services.feedback.candidates import submit_feedback
+from src.services.deferred_intent import (
+    has_deferred_intent,
+    resume_deferred_intent,
+)
 from src.utils.feedback_flow import idle_next_response
 
 
@@ -38,11 +42,12 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
 
         await submit_feedback(handler_input, "enjoyed")
 
-        record_listening_event(handler_input, {
-            "category": store.get("feedbackCategory"),
-            "creator": store.get("feedbackCreator"),
-            "liked": True,
-        })
+        record_listening_event(
+            handler_input,
+            category=store.get("feedbackCategory"),
+            creator=store.get("feedbackCreator"),
+            liked=True,
+        )
 
         creator_id = store.get("feedbackCreatorId")
         creator_name = store.get("feedbackCreator")
@@ -51,6 +56,9 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
             "awaitingFollow": False,
             "awaitingNotificationOptIn": False,
         })
+        if has_deferred_intent(handler_input):
+            await clear_feedback(handler_input)
+            return await resume_deferred_intent(handler_input)
 
         updated_store = get_store(handler_input)
         if (

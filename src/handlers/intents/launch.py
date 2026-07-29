@@ -21,6 +21,7 @@ from src.services.alexa.locality import (
     attach_profile_permission_if_needed, apply_listener_profile,
 )
 from src.services.launch import record_launch
+from src.services.listeners import sync_listener_for_launch
 from src.utils.skill_request import get_user_id as get_alexa_user_id
 from src.services.playback import flush_previous_track
 from src.services.alexa.reminders import cancel_feedback_reminder
@@ -86,6 +87,12 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
     launch = record_launch(user_id, store)
     if launch.get("save"):
         update_store(handler_input, launch["save"])
+        store = get_store(handler_input)
+
+    try:
+        await sync_listener_for_launch(handler_input)
+    except Exception as err:
+        logger.warning("Hear: listener launch sync failed error=%s", type(err).__name__)
 
     attrs = handler_input.attributes_manager.get_request_attributes()
     pending_notifications = attrs.get("_pendingNotifications") if attrs else None

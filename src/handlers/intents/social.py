@@ -110,7 +110,7 @@ class FollowCreatorHandler(AbstractRequestHandler):
 
         user_id = _get_user_id(handler_input)
         try:
-            await dispatch("user.followed_creator", {
+            dispatch("user.followed_creator", {
                 "userId": user_id, "listenerId": store.get("listenerId"),
                 "creatorId": creator_id, "creatorName": creator_name,
                 "timestamp": _current_timestamp_ms(),
@@ -178,7 +178,7 @@ class UnfollowCreatorHandler(AbstractRequestHandler):
 
         user_id = _get_user_id(handler_input)
         try:
-            await dispatch("user.unfollowed_creator", {
+            dispatch("user.unfollowed_creator", {
                 "userId": user_id, "listenerId": store.get("listenerId"),
                 "creatorId": creator_id, "timestamp": _current_timestamp_ms(),
             }, {"awaitQueue": True})
@@ -234,7 +234,7 @@ class ReportContentHandler(AbstractRequestHandler):
             pass
 
         try:
-            await dispatch("user.reported_content", {
+            dispatch("user.reported_content", {
                 "userId": user_id, "listenerId": store.get("listenerId"),
                 "contentId": content_id, "contentId": content_id,
                 "reason": "reported_via_alexa", "title": title,
@@ -278,7 +278,7 @@ class ReportCreatorHandler(AbstractRequestHandler):
 
         user_id = _get_user_id(handler_input)
         try:
-            await dispatch("user.reported_creator", {
+            dispatch("user.reported_creator", {
                 "userId": user_id, "listenerId": store.get("listenerId"),
                 "creatorId": creator_id, "reason": "reported_via_alexa",
                 "timestamp": _current_timestamp_ms(),

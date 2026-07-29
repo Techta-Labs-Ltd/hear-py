@@ -12,6 +12,10 @@ from src.utils.speech import (
     ssml, WELCOME_REPROMPT, FEEDBACK_NOT_ENJOYED, FEEDBACK_REPORT_REPROMPT,
 )
 from src.services.feedback.candidates import submit_feedback
+from src.services.deferred_intent import (
+    has_deferred_intent,
+    resume_deferred_intent,
+)
 from src.utils.playback_context import snapshot_report_context
 
 
@@ -36,14 +40,21 @@ class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
 
         await submit_feedback(handler_input, "not_enjoyed")
 
-        record_listening_event(handler_input, {
-            "category": store.get("feedbackCategory"),
-            "creator": store.get("feedbackCreator"),
-            "liked": False,
-        })
+        record_listening_event(
+            handler_input,
+            category=store.get("feedbackCategory"),
+            creator=store.get("feedbackCreator"),
+            liked=False,
+        )
 
         report_context = snapshot_report_context(store)
         dismiss_feedback_prompt(handler_input)
+        if has_deferred_intent(handler_input):
+            update_store(handler_input, {
+                "awaitingReportDecision": False,
+                "reportContext": None,
+            })
+            return await resume_deferred_intent(handler_input)
         update_store(handler_input, {
             "awaitingReportDecision": True,
             "reportContext": report_context,

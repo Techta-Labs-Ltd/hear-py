@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.services.api import search
 from src.services.playback.start import start_playback
-from src.services.queue.state import move_queue
+from src.services.queue.state import cached_queue_content, move_queue
 from src.services.storage.persistence import get_store
 from src.utils.normalize_content_item import content_title_for_speech, pick_content_credit
 from src.utils.skill_request import get_user_id
@@ -10,6 +10,9 @@ from src.utils.speech import LOCAL_CONTENT_FALLBACK
 
 
 async def _resolve_content(handler_input, content_id: str) -> dict | None:
+    cached = cached_queue_content(get_store(handler_input), content_id)
+    if cached:
+        return cached
     result = await search({
         "query": "",
         "filter": {"contentIds": [content_id]},

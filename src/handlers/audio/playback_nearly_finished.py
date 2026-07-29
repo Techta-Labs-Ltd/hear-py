@@ -5,7 +5,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from src.services.api import search
 from src.services.playback.events import emit_listening_event
 from src.services.playback.session import read_playback_session
-from src.services.queue.state import read_playback_queue
+from src.services.queue.state import cached_queue_content, read_playback_queue
 from src.services.storage.persistence import get_store, update_store
 from src.utils.audio import build_content_metadata, build_play_directive
 from src.utils.skill_request import (
@@ -32,16 +32,18 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         if next_index >= len(queue["orderedContentIds"]):
             return handler_input.response_builder.response
         next_id = queue["orderedContentIds"][next_index]
-        result = await search({
-            "query": "",
-            "filter": {"contentIds": [next_id]},
-            "page": 0,
-            "limit": 1,
-            "alexaUserId": get_user_id(handler_input),
-        })
-        if not result.get("results"):
-            return handler_input.response_builder.response
-        content = result["results"][0]
+        content = cached_queue_content(store, next_id)
+        if not content:
+            result = await search({
+                "query": "",
+                "filter": {"contentIds": [next_id]},
+                "page": 0,
+                "limit": 1,
+                "alexaUserId": get_user_id(handler_input),
+            })
+            if not result.get("results"):
+                return handler_input.response_builder.response
+            content = result["results"][0]
         update_store(handler_input, {"preparedNextContent": content})
         await emit_listening_event(handler_input, "nearly_finished", state)
         directive = build_play_directive(

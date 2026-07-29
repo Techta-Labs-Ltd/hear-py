@@ -156,6 +156,13 @@ class HandlerInput:
         self.attributes_manager = attributes_manager
         self.context = context
         self.response_builder = response_builder
+        self._redispatch = None
+
+    async def redispatch(self):
+        """Redispatch the current request after an intentional state transition."""
+        if self._redispatch is None:
+            return self.response_builder.response
+        return await self._redispatch(self)
 
 
 # --------------------------------------------------------------------------- #
@@ -204,6 +211,7 @@ class AsyncSkill:
         envelope = AttrDict(event)
         attrs = AttributesManager(envelope, self.persistence_adapter)
         handler_input = HandlerInput(envelope, attrs, context, ResponseBuilder())
+        handler_input._redispatch = self._dispatch
 
         response: Any = None
         try:

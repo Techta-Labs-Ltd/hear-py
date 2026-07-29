@@ -101,7 +101,7 @@ async def submit_feedback(handler_input, value: str) -> dict:
     store = get_store(handler_input)
     pending = store.get("pendingFeedback") or {}
     if pending.get("feedbackKey"):
-        await dispatch("feedback.given", {
+        dispatch("feedback.given", {
             "alexaUserId": get_user_id(handler_input),
             "feedbackKey": pending.get("feedbackKey"),
             "contentId": pending.get("contentId"),

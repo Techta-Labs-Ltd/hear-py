@@ -3,6 +3,18 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
+
+def repair_mojibake(value):
+    """Repair the common UTF-8-as-Windows-1252 corruption seen in API text."""
+    text = nullable_string(value)
+    if not text or not any(marker in text for marker in ("â€", "â€™", "Ã", "Â")):
+        return text
+    try:
+        return text.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
 def nullable_string(value):
     if value is None:
         return None
@@ -166,11 +178,18 @@ def _is_independent_org(name) -> bool:
     return n in ("independent", "independent creator")
 
 
+def _is_bad_organization_name(value) -> bool:
+    raw = str(value or "").strip()
+    if not raw or len(raw) > 120 or is_id_like_label(raw):
+        return True
+    return raw.lower() in {"unknown", "system", "admin", "administrator"}
+
+
 def _extract_creator_name(item: dict) -> str | None:
     creator = item.get("creator")
     if isinstance(creator, dict):
-        return nullable_string(creator.get("name"))
-    return nullable_string(creator)
+        return repair_mojibake(creator.get("name"))
+    return repair_mojibake(creator) or repair_mojibake(item.get("creatorName"))
 
 
 def _extract_creator_id(item: dict) -> str | None:
@@ -183,17 +202,21 @@ def _extract_creator_id(item: dict) -> str | None:
 def _pick_organization_name(item: dict) -> str | None:
     org = item.get("organization")
     if isinstance(org, dict):
-        name = nullable_string(org.get("name"))
+        name = repair_mojibake(org.get("name"))
         if name:
             return name
-    return None
+    return repair_mojibake(item.get("organizationName"))
 
 
 def _is_organization_publisher(item: dict) -> bool:
     if not isinstance(item, dict):
         return False
     org = _pick_organization_name(item)
-    return bool(org and not _is_independent_org(org) and not is_bad_credit_name(org))
+    return bool(
+        org
+        and not _is_independent_org(org)
+        and not _is_bad_organization_name(org)
+    )
 
 
 def pick_attribution_kind(item: dict) -> str:
@@ -209,11 +232,11 @@ def pick_attribution_credit(item: dict) -> str | None:
     creator = _extract_creator_name(item)
     org = _pick_organization_name(item)
     org_pub = _is_organization_publisher(item)
-    if org_pub and org and not is_bad_credit_name(org) and not _is_independent_org(org):
+    if org_pub and org:
         return org
     if creator and not is_bad_credit_name(creator):
         return creator
-    if org and not is_bad_credit_name(org) and not _is_independent_org(org):
+    if org and not _is_bad_organization_name(org) and not _is_independent_org(org):
         return org
     return None
 
@@ -286,9 +309,9 @@ def normalize_content_item(item: dict) -> dict:
     duration_secs = _pick_duration_secs(item)
     return {
         "contentId": content_id,
-        "title": nullable_string(item.get("title")),
-        "displayTitle": _pick_display_title(item),
-        "spokenTitle": pick_spoken_title(item),
+        "title": repair_mojibake(item.get("title")),
+        "displayTitle": repair_mojibake(_pick_display_title(item)),
+        "spokenTitle": repair_mojibake(pick_spoken_title(item)),
         "summary": pick_summary(item),
         "creatorId": creator_id,
         "creatorName": creator_name,
