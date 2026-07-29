@@ -30,13 +30,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+          pip install -r requirements.txt pytest pytest-asyncio
           pip install --no-cache-dir "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" || true
 
       - name: Provide placeholder env (settings load from .env)
         run: cp .env.example .env || true
 
       - name: Run tests
+        env:
+          HEAR_SEMANTIC_ROUTER_ENABLED: "0"
         run: pytest tests/ -q
 
       - name: Import + build smoke test (catches import & registration bugs)
