@@ -71,6 +71,8 @@ jobs:
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Deploy CloudFormation stack
+        id: cloudformation
+        continue-on-error: true
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: |
@@ -97,15 +99,36 @@ jobs:
               SentryDsn="$SENTRY_DSN"
 
       - name: Stack outputs
+        if: steps.cloudformation.outcome == 'success'
         run: |
           aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" --query "Stacks[0].Outputs" --output table
 
       - name: CloudFormation failure details
-        if: failure()
+        if: steps.cloudformation.outcome == 'failure'
         run: |
           aws cloudformation describe-stack-events \
             --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" \
             --query "StackEvents[?ResourceStatus=='CREATE_FAILED' || ResourceStatus=='UPDATE_FAILED'].[Timestamp,LogicalResourceId,ResourceStatusReason]" \
             --output table
+
+      - name: Deploy image to existing Lambdas when infrastructure is blocked
+        if: steps.cloudformation.outcome == 'failure'
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "Hear-Python-${STAGE:0:3}" \
+            --image-uri "$IMAGE" \
+            --region "$AWS_REGION"
+          aws lambda wait function-updated-v2 \
+            --function-name "Hear-Python-${STAGE:0:3}" \
+            --region "$AWS_REGION"
+          aws lambda update-function-code \
+            --function-name "Hear-Outbound-Python-${STAGE:0:3}" \
+            --image-uri "$IMAGE" \
+            --region "$AWS_REGION"
+          aws lambda wait function-updated-v2 \
+            --function-name "Hear-Outbound-Python-${STAGE:0:3}" \
+            --region "$AWS_REGION"
