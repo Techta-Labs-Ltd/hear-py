@@ -93,7 +93,7 @@ async def test_unresolved_creator_name_falls_back_to_search_query(
 
 
 @pytest.mark.asyncio
-async def test_organization_handler_reads_its_declared_alexa_slot(
+async def test_organization_slot_is_resolved_and_confirmed_before_search(
     monkeypatch,
     mock_handler_input,
 ):
@@ -130,14 +130,15 @@ async def test_organization_handler_reads_its_declared_alexa_slot(
 
     await PlayByOrganizationHandler().handle(mock_handler_input)
 
-    assert discover.await_args_list[0].args[1] == {
-        "q": "tnf",
-        "intent": "organization",
-    }
+    store = get_store(mock_handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingOrganizationConfirmation"] is True
+    assert store["pendingSearchSlots"]["organizationIds"]
+    discover.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_resolved_organization_uses_residual_topic_without_reprompting(
+async def test_resolved_organization_requires_confirmation_before_search(
     monkeypatch,
     mock_handler_input,
 ):
@@ -184,10 +185,11 @@ async def test_resolved_organization_uses_residual_topic_without_reprompting(
 
     await PlayByOrganizationHandler().handle(mock_handler_input)
 
-    assert discover.await_args_list[0].args[1] == {
-        "q": "heatwave",
-        "intent": "organization",
-    }
+    store = get_store(mock_handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingOrganizationConfirmation"] is True
+    assert store["pendingSearchSlots"]["residualQuery"] == "heatwave"
+    discover.assert_not_awaited()
 
 
 @pytest.mark.asyncio

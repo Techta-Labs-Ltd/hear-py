@@ -167,3 +167,23 @@ def test_prompted_short_organization_typo_uses_unique_taxonomy_alias(monkeypatch
     assert result["slots"]["organizationIds"] == ["org-ytn"]
     assert result["slots"]["organizationName"] == "York Talking News"
     assert result["slots"]["residualQuery"] == ""
+
+
+def test_prompted_spoken_organization_initialism_is_compacted(monkeypatch):
+    from src.resolver.taxonomy import TaxonomyRecord
+
+    manager = TaxonomyManager()
+    manager._snapshot = TaxonomySnapshot("ytn-spoken", [
+        TaxonomyRecord(
+            "organization",
+            "York Talking News",
+            "org-ytn",
+            aliases=("ytn",),
+        ),
+    ])
+    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+
+    result = resolve_organization_follow_up("Y. T. N.")
+
+    assert result["slots"]["organizationIds"] == ["org-ytn"]
+    assert result["slots"]["organizationName"] == "York Talking News"

@@ -43,6 +43,7 @@ from src.utils.search_filters import (
 )
 from src.services.playback.start import start_playback
 from src.resolver.normalize import is_generic_organization_request
+from src.resolver.integration import resolve_organization_follow_up
 
 logger = logging.getLogger(__name__)
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
@@ -740,6 +741,23 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             _extract_slot_value(handler_input, "organizationQuery") or \
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
         resolved_org = bool(nlp_slots.get("organizationIds"))
+
+        # Do not trust Alexa's carrier intent or persisted prompt state to be
+        # stable across turns.  Resolve every named talking-newspaper request
+        # through the organization-scoped resolver before deciding whether it
+        # can be confirmed or searched.
+        if org_query and not resolved_org:
+            resolved = resolve_organization_follow_up(str(org_query))
+            resolved_slots = resolved.get("slots") or {}
+            if resolved_slots.get("organizationIds"):
+                nlp_slots = {
+                    **nlp_slots,
+                    **resolved_slots,
+                    "organizationQuery": str(org_query),
+                    "organizationFollowUp": True,
+                }
+                resolved_org = True
+
         org_label = nlp_slots.get("organizationName") or org_query
 
         if org_query and _is_misrouted_browse_pagination(org_query) \
@@ -759,7 +777,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        if nlp_slots.get("organizationFollowUp") and not resolved_org:
+        if not resolved_org:
             update_store(handler_input, {"awaitingOrganizationName": True})
             return handler_input.response_builder \
                 .speak(ssml(TALKING_NEWSPAPER_NOT_RECOGNIZED(org_query))) \
@@ -767,7 +785,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        if nlp_slots.get("organizationFollowUp") and resolved_org:
+        if resolved_org:
             update_store(handler_input, {
                 "awaitingOrganizationName": False,
                 "awaitingSearchConfirmation": True,

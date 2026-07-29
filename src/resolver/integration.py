@@ -122,15 +122,24 @@ def resolve_organization_follow_up(
     Short acronym typo recovery is deliberately restricted to this prompt
     context and requires one unique taxonomy-owned organisation.
     """
+    phrase = normalize_utterance(utterance)
+    # Alexa commonly transcribes spoken initialisms as "y. t. n.".  The
+    # normalizer deliberately removes punctuation, so compact a sequence of
+    # single-letter tokens before both exact and fuzzy organization matching.
+    letter_tokens = phrase.split()
+    if 2 <= len(letter_tokens) <= 5 and all(
+        len(token) == 1 and token.isalnum() for token in letter_tokens
+    ):
+        phrase = "".join(letter_tokens)
+
     result = resolve_for_alexa(
-        f"play from {utterance}",
+        f"play from {phrase}",
         alexa_user_id,
         timezone,
     )
     if result["slots"].get("organizationIds"):
         return result
 
-    phrase = normalize_utterance(utterance)
     if not phrase or " " in phrase or not 2 <= len(phrase) <= 5:
         return result
 
