@@ -176,7 +176,10 @@ class YesIntentHandler(AbstractRequestHandler):
         if store.get("awaitingLocationConfirm"):
             return await self._confirm_location(handler_input, store)
 
-        # 1. Search confirmation
+        if store.get("awaitingCommunityPlayback"):
+            return await self._handle_community_play_yes(handler_input, store)
+
+        # 1. Resume
         if store.get("awaitingResume"):
             return await self._handle_resume_yes(handler_input, store)
 
@@ -257,6 +260,7 @@ class YesIntentHandler(AbstractRequestHandler):
             "localityResolvedAt": _current_timestamp_ms(),
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
+            "awaitingCommunityPlayback": True,
         })
         confirmed = get_store(handler_input)
         if user_id:
@@ -279,6 +283,50 @@ class YesIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder \
             .speak(ssml(LOCATION_CONFIRMED(final_city))) \
             .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
+            .set_should_end_session(False) \
+            .response
+
+    async def _handle_community_play_yes(self, handler_input, store):
+        """Play local content after the user accepts the location follow-up."""
+        city = store.get("userCity") or store.get("locality")
+        update_store(handler_input, {"awaitingCommunityPlayback": False})
+        attrs = handler_input.attributes_manager.get_request_attributes()
+        attrs["_nlp"] = {
+            "intent": "local",
+            "alexaIntent": "local",
+            "confidence": "high",
+            "nlpMatchesAlexa": True,
+            "needsRedirect": False,
+            "slots": {
+                "city": city,
+                "isLocal": True,
+                "residualQuery": "",
+            },
+        }
+        handler_input.attributes_manager.set_request_attributes(attrs)
+        result = await discover_content_via_search(
+            handler_input,
+            {"q": "", "intent": "local"},
+        )
+        if result.get("results"):
+            return await auto_play_first_from_search(
+                handler_input,
+                result,
+                {
+                    "discoveryIntent": "local",
+                    "q": "",
+                    "introOverride": f"Here is the latest from {escape_ssml_lite(city)}.",
+                },
+            )
+        if result.get("client_message"):
+            speech = escape_ssml_lite(str(result["client_message"]))
+        elif result.get("failed"):
+            speech = "I cannot reach the Hear catalogue right now. Please try again shortly."
+        else:
+            speech = f"I couldn't find anything available from {escape_ssml_lite(city)} right now."
+        return handler_input.response_builder \
+            .speak(ssml(speech)) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
             .set_should_end_session(False) \
             .response
 
@@ -622,6 +670,14 @@ class NoIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder \
                 .speak(ssml(LOCATION_RETRY)) \
                 .reprompt(ssml("Which town or city should I set?")) \
+                .set_should_end_session(False) \
+                .response
+
+        if store.get("awaitingCommunityPlayback"):
+            update_store(handler_input, {"awaitingCommunityPlayback": False})
+            return handler_input.response_builder \
+                .speak(ssml("No problem. What would you like to listen to?")) \
+                .reprompt(ssml(WELCOME_REPROMPT)) \
                 .set_should_end_session(False) \
                 .response
 

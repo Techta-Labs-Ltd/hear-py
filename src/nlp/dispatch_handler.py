@@ -24,8 +24,6 @@ DISPATCHABLE_INTENTS: list[str] = [
 # Query-driven intents that are confirmed with the user before any search runs.
 # Broad "show me stuff" intents (trending/browse/following/show_more) act
 # immediately since there is no specific entity that could be misheard.
-CONFIRMABLE_INTENTS: set[str] = {"creator", "organization", "category", "general", "local"}
-
 NON_DISPATCHABLE_INTENTS: list[str] = [
     "ReportContentIntent", "ReportCreatorIntent",
     "FollowCreatorIntent", "UnfollowCreatorIntent", "WhoIsCreatorIntent", "WhatsThisAboutIntent",
@@ -64,11 +62,6 @@ class IntentDispatchHandler(AbstractRequestHandler):
 
         if intent == "unclear":
             return self._handle_unclear(handler_input, nlp_data)
-
-        if intent in CONFIRMABLE_INTENTS:
-            pending = attrs.get("_pendingConfirmation")
-            if pending and pending.get("confirmText"):
-                return self._ask_search_confirmation(handler_input, nlp_data, pending)
 
         dispatch_map = {
             "trending": WhatsTrendingHandler,

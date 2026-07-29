@@ -973,6 +973,22 @@
           ]
         },
         {
+          "name": "TownCaptureIntent",
+          "slots": [
+            {
+              "name": "townName",
+              "type": "HEAR_TOWN"
+            }
+          ],
+          "samples": [
+            "{townName}",
+            "I am in {townName}",
+            "I live in {townName}",
+            "my town is {townName}",
+            "my city is {townName}"
+          ]
+        },
+        {
           "name": "SetLocationIntent",
           "slots": [
             {
@@ -1019,6 +1035,35 @@
         }
       ],
       "types": [
+        {
+          "name": "HEAR_TOWN",
+          "values": [
+            {
+              "name": {
+                "value": "Swindon",
+                "synonyms": ["swidon", "swinton"]
+              }
+            },
+            {
+              "name": {
+                "value": "Manchester",
+                "synonyms": ["manchster"]
+              }
+            },
+            {
+              "name": {
+                "value": "London",
+                "synonyms": []
+              }
+            },
+            {
+              "name": {
+                "value": "Burnley",
+                "synonyms": []
+              }
+            }
+          ]
+        },
         {
           "name": "ContentFormat",
           "values": [

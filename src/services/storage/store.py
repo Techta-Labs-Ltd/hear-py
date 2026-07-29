@@ -94,6 +94,7 @@ DEFAULT_STORE: dict[str, object] = {
     "onboardingComplete": False,
     "onboardingStage": None,
     "onboardingRetries": 0,
+    "awaitingCommunityPlayback": False,
     "locationSource": None,
     "awaitingSearchConfirmation": False,
     "pendingSuggestions": [],

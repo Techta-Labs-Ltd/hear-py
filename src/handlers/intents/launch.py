@@ -267,7 +267,13 @@ class TownCaptureHandler(AbstractRequestHandler):
             return True
 
         intent_name = get_intent_name(handler_input)
-        return intent_name in ("AMAZON.NoIntent", "SkipFeedbackIntent", "AMAZON.CancelIntent")
+        return intent_name in (
+            "TownCaptureIntent",
+            "SetLocationIntent",
+            "AMAZON.NoIntent",
+            "SkipFeedbackIntent",
+            "AMAZON.CancelIntent",
+        )
 
     async def handle(self, handler_input: HandlerInput):
         store = get_store(handler_input)
@@ -280,6 +286,11 @@ class TownCaptureHandler(AbstractRequestHandler):
         nlp = attrs.get("_nlp", {}) if attrs else {}
         nlp_slots = nlp.get("slots", {}) if nlp else {}
         nlp_town = nlp_slots.get("townName") or nlp_slots.get("placeName")
+        if not nlp_town:
+            nlp_town = (
+                _extract_slot_value(handler_input, "townName")
+                or _extract_slot_value(handler_input, "location")
+            )
 
         if nlp_town:
             return stage_town_confirmation(handler_input, store, nlp_town)

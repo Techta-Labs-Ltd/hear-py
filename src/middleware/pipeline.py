@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from src.handlers.can_fulfill import CanFulfillIntentHandler
 from src.handlers.intents import ErrorHandler, TownCaptureHandler
-from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.deadline import LambdaDeadlineInterceptor
 from src.middleware.feedback_gate import FeedbackGateHandler
 from src.middleware.notification import NotificationMiddleware
@@ -27,7 +26,6 @@ REQUEST_INTERCEPTORS = (
     LoadPersistenceInterceptor,
     NotificationMiddleware,
     NlpInterceptor,
-    ConfirmationMiddleware,
 )
 
 RESPONSE_INTERCEPTORS = (SavePersistenceInterceptor,)

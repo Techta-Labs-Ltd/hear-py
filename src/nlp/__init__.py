@@ -22,6 +22,7 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     if not slots:
         return None
     priorities = {
+        "TownCaptureIntent": ("townName",),
         "PlayLocalIntent": ("localQuery", "topic", "category"),
         "PlayRecommendationIntent": ("recommendationQuery", "topic", "category"),
         "PlayByCreatorIntent": ("creatorQuery", "topic"),
@@ -76,6 +77,20 @@ class NlpInterceptor(AbstractRequestInterceptor):
                     "confidence": "high",
                     "slots": {"townName": town} if town else {},
                     "localResolved": bool(town),
+                })
+                return
+
+            if alexa_intent == "TownCaptureIntent":
+                slot = (intent_obj.slots or {}).get("townName")
+                town = str(slot.value).strip() if slot and slot.value else None
+                _set_nlp(handler_input, {
+                    "intent": "town_capture",
+                    "alexaIntent": "town_capture",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": True,
+                    "needsRedirect": False,
+                    "confidence": "high",
+                    "slots": {"townName": town, "placeName": town} if town else {},
                 })
                 return
 

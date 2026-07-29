@@ -77,6 +77,7 @@ ALEXA_TO_NLP = {
     "BrowseContentIntent": "browse",
     "ShowMoreBrowseIntent": "show_more",
     "SetLocationIntent": "location_set",
+    "TownCaptureIntent": "town_capture",
     "AMAZON.FallbackIntent": "general",
 }
 

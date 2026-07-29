@@ -178,17 +178,6 @@ async def discover_content_via_search(
             ),
         }
     unresolved = nlp_slots.get("unresolvedReferences") or []
-    if unresolved:
-        reference = unresolved[0]
-        return {
-            "results": [],
-            "total_hits": 0,
-            "failed": False,
-            "client_message": unresolved_reference_message(
-                str(reference.get("phrase") or ""),
-                list(reference.get("expectedTypes") or []),
-            ),
-        }
 
     query = str(opts.get("q", ""))
     page = opts.get("page", 0)

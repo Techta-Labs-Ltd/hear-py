@@ -568,7 +568,10 @@ ONBOARDING_TOWN_GIVE_UP = "I'm having trouble catching that. Not to worry \u2014
 LOCATION_NOT_FOUND = "I couldn't find your location from your account. Would you like to tell me which city you're in so I can find content from your area?"
 LOCATION_ASK_CITY = "Which town or city are you in?"
 LOCATION_DECLINED = "No problem. What would you like to listen to?"
-LOCATION_CONFIRMED = lambda city: f"Great, your current location has now been set to {escape_ssml_lite(city)}. If you want to listen to content or tracks from {escape_ssml_lite(city)}, you can just say play something from my community. Would you like to listen to something from your community?"
+LOCATION_CONFIRMED = lambda city: (
+    f"{escape_ssml_lite(city)} is set. "
+    f"Would you like to hear the latest from {escape_ssml_lite(city)}?"
+)
 LOCATION_RETRY = "No problem. Which city should I set instead?"
 ONBOARDING_DISCOVERY = lambda city, count: f"Right, so you\u2019re near {escape_ssml_lite(city)} \u2014 nice one. I\u2019ve got {count} channels from your local community on here. You can ask for what\u2019s on in {escape_ssml_lite(city)}, pick a category like news or sport, or play from a local talking newspaper. What would you like to listen to?"
 ONBOARDING_NO_LOCAL_CONTENT = lambda city: f"So you\u2019re near {escape_ssml_lite(city)} \u2014 got it. No local channels in your area just yet, but there\u2019s loads from communities all over the country. Ask for news or sport, play from a talking newspaper, or say what\u2019s trending. What would you like to listen to?"
