@@ -347,7 +347,6 @@
             }
           ],
           "samples": [
-            "{organizationQuery}",
             "play from a talking newspaper",
             "play from a talking news paper",
             "play something from a talking newspaper",
@@ -1093,6 +1092,38 @@
           ]
         }
       ]
-    }
+    },
+    "dialog": {
+      "delegationStrategy": "SKILL_RESPONSE",
+      "intents": [
+        {
+          "name": "PlayByOrganizationIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "organizationQuery",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.PlayByOrganizationIntent.organizationQuery"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "prompts": [
+      {
+        "id": "Elicit.PlayByOrganizationIntent.organizationQuery",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which talking newspaper would you like?"
+          }
+        ]
+      }
+    ]
   }
 }

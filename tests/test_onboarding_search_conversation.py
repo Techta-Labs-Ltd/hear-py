@@ -230,6 +230,14 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     await PlayByOrganizationHandler().handle(mock_handler_input)
 
     assert get_store(mock_handler_input)["awaitingOrganizationName"] is True
+    chained_builder = (
+        mock_handler_input.response_builder.speak.return_value
+        .reprompt.return_value
+    )
+    chained_builder.add_directive.assert_called_once()
+    directive = chained_builder.add_directive.call_args.args[0]
+    assert directive.object_type == "Dialog.ElicitSlot"
+    assert directive.slot_to_elicit == "organizationQuery"
     discover.assert_not_awaited()
 
 
