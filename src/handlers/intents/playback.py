@@ -8,7 +8,7 @@ from ask_sdk_core.utils.request_util import get_slot_value
 from config import settings
 from src.services.api import search
 from src.services.playback.session import read_playback_session, write_playback_session
-from src.services.playback.start import start_playback
+from src.services.playback.start import resume_playback, start_playback
 from src.services.queue.state import move_queue
 from src.services.storage.persistence import get_store, update_store
 from src.utils.audio import (
@@ -78,15 +78,11 @@ async def _restart_active(
     state = read_playback_session(get_store(handler_input))
     if not state:
         return _open_response(handler_input, NOTHING_TO_RESUME)
-    content = await _find_content(state["contentId"])
-    if not content:
-        return _open_response(handler_input, NO_CONTENT_AVAILABLE)
-    return await start_playback(
-        handler_input,
-        content,
-        speech,
-        options={"offsetMs": state.get("offsetMs", 0) if offset_ms is None else offset_ms},
-    )
+    resume_state = {
+        **state,
+        "offsetMs": state.get("offsetMs", 0) if offset_ms is None else offset_ms,
+    }
+    return await resume_playback(handler_input, resume_state, speech)
 
 
 async def _play_queue_delta(handler_input: HandlerInput, delta: int, speech: str):

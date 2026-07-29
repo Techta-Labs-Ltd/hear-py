@@ -8,7 +8,11 @@ from src.services.playback.session import read_playback_session
 from src.services.queue.state import read_playback_queue
 from src.services.storage.persistence import get_store, update_store
 from src.utils.audio import build_content_metadata, build_play_directive
-from src.utils.skill_request import get_request_type, get_user_id
+from src.utils.skill_request import (
+    get_audio_player_token,
+    get_request_type,
+    get_user_id,
+)
 
 
 class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
@@ -16,8 +20,7 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         return get_request_type(handler_input) == "AudioPlayer.PlaybackNearlyFinished"
 
     async def handle(self, handler_input):
-        request = handler_input.request_envelope.request
-        token = request.token
+        token = get_audio_player_token(handler_input)
         store = get_store(handler_input)
         state = read_playback_session(store)
         if not state or state.get("contentId") != token:

@@ -8,7 +8,10 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
 from src.services.alexa.reminders import cancel_feedback_reminder
-from src.services.playback.session import create_playback_session
+from src.services.playback.session import (
+    create_playback_session,
+    write_playback_session,
+)
 from src.services.queue.state import read_playback_queue
 from src.services.storage.persistence import add_to_history, get_store, update_store
 from src.utils.audio import (
@@ -119,6 +122,90 @@ async def start_playback(
     )
     if not directive:
         logger.error("Hear: could not build play directive contentId=%s", state["contentId"])
+        return (
+            handler_input.response_builder
+            .speak(ssml(NO_CONTENT_AVAILABLE))
+            .reprompt(ssml(WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
+    return (
+        handler_input.response_builder
+        .speak(ssml(intro_text))
+        .add_directive(directive)
+        .response
+    )
+
+
+async def resume_playback(
+    handler_input: HandlerInput,
+    state: dict[str, Any],
+    intro_text: str,
+):
+    """Resume directly from canonical persisted playback state.
+
+    Resume must not depend on a catalog lookup: the backend may no longer
+    return the item, and the active record already owns the stable token,
+    playable URL, metadata, and exact offset.
+    """
+    content_id = str(state.get("contentId") or "").strip()
+    audio_url = str(
+        state.get("audioUrl") or get_store(handler_input).get("currentAudioUrl") or ""
+    ).strip()
+    content = {
+        "contentId": content_id,
+        "title": state.get("title"),
+        "spokenTitle": state.get("title"),
+        "audioUrl": audio_url,
+        "creatorId": state.get("creatorId"),
+        "creatorName": state.get("creatorName"),
+        "publicationId": state.get("publicationId"),
+        "publicationTitle": state.get("publicationTitle"),
+        "durationMs": state.get("durationMs"),
+        "playbackSpeeds": get_store(handler_input).get("currentPlaybackSpeeds") or [],
+    }
+    if not is_playable_content_item(content):
+        return (
+            handler_input.response_builder
+            .speak(ssml(NO_CONTENT_AVAILABLE))
+            .reprompt(ssml(WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
+
+    offset_ms = max(0, int(state.get("offsetMs") or 0))
+    speeds = content["playbackSpeeds"]
+    effective_speed = resolve_effective_playback_speed(
+        get_store(handler_input).get("playbackSpeed", settings.default_speed),
+        speeds,
+    )
+    resolved_url = resolve_audio_url_for_speed(audio_url, effective_speed, speeds)
+    resumed = write_playback_session(handler_input, {
+        "status": "starting",
+        "offsetMs": offset_ms,
+    })
+    update_store(handler_input, {
+        "lastToken": content_id,
+        "lastOffsetMs": offset_ms,
+        "currentContentId": content_id,
+        "currentContentTitle": state.get("title"),
+        "currentAudioUrl": audio_url,
+    })
+    directive = build_play_directive(
+        url=resolved_url,
+        token=content_id,
+        offset_ms=offset_ms,
+        metadata=build_content_metadata(content),
+        progress_report=True,
+        duration_secs=(
+            resumed["durationMs"] / 1000
+            if resumed and isinstance(resumed.get("durationMs"), (int, float))
+            else None
+        ),
+        handler_input=handler_input,
+    )
+    if not directive:
+        write_playback_session(handler_input, {"status": "failed"})
         return (
             handler_input.response_builder
             .speak(ssml(NO_CONTENT_AVAILABLE))

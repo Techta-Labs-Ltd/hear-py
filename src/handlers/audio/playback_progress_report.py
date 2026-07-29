@@ -4,7 +4,11 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
 from src.services.playback.session import read_playback_session, write_playback_session
 from src.services.storage.persistence import get_store, update_store
-from src.utils.skill_request import get_request_type
+from src.utils.skill_request import (
+    get_audio_player_offset_ms,
+    get_audio_player_token,
+    get_request_type,
+)
 
 
 class PlaybackProgressReportHandler(AbstractRequestHandler):
@@ -12,9 +16,8 @@ class PlaybackProgressReportHandler(AbstractRequestHandler):
         return get_request_type(handler_input) == "AudioPlayer.PlaybackProgressReport"
 
     async def handle(self, handler_input):
-        request = handler_input.request_envelope.request
-        token = request.token
-        offset_ms = max(0, int(request.offset_in_milliseconds or 0))
+        token = get_audio_player_token(handler_input)
+        offset_ms = get_audio_player_offset_ms(handler_input)
         state = read_playback_session(get_store(handler_input))
         if state and state.get("contentId") == token and state.get("status") in {
             "starting", "playing", "paused",

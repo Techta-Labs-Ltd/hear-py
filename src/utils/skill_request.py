@@ -25,3 +25,28 @@ def get_user_id(handler_input) -> str | None:
     if ctx and getattr(ctx, "System", None) and ctx.System.user:
         return ctx.System.user.userId
     return None
+
+
+def get_audio_player_token(handler_input) -> str:
+    """Read an AudioPlayer token from raw JSON or an ASK SDK request model."""
+    request = handler_input.request_envelope.request
+    if isinstance(request, dict):
+        return str(request.get("token") or "")
+    return str(getattr(request, "token", "") or "")
+
+
+def get_audio_player_offset_ms(handler_input) -> int:
+    """Read Alexa's camel-case offset while remaining ASK SDK compatible."""
+    request = handler_input.request_envelope.request
+    if isinstance(request, dict):
+        value = request.get("offsetInMilliseconds")
+        if value is None:
+            value = request.get("offset_in_milliseconds")
+    else:
+        value = getattr(request, "offset_in_milliseconds", None)
+        if value is None:
+            value = getattr(request, "offsetInMilliseconds", None)
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0

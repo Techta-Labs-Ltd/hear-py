@@ -11,7 +11,12 @@ from src.services.playback.session import (
 )
 from src.services.queue.state import read_playback_queue, set_queue_index_for_content
 from src.services.storage.persistence import get_store, update_store
-from src.utils.skill_request import get_request_type, get_user_id
+from src.utils.skill_request import (
+    get_audio_player_offset_ms,
+    get_audio_player_token,
+    get_request_type,
+    get_user_id,
+)
 
 
 class PlaybackStartedHandler(AbstractRequestHandler):
@@ -19,9 +24,8 @@ class PlaybackStartedHandler(AbstractRequestHandler):
         return get_request_type(handler_input) == "AudioPlayer.PlaybackStarted"
 
     async def handle(self, handler_input):
-        request = handler_input.request_envelope.request
-        token = request.token
-        offset_ms = max(0, int(request.offset_in_milliseconds or 0))
+        token = get_audio_player_token(handler_input)
+        offset_ms = get_audio_player_offset_ms(handler_input)
         store = get_store(handler_input)
         state = read_playback_session(store)
         prepared = store.get("preparedNextContent")

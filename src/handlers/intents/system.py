@@ -42,7 +42,7 @@ from src.handlers.notifications import (
     has_notification_permission, complete_notification_opt_in,
     build_notification_permission_response,
 )
-from src.services.playback.start import start_playback
+from src.services.playback.start import resume_playback, start_playback
 from src.services.notifications import (
     resolve_notification_queue,
     update_notification_status,
@@ -450,21 +450,10 @@ class YesIntentHandler(AbstractRequestHandler):
         update_store(handler_input, {"awaitingResume": False})
         if not state or not state.get("contentId"):
             return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
-        result = await search({
-            "query": "",
-            "filter": {"contentIds": [state["contentId"]]},
-            "page": 0,
-            "limit": 1,
-            "alexaUserId": get_alexa_user_id(handler_input),
-        })
-        if not result.get("results"):
-            write_playback_session(handler_input, {"status": "failed"})
-            return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
-        return await start_playback(
+        return await resume_playback(
             handler_input,
-            result["results"][0],
+            state,
             "Continuing where you stopped.",
-            options={"offsetMs": state.get("offsetMs") or 0},
         )
 
     async def _handle_still_listening_yes(self, handler_input, store):
