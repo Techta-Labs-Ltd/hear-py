@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -233,12 +234,25 @@ async def discover_content_via_search(
 
     timeout_ms = compute_search_timeout_ms(handler_input)
 
+    logged_payload = {
+        key: value
+        for key, value in payload.items()
+        if key != "alexaUserId"
+    }
     logger.info(
-        "Hear: search intent=%s q=%s page=%s limit=%s",
-        intent, payload.get("q"), page, page_limit,
+        "Hear: search request intent=%s payload=%s",
+        intent,
+        json.dumps(logged_payload, sort_keys=True, separators=(",", ":")),
     )
 
     result = await search(payload, timeout_ms=timeout_ms)
+    logger.info(
+        "Hear: search response intent=%s failed=%s total=%s returned=%s",
+        intent,
+        bool(result.get("failed")),
+        result.get("total_hits", 0),
+        len(result.get("results") or []),
+    )
     result["_search_payload"] = dict(payload)
     category_name = str(nlp_slots.get("category") or "").strip()
     source_name = str(
@@ -468,7 +482,10 @@ class WhatsTrendingHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             get_request_type(handler_input) == "IntentRequest"
-            and get_intent_name(handler_input) == "WhatsTrendingIntent"
+            and get_intent_name(handler_input) in {
+                "WhatsTrendingIntent",
+                "PlayRecommendationIntent",
+            }
         )
 
     async def handle(self, handler_input: HandlerInput):
@@ -486,10 +503,21 @@ class WhatsTrendingHandler(AbstractRequestHandler):
         if not search_result.get("results"):
             return _build_search_outcome_response(handler_input, search_result)
 
+        first = search_result["results"][0]
+        creator = first.get("creator")
+        nested_creator_name = (
+            creator.get("name") if isinstance(creator, dict) else None
+        )
         response = await auto_play_first_from_search(handler_input, search_result, {
             "discoveryIntent": "WhatsTrendingIntent",
             "locality": active_store.get("locality"),
-            "introOverride": TRENDING_INTRO(),
+            "introOverride": TRENDING_INTRO(
+                search_result.get("total_hits") or len(search_result["results"]),
+                content_title_for_speech(first),
+                pick_content_credit(first)
+                or first.get("creatorName")
+                or nested_creator_name,
+            ),
         })
         return response or _build_no_content_response(handler_input)
 
@@ -623,16 +651,19 @@ class PlayByCreatorHandler(AbstractRequestHandler):
 
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
-        creator_query = (nlp.get("slots", {}).get("creatorQuery") if nlp else None) or \
+        nlp_slots = nlp.get("slots", {}) if nlp else {}
+        creator_query = nlp_slots.get("creatorQuery") or \
             _extract_slot_value(handler_input, "creatorQuery") or \
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
+        resolved_creator = bool(nlp_slots.get("creatorIds"))
+        creator_label = nlp_slots.get("creatorName") or creator_query
         raw_phrase = _raw_search_phrase(handler_input)
 
         if creator_query and _is_misrouted_browse_pagination(creator_query) \
                 and _has_active_browse_catalog(active_store):
             return await ShowMoreBrowseHandler().handle(handler_input)
 
-        if not creator_query:
+        if not creator_query and not resolved_creator:
             return handler_input.response_builder \
                 .speak(ssml("Which creator would you like to hear?")) \
                 .reprompt(ssml("Just say their name.")) \
@@ -640,7 +671,8 @@ class PlayByCreatorHandler(AbstractRequestHandler):
                 .response
 
         search_result = await discover_content_via_search(handler_input, {
-            "q": creator_query, "intent": "creator",
+            "q": nlp_slots.get("residualQuery", "") if resolved_creator else creator_query,
+            "intent": "creator",
         })
 
         if not search_result.get("results"):
@@ -649,11 +681,11 @@ class PlayByCreatorHandler(AbstractRequestHandler):
                 response = await auto_play_first_from_search(handler_input, fallback, {
                     "discoveryIntent": "PlayContentIntent", "q": "",
                     "locality": get_store(handler_input).get("locality"),
-                    "introOverride": f"{SEARCH_NO_MATCH(creator_query)} Here are some other picks for you.",
+                    "introOverride": f"{SEARCH_NO_MATCH(creator_label)} Here are some other picks for you.",
                 })
                 return response or _build_no_content_response(handler_input)
             return handler_input.response_builder \
-                .speak(ssml(SEARCH_NO_MATCH(creator_query))) \
+                .speak(ssml(SEARCH_NO_MATCH(creator_label))) \
                 .reprompt(ssml(WELCOME_REPROMPT)) \
                 .set_should_end_session(False) \
                 .response
@@ -661,7 +693,7 @@ class PlayByCreatorHandler(AbstractRequestHandler):
         try:
             if wants_latest_playback(raw_phrase or ""):
                 return await _play_first_search_result(
-                    handler_input, search_result["results"], label=creator_query,
+                    handler_input, search_result["results"], label=creator_label,
                 )
         except Exception:
             pass
@@ -672,7 +704,7 @@ class PlayByCreatorHandler(AbstractRequestHandler):
             "q": creator_query,
             "locality": get_store(handler_input).get("locality"),
             "introOverride": None if was_relaxed
-            else f"Here is what I found for {escape_ssml_lite(creator_query)}.",
+            else f"Here is what I found for {escape_ssml_lite(creator_label)}.",
         })
         return response or _build_no_content_response(handler_input)
 
@@ -699,15 +731,18 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
 
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
-        org_query = (nlp.get("slots", {}).get("organizationQuery") if nlp else None) or \
+        nlp_slots = nlp.get("slots", {}) if nlp else {}
+        org_query = nlp_slots.get("organizationQuery") or \
             _extract_slot_value(handler_input, "organizationQuery") or \
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
+        resolved_org = bool(nlp_slots.get("organizationIds"))
+        org_label = nlp_slots.get("organizationName") or org_query
 
         if org_query and _is_misrouted_browse_pagination(org_query) \
                 and _has_active_browse_catalog(active_store):
             return await ShowMoreBrowseHandler().handle(handler_input)
 
-        if not org_query:
+        if not org_query and not resolved_org:
             return handler_input.response_builder \
                 .speak(ssml("Which talking newspaper would you like?")) \
                 .reprompt(ssml("Just say the name.")) \
@@ -715,7 +750,8 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 .response
 
         search_result = await discover_content_via_search(handler_input, {
-            "q": org_query, "intent": "organization",
+            "q": nlp_slots.get("residualQuery", "") if resolved_org else org_query,
+            "intent": "organization",
         })
 
         if not search_result.get("results"):
@@ -724,11 +760,11 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 response = await auto_play_first_from_search(handler_input, fallback, {
                     "discoveryIntent": "PlayContentIntent", "q": "",
                     "locality": active_store.get("locality"),
-                    "introOverride": f"{SEARCH_NO_MATCH(org_query)} Here are some other picks for you.",
+                    "introOverride": f"{SEARCH_NO_MATCH(org_label)} Here are some other picks for you.",
                 })
                 return response or _build_no_content_response(handler_input)
             return handler_input.response_builder \
-                .speak(ssml(SEARCH_NO_MATCH(org_query))) \
+                .speak(ssml(SEARCH_NO_MATCH(org_label))) \
                 .reprompt(ssml(WELCOME_REPROMPT)) \
                 .set_should_end_session(False) \
                 .response
@@ -737,7 +773,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
         try:
             if wants_latest_playback(raw_phrase or ""):
                 return await _play_first_search_result(
-                    handler_input, search_result["results"], label=org_query,
+                    handler_input, search_result["results"], label=org_label,
                 )
         except Exception:
             pass
@@ -748,7 +784,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             "q": "",
             "locality": active_store.get("locality"),
             "introOverride": None if was_relaxed
-            else f"Here is what I found from {escape_ssml_lite(org_query)}.",
+            else f"Here is what I found from {escape_ssml_lite(org_label)}.",
         })
         return response or _build_no_content_response(handler_input)
 

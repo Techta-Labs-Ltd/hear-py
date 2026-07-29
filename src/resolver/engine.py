@@ -8,7 +8,12 @@ from dataclasses import replace
 from rapidfuzz.distance import DamerauLevenshtein
 
 from src.resolver.models import ResolvedEntity, SearchPlan, UnresolvedReference
-from src.resolver.normalize import CONTENT_NOUNS, normalize_utterance, parse_command_modifiers
+from src.resolver.normalize import (
+    CONTENT_NOUNS,
+    is_reserved_content_noun,
+    normalize_utterance,
+    parse_command_modifiers,
+)
 from src.resolver.taxonomy import TaxonomyManager, taxonomy_manager
 from src.resolver.temporal import parse_temporal
 
@@ -35,6 +40,19 @@ CONTEXT_PATTERN = re.compile(
 MAX_CONTEXT_ENTITY_WORDS = 4
 
 
+def _context_types(match: re.Match, *, fuzzy: bool = False) -> tuple[str, ...]:
+    """Return entity types allowed by a contextual phrase.
+
+    A spoken ``city`` qualifier is an explicit location signal, including
+    after ``from`` where a bare name may otherwise legitimately be an
+    organisation or creator.
+    """
+    if re.search(r"\bcity\s*$", match.group(2)):
+        return ("location",)
+    mapping = FUZZY_CONTEXT_TYPES if fuzzy else CONTEXT_TYPES
+    return mapping[match.group(1)]
+
+
 def _overlaps(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
     return any(start < stop and end > begin for begin, stop in spans)
 
@@ -46,7 +64,7 @@ def _apply_context_type_constraints(
     """Remove exact entities whose type conflicts with an explicit relation."""
     constrained = list(entities)
     for match in CONTEXT_PATTERN.finditer(text):
-        allowed = set(CONTEXT_TYPES[match.group(1)])
+        allowed = set(_context_types(match))
         start, end = match.start(2), match.end(2)
         constrained = [
             entity
@@ -72,7 +90,7 @@ def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], manager: Taxono
             if _overlaps(start, end, claimed):
                 continue
             phrase = text[start:end]
-            for entity_type in FUZZY_CONTEXT_TYPES[match.group(1)]:
+            for entity_type in _context_types(match, fuzzy=True):
                 entity = manager.snapshot.fuzzy_match(phrase, entity_type)
                 if entity:
                     candidates.append((entity, start, end))
@@ -138,11 +156,35 @@ def _unresolved_contextual_references(
         unresolved.append(UnresolvedReference(
             relation=match.group(1),
             phrase=match.group(2).strip(),
-            expected_types=CONTEXT_TYPES[match.group(1)],
+            expected_types=_context_types(match),
             start=match.start(2),
             end=match.end(2),
         ))
     return unresolved
+
+
+def _location_qualifier_spans(
+    text: str,
+    entities: list[ResolvedEntity],
+) -> list[tuple[int, int]]:
+    """Claim ``city`` only when it qualifies an actually resolved location."""
+    spans: list[tuple[int, int]] = []
+    for match in CONTEXT_PATTERN.finditer(text):
+        city = re.search(r"\bcity\s*$", match.group(2))
+        if not city:
+            continue
+        phrase_start, phrase_end = match.start(2), match.end(2)
+        if any(
+            entity.entity_type == "location"
+            and entity.start < phrase_end
+            and entity.end > phrase_start
+            for entity in entities
+        ):
+            spans.append((
+                phrase_start + city.start(),
+                phrase_start + city.end(),
+            ))
+    return spans
 
 
 def _category_fuzzy(
@@ -224,7 +266,7 @@ def _extract_query(text: str, claimed: list[tuple[int, int]]) -> str:
     relation_words = {"about", "on", "regarding", "by", "from", "in", "near", "around", "since"}
     tokens = [
         token for token in re.sub(r"[-']", " ", "".join(chars)).split()
-        if token not in CONTENT_NOUNS and token not in relation_words
+        if not is_reserved_content_noun(token) and token not in relation_words
     ]
     return " ".join(tokens).strip()
 
@@ -282,6 +324,16 @@ class Resolver:
         ]
         entities.extend(fuzzy)
         claimed.extend((item.start, item.end) for item in fuzzy)
+        for entity in entities:
+            if entity.entity_type != "location":
+                continue
+            suffix = re.match(
+                r"\s+(?:city|town|village|borough)\b",
+                normalized[entity.end:],
+            )
+            if suffix:
+                claimed.append((entity.end, entity.end + suffix.end()))
+        claimed.extend(_location_qualifier_spans(normalized, entities))
         category_fuzzy = (
             []
             if any(item.entity_type == "category" for item in entities)

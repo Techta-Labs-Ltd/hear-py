@@ -282,7 +282,17 @@ SEARCH_UNAVAILABLE = "I'm having a bit of trouble reaching Hear right now. You c
 
 # ── Browse / Catalog ────────────────────────────────────────────────
 
-TRENDING_INTRO = lambda: "Here is what is popular on Hear right now."
+def TRENDING_INTRO(count, title=None, credit=None) -> str:
+    total = max(0, int(count or 0))
+    noun = "story" if total == 1 else "stories"
+    intro = f"I found {total} trending {noun}."
+    safe_title = escape_ssml_lite(str(title).strip()) if title else ""
+    safe_credit = escape_ssml_lite(str(credit).strip()) if credit else ""
+    if safe_title and safe_credit:
+        return f"{intro} Now playing {safe_title}, by {safe_credit}."
+    if safe_title:
+        return f"{intro} Now playing {safe_title}."
+    return f"{intro} Now playing the first one."
 BROWSE_INTRO = lambda: "Here is what is available on Hear right now."
 BROWSE_CATEGORY_INTRO = lambda category: f"Here is what is available in {escape_ssml_lite(category or '')}."
 BROWSE_EXHAUSTED = "That's everything I found."

@@ -5,6 +5,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from rapidfuzz import fuzz, process
+
 
 COMMAND_PATTERNS = (
     r"\bcan you\b", r"\bcould you\b", r"\bplease\b", r"\bfind me\b", r"\bfind\b",
@@ -28,6 +30,15 @@ CONTENT_NOUNS = {
     "item", "items", "podcast", "podcasts", "record", "recording", "recordings",
     "sound", "story", "stories", "track", "tracks",
 }
+_FUZZY_CONTENT_NOUNS = tuple(
+    value for value in CONTENT_NOUNS if len(value) >= 5
+)
+COMMAND_WORD_CORRECTIONS = {
+    # Frequent Alexa/typed transcriptions. Keep this deliberately limited to
+    # command vocabulary so genuine titles and names are never rewritten.
+    "leatest": "latest",
+    "somethign": "something",
+}
 
 
 @dataclass(frozen=True)
@@ -44,7 +55,23 @@ def normalize_utterance(value: str | None) -> str:
     text = re.sub(r"(?<=\w)'s\b", "", text)
     text = re.sub(r"[^a-z0-9'\s-]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(
+        r"\b(?:" + "|".join(map(re.escape, COMMAND_WORD_CORRECTIONS)) + r")\b",
+        lambda match: COMMAND_WORD_CORRECTIONS[match.group(0)],
+        text,
+    )
     return text
+
+
+def is_reserved_content_noun(value: str) -> bool:
+    """Recognize exact and safely misspelled generic playback nouns."""
+    token = str(value or "").strip().lower()
+    if token in CONTENT_NOUNS:
+        return True
+    if len(token) < 5:
+        return False
+    match = process.extractOne(token, _FUZZY_CONTENT_NOUNS, scorer=fuzz.ratio)
+    return bool(match and match[1] >= 88)
 
 
 def _spans(patterns: tuple[str, ...], text: str) -> list[tuple[int, int]]:

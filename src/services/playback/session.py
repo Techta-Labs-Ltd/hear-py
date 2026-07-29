@@ -70,7 +70,10 @@ def clear_playback_session(handler_input):
 
 def has_unfinished_playback(store: dict) -> bool:
     state = read_playback_session(store)
-    return bool(state and state.get("status") in ACTIVE_STATUSES)
+    if not state or state.get("status") not in ACTIVE_STATUSES:
+        return False
+    audio_url = state.get("audioUrl") or store.get("currentAudioUrl")
+    return isinstance(audio_url, str) and audio_url.strip().lower().startswith("https://")
 
 
 async def resolve_playback_state(alexa_user_id: str | None, handler_input) -> dict:

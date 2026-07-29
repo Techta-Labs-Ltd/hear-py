@@ -60,6 +60,14 @@ def resolver():
                        metadata={"city": "Burnley", "countryCode": "gb"}),
         TaxonomyRecord("location", "Swindon", aliases=("swindon",),
                        metadata={"city": "Swindon", "countryCode": "gb"}),
+        TaxonomyRecord("location", "Birmingham", aliases=("birmingham",),
+                       metadata={"city": "Birmingham", "countryCode": "gb"}),
+        TaxonomyRecord(
+            "organization",
+            "Birmingham Weekly Magazine",
+            entity_id="org-birmingham",
+            aliases=("Birmingham",),
+        ),
     ])
     return Resolver(manager)
 
@@ -184,6 +192,14 @@ def test_from_relation_recovers_a_misspelled_city(resolver):
     assert plan.country_code == "gb"
     assert plan.query == ""
     assert plan.unresolved_references == []
+
+
+def test_misspelled_filler_and_city_designator_do_not_pollute_query(resolver):
+    plan = resolver.resolve("play somethign from birmingham city")
+    assert plan.city == "Birmingham"
+    assert plan.country_code == "gb"
+    assert plan.query == ""
+    assert plan.organization_ids == []
 
 
 def test_scoped_fuzzy_creator_fallback(resolver):

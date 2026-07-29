@@ -137,6 +137,60 @@ async def test_organization_handler_reads_its_declared_alexa_slot(
 
 
 @pytest.mark.asyncio
+async def test_resolved_organization_uses_residual_topic_without_reprompting(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.play import PlayByOrganizationHandler
+
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            # Alexa may initially select the creator carrier phrase; local NLP
+            # redirects it to the organization handler.
+            "name": "PlayByCreatorIntent",
+            "slots": {
+                "creatorQuery": {
+                    "name": "creatorQuery",
+                    "value": "heatwave from ytn",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_nlp": {
+            "intent": "organization",
+            "slots": {
+                "organizationIds": ["org-ytn"],
+                "organizationName": "York Talking News",
+                "residualQuery": "heatwave",
+                "latest": False,
+            },
+        },
+    })
+    discover = AsyncMock(return_value={
+        "failed": False,
+        "results": [],
+        "total_hits": 0,
+    })
+    monkeypatch.setattr(
+        "src.handlers.intents.play.discover_content_via_search", discover,
+    )
+
+    await PlayByOrganizationHandler().handle(mock_handler_input)
+
+    assert discover.await_args_list[0].args[1] == {
+        "q": "heatwave",
+        "intent": "organization",
+    }
+
+
+@pytest.mark.asyncio
 async def test_location_follow_up_yes_executes_community_search(
     monkeypatch,
     mock_handler_input,
