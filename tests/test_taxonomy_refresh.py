@@ -111,6 +111,32 @@ def test_manifest_alias_index_routes_creator_and_organization(tmp_path):
     }
 
 
+def test_org_alias_from_manifest_uses_canonical_organization_type(tmp_path):
+    aliases = {
+        "tnf": {
+            "id": "org-tnf",
+            "name": "Talking News Federation",
+            "entity_type": "org",
+        },
+    }
+    content = json.dumps(aliases).encode()
+    (tmp_path / "aliases.json").write_bytes(content)
+    (tmp_path / "manifest.json").write_text(json.dumps({
+        "version": "org-alias-test",
+        "files": [{
+            "name": "aliases.json",
+            "hash": hashlib.sha256(content).hexdigest(),
+        }],
+    }), encoding="utf-8")
+
+    manager = TaxonomyManager()
+    assert manager.load_directory(tmp_path)
+    plan = Resolver(manager).resolve("play me something from tnf")
+
+    assert plan.organization_ids == ["org-tnf"]
+    assert plan.query == ""
+
+
 def test_downloaded_production_snapshot_loads_offline():
     fixture = Path(__file__).parent / "fixtures" / "taxonomy"
     manager = TaxonomyManager()

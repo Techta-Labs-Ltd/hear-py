@@ -20,6 +20,13 @@ CONTEXT_TYPES = {
     "near": ("location",),
     "around": ("location",),
 }
+# A misspelled place following "from" should still be recoverable, while exact
+# "from Burnley" continues to prefer the organisation and unresolved names
+# retain the creator/publisher clarification contract.
+FUZZY_CONTEXT_TYPES = {
+    **CONTEXT_TYPES,
+    "from": (*CONTEXT_TYPES["from"], "location"),
+}
 CONTEXT_PATTERN = re.compile(
     r"\b(by|from|in|near|around)\s+"
     r"([a-z0-9][a-z0-9' -]{2,80}?)"
@@ -65,7 +72,7 @@ def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], manager: Taxono
             if _overlaps(start, end, claimed):
                 continue
             phrase = text[start:end]
-            for entity_type in CONTEXT_TYPES[match.group(1)]:
+            for entity_type in FUZZY_CONTEXT_TYPES[match.group(1)]:
                 entity = manager.snapshot.fuzzy_match(phrase, entity_type)
                 if entity:
                     candidates.append((entity, start, end))
@@ -84,7 +91,32 @@ def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], manager: Taxono
         if not candidates:
             continue
         winner, winner_start, winner_end = candidates[0]
+        preferred_fuzzy_location = False
+        # A one-edit town and an organisation that owns the same town alias
+        # commonly receive identical scores (for example "swidon"). For a
+        # fuzzy "from" phrase, prefer the place; exact spellings continue
+        # through the exact matcher and preserve organisation precedence.
+        if match.group(1) == "from":
+            location_candidates = [
+                item for item in candidates
+                if item[0].entity_type == "location"
+            ]
+            if (
+                location_candidates
+                and location_candidates[0][0].confidence >= winner.confidence
+            ):
+                winner, winner_start, winner_end = location_candidates[0]
+                preferred_fuzzy_location = True
+                candidates = [
+                    (winner, winner_start, winner_end),
+                    *[
+                        item for item in candidates
+                        if item[0].entity_type != "location"
+                    ],
+                ]
         if (
+            not preferred_fuzzy_location
+            and
             len(candidates) > 1
             and winner.confidence - candidates[1][0].confidence < 0.03
             and (winner.entity_id or winner.canonical_value)
@@ -229,6 +261,20 @@ class Resolver:
         entities = _apply_context_type_constraints(normalized, entities)
         claimed.extend((item.start, item.end) for item in entities)
         fuzzy = _contextual_fuzzy(normalized, protected_claimed, self.taxonomy)
+        # A fuzzy place must not override an exact creator/publisher occupying
+        # the same spoken span. Other fuzzy candidates may extend a partial
+        # exact name, such as "David Beerd".
+        fuzzy = [
+            item for item in fuzzy
+            if not (
+                item.entity_type == "location"
+                and any(
+                    item.start < exact.end and item.end > exact.start
+                    for exact in entities
+                    if exact.entity_type != "location"
+                )
+            )
+        ]
         fuzzy_keys = {(item.entity_type, item.entity_id or item.canonical_value) for item in fuzzy}
         entities = [
             item for item in entities

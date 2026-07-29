@@ -93,6 +93,50 @@ async def test_unresolved_creator_name_falls_back_to_search_query(
 
 
 @pytest.mark.asyncio
+async def test_organization_handler_reads_its_declared_alexa_slot(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.play import PlayByOrganizationHandler
+
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayByOrganizationIntent",
+            "slots": {
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "value": "tnf",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    discover = AsyncMock(return_value={
+        "failed": False,
+        "results": [],
+        "total_hits": 0,
+    })
+    monkeypatch.setattr(
+        "src.handlers.intents.play.discover_content_via_search", discover,
+    )
+
+    await PlayByOrganizationHandler().handle(mock_handler_input)
+
+    assert discover.await_args_list[0].args[1] == {
+        "q": "tnf",
+        "intent": "organization",
+    }
+
+
+@pytest.mark.asyncio
 async def test_location_follow_up_yes_executes_community_search(
     monkeypatch,
     mock_handler_input,

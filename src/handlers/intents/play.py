@@ -610,6 +610,7 @@ class PlayByCreatorHandler(AbstractRequestHandler):
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
         creator_query = (nlp.get("slots", {}).get("creatorQuery") if nlp else None) or \
+            _extract_slot_value(handler_input, "creatorQuery") or \
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
         raw_phrase = _raw_search_phrase(handler_input)
 
@@ -685,6 +686,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
         org_query = (nlp.get("slots", {}).get("organizationQuery") if nlp else None) or \
+            _extract_slot_value(handler_input, "organizationQuery") or \
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
 
         if org_query and _is_misrouted_browse_pagination(org_query) \

@@ -384,15 +384,23 @@ class TaxonomyManager:
             manifest_url = settings.HEAR_TAXONOMY_MANIFEST_URL
             expected_revision = self._forced_revision
             if settings.HEAR_TAXONOMY_REVISION_TABLE:
-                table = boto3.resource("dynamodb", region_name=settings.ddb_region).Table(
-                    settings.HEAR_TAXONOMY_REVISION_TABLE
-                )
-                item = table.get_item(
-                    Key={"pk": "taxonomy#current"},
-                    ConsistentRead=False,
-                ).get("Item") or {}
-                expected_revision = str(item.get("revision") or expected_revision or "")
-                manifest_url = str(item.get("manifestUrl") or manifest_url)
+                try:
+                    table = boto3.resource(
+                        "dynamodb", region_name=settings.ddb_region,
+                    ).Table(settings.HEAR_TAXONOMY_REVISION_TABLE)
+                    item = table.get_item(
+                        Key={"pk": "taxonomy#current"},
+                        ConsistentRead=False,
+                    ).get("Item") or {}
+                    expected_revision = str(
+                        item.get("revision") or expected_revision or ""
+                    )
+                    manifest_url = str(item.get("manifestUrl") or manifest_url)
+                except Exception:
+                    logger.warning(
+                        "Taxonomy revision lookup failed; using configured manifest",
+                        exc_info=True,
+                    )
             if expected_revision and expected_revision == self.snapshot.revision:
                 self._forced_revision = None
                 return False
@@ -404,7 +412,7 @@ class TaxonomyManager:
         url = manifest_url or settings.HEAR_TAXONOMY_MANIFEST_URL
         if not url:
             return False
-        response = httpx.get(url, timeout=httpx.Timeout(2.0, connect=0.5))
+        response = httpx.get(url, timeout=httpx.Timeout(8.0, connect=2.0))
         response.raise_for_status()
         manifest = response.json()
         revision = str(
@@ -437,7 +445,9 @@ class TaxonomyManager:
             digest = hashlib.sha256(content).hexdigest() if content else ""
             expected = str(expected_hash or "").removeprefix("sha256:")
             if not content or (expected and not digest.startswith(expected)):
-                file_response = httpx.get(file_url, timeout=httpx.Timeout(3.0, connect=0.5))
+                file_response = httpx.get(
+                    file_url, timeout=httpx.Timeout(12.0, connect=3.0),
+                )
                 file_response.raise_for_status()
                 content = file_response.content
                 digest = hashlib.sha256(content).hexdigest()

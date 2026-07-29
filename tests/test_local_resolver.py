@@ -58,6 +58,8 @@ def resolver():
                        metadata={"city": "Havering", "countryCode": "gb"}),
         TaxonomyRecord("location", "Burnley", aliases=("burnley",),
                        metadata={"city": "Burnley", "countryCode": "gb"}),
+        TaxonomyRecord("location", "Swindon", aliases=("swindon",),
+                       metadata={"city": "Swindon", "countryCode": "gb"}),
     ])
     return Resolver(manager)
 
@@ -172,6 +174,16 @@ def test_from_relation_prefers_organization_over_same_named_city(resolver):
     plan = resolver.resolve("play recordings from burnley")
     assert plan.organization_ids == ["org-burnley"]
     assert plan.city is None
+
+
+def test_from_relation_recovers_a_misspelled_city(resolver):
+    plan = resolver.resolve("play me the latest news from swidon")
+
+    assert plan.category_slugs == ["news"]
+    assert plan.city == "Swindon"
+    assert plan.country_code == "gb"
+    assert plan.query == ""
+    assert plan.unresolved_references == []
 
 
 def test_scoped_fuzzy_creator_fallback(resolver):

@@ -347,6 +347,7 @@
             }
           ],
           "samples": [
+            "{organizationQuery}",
             "play from the {organizationQuery}",
             "play content from {organizationQuery}",
             "play content from the {organizationQuery}",
