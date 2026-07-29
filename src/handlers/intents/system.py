@@ -32,6 +32,7 @@ from src.utils.speech import (
     FOLLOW_NOTIFICATION_DECLINED_GENERIC, ASK_LISTEN_FIRST, ASK_LISTEN_NEXT,
     END_OF_LIST, NO_TRACKS_AVAILABLE, QUEUE_FINISHED, QUEUE_NEXT_ANNOUNCE,
     LOCATION_ASK_CITY, LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
+    ASK_TALKING_NEWSPAPER_REPROMPT,
 )
 from src.services.api import sync_listener
 from src.handlers.intents.onboarding import ONBOARDING_ASK_TOWN
@@ -353,6 +354,7 @@ class YesIntentHandler(AbstractRequestHandler):
 
         update_store(handler_input, {
             "awaitingSearchConfirmation": False,
+            "pendingOrganizationConfirmation": False,
             "pendingSearchIntent": None,
             "pendingSearchQuery": None,
             "pendingSearchSlots": {},
@@ -724,6 +726,23 @@ class NoIntentHandler(AbstractRequestHandler):
 
     def _handle_search_no(self, handler_input, store, session_attrs):
         """Cycle through search suggestions or give up."""
+        if store.get("pendingOrganizationConfirmation"):
+            update_store(handler_input, {
+                "awaitingSearchConfirmation": False,
+                "pendingOrganizationConfirmation": False,
+                "pendingSearchIntent": None,
+                "pendingSearchQuery": None,
+                "pendingSearchSlots": {},
+                "pendingSuggestions": [],
+                "suggestionIndex": 0,
+                "awaitingOrganizationName": True,
+            })
+            return handler_input.response_builder \
+                .speak(ssml("Okay. Which talking newspaper did you mean?")) \
+                .reprompt(ssml(ASK_TALKING_NEWSPAPER_REPROMPT)) \
+                .set_should_end_session(False) \
+                .response
+
         attrs = handler_input.attributes_manager.get_request_attributes()
         attrs.pop("_pendingConfirmation", None)
         handler_input.attributes_manager.set_request_attributes(attrs)

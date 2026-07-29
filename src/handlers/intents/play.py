@@ -22,7 +22,7 @@ from src.utils.speech import (
     TRENDING_INTRO, PLAY_COMMUNITY_INTRO, COMMUNITY_NEEDS_TOWN, REPROMPT_ASK_TOWN,
     NO_FOLLOWED_CREATORS_TO_PLAY,
     ASK_TALKING_NEWSPAPER, ASK_TALKING_NEWSPAPER_REPROMPT,
-    TALKING_NEWSPAPER_NOT_RECOGNIZED,
+    TALKING_NEWSPAPER_NOT_RECOGNIZED, CONFIRM_TALKING_NEWSPAPER,
     unresolved_reference_message,
     ambiguous_reference_message,
 )
@@ -764,6 +764,23 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             return handler_input.response_builder \
                 .speak(ssml(TALKING_NEWSPAPER_NOT_RECOGNIZED(org_query))) \
                 .reprompt(ssml(ASK_TALKING_NEWSPAPER_REPROMPT)) \
+                .set_should_end_session(False) \
+                .response
+
+        if nlp_slots.get("organizationFollowUp") and resolved_org:
+            update_store(handler_input, {
+                "awaitingOrganizationName": False,
+                "awaitingSearchConfirmation": True,
+                "pendingOrganizationConfirmation": True,
+                "pendingSearchIntent": "organization",
+                "pendingSearchQuery": "",
+                "pendingSearchSlots": dict(nlp_slots),
+                "pendingSuggestions": [],
+                "suggestionIndex": 0,
+            })
+            return handler_input.response_builder \
+                .speak(ssml(CONFIRM_TALKING_NEWSPAPER(org_label))) \
+                .reprompt(ssml("Say yes to play it, or no to try another name.")) \
                 .set_should_end_session(False) \
                 .response
 

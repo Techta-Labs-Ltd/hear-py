@@ -304,6 +304,9 @@ TALKING_NEWSPAPER_NOT_RECOGNIZED = lambda name: (
     f"I couldn't match {escape_ssml_lite(name or 'that name')} to a talking "
     "newspaper. Please say the full name."
 )
+CONFIRM_TALKING_NEWSPAPER = lambda name: (
+    f"Did you mean {escape_ssml_lite(name or 'that talking newspaper')}?"
+)
 
 CONTENT_ABOUT_PHRASE = lambda title, summary=None, main_topic=None, creator=None: _build_content_about(title, summary, main_topic, creator)
 

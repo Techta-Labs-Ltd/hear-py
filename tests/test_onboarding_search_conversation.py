@@ -278,6 +278,60 @@ async def test_talking_newspaper_follow_up_forces_organization_resolution(
 
 
 @pytest.mark.asyncio
+async def test_resolved_talking_newspaper_follow_up_requires_confirmation(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.play import PlayByOrganizationHandler
+
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {
+                "topic": {"name": "topic", "value": "ynt"},
+            },
+        },
+    })
+    resolved_slots = {
+        "organizationIds": ["org-ytn"],
+        "organizationName": "York Talking News",
+        "organizationQuery": "ynt",
+        "organizationFollowUp": True,
+        "residualQuery": "",
+    }
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {
+            **DEFAULT_STORE,
+            "onboardingComplete": True,
+            "awaitingOrganizationName": True,
+        },
+        "_nlp": {
+            "intent": "organization",
+            "slots": resolved_slots,
+        },
+    })
+    discover = AsyncMock()
+    monkeypatch.setattr(
+        "src.handlers.intents.play.discover_content_via_search", discover,
+    )
+
+    await PlayByOrganizationHandler().handle(mock_handler_input)
+
+    store = get_store(mock_handler_input)
+    assert store["awaitingOrganizationName"] is False
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingOrganizationConfirmation"] is True
+    assert store["pendingSearchIntent"] == "organization"
+    assert store["pendingSearchSlots"] == resolved_slots
+    discover.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_location_follow_up_yes_executes_community_search(
     monkeypatch,
     mock_handler_input,
