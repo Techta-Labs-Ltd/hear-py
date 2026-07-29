@@ -89,6 +89,7 @@ async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypat
     assert directive["audioItem"]["stream"]["token"] == CONTENT_ID
     assert directive["audioItem"]["stream"]["offsetInMilliseconds"] == 42_000
     assert "Continuing where you stopped" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is True
 
 
 @pytest.mark.asyncio

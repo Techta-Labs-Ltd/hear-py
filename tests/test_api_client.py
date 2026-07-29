@@ -123,5 +123,6 @@ async def test_start_playback_awaits_cleanup_and_builds_audio_directive(
     assert directive["audioItem"]["stream"]["token"]
     assert directive["audioItem"]["metadata"]["title"] == "A readable morning update"
     assert directive["audioItem"]["metadata"]["subtitle"] == "Monthly Update"
+    assert response["shouldEndSession"] is True
     cancel.assert_awaited_once_with(handler_input)
     assert directive["audioItem"]["stream"]["token"] == "content-1"

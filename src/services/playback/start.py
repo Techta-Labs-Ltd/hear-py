@@ -30,6 +30,17 @@ from src.utils.speech import NO_CONTENT_AVAILABLE, WELCOME_REPROMPT, ssml
 logger = logging.getLogger(__name__)
 
 
+def _play_response(handler_input: HandlerInput, intro_text: str, directive: dict) -> dict:
+    """Hand AudioPlayer control to Alexa and close the foreground session."""
+    return (
+        handler_input.response_builder
+        .speak(ssml(intro_text))
+        .add_directive(directive)
+        .set_should_end_session(True)
+        .response
+    )
+
+
 async def prepare_playback_audio_and_store(
     handler_input: HandlerInput,
     content: dict[str, Any],
@@ -129,12 +140,7 @@ async def start_playback(
             .set_should_end_session(False)
             .response
         )
-    return (
-        handler_input.response_builder
-        .speak(ssml(intro_text))
-        .add_directive(directive)
-        .response
-    )
+    return _play_response(handler_input, intro_text, directive)
 
 
 async def resume_playback(
@@ -213,9 +219,4 @@ async def resume_playback(
             .set_should_end_session(False)
             .response
         )
-    return (
-        handler_input.response_builder
-        .speak(ssml(intro_text))
-        .add_directive(directive)
-        .response
-    )
+    return _play_response(handler_input, intro_text, directive)
