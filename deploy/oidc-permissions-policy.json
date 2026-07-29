@@ -34,7 +34,15 @@
         "lambda:*",
         "apigateway:*",
         "sqs:*",
-        "logs:*"
+        "logs:*",
+        "dynamodb:CreateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:UpdateTable",
+        "dynamodb:UpdateTimeToLive",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource"
       ],
       "Resource": "*"
     },
