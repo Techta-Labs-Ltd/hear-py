@@ -63,7 +63,7 @@ def parse_temporal(
         text,
     )
     if not match:
-    return None
+        return None
     target = WEEKDAYS[match.group("day")]
     days_back = (today.weekday() - target) % 7
     if match.group("last"):
