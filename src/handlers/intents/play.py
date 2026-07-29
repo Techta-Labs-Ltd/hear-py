@@ -5,8 +5,6 @@ from typing import Any, Dict, List, Optional
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_core.utils.request_util import get_slot_value
-
 from config import settings
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
@@ -74,11 +72,9 @@ def _summarize_intent_slots(handler_input: HandlerInput) -> Dict[str, Any]:
 
 def _extract_slot_value(handler_input: HandlerInput, slot_name: str) -> Optional[str]:
     """Extract a single slot value by name."""
-    try:
-        return get_slot_value(handler_input, slot_name)
-    except Exception:
-        slots = _summarize_intent_slots(handler_input)
-        return slots.get(slot_name)
+    slots = _summarize_intent_slots(handler_input)
+    value = slots.get(slot_name)
+    return str(value).strip() if value is not None and str(value).strip() else None
 
 
 def _raw_search_phrase(handler_input: HandlerInput) -> Optional[str]:
