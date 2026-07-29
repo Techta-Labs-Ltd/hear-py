@@ -3,12 +3,12 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.services.persistence import (
+from src.services.storage.persistence import (
     get_store, clear_feedback, mark_feedback_given_from_store, record_listening_event,
 )
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import ssml, WELCOME_REPROMPT, FEEDBACK_SOMEWHAT
-from src.utils.listen_tracker import save_feedback_with_listen_context
+from src.services.feedback.candidates import submit_feedback
 from src.utils.feedback_flow import idle_next_response
 
 
@@ -31,10 +31,7 @@ class FeedbackSomewhatHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        if store.get("feedbackContentId"):
-            await save_feedback_with_listen_context(handler_input, "somewhat")
-
-        mark_feedback_given_from_store(handler_input, store)
+        await submit_feedback(handler_input, "somewhat")
         record_listening_event(handler_input, {
             "category": store.get("feedbackCategory"),
             "creator": store.get("feedbackCreator"),

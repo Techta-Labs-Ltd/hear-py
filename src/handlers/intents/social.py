@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, Optional
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.services.persistence import (
+from src.services.storage.persistence import (
     get_store, update_store, is_following, add_followed_creator,
-    remove_followed_creator, clear_feedback, dismiss_feedback_prompt,
+    remove_followed_creator, clear_feedback,
 )
 from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
@@ -19,14 +18,12 @@ from src.utils.speech import (
     FOLLOW_CREATOR_NOTIFICATION_REPROMPT, NOT_FOLLOWING, UNFOLLOW_CREATOR,
     IDLE_DO_NEXT_REPROMPT, REPORT_NOTHING_PLAYING, REPORT_CONTENT_THEN_ASK_CONTINUE,
     FLAGGED_CONTINUE_REPROMPT, REPORT_CREATOR_CONFIRM, CONTENT_ABOUT_PHRASE,
-    ERROR_GENERIC, WELCOME_REPROMPT, FEEDBACK_FOLLOW_DECLINED,
-    NOTIFICATIONS_ENABLE_FAILED, NOTIFICATIONS_ENABLED,
+    ERROR_GENERIC, WELCOME_REPROMPT, NOTIFICATIONS_ENABLE_FAILED,
 )
-from src.utils.feedback_gate import block_if_awaiting_feedback, enforce_interaction_gate
 from src.utils.feedback_flow import idle_next_response
 from src.utils.playback_context import (
     read_audio_player_context, is_audio_player_active,
-    build_report_context, snapshot_report_context,
+    build_report_context,
 )
 from src.handlers.notifications import has_notification_permission, complete_notification_opt_in
 from src.handlers.intents.play import play_from_followed_creators
@@ -35,10 +32,6 @@ from src.webhooks.dispatch import dispatch
 
 logger = logging.getLogger(__name__)
 
-
-def _gate_social_intent(handler_input: HandlerInput):
-    """Apply feedback and interaction gates for social intents."""
-    return block_if_awaiting_feedback(handler_input) or enforce_interaction_gate(handler_input)
 
 
 def _current_timestamp_ms() -> int:
@@ -56,9 +49,6 @@ class WhoIsCreatorHandler(AbstractRequestHandler):
         )
 
     def handle(self, handler_input: HandlerInput):
-        gated = _gate_social_intent(handler_input)
-        if gated:
-            return gated
 
         store = get_store(handler_input)
         title = store.get("currentContentTitle") or store.get("feedbackContentTitle")
@@ -89,9 +79,6 @@ class FollowCreatorHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = _gate_social_intent(handler_input)
-        if gated:
-            return gated
 
         try:
             if wants_play_from_followed_creators(handler_input):
@@ -133,7 +120,6 @@ class FollowCreatorHandler(AbstractRequestHandler):
             if store.get("awaitingFollow"):
                 await clear_feedback(handler_input)
 
-            updated_store = get_store(handler_input)
             has_perm = has_notification_permission(handler_input)
 
             if has_perm:
@@ -175,9 +161,6 @@ class UnfollowCreatorHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = _gate_social_intent(handler_input)
-        if gated:
-            return gated
 
         store = get_store(handler_input)
         creator_id = store.get("currentCreatorId") or store.get("feedbackCreatorId")
@@ -224,21 +207,18 @@ class ReportContentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = _gate_social_intent(handler_input)
-        if gated:
-            return gated
 
         store = get_store(handler_input)
         audio = read_audio_player_context(handler_input)
         report = build_report_context(store, {"audioToken": audio.get("token") if audio else None})
-        track_id = report.get("trackId")
+        content_id = report.get("contentId")
         content_id = report.get("contentId")
         title = report.get("title")
         creator_id = report.get("creatorId")
 
-        if not track_id or not content_id:
+        if not content_id or not content_id:
             logger.warning(
-                "Hear: report content blocked trackId=%s contentId=%s", track_id, content_id,
+                "Hear: report content blocked contentId=%s contentId=%s", content_id, content_id,
             )
             return handler_input.response_builder \
                 .speak(REPORT_NOTHING_PLAYING) \
@@ -256,7 +236,7 @@ class ReportContentHandler(AbstractRequestHandler):
         try:
             await dispatch("user.reported_content", {
                 "userId": user_id, "listenerId": store.get("listenerId"),
-                "trackId": track_id, "contentId": content_id,
+                "contentId": content_id, "contentId": content_id,
                 "reason": "reported_via_alexa", "title": title,
                 "creatorId": creator_id, "locale": locale, "deviceId": device_id,
                 "timestamp": _current_timestamp_ms(),
@@ -286,9 +266,6 @@ class ReportCreatorHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = _gate_social_intent(handler_input)
-        if gated:
-            return gated
 
         store = get_store(handler_input)
         creator_id = store.get("currentCreatorId") or store.get("feedbackCreatorId")
@@ -333,9 +310,6 @@ class WhatsThisAboutHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = _gate_social_intent(handler_input)
-        if gated:
-            return gated
 
         store = get_store(handler_input)
         summary = store.get("currentSummary")

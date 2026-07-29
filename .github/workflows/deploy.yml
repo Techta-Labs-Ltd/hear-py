@@ -74,11 +74,10 @@ jobs:
         run: |
           get() { aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION"; }
           HEAR_API_KEY=$(get "/hear/$STAGE/HEAR_API_KEY")
-          RESOLVER_API_KEY=$(get "/hear/$STAGE/RESOLVER_API_KEY")
           WEBHOOK_SECRET=$(get "/hear/$STAGE/WEBHOOK_SECRET")
           WEBHOOK_OUTBOUND_SECRET=$(get "/hear/$STAGE/WEBHOOK_OUTBOUND_SECRET")
           SENTRY_DSN=$(get "/hear/$STAGE/SENTRY_DSN")
-          for v in "$HEAR_API_KEY" "$RESOLVER_API_KEY" "$WEBHOOK_SECRET" "$WEBHOOK_OUTBOUND_SECRET" "$SENTRY_DSN"; do echo "::add-mask::$v"; done
+          for v in "$HEAR_API_KEY" "$WEBHOOK_SECRET" "$WEBHOOK_OUTBOUND_SECRET" "$SENTRY_DSN"; do echo "::add-mask::$v"; done
 
           aws cloudformation deploy \
             --template-file template.yaml \
@@ -91,7 +90,6 @@ jobs:
               ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" \
               HearApiKey="$HEAR_API_KEY" \
-              ResolverApiKey="$RESOLVER_API_KEY" \
               WebhookSecret="$WEBHOOK_SECRET" \
               WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
               SentryDsn="$SENTRY_DSN"

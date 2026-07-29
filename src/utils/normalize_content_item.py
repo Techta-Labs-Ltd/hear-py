@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 
 def nullable_string(value):
     if value is None:
@@ -238,16 +239,9 @@ def pick_summary(item: dict) -> str | None:
 def _pick_playback_speeds(item: dict) -> list | None:
     if isinstance(item.get("playback_speed"), list) and item["playback_speed"]:
         return item["playback_speed"]
+    if isinstance(item.get("playbackSpeed"), list) and item["playbackSpeed"]:
+        return item["playbackSpeed"]
     return None
-
-
-def _pick_track_title(track: dict, parent_item: dict | None = None) -> str | None:
-    candidates = [
-        track.get("title"),
-        track.get("shortDescription"),
-        parent_item.get("shortDescription") if parent_item else None,
-    ]
-    return prefer_readable(*[c for c in candidates if c is not None]) or nullable_string(track.get("title"))
 
 
 def _pick_duration_secs(source: dict) -> int | None:
@@ -260,65 +254,65 @@ def _pick_duration_secs(source: dict) -> int | None:
     return None
 
 
-def _normalize_track(track, parent_item=None):
-    """Normalize a single track entry within a multi-track content item."""
-    if not isinstance(track, dict):
-        return track
-    track_category = track.get("category") or track.get("categorySlug") or (isinstance(track.get("categories"), list) and track["categories"][0] if track.get("categories") else None) or None
-    return {
-        **track,
-        "id": track.get("id") or None,
-        "title": _pick_track_title(track, parent_item),
-        "audioUrl": track.get("audioUrl") or None,
-        "category": track_category,
-        "tags": track.get("tags") if isinstance(track.get("tags"), list) else [],
-        "playback_speed": track.get("playback_speed") if isinstance(track.get("playback_speed"), list) else None,
-        "durationSecs": _pick_duration_secs(track),
-    }
+def _extract_named_entity(item: dict, key: str) -> tuple[str | None, str | None]:
+    value = item.get(key)
+    if isinstance(value, dict):
+        return nullable_string(value.get("id")), nullable_string(value.get("name"))
+    return nullable_string(item.get(f"{key}Id")), nullable_string(value)
+
+
+def _category_value(item: dict):
+    category = item.get("category")
+    if category:
+        return category
+    categories = item.get("categories")
+    return categories[0] if isinstance(categories, list) and categories else None
+
+
+def _is_https_url(value: object) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    parsed = urlparse(value.strip())
+    return parsed.scheme == "https" and bool(parsed.netloc)
 
 
 def normalize_content_item(item: dict) -> dict:
     if not isinstance(item, dict):
         return item
-    tracks = [_normalize_track(t, item) for t in item.get("tracks", [])] if isinstance(item.get("tracks"), list) else []
+    content_id = nullable_string(item.get("contentId"))
+    creator_id, creator_name = _extract_named_entity(item, "creator")
+    organization_id, organization_name = _extract_named_entity(item, "organization")
+    publication_id, publication_title = _extract_named_entity(item, "publication")
+    duration_secs = _pick_duration_secs(item)
     return {
-        **item,
-        "id": item.get("id") or None,
+        "contentId": content_id,
         "title": nullable_string(item.get("title")),
         "displayTitle": _pick_display_title(item),
         "spokenTitle": pick_spoken_title(item),
         "summary": pick_summary(item),
-        "creator": _extract_creator_name(item),
-        "creatorId": _extract_creator_id(item),
-        "type": item.get("type") or ("publication" if tracks else "single"),
-        "category": item.get("category") or (isinstance(item.get("categories"), list) and item["categories"][0] if item.get("categories") else None) or None,
-        "categories": item.get("categories") if isinstance(item.get("categories"), list) else [],
+        "creatorId": creator_id,
+        "creatorName": creator_name,
+        "creator": creator_name,
+        "organizationId": organization_id,
+        "organizationName": organization_name,
+        "publicationId": publication_id,
+        "publicationTitle": publication_title,
+        "category": _category_value(item),
         "tags": item.get("tags") if isinstance(item.get("tags"), list) else [],
-        "audioUrl": item.get("audioUrl") or None,
-        "tracks": tracks,
-        "playback_speed": _pick_playback_speeds(item),
-        "durationSecs": _pick_duration_secs(item),
+        "audioUrl": nullable_string(item.get("audioUrl")),
+        "playbackSpeeds": _pick_playback_speeds(item) or [],
+        "durationMs": duration_secs * 1000 if duration_secs else None,
+        "publishedAt": item.get("publishedAt"),
     }
 
 
 def is_playable_content_item(item: dict) -> bool:
-    """Whether a content item can actually be played.
-
-    Requires an id plus real audio: a single item with a top-level ``audioUrl``,
-    or a publication with at least one track that has an ``audioUrl``. A
-    publication with no (playable) tracks — and any single with no audio — is
-    not playable and must be filtered out of results.
-    """
-    if not isinstance(item, dict) or not item.get("id"):
-        return False
-    if item.get("audioUrl"):
-        return True
-    tracks = item.get("tracks") or []
-    if isinstance(tracks, list) and any(
-        isinstance(t, dict) and t.get("audioUrl") for t in tracks
-    ):
-        return True
-    return False
+    """Return whether an item has a content ID and Alexa-compatible audio."""
+    return bool(
+        isinstance(item, dict)
+        and item.get("contentId")
+        and _is_https_url(item.get("audioUrl"))
+    )
 
 
 def normalize_content_items(items) -> list:

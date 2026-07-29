@@ -1,29 +1,8 @@
-"""Minimal async Alexa runtime.
-
-The Hear handlers and interceptors are written ``async`` and access the request
-envelope in both dict (``env.get("request")``) and attribute
-(``env.request.intent``) styles — a shape the synchronous ``ask-sdk-core``
-runtime doesn't provide. This module supplies a small drop-in replacement:
-
-* ``AttrDict``           - the raw event, accessible as dict AND attributes.
-* ``AttributesManager``  - session/request attributes + async persistence.
-* ``ResponseBuilder``    - ``.speak/.reprompt/.set_should_end_session/.add_directive``.
-* ``HandlerInput``       - what handlers receive.
-* ``AsyncSkill``         - registers handlers/interceptors and ``await``s them.
-
-``AsyncSkill`` exposes the same registration methods as the ask-sdk builder
-(``add_request_handler`` etc.) so ``register_middleware`` works unchanged, and an
-``async invoke(event, context)`` that ``main.handler`` awaits.
-"""
 from __future__ import annotations
 
 import inspect
 from typing import Any
 
-
-# --------------------------------------------------------------------------- #
-# AttrDict — dict + attribute access, recursively (JS-object style)
-# --------------------------------------------------------------------------- #
 def _wrap(value: Any) -> Any:
     if isinstance(value, AttrDict):
         return value
@@ -32,7 +11,6 @@ def _wrap(value: Any) -> Any:
     if isinstance(value, list):
         return [_wrap(v) for v in value]
     return value
-
 
 class AttrDict(dict):
     """A dict whose keys are also reachable as attributes, recursively."""
@@ -54,10 +32,6 @@ class AttrDict(dict):
     def __setitem__(self, key: str, value: Any) -> None:
         super().__setitem__(key, _wrap(value))
 
-
-# --------------------------------------------------------------------------- #
-# Attributes manager (session / request / async persistent)
-# --------------------------------------------------------------------------- #
 class AttributesManager:
     def __init__(self, request_envelope: AttrDict, persistence_adapter: Any = None):
         self._envelope = request_envelope
@@ -118,10 +92,6 @@ class AttributesManager:
         if self._adapter is not None and self._persistent is not None:
             await self._adapter.save_attributes(self._envelope, self._persistent)
 
-
-# --------------------------------------------------------------------------- #
-# Response builder
-# --------------------------------------------------------------------------- #
 class ResponseBuilder:
     def __init__(self):
         self._response: dict = {}

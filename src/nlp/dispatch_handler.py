@@ -6,7 +6,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
-from src.services.persistence import get_store, update_store
+from src.services.storage.persistence import update_store
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import ssml, escape_ssml_lite, FALLBACK_SPEECH, WELCOME_REPROMPT
 from src.handlers.intents import PlayContentHandler, PlayByCreatorHandler, PlayByOrganizationHandler, BrowseContentHandler, ShowMoreBrowseHandler, WhatsTrendingHandler, TownCaptureHandler, SetLocationHandler

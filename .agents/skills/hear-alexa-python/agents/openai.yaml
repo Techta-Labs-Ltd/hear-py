@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hear Alexa Python"
+  short_description: "Build and audit the Hear Alexa backend"
+  default_prompt: "Use $hear-alexa-python to implement and verify a clean Alexa backend change in this repository."

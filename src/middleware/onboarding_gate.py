@@ -5,7 +5,7 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.services.persistence import get_store, update_store
+from src.services.storage.persistence import get_store
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import ssml
 from src.handlers.intents.onboarding import (
@@ -37,16 +37,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
         rt = get_request_type(handler_input)
         if rt == "LaunchRequest":
             store = get_store(handler_input)
-            if not _is_new_user(store):
-                return False
-            update_store(handler_input, {
-                "onboardingStage": "ask_permission",
-                "_requiresReliableSave": True,
-            })
-            handler_input.attributes_manager.set_session_attributes({
-                "onboardingStage": "ask_permission",
-            })
-            return True
+            return _is_new_user(store)
 
         if isinstance(rt, str) and rt.startswith("AudioPlayer."):
             return False

@@ -1,7 +1,8 @@
 from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
-from src.services.persistence import get_store
-from src.webhooks.notification_webhook import check_notifications
+from src.services.storage.persistence import get_store
+from src.services.notifications import check_notifications
+from src.services.playback.session import has_unfinished_playback
 
 
 class NotificationMiddleware(AbstractRequestInterceptor):
@@ -31,30 +32,24 @@ class NotificationMiddleware(AbstractRequestInterceptor):
             return
 
         gated = bool(
-            store.get("awaitingFeedback")
+            has_unfinished_playback(store)
+            or store.get("awaitingFeedback")
             or store.get("awaitingStillListening")
             or store.get("awaitingContinueAfterFlag")
         )
 
-        try:
-            tracks = await check_notifications(user_id)
-        except Exception:
+        if gated:
             return
 
-        if not tracks:
+        try:
+            items = await check_notifications(user_id)
+        except Exception:
+            return
+        if not items:
             return
 
         attrs = handler_input.attributes_manager.request_attributes
-
-        if gated:
-            attrs["_deferredNotifications"] = {
-                "tracks": tracks,
-                "trackIds": [t["trackId"] for t in tracks if t.get("trackId")],
-            }
-        else:
-            attrs["_pendingNotifications"] = {
-                "tracks": tracks,
-                "trackIds": [t["trackId"] for t in tracks if t.get("trackId")],
-            }
-
+        attrs["_pendingNotifications"] = {
+            "items": items,
+        }
         handler_input.attributes_manager.request_attributes = attrs

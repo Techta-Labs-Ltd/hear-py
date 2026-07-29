@@ -7,10 +7,9 @@ from typing import Any, Dict, Optional
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from config import settings
 from config.permission_scopes import NOTIFICATIONS_WRITE
 
-from src.services.persistence import (
+from src.services.storage.persistence import (
     get_store, update_store, resolve_top_categories, get_browse_catalog,
 )
 from src.utils.skill_request import get_request_type, get_intent_name
@@ -19,9 +18,6 @@ from src.utils.speech import (
     NOTIFICATIONS_ENABLED, IDLE_DO_NEXT_REPROMPT, NOTIFICATIONS_DISABLED,
     BROWSE_ACTIVE_NOT_NOTIFICATIONS, WELCOME_REPROMPT, ERROR_GENERIC,
 )
-from src.utils.feedback_gate import enforce_interaction_gate
-from src.utils.search_filters import build_user_field
-from src.utils.lambda_deadline import compute_bounded_api_timeout_ms
 
 from src.webhooks.dispatch import dispatch
 
@@ -118,9 +114,6 @@ class EnableNotificationsHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         try:
-            gated = enforce_interaction_gate(handler_input)
-            if gated:
-                return gated
 
             has_perm = has_notification_permission(handler_input)
             logger.info("Hear: EnableNotifications entry hasPermission=%s", has_perm)
@@ -163,9 +156,6 @@ class DisableNotificationsHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
 
         store = get_store(handler_input)
         catalog = get_browse_catalog(store)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.services.persistence import (
+from src.services.storage.persistence import (
     get_store, update_store, is_following, clear_feedback,
     dismiss_feedback_prompt, mark_feedback_given_from_store, record_listening_event,
 )
@@ -13,7 +13,7 @@ from src.utils.speech import (
     FEEDBACK_FOLLOW_REPROMPT, FEEDBACK_ENJOYED_ALREADY_FOLLOWING,
     FEEDBACK_FOLLOW_DECLINED,
 )
-from src.utils.listen_tracker import save_feedback_with_listen_context
+from src.services.feedback.candidates import submit_feedback
 from src.utils.feedback_flow import idle_next_response
 
 
@@ -36,10 +36,8 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        if store.get("feedbackContentId"):
-            await save_feedback_with_listen_context(handler_input, "enjoyed")
+        await submit_feedback(handler_input, "enjoyed")
 
-        mark_feedback_given_from_store(handler_input, store)
         record_listening_event(handler_input, {
             "category": store.get("feedbackCategory"),
             "creator": store.get("feedbackCreator"),
@@ -49,7 +47,6 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
         creator_id = store.get("feedbackCreatorId")
         creator_name = store.get("feedbackCreator")
 
-        dismiss_feedback_prompt(handler_input)
         update_store(handler_input, {
             "awaitingFollow": False,
             "awaitingNotificationOptIn": False,

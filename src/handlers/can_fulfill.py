@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.nlp.grpc_blocklist import GATED_INTENTS
-from src.nlp.grpc_resolver import resolve
+from src.resolver.integration import SEARCH_INTENTS, resolve_for_alexa
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +74,7 @@ class CanFulfillIntentHandler(AbstractRequestHandler):
         intent = request.intent or {}
         intent_name = intent.get("name", "")
 
-        if intent_name not in CONTENT_INTENTS and intent_name not in GATED_INTENTS:
+        if intent_name not in CONTENT_INTENTS and intent_name not in SEARCH_INTENTS:
             return _reply("NO", intent)
 
         utterance = _slot_utterance(intent)
@@ -83,9 +82,8 @@ class CanFulfillIntentHandler(AbstractRequestHandler):
         if not utterance:
             return _reply("YES" if intent_name in NO_UTTERANCE_OK else "MAYBE", intent)
 
-        result = None
         try:
-            result = await resolve(utterance, "gb")
+            result = resolve_for_alexa(utterance)
         except Exception:
             result = None
 

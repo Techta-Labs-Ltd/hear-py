@@ -9,8 +9,8 @@ tests/
 *.pyc
 *.pyo
 
-# Not needed at runtime (Alexa model, docs, local config)
-en-GB.json
+# Not needed at runtime (docs and local config). The Alexa interaction model is
+# copied into the image because the local resolver loads its slot vocabulary.
 annotation-set.json
 annotation-set.csv
 utterances.md

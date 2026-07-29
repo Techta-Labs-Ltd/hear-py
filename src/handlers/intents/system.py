@@ -13,43 +13,51 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, Optional
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from config import settings
 
-from src.services.persistence import (
+from src.services.storage.persistence import (
     get_store, update_store, clear_queue, clear_feedback, reset_queue_items_completed,
 )
-from src.services.alexa_api_client import get_alexa_user_id
-from src.services.flush_previous_track import flush_previous_track
+from src.utils.skill_request import get_user_id as get_alexa_user_id
+from src.services.playback import flush_previous_track
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import (
     ssml, escape_ssml_lite, is_bad_credit, HELP, GOODBYE, IDLE_DO_NEXT_REPROMPT,
     WELCOME_REPROMPT, ERROR_GENERIC, FALLBACK_SPEECH, LOOP_SHUFFLE_UNAVAILABLE,
-    FLAGGED_CONTINUE_YES_ACK, NO_CONTENT_AVAILABLE, CONFIRM_NO, CONFIRM_NO_MATCH,
-    NOTIFICATIONS_ENABLE_FAILED, NOTIFICATIONS_ENABLED, NOTIFICATIONS_DECLINED,
+    FLAGGED_CONTINUE_YES_ACK, NO_CONTENT_AVAILABLE, NOTIFICATIONS_ENABLE_FAILED, NOTIFICATIONS_ENABLED, NOTIFICATIONS_DECLINED,
     FEEDBACK_FOLLOW_DECLINED, FOLLOW_CREATOR_NOTIFICATION_DECLINED,
     FOLLOW_NOTIFICATION_DECLINED_GENERIC, ASK_LISTEN_FIRST, ASK_LISTEN_NEXT,
     END_OF_LIST, NO_TRACKS_AVAILABLE, QUEUE_FINISHED, QUEUE_NEXT_ANNOUNCE,
     LOCATION_ASK_CITY, LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
 )
-from src.services.api import save_location
+from src.services.api import sync_listener
 from src.handlers.intents.onboarding import ONBOARDING_ASK_TOWN
 from src.utils.audio import build_stop_directive
-from src.utils.playback_user_events import emit_user_playback_event, USER_PLAYBACK_EVENT_TYPES
-from src.utils.feedback_gate import enforce_interaction_gate
+from src.services.playback.events import emit_user_playback_event, USER_PLAYBACK_EVENT_TYPES
 from src.utils.feedback_flow import idle_next_response
 from src.handlers.notifications import (
     has_notification_permission, complete_notification_opt_in,
     build_notification_permission_response,
 )
-from src.utils.playback_start import start_playback
-from src.webhooks.notification_webhook import mark_all_tracks_announced
-from src.webhooks.settings import get_settings
-from src.utils.session_queue import resolve_queue_item_for_playback
+from src.services.playback.start import start_playback
+from src.services.notifications import (
+    resolve_notification_queue,
+    update_notification_status,
+)
+from src.services.api import search
+from src.services.playback.session import (
+    read_playback_session,
+    write_playback_session,
+)
+from src.services.feedback.candidates import activate_best_feedback_candidate
+from src.services.queue.state import (
+    move_queue,
+    queue_content_id,
+    read_playback_queue,
+)
 from src.handlers.intents.play import PlayByCreatorHandler
 from src.handlers.intents.play import PlayByOrganizationHandler
 from src.handlers.intents.play import PlayContentHandler
@@ -62,7 +70,7 @@ from src.handlers.intents.play import ShowMoreBrowseHandler
 from src.handlers.feedback.not_enjoyed import FeedbackNotEnjoyedHandler
 from src.handlers.intents.playback import NextIntentHandler
 from src.handlers.feedback.skip import SkipFeedbackHandler
-from src.services.sentry import capture_skill_exception, flush_sentry, last_resort_skill_response
+from src.services.observability import capture_skill_exception, flush_sentry, last_resort_skill_response
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +95,6 @@ class HelpIntentHandler(AbstractRequestHandler):
         )
 
     def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
         return handler_input.response_builder \
             .speak(ssml(HELP)) \
             .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
@@ -172,6 +177,10 @@ class YesIntentHandler(AbstractRequestHandler):
             return await self._confirm_location(handler_input, store)
 
         # 1. Search confirmation
+        if store.get("awaitingResume"):
+            return await self._handle_resume_yes(handler_input, store)
+
+        # 1. Search confirmation
         if store.get("awaitingSearchConfirmation") or session_attrs.get("awaitingSearchConfirmation"):
             return await self._handle_search_confirmation(handler_input, store, session_attrs)
 
@@ -235,21 +244,13 @@ class YesIntentHandler(AbstractRequestHandler):
                 .response
 
         user_id = get_alexa_user_id(handler_input)
-        resolved = None
-        if user_id:
-            try:
-                resolved = await save_location(user_id, city)
-            except Exception as err:
-                logger.warning("Hear: save_location failed %s", err)
-
-        final_city = (resolved.get("city") if resolved else None) or city
+        final_city = city
         update_store(handler_input, {
             "userCity": final_city,
-            "locality": (resolved.get("locality") if resolved else None) or final_city,
-            "userState": resolved.get("state") if resolved else None,
-            "userCountry": resolved.get("country") if resolved else None,
-            "latitude": resolved.get("latitude") if resolved else None,
-            "longitude": resolved.get("longitude") if resolved else None,
+            "locality": pending.get("locality") or final_city,
+            "deviceCountryCode": pending.get("countryCode"),
+            "latitude": pending.get("latitude"),
+            "longitude": pending.get("longitude"),
             "onboardingComplete": True,
             "onboardingStage": None,
             "locationSource": "manual",
@@ -257,6 +258,24 @@ class YesIntentHandler(AbstractRequestHandler):
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
         })
+        confirmed = get_store(handler_input)
+        if user_id:
+            try:
+                await sync_listener({
+                    "alexaUserId": user_id,
+                    "deviceId": confirmed.get("deviceId"),
+                    "locale": getattr(handler_input.request_envelope.request, "locale", None),
+                    "userName": confirmed.get("userName"),
+                    "userEmail": confirmed.get("userEmail"),
+                    "city": final_city,
+                    "locality": confirmed.get("locality"),
+                    "countryCode": confirmed.get("deviceCountryCode"),
+                    "latitude": confirmed.get("latitude"),
+                    "longitude": confirmed.get("longitude"),
+                    "clientVersion": "alexa-skill",
+                })
+            except Exception as err:
+                logger.warning("Hear: listener sync failed error=%s", type(err).__name__)
         return handler_input.response_builder \
             .speak(ssml(LOCATION_CONFIRMED(final_city))) \
             .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
@@ -339,11 +358,8 @@ class YesIntentHandler(AbstractRequestHandler):
 
     async def _handle_list_mode_yes(self, handler_input, store):
         """Play the current item in list mode."""
-        queue = store.get("listQueue") or store.get("upcomingQueue") or []
-        pos = store.get("listPosition") or 0
-        item = queue[pos] if pos < len(queue) else None
-
-        if not item:
+        content_id = queue_content_id(store)
+        if not content_id:
             update_store(handler_input, {"listModeActive": False})
             return handler_input.response_builder \
                 .speak(ssml(NO_TRACKS_AVAILABLE)) \
@@ -351,50 +367,57 @@ class YesIntentHandler(AbstractRequestHandler):
 
         update_store(handler_input, {"listModeActive": False})
         await clear_feedback(handler_input)
-
-        return await start_playback(handler_input, item, "", 0)
+        result = await search({
+            "query": "",
+            "filter": {"contentIds": [content_id]},
+            "page": 0,
+            "limit": 1,
+        })
+        if not result.get("results"):
+            return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
+        return await start_playback(handler_input, result["results"][0], "")
 
     async def _handle_notification_choice(self, handler_input, store):
-        """Queue pending notification tracks and optionally auto-play."""
-
-        tracks = store.get("pendingNotificationQueue") or []
-        track_ids = [t.get("trackId") for t in tracks if t.get("trackId")]
-        queue = list(store.get("upcomingQueue") or [])
-        for t in reversed(tracks):
-            queue.insert(0, t)
-
+        """Resolve pending references through search and start the first result."""
+        notifications = store.get("pendingNotificationQueue") or []
         update_store(handler_input, {
-            "upcomingQueue": queue,
             "awaitingNotificationChoice": False,
             "pendingNotificationQueue": None,
         })
-        mark_all_tracks_announced(track_ids, get_alexa_user_id(handler_input))
-
-        settings_data = await get_settings()
-        auto_play = settings_data.get("autoPlay", True)
-
-        if auto_play:
-            resolved = await resolve_queue_item_for_playback(tracks[0])
-            if resolved:
-                return await start_playback(handler_input, resolved, "", 0)
-
-        update_store(handler_input, {
-            "listModeActive": True,
-            "listPosition": 0,
-            "listQueue": queue[:50],
-        })
-        first = tracks[0]
-        list_text = ASK_LISTEN_FIRST(
-            first.get("title", "this track"),
-            first.get("creator", "unknown"),
-            first.get("category", "general"),
-            first.get("organisation", "Hear"),
-        )
+        result = await resolve_notification_queue(handler_input, notifications)
+        if result.get("results"):
+            return await start_playback(
+                handler_input,
+                result["results"][0],
+                "Here are your new updates.",
+            )
         return handler_input.response_builder \
-            .speak(ssml(list_text)) \
-            .reprompt(ssml("Would you like to listen, or say next to skip?")) \
+            .speak(ssml(NO_CONTENT_AVAILABLE)) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
             .set_should_end_session(False) \
             .response
+
+    async def _handle_resume_yes(self, handler_input, store):
+        state = read_playback_session(store)
+        update_store(handler_input, {"awaitingResume": False})
+        if not state or not state.get("contentId"):
+            return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
+        result = await search({
+            "query": "",
+            "filter": {"contentIds": [state["contentId"]]},
+            "page": 0,
+            "limit": 1,
+            "alexaUserId": get_alexa_user_id(handler_input),
+        })
+        if not result.get("results"):
+            write_playback_session(handler_input, {"status": "failed"})
+            return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
+        return await start_playback(
+            handler_input,
+            result["results"][0],
+            "Continuing where you stopped.",
+            options={"offsetMs": state.get("offsetMs") or 0},
+        )
 
     async def _handle_still_listening_yes(self, handler_input, store):
         """Continue playing after the still-listening prompt."""
@@ -404,11 +427,9 @@ class YesIntentHandler(AbstractRequestHandler):
         })
         reset_queue_items_completed(handler_input)
 
-        queue = store.get("upcomingQueue") or []
-        idx = store.get("queueIndex", 0)
-        next_idx = idx + 1
-
-        if next_idx >= len(queue):
+        queue = read_playback_queue(store)
+        next_id = move_queue(handler_input, 1)
+        if not queue or not next_id:
             clear_queue(handler_input)
             return handler_input.response_builder \
                 .speak(ssml(QUEUE_FINISHED)) \
@@ -416,11 +437,13 @@ class YesIntentHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        raw = queue[next_idx]
-        update_store(handler_input, {"queueIndex": next_idx})
-
-        content = await resolve_queue_item_for_playback(raw)
-        if not content:
+        result = await search({
+            "query": "",
+            "filter": {"contentIds": [next_id]},
+            "page": 0,
+            "limit": 1,
+        })
+        if not result.get("results"):
             clear_queue(handler_input)
             return handler_input.response_builder \
                 .speak(ssml(NO_CONTENT_AVAILABLE)) \
@@ -428,14 +451,16 @@ class YesIntentHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        total = len(queue)
+        content = result["results"][0]
+        current_index = int(read_playback_queue(get_store(handler_input)).get("currentIndex") or 0)
+        total = len(queue["orderedContentIds"])
         intro = QUEUE_NEXT_ANNOUNCE(
             content.get("title"),
             content.get("creator"),
-            next_idx + 1,
+            current_index + 1,
             total,
         )
-        return await start_playback(handler_input, content, intro, 0, {"preserveSessionQueue": True})
+        return await start_playback(handler_input, content, intro)
 
     async def _handle_notification_opt_in(self, handler_input):
         """Complete the notification opt-in flow."""
@@ -601,6 +626,9 @@ class NoIntentHandler(AbstractRequestHandler):
                 .response
 
         # 1. Search confirmation
+        if store.get("awaitingResume"):
+            return self._handle_resume_no(handler_input, store)
+
         if store.get("awaitingSearchConfirmation") or session_attrs.get("awaitingSearchConfirmation"):
             return self._handle_search_no(handler_input, store, session_attrs)
 
@@ -610,7 +638,7 @@ class NoIntentHandler(AbstractRequestHandler):
 
         # 3. Notification choice
         if store.get("awaitingNotificationChoice"):
-            return self._handle_notification_no(handler_input, store)
+            return await self._handle_notification_no(handler_input, store)
 
         # 4. Still listening
         if store.get("awaitingStillListening"):
@@ -692,42 +720,43 @@ class NoIntentHandler(AbstractRequestHandler):
             .response
 
     def _handle_list_mode_no(self, handler_input, store):
-        """Advance to next item in list mode."""
-        queue = store.get("listQueue") or store.get("upcomingQueue") or []
-        pos = (store.get("listPosition") or 0) + 1
-
-        if pos >= len(queue):
-            update_store(handler_input, {"listModeActive": False})
-            return handler_input.response_builder \
-                .speak(ssml(END_OF_LIST)) \
-                .response
-
-        next_item = queue[pos]
-        update_store(handler_input, {"listPosition": pos, "listModeActive": True})
-        list_text = ASK_LISTEN_NEXT(
-            next_item.get("title", "this track"),
-            next_item.get("creator", "unknown"),
-            next_item.get("category", "general"),
-        )
+        """Decline the offered queue item without creating another queue."""
+        del store
+        update_store(handler_input, {"listModeActive": False})
         return handler_input.response_builder \
-            .speak(ssml(list_text)) \
-            .reprompt(ssml("Would you like to listen, or say next to skip?")) \
+            .speak(ssml("No problem. What would you like to listen to?")) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
             .set_should_end_session(False) \
             .response
 
-    def _handle_notification_no(self, handler_input, store):
-        """Clear pending notification queue."""
-
-        tracks = store.get("pendingNotificationQueue") or []
-        track_ids = [t.get("trackId") for t in tracks if t.get("trackId")]
+    async def _handle_notification_no(self, handler_input, store):
+        """Dismiss the notifications explicitly declined by the user."""
+        notifications = store.get("pendingNotificationQueue") or []
         update_store(handler_input, {
             "awaitingNotificationChoice": False,
             "pendingNotificationQueue": None,
         })
-        mark_all_tracks_announced(track_ids, get_alexa_user_id(handler_input))
+        for item in notifications:
+            await update_notification_status(
+                get_alexa_user_id(handler_input),
+                item.get("notificationId"),
+                "dismissed",
+            )
         return handler_input.response_builder \
             .speak(ssml(NOTIFICATIONS_DECLINED)) \
             .reprompt(ssml("What would you like to listen to?")) \
+            .set_should_end_session(False) \
+            .response
+
+    def _handle_resume_no(self, handler_input, store):
+        state = read_playback_session(store)
+        if state:
+            write_playback_session(handler_input, {"status": "abandoned"})
+        update_store(handler_input, {"awaitingResume": False})
+        activate_best_feedback_candidate(handler_input)
+        return handler_input.response_builder \
+            .speak(ssml("Okay, I won't continue that recording.")) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
             .set_should_end_session(False) \
             .response
 
@@ -790,9 +819,6 @@ class NavigateHomeHandler(AbstractRequestHandler):
         )
 
     def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
         return BrowseContentHandler().handle(handler_input)
 
 
@@ -846,9 +872,6 @@ class FallbackHandler(AbstractRequestHandler):
         )
 
     def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
         return handler_input.response_builder \
             .speak(FALLBACK_SPEECH) \
             .reprompt(WELCOME_REPROMPT) \
@@ -863,9 +886,6 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
         return get_request_type(handler_input) == "IntentRequest"
 
     def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
         intent_name = get_intent_name(handler_input)
         dialog_state = None
         try:

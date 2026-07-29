@@ -4,10 +4,9 @@ import re
 from urllib.parse import urlparse, parse_qs
 
 from config import settings
-from src.services.persistence import update_store
+from src.services.storage.persistence import update_store
 from src.utils.feedback_timing import feedback_progress_report_options
-from src.utils.normalize_content_item import is_id_like_label, nullable_string
-from src.utils.content_playback import resolve_playback_at_track_index
+from src.utils.normalize_content_item import is_id_like_label
 
 
 def _normalize_audio_item_metadata(metadata: dict | None) -> dict | None:
@@ -71,12 +70,21 @@ def build_stop_directive() -> dict:
 
 def build_content_metadata(content: dict, track_title: str | None = None, resolved_category: str | None = None) -> dict:
     cat = resolved_category if resolved_category else content.get("category") or (content.get("categories") or [None])[0]
-    subtitle = [c for c in [cat, content.get("locality")] if c]
+    if isinstance(cat, dict):
+        cat = cat.get("name") or cat.get("slug")
+    locality = content.get("locality")
+    if isinstance(locality, dict):
+        locality = locality.get("name") or locality.get("slug")
+    subtitle = [str(c) for c in [cat, locality] if c]
     tags = content.get("tags") or []
     if tags:
         subtitle.append(", ".join([str(t) for t in tags]))
     track_candidate = (track_title or "").strip()
-    parent_candidate = (content.get("title") or "").strip()
+    parent_candidate = (
+        content.get("spokenTitle")
+        or content.get("title")
+        or ""
+    ).strip()
     if track_candidate and not is_id_like_label(track_candidate):
         title = track_candidate
     elif parent_candidate and not is_id_like_label(parent_candidate):
@@ -259,24 +267,3 @@ def resolve_seek_ms(handler_input) -> int:
     except Exception:
         pass
     return settings.seek_step_ms
-
-
-def resolve_track_audio(content: dict, track_index: int = 0) -> dict | None:
-    """Resolve the audio URL, token, and metadata for a track at the given index."""
-    resolved = resolve_playback_at_track_index(content, track_index)
-    if not resolved:
-        return None
-    return {
-        "audioUrl": resolved["audioUrl"],
-        "token": resolved["token"],
-        "trackTitle": resolved["trackTitle"],
-        "trackId": resolved["trackId"],
-        "playbackParentId": resolved["playbackParentId"],
-        "effectiveCategory": resolved["effectiveCategory"],
-        "contentType": resolved["contentType"],
-        "collectionTitle": resolved["collectionTitle"],
-        "totalTracks": resolved["totalTracks"],
-        "trackIndex": resolved["trackIndex"],
-        "isMultiTrack": resolved["isMultiTrack"],
-        "isPublication": resolved["isMultiTrack"],
-    }

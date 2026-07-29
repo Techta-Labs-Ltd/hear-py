@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from src.middleware.onboarding_gate import _is_new_user
 from src.handlers.intents.launch import _handle_launch_request_body, _get_user_id
 from src.handlers.intents.onboarding import ask_for_permission
-from src.services.persistence import get_store, DEFAULT_STORE
+from src.services.storage.persistence import get_store, DEFAULT_STORE
 from src.utils.speech import (
     ONBOARDING_ASK_PERMISSION, WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY,
     WELCOME_RETURN_GENERIC, ERROR_GENERIC,
@@ -133,12 +133,10 @@ class TestSpeechStrings:
 
 
 class TestLaunchSimulation:
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def test_new_user_empty_store(self, mock_record, mock_settings):
+    def test_new_user_empty_store(self, mock_record):
         hi = _build_handler_input()
         mock_record.return_value = {"save": {}}
-        mock_settings.return_value = {}
 
         result = _handle_launch_request_body(hi)
         response = asyncio.run(result)
@@ -150,16 +148,13 @@ class TestLaunchSimulation:
         print(f"  lastToken: {store.get('lastToken')}")
         print(f"  has_location: {bool(store.get('userCity') or store.get('locality'))}")
         print(f"  Speech: {speech}")
-
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def test_new_user_with_city(self, mock_record, mock_settings):
+    def test_new_user_with_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "userCity": "London",
             "locality": "London",
         })
         mock_record.return_value = {"save": {}}
-        mock_settings.return_value = {}
 
         result = _handle_launch_request_body(hi)
         response = asyncio.run(result)
@@ -170,10 +165,8 @@ class TestLaunchSimulation:
         print(f"  playCount: {store.get('playCount', 0)}")
         print(f"  has_location: {bool(store.get('userCity'))}")
         print(f"  Speech: {speech}")
-
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def test_returning_with_city(self, mock_record, mock_settings):
+    def test_returning_with_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
             "lastToken": "token-123",
@@ -182,7 +175,6 @@ class TestLaunchSimulation:
             "onboardingComplete": True,
         })
         mock_record.return_value = {"save": {}}
-        mock_settings.return_value = {}
 
         result = _handle_launch_request_body(hi)
         response = asyncio.run(result)
@@ -193,10 +185,8 @@ class TestLaunchSimulation:
         print(f"  playCount: {store['playCount']}")
         print(f"  is_new: {_is_new_user(store)}")
         print(f"  Speech: {speech}")
-
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def test_returning_with_name_and_city(self, mock_record, mock_settings):
+    def test_returning_with_name_and_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
             "lastToken": "token-123",
@@ -206,7 +196,6 @@ class TestLaunchSimulation:
             "onboardingComplete": True,
         })
         mock_record.return_value = {"save": {}}
-        mock_settings.return_value = {}
 
         result = _handle_launch_request_body(hi)
         response = asyncio.run(result)
@@ -215,17 +204,14 @@ class TestLaunchSimulation:
         store = get_store(hi)
         print(f"\n=== RETURNING (name: John, city: London) ===")
         print(f"  Speech: {speech}")
-
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def test_returning_no_city(self, mock_record, mock_settings):
+    def test_returning_no_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 3,
             "lastToken": "token-123",
             "onboardingComplete": True,
         })
         mock_record.return_value = {"save": {}}
-        mock_settings.return_value = {}
 
         result = _handle_launch_request_body(hi)
         response = asyncio.run(result)
@@ -236,10 +222,8 @@ class TestLaunchSimulation:
         print(f"  is_new: {_is_new_user(store)}")
         print(f"  has_location: {bool(store.get('userCity') or store.get('locality'))}")
         print(f"  Speech: {speech}")
-
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def test_returning_awaiting_feedback(self, mock_record, mock_settings):
+    def test_returning_awaiting_feedback(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
             "lastToken": "token-123",
@@ -251,7 +235,6 @@ class TestLaunchSimulation:
             "onboardingComplete": True,
         })
         mock_record.return_value = {"save": {}}
-        mock_settings.return_value = {}
 
         result = _handle_launch_request_body(hi)
         response = asyncio.run(result)
@@ -259,10 +242,8 @@ class TestLaunchSimulation:
         speech = _speak_text(hi)
         print(f"\n=== RETURNING (pending feedback) ===")
         print(f"  Speech: {speech}")
-
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def test_returning_awaiting_still_listening(self, mock_record, mock_settings):
+    def test_returning_awaiting_still_listening(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
             "lastToken": "token-123",
@@ -272,7 +253,6 @@ class TestLaunchSimulation:
             "onboardingComplete": True,
         })
         mock_record.return_value = {"save": {}}
-        mock_settings.return_value = {}
 
         result = _handle_launch_request_body(hi)
         response = asyncio.run(result)
@@ -293,13 +273,8 @@ def run_full_trace():
             print(f"  [{label}] {speech[:120]}...")
         else:
             print(f"  [{label}] (no speech produced)")
-
-    @patch("src.handlers.intents.launch.get_settings", new_callable=AsyncMock)
     @patch("src.handlers.intents.launch.record_launch")
-    def trace(mock_record, mock_settings):
-        mock_settings.return_value.get = lambda k, d: d
-        mock_settings.return_value.__getitem__ = lambda s, k: mock_settings.return_value.get(k, None)
-        mock_settings.return_value = {}
+    def trace(mock_record):
 
         print("--- FIRST LAUNCH (empty store) ---")
         hi = _build_handler_input()

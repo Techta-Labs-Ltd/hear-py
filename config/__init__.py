@@ -50,13 +50,19 @@ class Settings(BaseSettings):
     def api_request_log(self) -> bool:
         return self.HEAR_API_REQUEST_LOG
 
-    RESOLVER_HOST: str = ""
-    RESOLVER_PORT: str = "50051"
-    RESOLVER_API_KEY: str = ""
-    RESOLVER_TLS: bool = True
-    RESOLVER_RESOLVE_TIMEOUT_MS: int = 2000
-    RESOLVER_HEALTH_TIMEOUT_MS: int = 1000
-    RESOLVER_DEFAULT_COUNTRY: str = "gb"
+    HEAR_TAXONOMY_MANIFEST_URL: str = (
+        "https://cdn.hear.media/runtime/taxonomy/v3/manifest.json"
+    )
+    HEAR_TAXONOMY_REVISION_TABLE: str = ""
+    HEAR_TAXONOMY_REFRESH_SECONDS: int = 300
+    HEAR_TAXONOMY_AUTO_REFRESH: bool = _is_lambda()
+    HEAR_TAXONOMY_BUNDLE_DIR: str = ""
+    HEAR_SEMANTIC_ROUTER_ENABLED: bool = _is_lambda()
+    HEAR_SEMANTIC_ROUTER_MODEL: str = "BAAI/bge-small-en-v1.5"
+    HEAR_SEMANTIC_ROUTER_CACHE_DIR: str = "/opt/hear-semantic-models"
+    HEAR_SEMANTIC_ROUTER_INDEX_PATH: str = "/opt/hear-semantic-index.npz"
+    HEAR_SEMANTIC_ROUTER_THRESHOLD: float = 0.72
+    HEAR_SEMANTIC_ROUTER_THREADS: int = 2
 
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "development"

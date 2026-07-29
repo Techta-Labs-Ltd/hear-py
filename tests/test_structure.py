@@ -1,0 +1,149 @@
+import base64
+
+import pytest
+
+from src.adapters.memory_persistence import MemoryPersistenceAdapter
+from src.application import build_skill
+from src.handlers.registry import REQUEST_HANDLERS
+from src.middleware import GATE_HANDLERS, REQUEST_INTERCEPTORS, RESPONSE_INTERCEPTORS
+from src.services.api.client import HearApiClient
+from src.services.api.request import ApiRequester
+from src.services.observability import ErrorReporter
+from src.services.feedback import FeedbackService
+from src.services.playback import PlaybackService
+from src.services.storage.playback_state import PlaybackStateRepository
+from src.services.tasks import BackgroundTaskManager
+from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
+from src.webhooks.router import is_http_event, normalize_http_event
+
+
+def test_skill_factory_registers_the_complete_pipeline():
+    skill = build_skill(MemoryPersistenceAdapter())
+
+    assert len(skill.request_handlers) == len(GATE_HANDLERS) + len(REQUEST_HANDLERS)
+    assert len(skill._request_interceptors) == len(REQUEST_INTERCEPTORS)
+    assert len(skill._response_interceptors) == len(RESPONSE_INTERCEPTORS)
+
+
+def test_normalizes_api_gateway_v2_event():
+    body = base64.b64encode(b'{"ok":true}').decode("ascii")
+    event = {
+        "requestContext": {"http": {"method": "POST", "path": "/webhook/settings"}},
+        "headers": {"x-test": "yes"},
+        "body": body,
+        "isBase64Encoded": True,
+    }
+
+    assert is_http_event(event)
+    assert normalize_http_event(event) == {
+        "httpMethod": "POST",
+        "path": "/webhook/settings",
+        "headers": {"x-test": "yes"},
+        "body": '{"ok":true}',
+    }
+
+
+def test_normalizes_api_gateway_v1_event():
+    event = {
+        "httpMethod": "POST",
+        "path": "/webhook/notification",
+        "headers": {},
+        "body": "{}",
+    }
+
+    assert is_http_event(event)
+    assert normalize_http_event(event)["path"] == "/webhook/notification"
+
+
+def test_stateful_services_have_explicit_owners():
+    assert isinstance(HearApiClient(), HearApiClient)
+    assert isinstance(ApiRequester(), ApiRequester)
+    assert isinstance(ErrorReporter(), ErrorReporter)
+    assert isinstance(PlaybackService(), PlaybackService)
+    assert isinstance(BackgroundTaskManager(), BackgroundTaskManager)
+    assert isinstance(FeedbackService(), FeedbackService)
+
+
+@pytest.mark.asyncio
+async def test_playback_repositories_have_isolated_memory():
+    first = PlaybackStateRepository()
+    second = PlaybackStateRepository()
+
+    await first.set("user-1", {"contentId": "track-1"})
+
+    assert await first.get("user-1") == {
+        "alexaUserId": "user-1",
+        "contentId": "track-1",
+    }
+    assert await second.get("user-1") is None
+
+
+@pytest.mark.asyncio
+async def test_onboarding_yes_returns_permission_card():
+    skill = build_skill(MemoryPersistenceAdapter())
+    context = {
+        "System": {
+            "user": {"userId": "test-user"},
+            "device": {"deviceId": "test-device"},
+        }
+    }
+    launch = {
+        "version": "1.0",
+        "context": context,
+        "session": {"user": {"userId": "test-user"}},
+        "request": {"type": "LaunchRequest", "locale": "en-GB"},
+    }
+    yes = {
+        "version": "1.0",
+        "context": context,
+        "session": {"user": {"userId": "test-user"}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+        },
+    }
+
+    await skill.invoke(launch, None)
+    response = await skill.invoke(yes, None)
+
+    assert response["response"]["card"] == {
+        "type": "AskForPermissionsConsent",
+        "permissions": [DEVICE_ADDRESS, GEOLOCATION_READ],
+    }
+
+
+def test_feedback_service_owns_pending_feedback_policy():
+    envelope = AttrDict({
+        "context": {
+            "System": {
+                "user": {"userId": "test-user"},
+                "device": {"deviceId": "test-device"},
+            }
+        },
+        "request": {
+            "type": "IntentRequest",
+            "intent": {"name": "PlayContentIntent", "slots": {}},
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "awaitingFeedback": True,
+            "feedbackContentTitle": "Example",
+        },
+        "_dirty": False,
+    }
+    handler_input = HandlerInput(
+        envelope,
+        attributes,
+        None,
+        ResponseBuilder(),
+    )
+
+    service = FeedbackService()
+
+    assert service.should_block(handler_input)
+    response = service.pending_response(handler_input)
+    assert response["shouldEndSession"] is False

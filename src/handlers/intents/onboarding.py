@@ -6,20 +6,16 @@ from typing import Any, Dict, Optional
 
 from ask_sdk_core.handler_input import HandlerInput
 
-from config import settings
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
-from src.services.persistence import get_store, update_store
-from src.services.locality import get_device_address, get_geolocation
-from src.webhooks.dispatch import dispatch
-from src.services.api import resolve_locality
+from src.services.storage.persistence import get_store, update_store
+from src.resolver.location import resolve_location_phrase
 from src.utils.speech import (
     ssml, ONBOARDING_ASK_PERMISSION, ONBOARDING_CONSENT_CARD_SENT,
-    ONBOARDING_LOCATION_DENIED, ONBOARDING_FETCHING_LOCATION, ONBOARDING_DISCOVERY,
-    LOCATION_NOT_FOUND, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
+    ONBOARDING_LOCATION_DENIED, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
     TOWN_NOT_UNDERSTOOD, TOWN_GOT_IT, REPROMPT_CITY, TOWN_SKIPPED, REPROMPT_NO_CITY,
     WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY, WELCOME_RETURN_GENERIC,
-    ONBOARDING_NO_LOCAL_CONTENT, ONBOARDING_DISCOVERY_NATIONAL,
+    ONBOARDING_TOWN_CONFIRM,
 )
 
 ONBOARDING_ASK_TOWN = "ask_town"
@@ -49,6 +45,7 @@ def handle_permission_yes(handler_input: HandlerInput, store: Dict[str, Any]):
     update_store(handler_input, {"onboardingStage": "ask_permission"})
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_CONSENT_CARD_SENT)) \
+        .with_ask_for_permissions_consent_card(permissions) \
         .set_should_end_session(False) \
         .response
 
@@ -62,100 +59,6 @@ def handle_permission_no(handler_input: HandlerInput, store: Dict[str, Any]):
     })
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_LOCATION_DENIED)) \
-        .set_should_end_session(False) \
-        .response
-
-
-async def resume_after_location_grant(handler_input: HandlerInput, store: Dict[str, Any]):
-    try:
-        address = await get_device_address(handler_input)
-        geo = get_geolocation(handler_input)
-
-        if address and not address.get("denied"):
-            payload = {
-                "postalCode": address.get("postalCode"),
-                "countryCode": address.get("countryCode"),
-                "latitude": geo.get("latitude") if geo else None,
-                "longitude": geo.get("longitude") if geo else None,
-            }
-
-            resolved = await resolve_locality(payload)
-            if resolved and resolved.get("city"):
-                update_store(handler_input, {
-                    "userCity": resolved["city"],
-                    "locality": resolved.get("locality") or resolved["city"],
-                    "userState": resolved.get("state"),
-                    "userCountry": resolved.get("country"),
-                    "devicePostalCode": address.get("postalCode"),
-                    "deviceCountryCode": address.get("countryCode"),
-                    "latitude": resolved.get("latitude"),
-                    "longitude": resolved.get("longitude"),
-                    "onboardingComplete": True,
-                    "onboardingStage": "done",
-                    "locationSource": "device",
-                    "localityResolvedAt": int(time.time() * 1000),
-                })
-                return handler_input.response_builder \
-                    .speak(ssml(ONBOARDING_DISCOVERY(resolved["city"], 0))) \
-                    .set_should_end_session(False) \
-                    .response
-
-        if address and address.get("denied"):
-            update_store(handler_input, {
-                "onboardingStage": ONBOARDING_ASK_TOWN,
-                "onboardingRetries": 0,
-            })
-            return handler_input.response_builder \
-                .speak(ssml(ONBOARDING_LOCATION_DENIED)) \
-                .set_should_end_session(False) \
-                .response
-    except Exception as err:
-        logger.warning("Hear: resume_after_location_grant failed %s", err)
-
-    update_store(handler_input, {
-        "awaitingLocationChoice": True,
-        "onboardingStage": "await_location_choice",
-    })
-    return handler_input.response_builder \
-        .speak(ssml(LOCATION_NOT_FOUND)) \
-        .set_should_end_session(False) \
-        .response
-
-
-async def confirm_manual_town(handler_input: HandlerInput, store: Dict[str, Any], city: str):
-    try:
-        resolved = await resolve_locality({"q": city})
-        if resolved and resolved.get("city"):
-            update_store(handler_input, {
-                "userCity": resolved["city"],
-                "locality": resolved.get("locality") or resolved["city"],
-                "userState": resolved.get("state"),
-                "userCountry": resolved.get("country"),
-                "latitude": resolved.get("latitude"),
-                "longitude": resolved.get("longitude"),
-                "devicePostalCode": resolved.get("postalCode"),
-                "onboardingComplete": True,
-                "onboardingStage": "done",
-                "locationSource": "manual",
-                "localityResolvedAt": int(time.time() * 1000),
-            })
-            return handler_input.response_builder \
-                .speak(ssml(ONBOARDING_DISCOVERY(resolved["city"], 0))) \
-                .set_should_end_session(False) \
-                .response
-    except Exception:
-        pass
-
-    update_store(handler_input, {
-        "userCity": city,
-        "locality": city,
-        "localityResolvedAt": int(time.time() * 1000),
-        "onboardingComplete": True,
-        "onboardingStage": "done",
-        "locationSource": "manual",
-    })
-    return handler_input.response_builder \
-        .speak(ssml(ONBOARDING_DISCOVERY(city, 0))) \
         .set_should_end_session(False) \
         .response
 
@@ -209,42 +112,67 @@ def resume_town_capture(handler_input: HandlerInput, store: Dict[str, Any]):
         .response
 
 
-async def finalize_town_captured(handler_input: HandlerInput, store: Dict[str, Any], city: str):
-    """Persist the captured town and acknowledge it to the user."""
-    try:
-        user_id = handler_input.request_envelope.context.System.user.userId or None
-    except Exception:
-        user_id = None
-
-    if city and user_id:
-        update_store(handler_input, {
-            "userCity": city,
-            "locality": city,
-            "localityResolvedAt": int(time.time() * 1000),
-        })
-        try:
-            dispatch("user.location_updated", {
-                "userId": user_id,
-                "listenerId": None,
-                "city": city,
-                "timestamp": int(time.time() * 1000),
+def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, Any], phrase: str):
+    """Resolve a manual town in location scope and ask for confirmation."""
+    resolution = resolve_location_phrase(phrase)
+    match = resolution.get("match")
+    candidates = resolution.get("candidates") or []
+    if not match:
+        if candidates:
+            names = [candidate["city"] for candidate in candidates[:2]]
+            spoken = " or ".join(names)
+            update_store(handler_input, {
+                "onboardingTownAttempts": store.get("onboardingTownAttempts", 0) + 1,
             })
-        except Exception:
-            pass
-
-    updated_store = get_store(handler_input)
-    resolved_city = updated_store.get("userCity") or updated_store.get("locality") or city
-
+            return handler_input.response_builder \
+                .speak(ssml(f"Did you mean {spoken}? Please say the full town name.")) \
+                .reprompt(ssml(REPROMPT_ASK_TOWN)) \
+                .set_should_end_session(False) \
+                .response
+        return resume_town_capture(handler_input, store)
     update_store(handler_input, {
+        "pendingLocationConfirm": match,
+        "awaitingLocationConfirm": True,
+        "onboardingStage": "await_location_confirm",
+    })
+    return handler_input.response_builder \
+        .speak(ssml(ONBOARDING_TOWN_CONFIRM(match["city"]))) \
+        .reprompt(ssml("Say yes to confirm, or no to set a different town.")) \
+        .set_should_end_session(False) \
+        .response
+
+
+async def finalize_town_captured(
+    handler_input: HandlerInput,
+    store: Dict[str, Any],
+    phrase: str,
+):
+    """Persist a resolved manual town.
+
+    Kept as a small compatibility entry point for callers that already have an
+    explicit town confirmation. New voice flows stage and confirm first.
+    """
+    resolution = resolve_location_phrase(phrase)
+    match = resolution.get("match")
+    if not match:
+        return stage_town_confirmation(handler_input, store, phrase)
+    update_store(handler_input, {
+        "userCity": match["city"],
+        "locality": match.get("locality") or match["city"],
+        "deviceCountryCode": match.get("countryCode"),
+        "latitude": match.get("latitude"),
+        "longitude": match.get("longitude"),
+        "onboardingComplete": True,
         "onboardingStage": None,
         "onboardingTownAttempts": 0,
+        "locationSource": "manual",
+        "localityResolvedAt": int(time.time() * 1000),
+        "awaitingLocationConfirm": False,
+        "pendingLocationConfirm": None,
     })
-
-    logger.info("Hear: onboarding town captured city=%s", resolved_city)
-
     return handler_input.response_builder \
-        .speak(ssml(TOWN_GOT_IT(resolved_city))) \
-        .reprompt(ssml(REPROMPT_CITY(resolved_city))) \
+        .speak(ssml(TOWN_GOT_IT(match["city"]))) \
+        .reprompt(ssml(REPROMPT_CITY)) \
         .set_should_end_session(False) \
         .response
 

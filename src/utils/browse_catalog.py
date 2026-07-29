@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 
 from config import settings
 from src.utils.normalize_content_item import content_title_for_speech, pick_menu_credit
@@ -46,6 +45,7 @@ def empty_browse_catalog() -> dict:
         "q": "",
         "categorySlug": None,
         "tags": None,
+        "searchPayload": None,
         "limit": settings.search_page_limit,
         "currentPage": 0,
         "totalHits": 0,
@@ -110,7 +110,21 @@ def slice_speak_window(catalog: dict | None) -> dict:
     }
 
 
-def build_catalog_from_search_result(search_result: dict | None, *, intent: str = "general", q: str = "", category_slug: str | None = None, tags: list | None = None, page: int = 0, limit: int | None = None, existing_catalog: dict | None = None, append: bool = False, exclude_recent=None, session_key: str | None = None) -> dict:
+def build_catalog_from_search_result(
+    search_result: dict | None,
+    *,
+    intent: str = "general",
+    q: str = "",
+    category_slug: str | None = None,
+    tags: list | None = None,
+    search_payload: dict | None = None,
+    page: int = 0,
+    limit: int | None = None,
+    existing_catalog: dict | None = None,
+    append: bool = False,
+    exclude_recent=None,
+    session_key: str | None = None,
+) -> dict:
     """Build a browse catalog structure from a search API result."""
     page_limit = limit or settings.search_page_limit
     raw = (search_result.get("results") or []) if search_result else []
@@ -145,6 +159,15 @@ def build_catalog_from_search_result(search_result: dict | None, *, intent: str 
         "q": str(q) if q is not None else "",
         "categorySlug": category_slug or None,
         "tags": tags or None,
+        "searchPayload": (
+            dict(search_payload)
+            if isinstance(search_payload, dict)
+            else dict(search_result.get("_search_payload"))
+            if search_result and isinstance(search_result.get("_search_payload"), dict)
+            else dict(existing_catalog.get("searchPayload"))
+            if append and existing_catalog and isinstance(existing_catalog.get("searchPayload"), dict)
+            else None
+        ),
         "limit": page_limit,
         "currentPage": current_page,
         "totalHits": total_hits,
@@ -170,7 +193,14 @@ def catalog_search_context(catalog: dict | None) -> dict:
     """Extract the search context from a catalog."""
     if not catalog:
         return {}
-    return {"intent": catalog.get("intent") or "general", "q": catalog.get("q") or ""}
+    return {
+        "intent": catalog.get("intent") or "general",
+        "q": catalog.get("q") or "",
+        "search_payload": (
+            dict(catalog["searchPayload"])
+            if isinstance(catalog.get("searchPayload"), dict) else None
+        ),
+    }
 
 
 def prepare_catalog_for_launch_resume(catalog: dict | None) -> dict | None:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import json
 import time
 
@@ -61,7 +60,7 @@ def _dispatch_via_http(url: str, secret: str, envelope: dict, await_queue: bool)
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(_send(), loop)
+            asyncio.run_coroutine_threadsafe(_send(), loop)
         else:
             asyncio.run(_send())
     except Exception:

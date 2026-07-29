@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from src.services.persistence import (
+from src.services.storage.persistence import (
     DEFAULT_STORE, merge_initial_store, get_store, update_store,
     add_to_history, add_followed_creator, is_following,
     recent_content_ids, clear_queue, init_queue,
@@ -12,13 +12,14 @@ class TestPersistence:
         assert "lastToken" in DEFAULT_STORE
         assert "locality" in DEFAULT_STORE
         assert "playbackSpeed" in DEFAULT_STORE
-        assert "upcomingQueue" in DEFAULT_STORE
+        assert "playbackQueue" in DEFAULT_STORE
+        assert "activePlayback" in DEFAULT_STORE
         assert "followedCreators" in DEFAULT_STORE
 
     def test_merge_initial_store_preserves_defaults(self):
         merged = merge_initial_store({})
         assert merged["playbackSpeed"] == 1.0
-        assert merged["upcomingQueue"] == []
+        assert merged["playbackQueue"] is None
 
     def test_merge_initial_store_overrides(self):
         merged = merge_initial_store({"playbackSpeed": 2.0, "userCity": "London"})
@@ -59,7 +60,7 @@ class TestPersistence:
 
     def test_clear_queue(self, mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"] = dict(DEFAULT_STORE)
-        store = init_queue(mock_handler_input, [{"id": "1"}, {"id": "2"}])
-        assert len(store["upcomingQueue"]) == 2
+        store = init_queue(mock_handler_input, [{"contentId": "1"}, {"contentId": "2"}])
+        assert store["playbackQueue"]["orderedContentIds"] == ["1", "2"]
         store = clear_queue(mock_handler_input)
-        assert len(store["upcomingQueue"]) == 0
+        assert store["playbackQueue"] is None

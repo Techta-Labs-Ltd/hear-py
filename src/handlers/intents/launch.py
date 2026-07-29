@@ -7,70 +7,50 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from config import settings
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
-from src.services.persistence import (
-    get_store, update_store, add_to_history, clear_queue,
-    set_browse_catalog, init_queue, recent_exclude_filters,
+from src.services.storage.persistence import (
+    get_store, update_store,
 )
-from src.services.api import search
-from src.services.locality import (
+from src.services.alexa.locality import (
     attach_profile_permission_if_needed, apply_listener_profile,
 )
-from src.services.launch_tracker import record_launch
-from src.services.alexa_api_client import get_alexa_user_id
-from src.services.flush_previous_track import flush_previous_track
-from src.services.alexa_reminders import cancel_feedback_reminder
-from src.webhooks.settings import get_settings
-from src.webhooks.notification_webhook import group_notifications_by_creator, build_notification_speech
+from src.services.launch import record_launch
+from src.utils.skill_request import get_user_id as get_alexa_user_id
+from src.services.playback import flush_previous_track
+from src.services.alexa.reminders import cancel_feedback_reminder
+from src.services.notifications import (
+    group_notifications_by_creator,
+    build_notification_speech,
+    update_notification_status,
+)
 from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
-    ssml, escape_ssml_lite, humanize_spoken_title, get_mid_playback_prompt,
-    NO_CONTENT_AVAILABLE, WELCOME_FIRST, WELCOME_FIRST_HAS_CITY,
+    ssml, escape_ssml_lite, humanize_spoken_title, WELCOME_FIRST, WELCOME_FIRST_HAS_CITY,
     WELCOME_ERROR, WELCOME_REPROMPT, ERROR_GENERIC, REPROMPT_NO_CITY,
     LAUNCH_PENDING_FEEDBACK, FEEDBACK_AWAITING_REPROMPT,
     STILL_LISTENING_PROMPT, STILL_LISTENING_REPROMPT,
     LAUNCH_RESUME_FLAGGED_PROMPT, FLAGGED_CONTINUE_REPROMPT,
     NOTIFICATIONS_SHOW_MORE, ONBOARDING_TOWN_CONFIRM,
 )
-from src.utils.normalize_content_item import (
-    content_title_for_speech, pick_content_credit, normalize_content_items,
-)
-from src.utils.listen_tracker import finalize_previous_track_if_any
-from src.utils.audio import (
-    build_play_directive, build_content_metadata, resolve_track_audio,
-    find_speed_url, get_next_speed, resolve_audio_url_for_speed,
-    resolve_effective_playback_speed,
-)
-from src.utils.browse_catalog import (
-    build_catalog_from_search_result, slice_speak_window,
-    has_more_server_pages, merge_spoken_menu_entries,
-    prepare_catalog_for_launch_resume,
-)
-from src.utils.search_filters import build_search_filters
 from src.utils.lambda_deadline import (
-    get_lambda_remaining_ms, compute_search_timeout_ms,
-    launch_background_work_budget_ms, should_block_on_launch_flush,
+    get_lambda_remaining_ms, launch_background_work_budget_ms, should_block_on_launch_flush,
 )
 from src.handlers.notifications import (
     ensure_subscription, has_notification_permission, complete_notification_opt_in,
 )
 from src.handlers.intents.onboarding import (
     ONBOARDING_ASK_TOWN, handle_returning_user, start_town_capture,
-    resume_town_capture, finalize_town_captured, finalize_town_skipped,
-    confirm_manual_town, ask_for_permission, handle_permission_yes,
-    handle_permission_no, resume_after_location_grant,
+    resume_town_capture, stage_town_confirmation, finalize_town_skipped,
 )
-from src.utils.playback_start import (
-    extract_playback_speeds, prepare_playback_audio_and_store, start_playback,
-)
-from src.utils.background import run_background
+from src.services.tasks import run_background
+from src.services.playback.session import has_unfinished_playback, read_playback_session
+from src.services.feedback import feedback_service
 
 logger = logging.getLogger(__name__)
 MAX_TOWN_ATTEMPTS = 3
@@ -107,49 +87,26 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
     if launch.get("save"):
         update_store(handler_input, launch["save"])
 
-    try:
-        settings_data = await get_settings()
-    except Exception:
-        settings_data = {}
-    auto_play = settings_data.get("autoPlay", True)
-    outro_enabled = bool(settings_data.get("outroEnabled"))
-    feedback_enabled = settings_data.get("feedbackEnabled", True)
-
     attrs = handler_input.attributes_manager.get_request_attributes()
     pending_notifications = attrs.get("_pendingNotifications") if attrs else None
-
-    if pending_notifications and pending_notifications.get("tracks"):
-        tracks = pending_notifications["tracks"]
-        try:
-            groups = group_notifications_by_creator(tracks)
-            speech_text = build_notification_speech(groups)
-        except Exception:
-            groups = []
-            speech_text = "You have some new updates."
-
-        update_store(handler_input, {
-            "pendingNotificationQueue": tracks,
-            "awaitingNotificationChoice": True,
-        })
-
-        if attrs:
-            attrs.pop("_pendingNotifications", None)
-            handler_input.attributes_manager.set_request_attributes(attrs)
-
-        show_more = " " + NOTIFICATIONS_SHOW_MORE if len(groups) > 5 else ""
-        return handler_input.response_builder \
-            .speak(ssml(speech_text + show_more)) \
-            .reprompt(ssml("Would you like to listen to them?")) \
-            .set_should_end_session(False) \
-            .response
 
     if store.get("awaitingNotificationOptIn"):
         update_store(handler_input, {"awaitingNotificationOptIn": False})
 
-    if store.get("awaitingStillListening"):
+    # Foreground interaction priority: onboarding, resume, feedback, notifications.
+    if store.get("onboardingStage") == ONBOARDING_ASK_TOWN:
+        return resume_town_capture(handler_input, store)
+
+    if store.get("onboardingStage") == "confirm_town_for_community":
+        return start_town_capture(handler_input, store, user_name)
+
+    if has_unfinished_playback(store):
+        active = read_playback_session(store) or {}
+        title = escape_ssml_lite(active.get("title") or "your recording")
+        update_store(handler_input, {"awaitingResume": True})
         return handler_input.response_builder \
-            .speak(ssml(STILL_LISTENING_PROMPT)) \
-            .reprompt(STILL_LISTENING_REPROMPT) \
+            .speak(ssml(f"You did not finish {title}. Would you like to continue?")) \
+            .reprompt(ssml("Would you like to continue listening?")) \
             .set_should_end_session(False) \
             .response
 
@@ -159,6 +116,9 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
             .reprompt(FLAGGED_CONTINUE_REPROMPT) \
             .set_should_end_session(False) \
             .response
+
+    if store.get("awaitingFeedback") and store.get("pendingFeedback"):
+        return feedback_service.pending_response(handler_input)
 
     if store.get("awaitingFeedback") and (store.get("feedbackContentTitle") or store.get("feedbackPromptText")):
         await cancel_feedback_reminder(handler_input)
@@ -173,11 +133,28 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
         )
         return builder.set_should_end_session(False).response
 
-    if store.get("onboardingStage") == ONBOARDING_ASK_TOWN:
-        return resume_town_capture(handler_input, store)
-
-    if store.get("onboardingStage") == "confirm_town_for_community":
-        return start_town_capture(handler_input, store, user_name)
+    if pending_notifications and pending_notifications.get("items"):
+        items = pending_notifications["items"]
+        groups = group_notifications_by_creator(items)
+        speech_text = build_notification_speech(groups) or "You have some new updates."
+        update_store(handler_input, {
+            "pendingNotificationQueue": items,
+            "awaitingNotificationChoice": True,
+        })
+        for item in items:
+            await update_notification_status(
+                user_id,
+                item.get("notificationId"),
+                "offered",
+            )
+        if attrs:
+            attrs.pop("_pendingNotifications", None)
+            handler_input.attributes_manager.set_request_attributes(attrs)
+        return handler_input.response_builder \
+            .speak(ssml(speech_text)) \
+            .reprompt(ssml("Would you like to listen to them?")) \
+            .set_should_end_session(False) \
+            .response
 
     try:
         store = await _ensure_listener_data_for_launch(handler_input, store)
@@ -305,7 +282,7 @@ class TownCaptureHandler(AbstractRequestHandler):
         nlp_town = nlp_slots.get("townName") or nlp_slots.get("placeName")
 
         if nlp_town:
-            return await finalize_town_captured(handler_input, store, nlp_town)
+            return stage_town_confirmation(handler_input, store, nlp_town)
 
         return resume_town_capture(handler_input, store)
 
@@ -323,22 +300,12 @@ class SetLocationHandler(AbstractRequestHandler):
         return bool(attrs) and attrs.get("_nlp", {}).get("intent") == "location_set"
 
     async def handle(self, handler_input: HandlerInput):
-        store = get_store(handler_input)
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
         town = (nlp.get("slots", {}) or {}).get("townName")
 
         if town:
-            update_store(handler_input, {
-                "pendingLocationConfirm": {"city": town},
-                "awaitingLocationConfirm": True,
-                "onboardingStage": "await_location_confirm",
-            })
-            return handler_input.response_builder \
-                .speak(ssml(ONBOARDING_TOWN_CONFIRM(town))) \
-                .reprompt(ssml("Say yes to confirm, or no to set a different town.")) \
-                .set_should_end_session(False) \
-                .response
+            return stage_town_confirmation(handler_input, get_store(handler_input), town)
 
         update_store(handler_input, {
             "onboardingStage": ONBOARDING_ASK_TOWN,

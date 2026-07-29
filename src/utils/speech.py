@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-from config import settings
 from src.utils.normalize_content_item import is_bad_credit_name, is_id_like_label
 
 _MAX_SSML_CHARS = 7500
@@ -238,6 +237,46 @@ def _build_search_no_match(query) -> str:
 
 
 SEARCH_NO_MATCH = lambda query: _build_search_no_match(query)
+
+
+def unresolved_reference_message(phrase: str, expected_types: list[str]) -> str:
+    safe = escape_ssml_lite(str(phrase).strip())
+    labels = {
+        "creator": "creator",
+        "organization": "organisation",
+        "publication": "publication",
+        "location": "place",
+    }
+    expected = [labels[value] for value in expected_types if value in labels]
+    kind = (
+        f"{', '.join(expected[:-1])} or {expected[-1]}"
+        if len(expected) > 1
+        else expected[0] if expected
+        else "name"
+    )
+    return (
+        f"I couldn't find a {kind} named {safe}. "
+        "Please try the full name, or ask for a different one."
+    )
+
+
+def ambiguous_reference_message(phrase: str, candidates: list[dict]) -> str:
+    names = list(dict.fromkeys(
+        escape_ssml_lite(str(item.get("name") or "").strip())
+        for item in candidates
+        if item.get("name")
+    ))[:3]
+    if not names:
+        return unresolved_reference_message(phrase, [])
+    if len(names) == 1:
+        choices = names[0]
+    else:
+        choices = f"{', '.join(names[:-1])}, or {names[-1]}"
+    return (
+        "I found more than one match for that name. "
+        f"Did you mean {choices}?"
+    )
+
 
 SEARCH_UNAVAILABLE = "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."
 

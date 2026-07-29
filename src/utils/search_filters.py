@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import re
 
-from config import settings
-from src.utils.skill_request import get_intent_name
+from src.utils.skill_request import get_intent_name, get_user_id
 
 
 def to_slug(value) -> str | None:
@@ -15,13 +14,6 @@ def to_slug(value) -> str | None:
     slug = re.sub(r"[^a-z0-9]+", "-", slug)
     slug = re.sub(r"^-+|-+$", "", slug)
     return slug or None
-
-
-def get_user_id(handler_input) -> str | None:
-    try:
-        return handler_input.request_envelope.context.System.user.userId or None
-    except Exception:
-        return None
 
 
 def build_user_field(handler_input, store: dict | None = None) -> dict:
@@ -52,7 +44,10 @@ def build_user_field(handler_input, store: dict | None = None) -> dict:
 
 
 class SearchPayload:
-    _FILTER_KEYS = ("creator", "organization", "category", "location")
+    _FILTER_KEYS = (
+        "contentIds", "creatorIds", "organizationIds", "publicationIds",
+        "categorySlugs", "city", "countryCode",
+    )
 
     def __init__(
         self,
@@ -93,7 +88,9 @@ class SearchPayload:
         """
         payload = {
             "alexaUserId": get_user_id(self.handler_input),
-            "q": str(self.q) if self.q is not None else "",
+            "query": str(self.q) if self.q is not None else "",
+            "isLocal": bool((self.nlp_filter or {}).get("isLocal")),
+            "isRecommended": bool((self.nlp_filter or {}).get("isRecommended")),
             "limit": self.limit,
             "page": self.page,
         }
@@ -102,6 +99,9 @@ class SearchPayload:
         filter_obj = self._filter_object()
         if filter_obj:
             payload["filter"] = filter_obj
+        for key in ("publishedFrom", "publishedTo"):
+            if isinstance((self.nlp_filter or {}).get(key), (int, float)):
+                payload[key] = int(self.nlp_filter[key])
         return payload
 
     @classmethod

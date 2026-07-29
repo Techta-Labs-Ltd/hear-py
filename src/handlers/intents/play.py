@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import logging
-import time
 from typing import Any, Dict, List, Optional
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
@@ -12,9 +10,9 @@ from ask_sdk_core.utils.request_util import get_slot_value
 from config import settings
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
-from src.services.persistence import (
+from src.services.storage.persistence import (
     get_store, update_store, set_browse_catalog, get_browse_catalog,
-    init_queue, clear_queue, recent_exclude_filters,
+    init_queue, recent_exclude_filters,
 )
 from src.services.api import search
 from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
@@ -23,32 +21,26 @@ from src.utils.speech import (
     SEARCH_NO_MATCH, WELCOME_REPROMPT, PLAY_NO_PENDING_LIST, BROWSE_EXHAUSTED,
     CONTENT_NOT_READY, REPROMPT_NO_CITY, ERROR_GENERIC, LOCAL_CONTENT_FALLBACK,
     TRENDING_INTRO, PLAY_COMMUNITY_INTRO, COMMUNITY_NEEDS_TOWN, REPROMPT_ASK_TOWN,
-    CONTENT_ABOUT_PHRASE, LAUNCH_CHOICE_OUTRO, PLAY_CHOICE_INVALID,
     NO_FOLLOWED_CREATORS_TO_PLAY,
+    unresolved_reference_message,
+    ambiguous_reference_message,
 )
 from src.utils.normalize_content_item import (
     content_title_for_speech, pick_content_credit, normalize_content_items,
-    pick_summary,
 )
-from src.utils.audio import resolve_track_audio
-from src.utils.feedback_gate import enforce_interaction_gate
+from src.utils.normalize_content_item import is_playable_content_item
 from src.utils.browse_catalog import (
-    build_catalog_from_search_result, slice_speak_window,
-    has_more_server_pages, catalog_search_context, merge_spoken_menu_entries,
+    build_catalog_from_search_result, has_more_server_pages, catalog_search_context,
 )
-from src.utils.search_filters import SearchPayload, to_slug
+from src.utils.search_filters import SearchPayload
 from src.utils.lambda_deadline import (
     compute_search_timeout_ms, get_lambda_remaining_ms,
-    api_options, has_budget_for_api,
-)
-from src.utils.playback_context import (
-    read_audio_player_context, is_audio_player_active, resolve_active_playback_token,
 )
 from src.utils.search_filters import (
     wants_latest_playback,
     wants_play_from_followed_creators, wants_local_community_content,
 )
-from src.utils.playback_start import start_playback
+from src.services.playback.start import start_playback
 
 logger = logging.getLogger(__name__)
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
@@ -121,15 +113,8 @@ def _is_misrouted_browse_pagination(query: str) -> bool:
 
 def _resolve_content_for_playback(item: Dict[str, Any], handler_input: HandlerInput) -> Optional[Dict[str, Any]]:
     """Check whether an item has playable audio, return it if so."""
-    if not item or not item.get("id"):
-        return None
-    has_playable = item.get("audioUrl") or (
-        isinstance(item.get("tracks"), list)
-        and any(t and t.get("audioUrl") for t in item["tracks"])
-    )
-    if has_playable:
-        return item
-    return None
+    del handler_input
+    return item if is_playable_content_item(item) else None
 
 
 def _build_no_content_response(handler_input: HandlerInput):
@@ -155,6 +140,14 @@ def _build_search_outcome_response(handler_input: HandlerInput, search_result: O
             .reprompt(ssml(WELCOME_REPROMPT)) \
             .set_should_end_session(False) \
             .response
+    search_payload = (search_result or {}).get("_search_payload") or {}
+    if search_payload.get("query") or search_payload.get("q") or search_payload.get("filter"):
+        requested = search_payload.get("query") or search_payload.get("q") or "that request"
+        return handler_input.response_builder \
+            .speak(ssml(SEARCH_NO_MATCH(requested))) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
+            .set_should_end_session(False) \
+            .response
     return _build_no_content_response(handler_input)
 
 
@@ -172,6 +165,30 @@ async def discover_content_via_search(
     nlp = attrs.get("_nlp", {}) if attrs else {}
     nlp_slots = nlp.get("slots") or {}
     nlp_intent = nlp.get("intent")
+    ambiguous = nlp_slots.get("ambiguousReferences") or []
+    if ambiguous:
+        reference = ambiguous[0]
+        return {
+            "results": [],
+            "total_hits": 0,
+            "failed": False,
+            "client_message": ambiguous_reference_message(
+                str(reference.get("phrase") or ""),
+                list(reference.get("candidates") or []),
+            ),
+        }
+    unresolved = nlp_slots.get("unresolvedReferences") or []
+    if unresolved:
+        reference = unresolved[0]
+        return {
+            "results": [],
+            "total_hits": 0,
+            "failed": False,
+            "client_message": unresolved_reference_message(
+                str(reference.get("phrase") or ""),
+                list(reference.get("expectedTypes") or []),
+            ),
+        }
 
     query = str(opts.get("q", ""))
     page = opts.get("page", 0)
@@ -179,18 +196,26 @@ async def discover_content_via_search(
     limit = opts.get("limit")
 
     nlp_filter = {}
-    if nlp_slots.get("creatorQuery"):
-        nlp_filter["creator"] = str(nlp_slots["creatorQuery"]).strip()
-    if nlp_slots.get("organizationQuery"):
-        nlp_filter["organization"] = str(nlp_slots["organizationQuery"]).strip()
+    if nlp_slots.get("creatorIds"):
+        nlp_filter["creatorIds"] = list(nlp_slots["creatorIds"])
+    if nlp_slots.get("organizationIds"):
+        nlp_filter["organizationIds"] = list(nlp_slots["organizationIds"])
+    if nlp_slots.get("publicationIds"):
+        nlp_filter["publicationIds"] = list(nlp_slots["publicationIds"])
     if nlp_slots.get("category"):
-        nlp_filter["category"] = str(nlp_slots["category"]).strip()
+        nlp_filter["categorySlugs"] = [str(nlp_slots["category"]).strip()]
     city_val = nlp_slots.get("city") or nlp_slots.get("placeName")
     if city_val:
-        nlp_filter["location"] = str(city_val).strip()
+        nlp_filter["city"] = str(city_val).strip()
     nlp_tags = nlp_slots.get("tags")
     if isinstance(nlp_tags, list) and nlp_tags:
         nlp_filter["tags"] = list(nlp_tags)
+    nlp_filter["isLocal"] = bool(nlp_slots.get("isLocal"))
+    nlp_filter["isRecommended"] = bool(nlp_slots.get("isRecommended"))
+    search_plan_payload = nlp_slots.get("searchPlan") or {}
+    for key in ("publishedFrom", "publishedTo"):
+        if search_plan_payload.get(key) is not None:
+            nlp_filter[key] = search_plan_payload[key]
 
     residual = nlp_slots.get("residualQuery")
     if isinstance(residual, str) and (not query or query == _raw_search_phrase(handler_input)):
@@ -224,6 +249,7 @@ async def discover_content_via_search(
     )
 
     result = await search(payload, timeout_ms=timeout_ms)
+    result["_search_payload"] = dict(payload)
     if result and isinstance(result.get("results"), list):
         result["results"] = normalize_content_items(result["results"])
     return result
@@ -234,7 +260,6 @@ async def _discover_content_avoiding_recent(
 ) -> Dict[str, Any]:
     """Search across multiple pages, skipping empty pages, to find fresh content."""
     opts = search_options or {}
-    store = get_store(handler_input)
     start_page = opts.get("page", 0)
     remaining = get_lambda_remaining_ms(handler_input)
     max_pages = opts.get("maxPages") or (1 if isinstance(remaining, (int, float)) and remaining < 5500 else 3)
@@ -268,22 +293,23 @@ async def auto_play_first_from_search(
     q = opts.get("q", "")
     intro_override = opts.get("introOverride")
 
-    catalog = build_catalog_from_search_result(search_result, {
-        "intent": intent,
-        "q": q,
-        "page": 0,
-        "limit": _DEFAULT_SEARCH_PAGE_LIMIT,
-        "excludeRecent": recent_exclude_filters(store),
-    })
-    set_browse_catalog(handler_input, catalog, {"intent": intent})
+    catalog = build_catalog_from_search_result(
+        search_result,
+        intent=intent,
+        q=q,
+        search_payload=search_result.get("_search_payload"),
+        page=0,
+        limit=_DEFAULT_SEARCH_PAGE_LIMIT,
+        exclude_recent=recent_exclude_filters(store),
+    )
+    set_browse_catalog(handler_input, catalog, intent=intent)
 
     first = search_result["results"][0]
     content = _resolve_content_for_playback(first, handler_input)
     if not content:
         return _build_next_playable_response(handler_input, store, search_result["results"], intent)
 
-    track_info = resolve_track_audio(content, 0)
-    if not track_info.get("audioUrl"):
+    if not is_playable_content_item(content):
         return _build_next_playable_response(handler_input, store, search_result["results"], intent)
 
     title = content_title_for_speech(content)
@@ -299,11 +325,13 @@ async def auto_play_first_from_search(
     else:
         intro = f"I found {total} stories. Now playing the first one."
 
-    init_queue(handler_input, [{"id": i.get("id")} for i in search_result["results"]], {
-        "source": intent or "search",
-        "locality": store.get("locality"),
-        "startIndex": 0,
-    })
+    init_queue(
+        handler_input,
+        [{"contentId": i.get("contentId")} for i in search_result["results"]],
+        source=intent or "search",
+        locality=store.get("locality"),
+        start_index=0,
+    )
 
     return await start_playback(handler_input, content, intro, 0, {"preserveSessionQueue": True})
 
@@ -315,27 +343,22 @@ def _build_next_playable_response(
     """Fallback: try subsequent items in the result set until a playable one is found."""
     for i in range(1, len(items)):
         item = items[i]
-        has_audio = item.get("audioUrl") or (
-            isinstance(item.get("tracks"), list)
-            and any(t and t.get("audioUrl") for t in item["tracks"])
-        )
-        if not has_audio:
+        if not is_playable_content_item(item):
             continue
         content = items[i]
-        track_info = resolve_track_audio(content, 0)
-        if not track_info or not track_info.get("audioUrl"):
-            continue
         title = content_title_for_speech(content)
         credit = pick_content_credit(content)
         intro = (
             f"Now playing {escape_ssml_lite(title)}, by {escape_ssml_lite(credit)}."
             if title and credit else "Now playing the next story."
         )
-        init_queue(handler_input, [{"id": it.get("id")} for it in items], {
-            "source": discovery_intent or "search",
-            "locality": store.get("locality"),
-            "startIndex": i,
-        })
+        init_queue(
+            handler_input,
+            [{"contentId": it.get("contentId")} for it in items],
+            source=discovery_intent or "search",
+            locality=store.get("locality"),
+            start_index=i,
+        )
         return start_playback(handler_input, content, intro, 0, {"preserveSessionQueue": True})
 
     return handler_input.response_builder \
@@ -380,8 +403,7 @@ async def _play_first_search_result(handler_input: HandlerInput, items: List[Dic
     if not content:
         return _build_no_content_response(handler_input)
 
-    track_info = resolve_track_audio(content, 0)
-    if not track_info.get("audioUrl"):
+    if not is_playable_content_item(content):
         return handler_input.response_builder \
             .speak(ssml(CONTENT_NOT_READY)) \
             .reprompt(ssml(REPROMPT_NO_CITY)) \
@@ -393,11 +415,13 @@ async def _play_first_search_result(handler_input: HandlerInput, items: List[Dic
     credit = pick_content_credit(content) or label
     intro = LOCAL_CONTENT_FALLBACK(title, credit)
 
-    init_queue(handler_input, [{"id": i.get("id")} for i in items], {
-        "source": get_intent_name(handler_input) or "search",
-        "locality": store.get("locality"),
-        "startIndex": 0,
-    })
+    init_queue(
+        handler_input,
+        [{"contentId": i.get("contentId")} for i in items],
+        source=get_intent_name(handler_input) or "search",
+        locality=store.get("locality"),
+        start_index=0,
+    )
 
     return await start_playback(handler_input, content, intro, 0, {"preserveSessionQueue": True})
 
@@ -414,14 +438,19 @@ async def _fetch_next_catalog_page(handler_input: HandlerInput, catalog: Dict[st
     })
     if search_result.get("failed") or not search_result.get("results"):
         return {"catalog": catalog, "failed": True}
-    merged = build_catalog_from_search_result(search_result, {
+    merged = build_catalog_from_search_result(
+        search_result,
         **ctx,
-        "page": next_page,
-        "limit": catalog.get("limit"),
-        "existingCatalog": catalog,
-        "append": True,
-    })
-    set_browse_catalog(handler_input, merged, {"intent": catalog.get("intent")})
+        page=next_page,
+        limit=catalog.get("limit"),
+        existing_catalog=catalog,
+        append=True,
+    )
+    set_browse_catalog(
+        handler_input,
+        merged,
+        intent=catalog.get("intent"),
+    )
     return {"catalog": merged, "failed": False}
 
 
@@ -440,9 +469,6 @@ class WhatsTrendingHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
 
         if not _get_user_id(handler_input):
             return handler_input.response_builder \
@@ -477,9 +503,6 @@ class PlayContentHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         try:
-            gated = enforce_interaction_gate(handler_input)
-            if gated:
-                return gated
 
             if not _get_user_id(handler_input):
                 return handler_input.response_builder \
@@ -585,9 +608,6 @@ class PlayByCreatorHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
 
         if not _get_user_id(handler_input):
             return handler_input.response_builder \
@@ -663,9 +683,6 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
 
         if not _get_user_id(handler_input):
             return handler_input.response_builder \
@@ -742,9 +759,6 @@ class BrowseContentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
 
         if not _get_user_id(handler_input):
             return handler_input.response_builder \
@@ -807,9 +821,6 @@ class ShowMoreBrowseHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        gated = enforce_interaction_gate(handler_input)
-        if gated:
-            return gated
 
         store = get_store(handler_input)
         catalog = get_browse_catalog(store)
@@ -842,14 +853,17 @@ class ShowMoreBrowseHandler(AbstractRequestHandler):
         next_item = catalog["items"][offset]
         content = _resolve_content_for_playback(next_item, handler_input)
         if content:
-            track_info = resolve_track_audio(content, 0)
-            if track_info and track_info.get("audioUrl"):
+            if is_playable_content_item(content):
                 title = content_title_for_speech(content)
                 credit = pick_content_credit(content)
                 intro = f"Next up: {escape_ssml_lite(title)}, by {escape_ssml_lite(credit)}." \
                     if title and credit else "Next story."
                 catalog["spokenOffset"] = offset + 1
-                set_browse_catalog(handler_input, catalog, {"intent": catalog.get("intent", "general")})
+                set_browse_catalog(
+                    handler_input,
+                    catalog,
+                    intent=catalog.get("intent", "general"),
+                )
                 return await start_playback(
                     handler_input, content, intro, 0, {"preserveSessionQueue": True},
                 )

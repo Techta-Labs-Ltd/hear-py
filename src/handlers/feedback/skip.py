@@ -3,10 +3,11 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.services.persistence import get_store, clear_feedback, mark_feedback_given_from_store
+from src.services.storage.persistence import get_store, clear_feedback, mark_feedback_given_from_store
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import ssml, WELCOME_REPROMPT, FEEDBACK_SKIP_INTRO
 from src.utils.feedback_flow import idle_next_response
+from src.services.feedback.candidates import submit_feedback
 
 
 class SkipFeedbackHandler(AbstractRequestHandler):
@@ -32,6 +33,6 @@ class SkipFeedbackHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        mark_feedback_given_from_store(handler_input, store)
+        await submit_feedback(handler_input, "skipped")
         await clear_feedback(handler_input)
         return idle_next_response(handler_input, FEEDBACK_SKIP_INTRO)
