@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from aws_lambda_powertools import Logger, Tracer
 
@@ -11,6 +12,7 @@ from src.webhooks.router import is_http_event, normalize_http_event, route_webho
 
 logger = Logger()
 tracer = Tracer()
+logging.getLogger().setLevel(logging.INFO)
 init_sentry()
 
 _skill = None

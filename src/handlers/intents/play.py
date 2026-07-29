@@ -21,6 +21,8 @@ from src.utils.speech import (
     CONTENT_NOT_READY, REPROMPT_NO_CITY, ERROR_GENERIC, LOCAL_CONTENT_FALLBACK,
     TRENDING_INTRO, PLAY_COMMUNITY_INTRO, COMMUNITY_NEEDS_TOWN, REPROMPT_ASK_TOWN,
     NO_FOLLOWED_CREATORS_TO_PLAY,
+    ASK_TALKING_NEWSPAPER, ASK_TALKING_NEWSPAPER_REPROMPT,
+    TALKING_NEWSPAPER_NOT_RECOGNIZED,
     unresolved_reference_message,
     ambiguous_reference_message,
 )
@@ -40,6 +42,7 @@ from src.utils.search_filters import (
     wants_play_from_followed_creators, wants_local_community_content,
 )
 from src.services.playback.start import start_playback
+from src.resolver.normalize import is_generic_organization_request
 
 logger = logging.getLogger(__name__)
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
@@ -732,6 +735,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
         nlp_slots = nlp.get("slots", {}) if nlp else {}
+        raw_phrase = _raw_search_phrase(handler_input)
         org_query = nlp_slots.get("organizationQuery") or \
             _extract_slot_value(handler_input, "organizationQuery") or \
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
@@ -742,12 +746,29 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 and _has_active_browse_catalog(active_store):
             return await ShowMoreBrowseHandler().handle(handler_input)
 
-        if not org_query and not resolved_org:
+        generic_request = (
+            bool(nlp_slots.get("genericOrganizationRequest"))
+            or is_generic_organization_request(raw_phrase)
+            or is_generic_organization_request(org_query)
+        )
+        if generic_request or (not org_query and not resolved_org):
+            update_store(handler_input, {"awaitingOrganizationName": True})
             return handler_input.response_builder \
-                .speak(ssml("Which talking newspaper would you like?")) \
-                .reprompt(ssml("Just say the name.")) \
+                .speak(ssml(ASK_TALKING_NEWSPAPER)) \
+                .reprompt(ssml(ASK_TALKING_NEWSPAPER_REPROMPT)) \
                 .set_should_end_session(False) \
                 .response
+
+        if nlp_slots.get("organizationFollowUp") and not resolved_org:
+            update_store(handler_input, {"awaitingOrganizationName": True})
+            return handler_input.response_builder \
+                .speak(ssml(TALKING_NEWSPAPER_NOT_RECOGNIZED(org_query))) \
+                .reprompt(ssml(ASK_TALKING_NEWSPAPER_REPROMPT)) \
+                .set_should_end_session(False) \
+                .response
+
+        if resolved_org:
+            update_store(handler_input, {"awaitingOrganizationName": False})
 
         search_result = await discover_content_via_search(handler_input, {
             "q": nlp_slots.get("residualQuery", "") if resolved_org else org_query,
@@ -769,7 +790,6 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        raw_phrase = _raw_search_phrase(handler_input)
         try:
             if wants_latest_playback(raw_phrase or ""):
                 return await _play_first_search_result(

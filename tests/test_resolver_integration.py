@@ -5,7 +5,10 @@ from src.utils.browse_catalog import (
     catalog_search_context,
 )
 from src.resolver.engine import Resolver
-from src.resolver.integration import resolve_for_alexa
+from src.resolver.integration import (
+    resolve_for_alexa,
+    resolve_organization_follow_up,
+)
 from src.resolver.taxonomy import TaxonomyManager, TaxonomySnapshot
 
 
@@ -121,3 +124,46 @@ def test_resolved_organization_keeps_a_spoken_display_name(monkeypatch):
     assert result["slots"]["category"] == "sport"
     assert result["slots"]["organizationIds"] == ["org-tnf"]
     assert result["slots"]["organizationName"] == "Talking News Federation"
+
+
+def test_resolved_city_routes_as_local_even_without_near_me_language(monkeypatch):
+    from src.resolver.taxonomy import TaxonomyRecord
+
+    manager = TaxonomyManager()
+    manager._snapshot = TaxonomySnapshot("city", [
+        TaxonomyRecord(
+            "location",
+            "Birmingham",
+            aliases=("birmingham",),
+            metadata={"city": "Birmingham", "countryCode": "gb"},
+        ),
+    ])
+    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+
+    result = resolve_for_alexa("birmingham city")
+
+    assert result["intent"] == "local"
+    assert result["slots"]["city"] == "Birmingham"
+    assert result["slots"]["residualQuery"] == ""
+
+
+def test_prompted_short_organization_typo_uses_unique_taxonomy_alias(monkeypatch):
+    from src.resolver.taxonomy import TaxonomyRecord
+
+    manager = TaxonomyManager()
+    manager._snapshot = TaxonomySnapshot("ytn", [
+        TaxonomyRecord(
+            "organization",
+            "York Talking News",
+            "org-ytn",
+            aliases=("ytn",),
+        ),
+    ])
+    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+
+    result = resolve_organization_follow_up("ynt")
+
+    assert result["intent"] == "organization"
+    assert result["slots"]["organizationIds"] == ["org-ytn"]
+    assert result["slots"]["organizationName"] == "York Talking News"
+    assert result["slots"]["residualQuery"] == ""

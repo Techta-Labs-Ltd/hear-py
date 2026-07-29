@@ -9,7 +9,12 @@ from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from config import settings
 from src.nlp.classifier import classify_utterance
 from src.nlp.patterns import ALEXA_TO_NLP
-from src.resolver.integration import SEARCH_INTENTS, resolve_for_alexa
+from src.resolver.integration import (
+    SEARCH_INTENTS,
+    resolve_for_alexa,
+    resolve_organization_follow_up,
+)
+from src.resolver.normalize import is_generic_organization_request
 from src.resolver.taxonomy import taxonomy_manager
 
 logger = logging.getLogger(__name__)
@@ -108,6 +113,32 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 })
                 return
 
+            if raw and store.get("awaitingOrganizationName"):
+                if is_generic_organization_request(raw):
+                    result = {
+                        "intent": "organization",
+                        "confidence": "high",
+                        "slots": {
+                            "organizationQuery": "",
+                            "residualQuery": "",
+                            "genericOrganizationRequest": True,
+                        },
+                    }
+                else:
+                    result = resolve_organization_follow_up(raw)
+                    result["intent"] = "organization"
+                    result["slots"]["organizationQuery"] = raw
+                    result["slots"]["organizationFollowUp"] = True
+                _set_nlp(handler_input, {
+                    **result,
+                    "alexaIntent": "organization",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": alexa_intent == "PlayByOrganizationIntent",
+                    "needsRedirect": alexa_intent != "PlayByOrganizationIntent",
+                    "localResolved": True,
+                })
+                return
+
             if not raw:
                 known = ALEXA_TO_NLP.get(alexa_intent)
                 if known and alexa_intent not in SEARCH_INTENTS:
@@ -128,7 +159,18 @@ class NlpInterceptor(AbstractRequestInterceptor):
                         await asyncio.to_thread(taxonomy_manager.refresh_if_needed)
                     except Exception:
                         logger.exception("Taxonomy refresh failed; using active snapshot")
-                result = resolve_for_alexa(raw)
+                if is_generic_organization_request(raw):
+                    result = {
+                        "intent": "organization",
+                        "confidence": "high",
+                        "slots": {
+                            "organizationQuery": "",
+                            "residualQuery": "",
+                            "genericOrganizationRequest": True,
+                        },
+                    }
+                else:
+                    result = resolve_for_alexa(raw)
             else:
                 result = classify_utterance(raw)
 

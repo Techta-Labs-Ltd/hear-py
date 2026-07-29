@@ -39,6 +39,13 @@ COMMAND_WORD_CORRECTIONS = {
     "leatest": "latest",
     "somethign": "something",
 }
+GENERIC_ORGANIZATION_REQUEST = re.compile(
+    r"^(?:(?:play|find|hear|listen)(?:\s+me)?(?:\s+something)?\s+)?"
+    r"(?:from\s+)?(?:a\s+|an\s+|the\s+)?"
+    r"(?:talking\s+news\s*paper|talking\s+news|news\s*paper)"
+    r"(?:\s+(?:recording|content|audio))?$",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +79,13 @@ def is_reserved_content_noun(value: str) -> bool:
         return False
     match = process.extractOne(token, _FUZZY_CONTENT_NOUNS, scorer=fuzz.ratio)
     return bool(match and match[1] >= 88)
+
+
+def is_generic_organization_request(value: str | None) -> bool:
+    """Return whether speech asks for an unnamed talking-newspaper source."""
+    return bool(GENERIC_ORGANIZATION_REQUEST.fullmatch(
+        normalize_utterance(value),
+    ))
 
 
 def _spans(patterns: tuple[str, ...], text: str) -> list[tuple[int, int]]:

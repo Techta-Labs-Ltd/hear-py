@@ -191,6 +191,93 @@ async def test_resolved_organization_uses_residual_topic_without_reprompting(
 
 
 @pytest.mark.asyncio
+async def test_generic_talking_newspaper_request_prompts_and_persists_context(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.play import PlayByOrganizationHandler
+
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayByOrganizationIntent",
+            "slots": {
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "value": "talking news paper",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_nlp": {
+            "intent": "organization",
+            "slots": {"genericOrganizationRequest": True},
+        },
+    })
+    discover = AsyncMock()
+    monkeypatch.setattr(
+        "src.handlers.intents.play.discover_content_via_search", discover,
+    )
+
+    await PlayByOrganizationHandler().handle(mock_handler_input)
+
+    assert get_store(mock_handler_input)["awaitingOrganizationName"] is True
+    discover.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_talking_newspaper_follow_up_forces_organization_resolution(
+    monkeypatch,
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {
+                "topic": {"name": "topic", "value": "ynt"},
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingOrganizationName": True,
+    }
+    resolved = {
+        "intent": "organization",
+        "confidence": "high",
+        "slots": {
+            "organizationIds": ["org-ytn"],
+            "organizationName": "York Talking News",
+            "residualQuery": "",
+        },
+    }
+    monkeypatch.setattr(
+        "src.nlp.resolve_organization_follow_up",
+        lambda utterance: resolved,
+    )
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "organization"
+    assert nlp["slots"]["organizationIds"] == ["org-ytn"]
+    assert nlp["slots"]["organizationQuery"] == "ynt"
+    assert nlp["slots"]["organizationFollowUp"] is True
+
+
+@pytest.mark.asyncio
 async def test_location_follow_up_yes_executes_community_search(
     monkeypatch,
     mock_handler_input,

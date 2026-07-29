@@ -296,6 +296,14 @@ def TRENDING_INTRO(count, title=None, credit=None) -> str:
 BROWSE_INTRO = lambda: "Here is what is available on Hear right now."
 BROWSE_CATEGORY_INTRO = lambda category: f"Here is what is available in {escape_ssml_lite(category or '')}."
 BROWSE_EXHAUSTED = "That's everything I found."
+ASK_TALKING_NEWSPAPER = "Which talking newspaper would you like?"
+ASK_TALKING_NEWSPAPER_REPROMPT = (
+    "Please say its name, for example York Talking News."
+)
+TALKING_NEWSPAPER_NOT_RECOGNIZED = lambda name: (
+    f"I couldn't match {escape_ssml_lite(name or 'that name')} to a talking "
+    "newspaper. Please say the full name."
+)
 
 CONTENT_ABOUT_PHRASE = lambda title, summary=None, main_topic=None, creator=None: _build_content_about(title, summary, main_topic, creator)
 

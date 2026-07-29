@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from rapidfuzz.distance import DamerauLevenshtein
+
 from src.resolver.engine import resolver
+from src.resolver.normalize import normalize_utterance
 from src.resolver.payload import build_hear_payload
 from src.services.semantic_routing import SEARCH_ROUTE_NAMES, semantic_intent_router
 
@@ -14,8 +17,8 @@ SEARCH_INTENTS = {
 def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "Europe/London") -> dict:
     plan = resolver.resolve(utterance, alexa_user_id, timezone)
     deterministic_intent = (
-        "local" if plan.is_local else
         "category" if plan.category_slugs else
+        "local" if plan.is_local or plan.city else
         "creator" if plan.creator_ids else
         "organization" if plan.organization_ids else ""
     )
@@ -107,3 +110,50 @@ def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "
         "slots": slots,
         "searchPlan": plan,
     }
+
+
+def resolve_organization_follow_up(
+    utterance: str,
+    alexa_user_id: str = "",
+    timezone: str = "Europe/London",
+) -> dict:
+    """Resolve a source name after Alexa explicitly requested one.
+
+    Short acronym typo recovery is deliberately restricted to this prompt
+    context and requires one unique taxonomy-owned organisation.
+    """
+    result = resolve_for_alexa(
+        f"play from {utterance}",
+        alexa_user_id,
+        timezone,
+    )
+    if result["slots"].get("organizationIds"):
+        return result
+
+    phrase = normalize_utterance(utterance)
+    if not phrase or " " in phrase or not 2 <= len(phrase) <= 5:
+        return result
+
+    matches = {}
+    for alias, record in resolver.taxonomy.snapshot.fuzzy.get(
+        "organization", {}
+    ).items():
+        if not 2 <= len(alias) <= 5:
+            continue
+        if DamerauLevenshtein.distance(phrase, alias) > 1:
+            continue
+        identity = record.entity_id or record.canonical
+        matches[identity] = record
+    if len(matches) != 1:
+        return result
+
+    identity, record = next(iter(matches.items()))
+    result["intent"] = "organization"
+    result["confidence"] = "high"
+    result["slots"].update({
+        "organizationIds": [identity],
+        "organizationName": record.canonical,
+        "residualQuery": "",
+        "unresolvedReferences": [],
+    })
+    return result
