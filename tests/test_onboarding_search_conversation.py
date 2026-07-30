@@ -76,7 +76,7 @@ def test_confirmation_never_uses_from_without_source_filter():
     assert resolved_search_request_label({
         "category": "sport",
         "residualQuery": "adeshina",
-    }, "sport from adeshina") == "sport about adeshina"
+    }, "sport from adeshina") == "sport adeshina"
 
 
 def test_publication_is_spoken_as_collection_not_source():

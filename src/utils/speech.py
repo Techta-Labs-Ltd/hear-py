@@ -347,7 +347,7 @@ def resolved_search_request_label(slots: dict, source_name: str | None = None) -
             if str(tag or "").strip()
         ]
         subject = " and ".join([category_label, *tag_labels])
-        subject = f"{subject} about {residual}"
+        subject = f"{subject} {residual}"
     else:
         subject = " and ".join(facets) or "content"
     if slots.get("latest"):

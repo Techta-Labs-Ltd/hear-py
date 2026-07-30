@@ -106,7 +106,7 @@ def test_exact_category_keeps_following_description_as_query():
     })
 
     assert result["confirmationLabel"] == (
-        "the latest sport about briefing update"
+        "the latest sport briefing update"
     )
     assert result["searchPayload"]["query"] == "briefing update"
     assert result["searchPayload"]["filter"]["categorySlugs"] == ["sport"]
@@ -158,7 +158,7 @@ def test_sport_update_in_london_is_not_duplicated_or_called_a_source():
 
     assert result["status"] == "resolved"
     assert result["confirmationLabel"] == (
-        "the latest sport about update in London"
+        "the latest sport update in London"
     )
     assert result["searchPayload"]["query"] == "update"
     assert result["searchPayload"]["filter"] == {
@@ -166,6 +166,47 @@ def test_sport_update_in_london_is_not_duplicated_or_called_a_source():
         "city": "London",
         "countryCode": "gb",
     }
+
+
+@pytest.mark.parametrize(
+    "utterance,label,query,category",
+    (
+        (
+            "what's the latest music from ytn",
+            "the latest music from York Talking News",
+            "",
+            "music",
+        ),
+        (
+            "what's the latest sport update from ytn",
+            "the latest sport update from York Talking News",
+            "update",
+            "sport",
+        ),
+    ),
+)
+def test_constrained_whats_latest_uses_resolved_search_contract(
+    utterance,
+    label,
+    query,
+    category,
+):
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": utterance,
+        "alexaIntent": "WhatsTrendingIntent",
+    })
+
+    assert result["status"] == "resolved"
+    assert result["intent"] == "category"
+    assert result["confirmationLabel"] == label
+    assert result["searchPayload"]["query"] == query
+    assert result["searchPayload"]["filter"] == {
+        "categorySlugs": [category],
+        "organizationIds": ["63915f39-db54-4001-9877-7d2b3fc36639"],
+    }
+    assert result["searchPayload"]["sort"] == "latest"
 
 
 def test_duplicate_creator_ids_resolve_as_one_spoken_creator():
