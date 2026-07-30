@@ -615,8 +615,9 @@ LOCATION_NOT_FOUND = "I couldn't find your location from your account. Would you
 LOCATION_ASK_CITY = "Which town or city are you in?"
 LOCATION_DECLINED = "No problem. What would you like to listen to?"
 LOCATION_CONFIRMED = lambda city: (
-    f"{escape_ssml_lite(city)} is set. "
-    f"Would you like to hear the latest from {escape_ssml_lite(city)}?"
+    f"Thanks. I've set your location to {escape_ssml_lite(city)}. "
+    "You can ask for local news or sport, play from a talking newspaper, "
+    "or say what's trending. What would you like to hear?"
 )
 LOCATION_RETRY = "No problem. Which city should I set instead?"
 ONBOARDING_DISCOVERY = lambda city, count: f"Right, so you\u2019re near {escape_ssml_lite(city)} \u2014 nice one. I\u2019ve got {count} channels from your local community on here. You can ask for what\u2019s on in {escape_ssml_lite(city)}, pick a category like news or sport, or play from a local talking newspaper. What would you like to listen to?"

@@ -401,3 +401,39 @@ async def test_location_follow_up_yes_executes_community_search(
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["slots"]["city"] == "Manchester"
     assert nlp["slots"]["isLocal"] is True
+
+
+@pytest.mark.asyncio
+async def test_location_confirmation_finishes_onboarding_without_forcing_empty_search(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.system import YesIntentHandler
+
+    handler_input = _town_request(mock_handler_input, "swidon")
+    store = get_store(handler_input)
+    store.update({
+        "onboardingStage": "await_location_confirm",
+        "awaitingLocationConfirm": True,
+        "pendingLocationConfirm": {
+            "city": "Swindon",
+            "locality": "Swindon",
+            "countryCode": "GB",
+            "latitude": 51.5558,
+            "longitude": -1.7797,
+        },
+    })
+    handler_input.attributes_manager.request_attributes["_store"] = store
+    sync = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr("src.handlers.intents.system.sync_listener", sync)
+
+    response = await YesIntentHandler()._confirm_location(handler_input, store)
+
+    updated = get_store(handler_input)
+    assert updated["onboardingComplete"] is True
+    assert updated["userCity"] == "Swindon"
+    assert updated["awaitingCommunityPlayback"] is False
+    spoken = handler_input.response_builder.speak.call_args.args[0]
+    assert "I've set your location to Swindon" in spoken
+    assert "What would you like to hear?" in spoken
+    sync.assert_awaited_once()

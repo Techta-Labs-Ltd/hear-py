@@ -261,7 +261,7 @@ class YesIntentHandler(AbstractRequestHandler):
             "localityResolvedAt": _current_timestamp_ms(),
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
-            "awaitingCommunityPlayback": True,
+            "awaitingCommunityPlayback": False,
         })
         confirmed = get_store(handler_input)
         if user_id:
@@ -998,12 +998,6 @@ class UnknownRequestHandler(AbstractRequestHandler):
             .reprompt(WELCOME_REPROMPT) \
             .set_should_end_session(False) \
             .response
-
-
-# ---------------------------------------------------------------------------
-# ErrorHandler (AbstractExceptionHandler)
-# ---------------------------------------------------------------------------
-
 
 class ErrorHandler(AbstractExceptionHandler):
     """Global exception handler — flushes state, logs to Sentry, returns generic error."""
