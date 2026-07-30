@@ -79,6 +79,18 @@ def test_confirmation_never_uses_from_without_source_filter():
     }, "sport from adeshina") == "sport about adeshina"
 
 
+def test_publication_is_spoken_as_collection_not_source():
+    assert resolved_search_request_label({
+        "latest": True,
+        "category": "sport",
+        "publicationIds": ["publication-1"],
+        "publicationName": "London Weekly Review",
+        "city": "London",
+    }, "London Weekly Review") == (
+        "the latest sport within London Weekly Review in London"
+    )
+
+
 @pytest.mark.asyncio
 async def test_unresolved_creator_name_falls_back_to_search_query(
     monkeypatch,

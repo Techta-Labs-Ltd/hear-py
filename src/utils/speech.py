@@ -352,12 +352,28 @@ def resolved_search_request_label(slots: dict, source_name: str | None = None) -
         subject = " and ".join(facets) or "content"
     if slots.get("latest"):
         subject = f"the latest {subject}"
-    has_source_filter = any(
-        slots.get(key)
-        for key in ("creatorIds", "organizationIds", "publicationIds")
-    )
-    source = str(source_name or "").strip() if has_source_filter else ""
-    return f"{subject} from {source}" if source else subject
+    has_creator = bool(slots.get("creatorIds"))
+    has_organization = bool(slots.get("organizationIds"))
+    has_publication = bool(slots.get("publicationIds"))
+    source = str(
+        slots.get("organizationName")
+        or slots.get("creatorName")
+        or (source_name if has_creator or has_organization else "")
+        or ""
+    ).strip()
+    if source:
+        subject = f"{subject} from {source}"
+    publication = str(
+        slots.get("publicationName")
+        or (source_name if has_publication and not source else "")
+        or ""
+    ).strip()
+    if publication:
+        subject = f"{subject} within {publication}"
+    city = str(slots.get("city") or slots.get("placeName") or "").strip()
+    if city:
+        subject = f"{subject} in {city}"
+    return subject
 
 
 CONFIRM_RESOLVED_SEARCH = lambda label: (

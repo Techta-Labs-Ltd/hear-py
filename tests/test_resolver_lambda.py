@@ -124,6 +124,50 @@ def test_duplicated_source_slot_text_is_not_confirmable():
     assert result["unresolvedReferences"]
 
 
+def test_lates_sport_from_london_corrects_and_confirms_every_constraint():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play the lates sport from london",
+    })
+
+    assert result["status"] == "resolved"
+    assert result["normalizedUtterance"] == (
+        "play the latest sport from london"
+    )
+    assert result["corrections"] == [{
+        "original": "lates",
+        "replacement": "latest",
+        "type": "contextual",
+    }]
+    assert result["confirmationLabel"] == "the latest sport in London"
+    assert result["searchPayload"]["filter"] == {
+        "categorySlugs": ["sport"],
+        "city": "London",
+        "countryCode": "gb",
+    }
+    assert result["searchPayload"]["sort"] == "latest"
+
+
+def test_sport_update_in_london_is_not_duplicated_or_called_a_source():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play me the latest sport update in london",
+    })
+
+    assert result["status"] == "resolved"
+    assert result["confirmationLabel"] == (
+        "the latest sport about update in London"
+    )
+    assert result["searchPayload"]["query"] == "update"
+    assert result["searchPayload"]["filter"] == {
+        "categorySlugs": ["sport"],
+        "city": "London",
+        "countryCode": "gb",
+    }
+
+
 def test_duplicate_creator_ids_resolve_as_one_spoken_creator():
     result = handler({
         "version": 1,
