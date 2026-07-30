@@ -113,22 +113,8 @@ jobs:
             --query "StackEvents[?ResourceStatus=='CREATE_FAILED' || ResourceStatus=='UPDATE_FAILED'].[Timestamp,LogicalResourceId,ResourceStatusReason]" \
             --output table
 
-      - name: Deploy image to existing Lambdas when infrastructure is blocked
+      - name: Stop after infrastructure deployment failure
         if: steps.cloudformation.outcome == 'failure'
-        env:
-          IMAGE: ${{ steps.build.outputs.image }}
         run: |
-          aws lambda update-function-code \
-            --function-name "Hear-Python-${STAGE:0:3}" \
-            --image-uri "$IMAGE" \
-            --region "$AWS_REGION"
-          aws lambda wait function-updated-v2 \
-            --function-name "Hear-Python-${STAGE:0:3}" \
-            --region "$AWS_REGION"
-          aws lambda update-function-code \
-            --function-name "Hear-Outbound-Python-${STAGE:0:3}" \
-            --image-uri "$IMAGE" \
-            --region "$AWS_REGION"
-          aws lambda wait function-updated-v2 \
-            --function-name "Hear-Outbound-Python-${STAGE:0:3}" \
-            --region "$AWS_REGION"
+          echo "CloudFormation failed; refusing to deploy application code without its required infrastructure."
+          exit 1
