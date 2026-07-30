@@ -19,7 +19,7 @@ from src.utils.speech import (
     BROWSE_ACTIVE_NOT_NOTIFICATIONS, WELCOME_REPROMPT, ERROR_GENERIC,
 )
 
-from src.webhooks.dispatch import dispatch
+from src.services.outbound_dispatch import dispatch
 
 logger = logging.getLogger(__name__)
 NOTIFICATIONS = {"PERMISSION_SCOPE": NOTIFICATIONS_WRITE}

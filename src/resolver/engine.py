@@ -187,19 +187,23 @@ def _location_qualifier_spans(
     return spans
 
 
-def _category_fuzzy(
+def _facet_fuzzy(
     text: str,
     claimed: list[tuple[int, int]],
     manager: TaxonomyManager,
 ) -> list[ResolvedEntity]:
-    """Resolve one-edit category ASR mistakes across one-to-four-word phrases."""
+    """Resolve one-edit category/tag ASR variants from taxonomy data."""
     proposals: list[ResolvedEntity] = []
     ignored = CONTENT_NOUNS | {
         "about", "and", "around", "by", "for", "from", "in", "near",
         "on", "regarding", "since", "the", "to",
     }
     words = list(re.finditer(r"\b[a-z][a-z-]*\b", text))
-    aliases = manager.snapshot.fuzzy.get("category", {})
+    aliases = [
+        (entity_type, alias, record)
+        for entity_type in ("category", "tag")
+        for alias, record in manager.snapshot.fuzzy.get(entity_type, {}).items()
+    ]
     for start_index, first in enumerate(words):
         for word_count in range(1, min(4, len(words) - start_index) + 1):
             last = words[start_index + word_count - 1]
@@ -217,8 +221,8 @@ def _category_fuzzy(
             ):
                 continue
             normalized_phrase = phrase.replace("-", " ")
-            candidates: dict[str, tuple[str, object, int]] = {}
-            for alias, record in aliases.items():
+            candidates: dict[tuple[str, str], tuple[str, str, object, int]] = {}
+            for entity_type, alias, record in aliases:
                 normalized_alias = alias.replace("-", " ")
                 if len(normalized_alias.split()) != word_count:
                     continue
@@ -228,19 +232,22 @@ def _category_fuzzy(
                 if distance > 1:
                     continue
                 identity = record.entity_id or record.slug or record.canonical
-                current = candidates.get(identity)
-                if current is None or distance < current[2]:
-                    candidates[identity] = (normalized_alias, record, distance)
+                key = (entity_type, identity)
+                current = candidates.get(key)
+                if current is None or distance < current[3]:
+                    candidates[key] = (
+                        entity_type, normalized_alias, record, distance,
+                    )
             if len(candidates) != 1:
                 continue
-            alias, record, distance = next(iter(candidates.values()))
+            entity_type, alias, record, distance = next(iter(candidates.values()))
             similarity = 1.0 - (
                 distance / max(len(normalized_phrase), len(alias))
             )
             if similarity < 0.82:
                 continue
             proposals.append(ResolvedEntity(
-                "category",
+                entity_type,
                 record.entity_id,
                 record.slug or record.canonical,
                 phrase,
@@ -334,13 +341,25 @@ class Resolver:
             if suffix:
                 claimed.append((entity.end, entity.end + suffix.end()))
         claimed.extend(_location_qualifier_spans(normalized, entities))
-        category_fuzzy = (
-            []
-            if any(item.entity_type == "category" for item in entities)
-            else _category_fuzzy(normalized, claimed, self.taxonomy)
+        # Search the full non-command text so a longer one-edit taxonomy
+        # phrase ("community service" -> tag "community-services") can
+        # replace shorter exact facet fragments ("community" + "service").
+        facet_fuzzy = _facet_fuzzy(
+            normalized, protected_claimed, self.taxonomy,
         )
-        entities.extend(category_fuzzy)
-        claimed.extend((item.start, item.end) for item in category_fuzzy)
+        entities = [
+            item
+            for item in entities
+            if not (
+                item.entity_type in {"category", "tag"}
+                and any(
+                    fuzzy.start < item.end and fuzzy.end > item.start
+                    for fuzzy in facet_fuzzy
+                )
+            )
+        ]
+        entities.extend(facet_fuzzy)
+        claimed.extend((item.start, item.end) for item in facet_fuzzy)
         ambiguous_references = self.taxonomy.snapshot.ambiguous(normalized, claimed)
         claimed.extend((item.start, item.end) for item in ambiguous_references)
         unresolved_references = _unresolved_contextual_references(normalized, claimed)

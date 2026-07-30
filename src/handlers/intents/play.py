@@ -22,7 +22,8 @@ from src.utils.speech import (
     TRENDING_INTRO, PLAY_COMMUNITY_INTRO, COMMUNITY_NEEDS_TOWN, REPROMPT_ASK_TOWN,
     NO_FOLLOWED_CREATORS_TO_PLAY,
     ASK_TALKING_NEWSPAPER, ASK_TALKING_NEWSPAPER_REPROMPT,
-    TALKING_NEWSPAPER_NOT_RECOGNIZED, CONFIRM_TALKING_NEWSPAPER,
+    TALKING_NEWSPAPER_NOT_RECOGNIZED, CONFIRM_RESOLVED_SEARCH,
+    resolved_search_request_label,
     unresolved_reference_message,
     ambiguous_reference_message,
 )
@@ -259,16 +260,22 @@ async def discover_content_via_search(
     )
     result["_search_payload"] = dict(payload)
     category_name = str(nlp_slots.get("category") or "").strip()
+    tag_names = [
+        str(value).strip().replace("-", " ")
+        for value in nlp_slots.get("tags") or []
+        if str(value).strip()
+    ]
+    facet_name = category_name.replace("-", " ") or " and ".join(tag_names)
     source_name = str(
         nlp_slots.get("organizationName")
         or nlp_slots.get("creatorName")
         or nlp_slots.get("publicationName")
         or ""
     ).strip()
-    if category_name and source_name:
-        result["_request_label"] = f"{category_name} from {source_name}"
-    elif category_name or source_name:
-        result["_request_label"] = category_name or source_name
+    if facet_name and source_name:
+        result["_request_label"] = f"{facet_name} from {source_name}"
+    elif facet_name or source_name:
+        result["_request_label"] = facet_name or source_name
     elif query:
         result["_request_label"] = query
     if result and isinstance(result.get("results"), list):
@@ -805,7 +812,9 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 "suggestionIndex": 0,
             })
             return handler_input.response_builder \
-                .speak(ssml(CONFIRM_TALKING_NEWSPAPER(org_label))) \
+                .speak(ssml(CONFIRM_RESOLVED_SEARCH(
+                    resolved_search_request_label(nlp_slots, org_label),
+                ))) \
                 .reprompt(ssml("Say yes to play it, or no to try another name.")) \
                 .set_should_end_session(False) \
                 .response

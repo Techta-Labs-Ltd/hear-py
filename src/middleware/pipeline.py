@@ -5,6 +5,7 @@ from src.handlers.intents import ErrorHandler, TownCaptureHandler
 from src.middleware.deadline import LambdaDeadlineInterceptor
 from src.middleware.feedback_gate import FeedbackGateHandler
 from src.middleware.notification import NotificationMiddleware
+from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.onboarding_gate import OnboardingGateHandler
 from src.nlp import NlpInterceptor
 from src.nlp.dispatch_handler import IntentDispatchHandler
@@ -26,6 +27,7 @@ REQUEST_INTERCEPTORS = (
     LoadPersistenceInterceptor,
     NotificationMiddleware,
     NlpInterceptor,
+    ConfirmationMiddleware,
 )
 
 RESPONSE_INTERCEPTORS = (SavePersistenceInterceptor,)

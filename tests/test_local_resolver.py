@@ -122,6 +122,39 @@ def test_misspelled_multi_word_sound_recording_is_fuzzy_category(resolver):
     assert plan.ambiguous_references == []
 
 
+def test_longer_fuzzy_tag_replaces_shorter_exact_facet_fragments():
+    manager = TaxonomyManager()
+    manager._snapshot = TaxonomySnapshot("community-service", [
+        TaxonomyRecord("category", "community", slug="community"),
+        TaxonomyRecord(
+            "category", "emergency-services", slug="emergency-services",
+            aliases=("service",),
+        ),
+        TaxonomyRecord(
+            "tag", "community-services", slug="community-services",
+            aliases=("community services",),
+        ),
+        TaxonomyRecord(
+            "organization", "York Talking News", "org-ytn",
+            aliases=("ytn",),
+        ),
+    ])
+
+    plan = Resolver(manager).resolve(
+        "play the latest community service from ytn",
+    )
+
+    assert plan.category_slugs == []
+    assert plan.tags == ["community-services"]
+    assert plan.organization_ids == ["org-ytn"]
+    assert plan.query == ""
+    assert plan.sort == "latest"
+    assert build_hear_payload(plan)["filter"] == {
+        "tags": ["community-services"],
+        "organizationIds": ["org-ytn"],
+    }
+
+
 @pytest.mark.parametrize(
     ("utterance", "query", "categories", "creators", "organizations", "city",
      "local", "recommended", "sort"),

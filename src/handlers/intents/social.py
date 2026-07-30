@@ -28,7 +28,7 @@ from src.utils.playback_context import (
 from src.handlers.notifications import has_notification_permission, complete_notification_opt_in
 from src.handlers.intents.play import play_from_followed_creators
 from src.utils.search_filters import wants_play_from_followed_creators
-from src.webhooks.dispatch import dispatch
+from src.services.outbound_dispatch import dispatch
 
 logger = logging.getLogger(__name__)
 

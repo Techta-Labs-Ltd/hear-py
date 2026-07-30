@@ -7,7 +7,6 @@ import logging
 import boto3
 
 from config import settings
-from src.resolver.taxonomy import taxonomy_manager
 
 logger = logging.getLogger(__name__)
 
@@ -51,5 +50,4 @@ async def handle_taxonomy_webhook(event: dict) -> dict:
     except Exception:
         logger.exception("Could not persist taxonomy revision")
         return _response(503, {"error": "Revision store unavailable"})
-    taxonomy_manager.mark_stale(revision)
     return _response(202, {"ok": True, "revision": revision})

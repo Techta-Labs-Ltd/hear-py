@@ -60,6 +60,13 @@ class IntentDispatchHandler(AbstractRequestHandler):
         nlp_data = attrs.get("_nlp", {})
         intent = nlp_data.get("intent", "general")
 
+        pending = attrs.pop("_pendingConfirmation", None)
+        handler_input.attributes_manager.request_attributes = attrs
+        if pending:
+            return self._ask_search_confirmation(
+                handler_input, nlp_data, pending,
+            )
+
         if intent == "unclear":
             return self._handle_unclear(handler_input, nlp_data)
 

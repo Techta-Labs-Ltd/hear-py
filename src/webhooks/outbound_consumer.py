@@ -6,7 +6,7 @@ import json
 import httpx
 
 from config import settings
-from src.webhooks.signing import sign_payload
+from src.utils.webhook_signing import sign_payload
 
 
 async def _forward_to_backend(url: str, secret: str, envelope: dict):

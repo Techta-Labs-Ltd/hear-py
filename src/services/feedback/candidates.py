@@ -5,7 +5,7 @@ import time
 from config import settings
 from src.services.storage.persistence import get_store, update_store
 from src.utils.skill_request import get_user_id
-from src.webhooks.dispatch import dispatch
+from src.services.outbound_dispatch import dispatch
 
 
 def _feedback_key(state: dict) -> str | None:

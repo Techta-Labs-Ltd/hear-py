@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from src.middleware.confirmation import ConfirmationMiddleware
+from src.nlp.dispatch_handler import IntentDispatchHandler
+from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.services.storage.persistence import DEFAULT_STORE, get_store
+
+
+def test_full_resolved_search_is_spoken_before_backend_search():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {
+            "System": {
+                "user": {"userId": "test-user"},
+                "device": {"deviceId": "test-device"},
+            },
+        },
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayByOrganizationIntent",
+                "slots": {
+                    "organizationQuery": {
+                        "name": "organizationQuery",
+                        "value": "latest community service from ytn",
+                    },
+                },
+            },
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "intent": "organization",
+            "slots": {
+                "latest": True,
+                "tags": ["community-services"],
+                "organizationIds": ["org-ytn"],
+                "organizationName": "York Talking News",
+                "residualQuery": "",
+            },
+        },
+    }
+    handler_input = HandlerInput(
+        envelope, attributes, None, ResponseBuilder(),
+    )
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert (
+        "Did you want me to play the latest community services "
+        "from York Talking News?"
+    ) in response["outputSpeech"]["ssml"]
+    store = get_store(handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingSearchSlots"]["tags"] == ["community-services"]
+    assert store["pendingSearchSlots"]["organizationIds"] == ["org-ytn"]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.services.storage.persistence import get_store
 from src.utils.playback_event_builder import normalize_playback_event
-from src.webhooks.dispatch import dispatch
+from src.services.outbound_dispatch import dispatch
 
 
 async def send_playback_events(

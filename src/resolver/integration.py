@@ -17,7 +17,7 @@ SEARCH_INTENTS = {
 def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "Europe/London") -> dict:
     plan = resolver.resolve(utterance, alexa_user_id, timezone)
     deterministic_intent = (
-        "category" if plan.category_slugs else
+        "category" if plan.category_slugs or plan.tags else
         "local" if plan.is_local or plan.city else
         "creator" if plan.creator_ids else
         "organization" if plan.organization_ids else ""
@@ -66,6 +66,8 @@ def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "
     }
     if plan.category_slugs:
         slots["category"] = plan.category_slugs[0]
+    if plan.tags:
+        slots["tags"] = list(plan.tags)
     if plan.creator_ids:
         slots["creatorIds"] = plan.creator_ids
         slots["creatorName"] = next(

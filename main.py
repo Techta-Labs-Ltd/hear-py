@@ -8,7 +8,6 @@ from aws_lambda_powertools import Logger, Tracer
 
 from src.application import build_skill
 from src.services.observability import init_sentry, last_resort_skill_response
-from src.webhooks.router import is_http_event, normalize_http_event, route_webhook
 
 logger = Logger()
 tracer = Tracer()
@@ -43,8 +42,6 @@ def _is_alexa_event(event: dict) -> bool:
 def handler(event: dict, context) -> dict:
     try:
         event = event or {}
-        if is_http_event(event):
-            return _run(route_webhook(normalize_http_event(event)))
         if not _is_alexa_event(event):
             request_type = (event.get("request") or {}).get("type")
             logger.info("Non-Alexa event ignored", extra={"requestType": request_type})

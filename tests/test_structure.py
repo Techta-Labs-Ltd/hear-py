@@ -1,4 +1,5 @@
 import base64
+from pathlib import Path
 
 import pytest
 
@@ -54,6 +55,17 @@ def test_normalizes_api_gateway_v1_event():
 
     assert is_http_event(event)
     assert normalize_http_event(event)["path"] == "/webhook/notification"
+
+
+def test_alexa_and_webhook_lambda_entry_points_are_separate():
+    root = Path(__file__).resolve().parents[1]
+    alexa_entry = (root / "main.py").read_text(encoding="utf-8")
+    webhook_entry = (
+        root / "src" / "webhooks" / "lambda_handler.py"
+    ).read_text(encoding="utf-8")
+
+    assert "src.webhooks.router" not in alexa_entry
+    assert "src.resolver" not in webhook_entry
 
 
 def test_stateful_services_have_explicit_owners():

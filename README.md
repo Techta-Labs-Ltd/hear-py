@@ -17,7 +17,7 @@ Alexa skill and webhook service deployed to AWS Lambda as a container image.
 - `src/services/storage/` — user persistence and playback-state repositories
 - `src/services/` root modules — cross-feature workflows and observability
 - `src/utils/` — pure parsing, normalization, formatting, and calculations
-- `src/webhooks/` — HTTP normalization, routing, and webhook endpoints
+- `src/webhooks/` — separately deployed HTTP Lambda and webhook routing
 - `src/runtime/` — async Alexa dispatch runtime
 - `src/resolver/` — in-process taxonomy, temporal, context, fuzzy, and payload resolver
 - `deploy/` and `template.yaml` — deployment policies and infrastructure
@@ -28,9 +28,11 @@ the registries instead of registering them in the Lambda entry point.
 Search utterances are resolved locally in Lambda. The resolver separates exact
 taxonomy facets from residual full-text terms, emits the structured Hear search
 contract, and preserves that contract through browse pagination and queue refill.
-The `/webhook/taxonomy` endpoint records new taxonomy revisions; Lambda workers
-hash-check changed files, cache them under `/tmp`, and atomically swap a valid
-snapshot. Bundled `src/data/locations.json` remains the static location source.
+The container build downloads, hash-checks, and stores the taxonomy under
+`/opt/hear-taxonomy`. Alexa requests load only that immutable local snapshot and
+never fetch the CDN manifest. The separately deployed `/webhook/taxonomy`
+endpoint records new revisions for the next image build. Bundled
+`src/data/locations.json` remains the static location source.
 
 ## Local checks
 

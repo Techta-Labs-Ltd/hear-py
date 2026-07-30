@@ -10,6 +10,7 @@ from src.middleware.pipeline import REQUEST_INTERCEPTORS
 from src.nlp import NlpInterceptor
 from src.runtime import AttrDict
 from src.services.storage.persistence import DEFAULT_STORE, get_store
+from src.utils.speech import resolved_search_request_label
 
 
 def _town_request(mock_handler_input, value: str):
@@ -47,10 +48,19 @@ async def test_misspelled_bare_town_is_owned_by_onboarding(mock_handler_input):
     assert store["awaitingLocationConfirm"] is True
 
 
-def test_generic_search_confirmation_interceptor_is_not_registered():
-    assert all(
-        interceptor.__name__ != "ConfirmationMiddleware"
-        for interceptor in REQUEST_INTERCEPTORS
+def test_search_confirmation_runs_after_local_nlp_resolution():
+    names = [interceptor.__name__ for interceptor in REQUEST_INTERCEPTORS]
+    assert "ConfirmationMiddleware" in names
+    assert names.index("ConfirmationMiddleware") > names.index("NlpInterceptor")
+
+
+def test_resolved_confirmation_repeats_full_search_request():
+    assert resolved_search_request_label({
+        "latest": True,
+        "tags": ["community-services"],
+        "residualQuery": "",
+    }, "York Talking News") == (
+        "the latest community services from York Talking News"
     )
 
 

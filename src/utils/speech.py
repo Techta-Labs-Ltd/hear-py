@@ -308,6 +308,31 @@ CONFIRM_TALKING_NEWSPAPER = lambda name: (
     f"Did you mean {escape_ssml_lite(name or 'that talking newspaper')}?"
 )
 
+
+def resolved_search_request_label(slots: dict, source_name: str | None = None) -> str:
+    """Build the complete spoken interpretation of a resolved search."""
+    facets = []
+    category = str(slots.get("category") or "").strip()
+    if category:
+        facets.append(category.replace("-", " "))
+    for tag in slots.get("tags") or []:
+        spoken = str(tag or "").strip().replace("-", " ")
+        if spoken and spoken not in facets:
+            facets.append(spoken)
+    residual = str(slots.get("residualQuery") or "").strip()
+    if residual:
+        facets.append(residual)
+    subject = " and ".join(facets) or "content"
+    if slots.get("latest"):
+        subject = f"the latest {subject}"
+    source = str(source_name or "").strip()
+    return f"{subject} from {source}" if source else subject
+
+
+CONFIRM_RESOLVED_SEARCH = lambda label: (
+    f"Did you want me to play {escape_ssml_lite(label or 'that')}?"
+)
+
 CONTENT_ABOUT_PHRASE = lambda title, summary=None, main_topic=None, creator=None: _build_content_about(title, summary, main_topic, creator)
 
 

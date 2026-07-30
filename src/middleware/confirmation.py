@@ -3,8 +3,11 @@ from __future__ import annotations
 import re
 
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
+from src.utils.speech import resolved_search_request_label
 
-_DISPATCHABLE: set[str] = {"trending", "local", "creator", "organization", "category", "browse", "following", "general"}
+_CONFIRMABLE: set[str] = {
+    "local", "creator", "organization", "category", "general",
+}
 
 
 def _build_confirmation_speech(nlp: dict | None) -> str | None:
@@ -13,10 +16,25 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
     intent = nlp["intent"]
     slots = nlp.get("slots") or {}
     category = slots.get("category") or slots.get("topic") or None
-    creator = slots.get("creatorQuery") or slots.get("creator") or None
-    org = slots.get("organizationQuery") or slots.get("organization") or None
+    creator = (
+        slots.get("creatorName") or slots.get("creatorQuery")
+        or slots.get("creator") or None
+    )
+    org = (
+        slots.get("organizationName") or slots.get("organizationQuery")
+        or slots.get("organization") or None
+    )
     city = slots.get("city") or slots.get("placeName") or None
     residual = str(slots.get("residualQuery", "")).strip() or ""
+
+    if intent == "organization" and org:
+        return resolved_search_request_label(slots, org)
+    if intent == "creator" and creator:
+        return resolved_search_request_label(slots, creator)
+    if intent in {"category", "general"} and (
+        category or slots.get("tags") or residual
+    ):
+        return resolved_search_request_label(slots)
 
     if intent == "local":
         prefix = "the latest " if slots.get("latest") else ""
@@ -161,7 +179,7 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             return
         if nlp["intent"] == "unclear":
             return
-        if nlp["intent"] not in _DISPATCHABLE:
+        if nlp["intent"] not in _CONFIRMABLE:
             return
 
         confirm_text = _build_confirmation_speech(nlp)
