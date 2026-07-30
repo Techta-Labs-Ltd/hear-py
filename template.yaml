@@ -82,7 +82,7 @@ Resources:
       ImageUri: !Ref ImageUri
       ImageConfig:
         Command: [ "src.resolver.lambda_handler.handler" ]
-      MemorySize: 3072
+      MemorySize: 3008
       Timeout: 8
       AutoPublishAlias: live
       ProvisionedConcurrencyConfig:
