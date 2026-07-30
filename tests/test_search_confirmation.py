@@ -72,3 +72,55 @@ def test_full_resolved_search_is_spoken_before_backend_search():
     pending = store["pendingResolution"]
     assert pending["searchPayload"]["filter"]["tags"] == ["community-services"]
     assert pending["searchPayload"]["filter"]["organizationIds"] == ["org-ytn"]
+
+
+def test_constrained_whats_latest_stops_for_confirmation():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "WhatsTrendingIntent", "slots": {}},
+        },
+    })
+    attributes = AttributesManager(envelope)
+    payload = {
+        "query": "update",
+        "filter": {
+            "categorySlugs": ["sport"],
+            "organizationIds": ["org-ytn"],
+        },
+        "sort": "latest",
+        "page": 0,
+        "limit": 20,
+    }
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "category",
+            "requestId": "resolution-trending-1",
+            "confirmationLabel": (
+                "the latest sport update from York Talking News"
+            ),
+            "searchPayload": payload,
+            "slots": {
+                "latest": True,
+                "category": "sport",
+                "residualQuery": "update",
+                "organizationIds": ["org-ytn"],
+                "organizationName": "York Talking News",
+            },
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "Did you want me to play the latest sport update" in (
+        response["outputSpeech"]["ssml"]
+    )
+    assert get_store(handler_input)["pendingResolution"]["searchPayload"] == payload
