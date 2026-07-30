@@ -22,7 +22,7 @@ RECOMMENDED_PATTERNS = (
 )
 LOCAL_PATTERNS = (
     r"\bnear me\b", r"\bnearby\b", r"\blocal\b", r"\bmy area\b",
-    r"\baround me\b",
+    r"\baround me\b", r"\bmy city\b", r"\bmy town\b",
 )
 CONTENT_NOUNS = {
     "a", "an", "the", "some", "something",

@@ -170,6 +170,7 @@ def test_longer_fuzzy_tag_replaces_shorter_exact_facet_fragments():
         ("play something around lagos about traffic", "traffic", [], [], [], "Lagos", False, False, "relevance"),
         ("play local news", "", ["news"], [], [], None, True, False, "relevance"),
         ("play news near me", "", ["news"], [], [], None, True, False, "relevance"),
+        ("play something from my city", "", [], [], [], None, True, False, "relevance"),
         ("recommend some news", "", ["news"], [], [], None, False, True, "recommended"),
         ("recommend sports from david", "", ["sports"], ["creator-david"], [], None, False, True, "recommended"),
         ("give me something i would like", "", [], [], [], None, False, True, "recommended"),

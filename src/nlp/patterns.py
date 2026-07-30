@@ -14,7 +14,8 @@ LOCAL_HINTS = {
     "what's local", "whats local", "what is local", "local community",
     "community", "around me", "around here", "content near me",
     "local recordings", "nearby recordings", "local audio",
-    "nearby audio", "what's happening near me",
+    "nearby audio", "what's happening near me", "my city", "my town",
+    "from my city", "from my town",
 }
 
 FOLLOWING_HINTS = {

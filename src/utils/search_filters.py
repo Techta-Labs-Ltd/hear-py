@@ -86,17 +86,38 @@ class SearchPayload:
         The search API doesn't use intent/skillIntent and no longer expects the
         user metadata object, so none of those are included.
         """
+        filter_obj = self._filter_object()
+        is_local = bool((self.nlp_filter or {}).get("isLocal"))
+        if is_local:
+            requested_city = str(filter_obj.get("city") or "").strip()
+            saved_city = str(
+                (self.store or {}).get("userCity")
+                or (self.store or {}).get("locality")
+                or ""
+            ).strip()
+            if not requested_city or (
+                saved_city and requested_city.casefold() == saved_city.casefold()
+            ):
+                # Local search uses the registered listener coordinates. An
+                # exact city facet can incorrectly empty that radius search.
+                filter_obj.pop("city", None)
+            else:
+                # A different named city is an exact catalogue request, not a
+                # radius search around the listener's saved coordinates.
+                is_local = False
+
         payload = {
             "alexaUserId": get_user_id(self.handler_input),
             "query": str(self.q) if self.q is not None else "",
-            "isLocal": bool((self.nlp_filter or {}).get("isLocal")),
+            "isLocal": is_local,
             "isRecommended": bool((self.nlp_filter or {}).get("isRecommended")),
             "limit": self.limit,
             "page": self.page,
         }
         if self.sort:
             payload["sort"] = self.sort
-        filter_obj = self._filter_object()
+        elif is_local:
+            payload["sort"] = "nearest"
         if filter_obj:
             payload["filter"] = filter_obj
         for key in ("publishedFrom", "publishedTo"):
@@ -273,7 +294,11 @@ def wants_local_community_content(handler_input, search_q: str = "") -> bool:
     cat = str(category_slot).lower().strip() if category_slot else ""
     if cat == "community":
         return True
-    return bool(re.search(r"\b(near me|nearby|local|community|my area|from my area|around me)\b", q))
+    return bool(re.search(
+        r"\b(near me|nearby|local|community|my area|from my area|"
+        r"my city|from my city|my town|from my town|around me)\b",
+        q,
+    ))
 
 
 def raw_search_phrase(handler_input) -> str:
