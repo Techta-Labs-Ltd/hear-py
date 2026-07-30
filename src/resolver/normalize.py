@@ -33,12 +33,6 @@ CONTENT_NOUNS = {
 _FUZZY_CONTENT_NOUNS = tuple(
     value for value in CONTENT_NOUNS if len(value) >= 5
 )
-COMMAND_WORD_CORRECTIONS = {
-    # Frequent Alexa/typed transcriptions. Keep this deliberately limited to
-    # command vocabulary so genuine titles and names are never rewritten.
-    "leatest": "latest",
-    "somethign": "something",
-}
 GENERIC_ORGANIZATION_REQUEST = re.compile(
     r"^(?:(?:play|find|hear|listen)(?:\s+me)?(?:\s+something)?\s+)?"
     r"(?:from\s+)?(?:a\s+|an\s+|the\s+)?"
@@ -62,11 +56,6 @@ def normalize_utterance(value: str | None) -> str:
     text = re.sub(r"(?<=\w)'s\b", "", text)
     text = re.sub(r"[^a-z0-9'\s-]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    text = re.sub(
-        r"\b(?:" + "|".join(map(re.escape, COMMAND_WORD_CORRECTIONS)) + r")\b",
-        lambda match: COMMAND_WORD_CORRECTIONS[match.group(0)],
-        text,
-    )
     return text
 
 

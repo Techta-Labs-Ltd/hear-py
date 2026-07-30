@@ -35,6 +35,18 @@ def test_full_resolved_search_is_spoken_before_backend_search():
         "_dirty": False,
         "_nlp": {
             "intent": "organization",
+            "requestId": "resolution-1",
+            "confirmationLabel": "the latest community services from York Talking News",
+            "searchPayload": {
+                "query": "",
+                "filter": {
+                    "tags": ["community-services"],
+                    "organizationIds": ["org-ytn"],
+                },
+                "sort": "latest",
+                "page": 0,
+                "limit": 20,
+            },
             "slots": {
                 "latest": True,
                 "tags": ["community-services"],
@@ -57,5 +69,6 @@ def test_full_resolved_search_is_spoken_before_backend_search():
     ) in response["outputSpeech"]["ssml"]
     store = get_store(handler_input)
     assert store["awaitingSearchConfirmation"] is True
-    assert store["pendingSearchSlots"]["tags"] == ["community-services"]
-    assert store["pendingSearchSlots"]["organizationIds"] == ["org-ytn"]
+    pending = store["pendingResolution"]
+    assert pending["searchPayload"]["filter"]["tags"] == ["community-services"]
+    assert pending["searchPayload"]["filter"]["organizationIds"] == ["org-ytn"]

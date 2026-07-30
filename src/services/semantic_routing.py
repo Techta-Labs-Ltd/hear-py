@@ -212,6 +212,10 @@ class SemanticIntentRouter:
             return None
         return SemanticDecision(name, score)
 
+    def warm(self) -> bool:
+        """Initialize the offline backend during resolver Lambda startup."""
+        return self._get_backend() is not None
+
 
 semantic_intent_router = SemanticIntentRouter()
 

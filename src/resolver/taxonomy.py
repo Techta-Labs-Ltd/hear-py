@@ -5,7 +5,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -14,8 +13,10 @@ from typing import Any, Iterable
 from urllib.parse import urljoin
 
 import httpx
+import spacy
 import boto3
 from rapidfuzz import fuzz, process
+from spacy.matcher import PhraseMatcher
 
 from config import settings
 from src.resolver.normalize import CONTENT_NOUNS
@@ -26,18 +27,6 @@ from src.resolver.models import (
 )
 
 logger = logging.getLogger(__name__)
-TOKEN_RE = re.compile(r"[a-z0-9]+")
-
-
-def _phrase_tokens(value: str) -> tuple[str, ...]:
-    return tuple(match.group(0) for match in TOKEN_RE.finditer(str(value).lower()))
-
-
-def _text_tokens(value: str) -> list[tuple[str, int, int]]:
-    return [
-        (match.group(0), match.start(), match.end())
-        for match in TOKEN_RE.finditer(str(value).lower())
-    ]
 
 ENTITY_TYPE_ALIASES = {
     "organisation": "organization",
@@ -69,18 +58,45 @@ class TaxonomyRecord:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+def _consolidate_equivalent_records(
+    records: Iterable[TaxonomyRecord],
+) -> tuple[TaxonomyRecord, ...]:
+    """Merge duplicate IDs representing the same spoken taxonomy entity."""
+    grouped: dict[tuple[str, str], list[TaxonomyRecord]] = {}
+    for record in records:
+        key = (record.entity_type, record.canonical.strip().casefold())
+        grouped.setdefault(key, []).append(record)
+    consolidated = []
+    for equivalents in grouped.values():
+        first = equivalents[0]
+        ids = tuple(dict.fromkeys(
+            record.entity_id for record in equivalents if record.entity_id
+        ))
+        metadata = dict(first.metadata)
+        if len(ids) > 1:
+            metadata["equivalentIds"] = ids
+        consolidated.append(TaxonomyRecord(
+            entity_type=first.entity_type,
+            canonical=first.canonical,
+            entity_id=first.entity_id,
+            slug=first.slug,
+            aliases=tuple(dict.fromkeys(
+                alias for record in equivalents for alias in record.aliases
+            )),
+            metadata=metadata,
+        ))
+    return tuple(consolidated)
+
+
 class TaxonomySnapshot:
     def __init__(self, revision: str, records: Iterable[TaxonomyRecord]):
         self.revision = revision
-        self.records = tuple(records)
+        self.records = _consolidate_equivalent_records(records)
+        self.nlp = spacy.blank("en")
+        self.matcher = PhraseMatcher(self.nlp.vocab, attr="LOWER")
+        self.ambiguous_matcher = PhraseMatcher(self.nlp.vocab, attr="LOWER")
         self.by_rule: dict[str, TaxonomyRecord] = {}
         self.ambiguous_by_rule: dict[str, tuple[TaxonomyRecord, ...]] = {}
-        self._exact_phrases: dict[tuple[str, ...], list[TaxonomyRecord]] = {}
-        self._ambiguous_phrases: dict[
-            tuple[str, ...], tuple[TaxonomyRecord, ...]
-        ] = {}
-        self._exact_lengths: dict[str, set[int]] = {}
-        self._ambiguous_lengths: dict[str, set[int]] = {}
         self.fuzzy: dict[str, dict[str, TaxonomyRecord]] = {}
         alias_owners: dict[tuple[str, str], set[str]] = {}
         alias_records: dict[tuple[str, str], list[TaxonomyRecord]] = {}
@@ -124,10 +140,7 @@ class TaxonomySnapshot:
             records.sort(key=lambda record: record.canonical.casefold())
             rule = f"ambiguous:{index}"
             self.ambiguous_by_rule[rule] = tuple(records)
-            tokens = _phrase_tokens(alias)
-            if tokens:
-                self._ambiguous_phrases[tokens] = tuple(records)
-                self._ambiguous_lengths.setdefault(tokens[0], set()).add(len(tokens))
+            self.ambiguous_matcher.add(rule, [self.nlp.make_doc(alias)])
         for index, record in enumerate(self.records):
             canonical = record.canonical.strip().lower()
             identity = record.entity_id or record.slug or record.canonical
@@ -167,51 +180,25 @@ class TaxonomySnapshot:
                 continue
             rule = f"{record.entity_type}:{index}"
             self.by_rule[rule] = record
+            self.matcher.add(rule, [self.nlp.make_doc(alias) for alias in aliases])
             choices = self.fuzzy.setdefault(record.entity_type, {})
             for alias in aliases:
                 choices[alias] = record
-                tokens = _phrase_tokens(alias)
-                if tokens:
-                    records = self._exact_phrases.setdefault(tokens, [])
-                    if record not in records:
-                        records.append(record)
-                    self._exact_lengths.setdefault(tokens[0], set()).add(len(tokens))
-
-    @staticmethod
-    def _phrase_matches(
-        text: str,
-        phrases: dict[tuple[str, ...], Any],
-        lengths_by_first: dict[str, set[int]],
-    ) -> list[tuple[Any, int, int, str]]:
-        tokens = _text_tokens(text)
-        matches: list[tuple[Any, int, int, str]] = []
-        for index, (first, start, _) in enumerate(tokens):
-            for length in lengths_by_first.get(first, ()):
-                end_index = index + length
-                if end_index > len(tokens):
-                    continue
-                key = tuple(token for token, _, _ in tokens[index:end_index])
-                value = phrases.get(key)
-                if value is None:
-                    continue
-                end = tokens[end_index - 1][2]
-                matches.append((value, start, end, text[start:end]))
-        return matches
 
     def exact(self, text: str, excluded: list[tuple[int, int]] | None = None) -> list[ResolvedEntity]:
         excluded = excluded or []
+        doc = self.nlp.make_doc(text)
         candidates: list[ResolvedEntity] = []
-        for records, start, end, phrase in self._phrase_matches(
-            text, self._exact_phrases, self._exact_lengths,
-        ):
-            if any(start < stop and end > begin for begin, stop in excluded):
+        for match_id, start, end in self.matcher(doc):
+            span = doc[start:end]
+            if any(span.start_char < stop and span.end_char > begin for begin, stop in excluded):
                 continue
-            for record in records:
-                candidates.append(ResolvedEntity(
-                    record.entity_type, record.entity_id,
-                    record.slug or record.canonical, phrase, 1.0, "exact",
-                    start, end, record.metadata,
-                ))
+            record = self.by_rule[self.nlp.vocab.strings[match_id]]
+            candidates.append(ResolvedEntity(
+                record.entity_type, record.entity_id,
+                record.slug or record.canonical, span.text, 1.0, "exact",
+                span.start_char, span.end_char, record.metadata,
+            ))
         type_priority = {
             "organization": 0, "publication": 1, "creator": 2,
             "location": 3, "category": 4, "tag": 5,
@@ -232,14 +219,15 @@ class TaxonomySnapshot:
         excluded: list[tuple[int, int]] | None = None,
     ) -> list[AmbiguousReference]:
         excluded = excluded or []
+        doc = self.nlp.make_doc(text)
         matches = []
-        for records, start, end, phrase in self._phrase_matches(
-            text, self._ambiguous_phrases, self._ambiguous_lengths,
-        ):
-            if any(start < stop and end > begin for begin, stop in excluded):
+        for match_id, start, end in self.ambiguous_matcher(doc):
+            span = doc[start:end]
+            if any(span.start_char < stop and span.end_char > begin for begin, stop in excluded):
                 continue
+            records = self.ambiguous_by_rule[self.nlp.vocab.strings[match_id]]
             matches.append(AmbiguousReference(
-                phrase=phrase,
+                phrase=span.text,
                 candidates=tuple(
                     AmbiguousCandidate(
                         entity_type=record.entity_type,
@@ -248,8 +236,8 @@ class TaxonomySnapshot:
                     )
                     for record in records
                 ),
-                start=start,
-                end=end,
+                start=span.start_char,
+                end=span.end_char,
             ))
         matches.sort(key=lambda item: (-(item.end - item.start), item.start))
         accepted = []

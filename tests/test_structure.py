@@ -68,6 +68,34 @@ def test_alexa_and_webhook_lambda_entry_points_are_separate():
     assert "src.resolver" not in webhook_entry
 
 
+def test_alexa_entry_graph_does_not_import_resolver_implementation():
+    root = Path(__file__).resolve().parents[1]
+    alexa_modules = [
+        root / "main.py",
+        root / "src" / "application.py",
+        root / "src" / "middleware" / "pipeline.py",
+        root / "src" / "nlp" / "__init__.py",
+        root / "src" / "handlers" / "can_fulfill.py",
+        root / "src" / "handlers" / "intents" / "play.py",
+        root / "src" / "handlers" / "intents" / "onboarding.py",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in alexa_modules)
+
+    assert "from src.resolver" not in combined
+    assert "import src.resolver" not in combined
+    assert "import spacy" not in combined
+
+
+def test_resolver_has_a_dedicated_lambda_entry_point():
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "src" / "resolver" / "lambda_handler.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "def handler(" in source
+    assert "semantic_intent_router.warm()" in source
+
+
 def test_stateful_services_have_explicit_owners():
     assert isinstance(HearApiClient(), HearApiClient)
     assert isinstance(ApiRequester(), ApiRequester)

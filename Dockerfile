@@ -4,6 +4,9 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 ENV FASTEMBED_CACHE_PATH=/opt/hear-semantic-models
 ENV LITELLM_LOCAL_MODEL_COST_MAP=True
 RUN python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/opt/hear-semantic-models').embed(['hear semantic router warmup']))"
+RUN python -m pip install --no-cache-dir \
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" \
+    || true
 COPY main.py ${LAMBDA_TASK_ROOT}/
 COPY en-GB.json ${LAMBDA_TASK_ROOT}/
 COPY src/ ${LAMBDA_TASK_ROOT}/src/

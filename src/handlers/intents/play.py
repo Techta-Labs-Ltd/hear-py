@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
@@ -14,6 +15,7 @@ from src.services.storage.persistence import (
     init_queue, recent_exclude_filters,
 )
 from src.services.api import search
+from src.services.resolution_state import build_pending_resolution
 from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
     ssml, escape_ssml_lite, NO_CONTENT_AVAILABLE, SEARCH_UNAVAILABLE,
@@ -43,8 +45,6 @@ from src.utils.search_filters import (
     wants_play_from_followed_creators, wants_local_community_content,
 )
 from src.services.playback.start import start_playback
-from src.resolver.normalize import is_generic_organization_request
-from src.resolver.integration import resolve_organization_follow_up
 
 logger = logging.getLogger(__name__)
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
@@ -175,13 +175,29 @@ async def discover_content_via_search(
     ambiguous = nlp_slots.get("ambiguousReferences") or []
     if ambiguous:
         reference = ambiguous[0]
+        candidates = list(reference.get("candidates") or [])[:3]
+        update_store(handler_input, {
+            "pendingAmbiguity": {
+                "requestId": nlp.get("requestId"),
+                "intent": nlp.get("intent") or "general",
+                "originalUtterance": nlp.get("originalUtterance") or "",
+                "searchPayload": dict(
+                    nlp.get("searchPayload") or nlp_slots.get("searchPlan") or {}
+                ),
+                "slots": dict(nlp_slots),
+                "candidates": candidates,
+                "createdAt": int(time.time()),
+                "expiresAt": int(time.time()) + 300,
+            },
+            "_requiresReliableSave": True,
+        })
         return {
             "results": [],
             "total_hits": 0,
             "failed": False,
             "client_message": ambiguous_reference_message(
                 str(reference.get("phrase") or ""),
-                list(reference.get("candidates") or []),
+                candidates,
             ),
         }
     unresolved = nlp_slots.get("unresolvedReferences") or []
@@ -749,26 +765,6 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
         resolved_org = bool(nlp_slots.get("organizationIds"))
 
-        # Do not trust Alexa's carrier intent or persisted prompt state to be
-        # stable across turns.  Resolve every named talking-newspaper request
-        # through the organization-scoped resolver before deciding whether it
-        # can be confirmed or searched.
-        if (
-            org_query
-            and not resolved_org
-            and not nlp_slots.get("organizationFollowUp")
-        ):
-            resolved = resolve_organization_follow_up(str(org_query))
-            resolved_slots = resolved.get("slots") or {}
-            if resolved_slots.get("organizationIds"):
-                nlp_slots = {
-                    **nlp_slots,
-                    **resolved_slots,
-                    "organizationQuery": str(org_query),
-                    "organizationFollowUp": True,
-                }
-                resolved_org = True
-
         org_label = nlp_slots.get("organizationName") or org_query
 
         if org_query and _is_misrouted_browse_pagination(org_query) \
@@ -777,8 +773,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
 
         generic_request = (
             bool(nlp_slots.get("genericOrganizationRequest"))
-            or is_generic_organization_request(raw_phrase)
-            or is_generic_organization_request(org_query)
+            or bool(nlp_slots.get("unresolvedGenericOrganization"))
         )
         if generic_request or (not org_query and not resolved_org):
             update_store(handler_input, {"awaitingOrganizationName": True})
@@ -801,26 +796,18 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 .response
 
         if resolved_org:
+            label = resolved_search_request_label(nlp_slots, org_label)
             update_store(handler_input, {
                 "awaitingOrganizationName": False,
                 "awaitingSearchConfirmation": True,
-                "pendingOrganizationConfirmation": True,
-                "pendingSearchIntent": "organization",
-                "pendingSearchQuery": "",
-                "pendingSearchSlots": dict(nlp_slots),
-                "pendingSuggestions": [],
-                "suggestionIndex": 0,
+                "pendingResolution": build_pending_resolution(nlp, label),
+                "_requiresReliableSave": True,
             })
             return handler_input.response_builder \
-                .speak(ssml(CONFIRM_RESOLVED_SEARCH(
-                    resolved_search_request_label(nlp_slots, org_label),
-                ))) \
+                .speak(ssml(CONFIRM_RESOLVED_SEARCH(label))) \
                 .reprompt(ssml("Say yes to play it, or no to try another name.")) \
                 .set_should_end_session(False) \
                 .response
-
-        if resolved_org:
-            update_store(handler_input, {"awaitingOrganizationName": False})
 
         search_result = await discover_content_via_search(handler_input, {
             "q": nlp_slots.get("residualQuery", "") if resolved_org else org_query,

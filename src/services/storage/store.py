@@ -97,6 +97,8 @@ DEFAULT_STORE: dict[str, object] = {
     "awaitingCommunityPlayback": False,
     "locationSource": None,
     "awaitingSearchConfirmation": False,
+    "pendingResolution": None,
+    "pendingAmbiguity": None,
     "pendingSuggestions": [],
     "suggestionIndex": 0,
     "excludedSuggestions": [],

@@ -1,23 +1,22 @@
-"""Alexa request interception backed by the local Hear resolver."""
+"""Alexa request interception backed by the dedicated resolver Lambda."""
 from __future__ import annotations
 
-import asyncio
 import logging
+import time
 
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
-from config import settings
-from src.nlp.classifier import classify_utterance
 from src.nlp.patterns import ALEXA_TO_NLP
-from src.resolver.integration import (
-    SEARCH_INTENTS,
-    resolve_for_alexa,
-    resolve_organization_follow_up,
-)
-from src.resolver.normalize import is_generic_organization_request
-from src.resolver.taxonomy import taxonomy_manager
+from src.services.resolver_client import ResolverUnavailable, resolve_utterance
+from src.services.storage.persistence import update_store
+from src.utils.skill_request import get_user_id
 
 logger = logging.getLogger(__name__)
+SEARCH_INTENTS = {
+    "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
+    "BrowseContentIntent", "BrowseByCategoryIntent", "WhatsTrendingIntent",
+    "PlayLocalIntent", "PlayRecommendationIntent",
+}
 
 
 def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | None:
@@ -113,22 +112,51 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 })
                 return
 
-            if raw and store.get("awaitingOrganizationName"):
-                if is_generic_organization_request(raw):
-                    result = {
-                        "intent": "organization",
-                        "confidence": "high",
-                        "slots": {
-                            "organizationQuery": "",
-                            "residualQuery": "",
-                            "genericOrganizationRequest": True,
-                        },
-                    }
+            pending_ambiguity = store.get("pendingAmbiguity")
+            if raw and isinstance(pending_ambiguity, dict):
+                if int(pending_ambiguity.get("expiresAt") or 0) < int(time.time()):
+                    update_store(handler_input, {"pendingAmbiguity": None})
                 else:
-                    result = resolve_organization_follow_up(raw)
-                    result["intent"] = "organization"
-                    result["slots"]["organizationQuery"] = raw
-                    result["slots"]["organizationFollowUp"] = True
+                    result = await resolve_utterance(
+                        "resolve_ambiguity_follow_up",
+                        raw,
+                        alexa_intent=alexa_intent,
+                        alexa_user_id=get_user_id(handler_input) or "",
+                        request_id=str(getattr(request, "request_id", "") or ""),
+                        context=pending_ambiguity,
+                    )
+                    if result.get("status") == "resolved":
+                        update_store(handler_input, {"pendingAmbiguity": None})
+                    elif result.get("status") == "ambiguous":
+                        narrowed = (result.get("ambiguities") or [{}])[0].get("candidates") or []
+                        update_store(handler_input, {
+                            "pendingAmbiguity": {
+                                **pending_ambiguity,
+                                "candidates": narrowed[:3],
+                                "expiresAt": int(time.time()) + 300,
+                            },
+                        })
+                    _set_nlp(handler_input, {
+                        **result,
+                        "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
+                        "alexaRawIntent": alexa_intent,
+                        "nlpMatchesAlexa": False,
+                        "needsRedirect": True,
+                        "localResolved": True,
+                    })
+                    return
+
+            if raw and store.get("awaitingOrganizationName"):
+                result = await resolve_utterance(
+                    "resolve_organization_follow_up",
+                    raw,
+                    alexa_intent=alexa_intent,
+                    alexa_user_id=get_user_id(handler_input) or "",
+                    request_id=str(getattr(request, "request_id", "") or ""),
+                )
+                result["intent"] = "organization"
+                result.setdefault("slots", {})["organizationQuery"] = raw
+                result["slots"]["organizationFollowUp"] = True
                 _set_nlp(handler_input, {
                     **result,
                     "alexaIntent": "organization",
@@ -154,25 +182,22 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 return
 
             if alexa_intent in SEARCH_INTENTS:
-                if settings.HEAR_TAXONOMY_AUTO_REFRESH:
-                    try:
-                        await asyncio.to_thread(taxonomy_manager.refresh_if_needed)
-                    except Exception:
-                        logger.exception("Taxonomy refresh failed; using active snapshot")
-                if is_generic_organization_request(raw):
-                    result = {
-                        "intent": "organization",
-                        "confidence": "high",
-                        "slots": {
-                            "organizationQuery": "",
-                            "residualQuery": "",
-                            "genericOrganizationRequest": True,
-                        },
-                    }
-                else:
-                    result = resolve_for_alexa(raw)
+                result = await resolve_utterance(
+                    "resolve_search",
+                    raw,
+                    alexa_intent=alexa_intent,
+                    alexa_user_id=get_user_id(handler_input) or "",
+                    request_id=str(getattr(request, "request_id", "") or ""),
+                )
             else:
-                result = classify_utterance(raw)
+                known = ALEXA_TO_NLP.get(alexa_intent)
+                if not known:
+                    return
+                result = {
+                    "intent": known,
+                    "confidence": "high",
+                    "slots": {},
+                }
 
             expected = ALEXA_TO_NLP.get(alexa_intent, "general")
             actual = result["intent"]
@@ -184,5 +209,12 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 "needsRedirect": actual != expected,
                 "localResolved": alexa_intent in SEARCH_INTENTS,
             })
+        except ResolverUnavailable:
+            _set_nlp(handler_input, {
+                "intent": "resolver_unavailable",
+                "confidence": "low",
+                "slots": {},
+            })
+            logger.warning("Hear resolver unavailable")
         except Exception:
             logger.warning("Hear: NlpInterceptor error", exc_info=True)

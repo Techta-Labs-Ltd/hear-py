@@ -300,7 +300,7 @@ class TownCaptureHandler(AbstractRequestHandler):
             )
 
         if nlp_town:
-            return stage_town_confirmation(handler_input, store, nlp_town)
+            return await stage_town_confirmation(handler_input, store, nlp_town)
 
         return resume_town_capture(handler_input, store)
 
@@ -323,7 +323,7 @@ class SetLocationHandler(AbstractRequestHandler):
         town = (nlp.get("slots", {}) or {}).get("townName")
 
         if town:
-            return stage_town_confirmation(handler_input, get_store(handler_input), town)
+            return await stage_town_confirmation(handler_input, get_store(handler_input), town)
 
         update_store(handler_input, {
             "onboardingStage": ONBOARDING_ASK_TOWN,

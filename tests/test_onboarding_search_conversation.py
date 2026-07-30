@@ -36,7 +36,14 @@ def _town_request(mock_handler_input, value: str):
 
 
 @pytest.mark.asyncio
-async def test_misspelled_bare_town_is_owned_by_onboarding(mock_handler_input):
+async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_handler_input):
+    monkeypatch.setattr(
+        "src.handlers.intents.onboarding.resolve_utterance",
+        AsyncMock(return_value={
+            "status": "resolved",
+            "resolution": {"match": {"city": "Swindon"}, "candidates": []},
+        }),
+    )
     handler_input = _town_request(mock_handler_input, "swidon")
     await NlpInterceptor().process(handler_input)
 
@@ -59,9 +66,17 @@ def test_resolved_confirmation_repeats_full_search_request():
         "latest": True,
         "tags": ["community-services"],
         "residualQuery": "",
+        "organizationIds": ["org-ytn"],
     }, "York Talking News") == (
         "the latest community services from York Talking News"
     )
+
+
+def test_confirmation_never_uses_from_without_source_filter():
+    assert resolved_search_request_label({
+        "category": "sport",
+        "residualQuery": "adeshina",
+    }, "sport from adeshina") == "sport about adeshina"
 
 
 @pytest.mark.asyncio
@@ -108,7 +123,8 @@ async def test_organization_slot_is_resolved_and_confirmed_before_search(
     monkeypatch,
     mock_handler_input,
 ):
-    from src.handlers.intents.play import PlayByOrganizationHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.nlp.dispatch_handler import IntentDispatchHandler
 
     mock_handler_input.request_envelope = AttrDict(
         mock_handler_input.request_envelope
@@ -130,22 +146,35 @@ async def test_organization_slot_is_resolved_and_confirmed_before_search(
         **DEFAULT_STORE,
         "onboardingComplete": True,
     }
-    discover = AsyncMock(return_value={
-        "failed": False,
-        "results": [],
-        "total_hits": 0,
-    })
-    monkeypatch.setattr(
-        "src.handlers.intents.play.discover_content_via_search", discover,
-    )
+    resolution = {
+        "version": 1,
+        "requestId": "tnf-resolution",
+        "status": "resolved",
+        "intent": "organization",
+        "confidence": "high",
+        "confirmationLabel": "content from Talking News Federation",
+        "searchPayload": {
+            "query": "",
+            "filter": {"organizationIds": ["org-tnf"]},
+            "page": 0,
+            "limit": 20,
+        },
+        "entities": [{"type": "organization", "canonicalValue": "Talking News Federation"}],
+        "slots": {
+            "organizationIds": ["org-tnf"],
+            "organizationName": "Talking News Federation",
+            "residualQuery": "",
+        },
+    }
+    monkeypatch.setattr("src.nlp.resolve_utterance", AsyncMock(return_value=resolution))
 
-    await PlayByOrganizationHandler().handle(mock_handler_input)
+    await NlpInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    IntentDispatchHandler().handle(mock_handler_input)
 
     store = get_store(mock_handler_input)
     assert store["awaitingSearchConfirmation"] is True
-    assert store["pendingOrganizationConfirmation"] is True
-    assert store["pendingSearchSlots"]["organizationIds"]
-    discover.assert_not_awaited()
+    assert store["pendingResolution"]["searchPayload"]["filter"]["organizationIds"] == ["org-tnf"]
 
 
 @pytest.mark.asyncio
@@ -198,8 +227,10 @@ async def test_resolved_organization_requires_confirmation_before_search(
 
     store = get_store(mock_handler_input)
     assert store["awaitingSearchConfirmation"] is True
-    assert store["pendingOrganizationConfirmation"] is True
-    assert store["pendingSearchSlots"]["residualQuery"] == "heatwave"
+    assert store["pendingResolution"]["intent"] == "organization"
+    assert store["pendingResolution"]["confirmationLabel"] == (
+        "heatwave from York Talking News"
+    )
     discover.assert_not_awaited()
 
 
@@ -288,8 +319,8 @@ async def test_talking_newspaper_follow_up_forces_organization_resolution(
         },
     }
     monkeypatch.setattr(
-        "src.nlp.resolve_organization_follow_up",
-        lambda utterance: resolved,
+        "src.nlp.resolve_utterance",
+        AsyncMock(return_value={"version": 1, "status": "resolved", **resolved}),
     )
 
     await NlpInterceptor().process(mock_handler_input)
@@ -349,9 +380,10 @@ async def test_resolved_talking_newspaper_follow_up_requires_confirmation(
     store = get_store(mock_handler_input)
     assert store["awaitingOrganizationName"] is False
     assert store["awaitingSearchConfirmation"] is True
-    assert store["pendingOrganizationConfirmation"] is True
-    assert store["pendingSearchIntent"] == "organization"
-    assert store["pendingSearchSlots"] == resolved_slots
+    assert store["pendingResolution"]["intent"] == "organization"
+    assert store["pendingResolution"]["confirmationLabel"] == (
+        "content from York Talking News"
+    )
     discover.assert_not_awaited()
 
 

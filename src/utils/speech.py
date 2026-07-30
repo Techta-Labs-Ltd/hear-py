@@ -268,6 +268,23 @@ def ambiguous_reference_message(phrase: str, candidates: list[dict]) -> str:
     ))[:3]
     if not names:
         return unresolved_reference_message(phrase, [])
+    raw_names = [str(item.get("name") or "").strip() for item in candidates if item.get("name")][:3]
+    word_lists = [name.split() for name in raw_names]
+    common = []
+    for words in zip(*word_lists):
+        if len({word.casefold() for word in words}) != 1:
+            break
+        common.append(words[0])
+    if common and len(raw_names) > 1:
+        prefix = " ".join(common)
+        suffixes = [name[len(prefix):].strip(" ,-â€“—") for name in raw_names]
+        suffixes = [escape_ssml_lite(value) for value in suffixes if value]
+        if len(suffixes) == len(raw_names):
+            choices = f"{', '.join(suffixes[:-1])}, or {suffixes[-1]}"
+            return (
+                f"I found several matches beginning {escape_ssml_lite(prefix)}. "
+                f"Please say the distinguishing part: {choices}."
+            )
     if len(names) == 1:
         choices = names[0]
     else:
@@ -322,10 +339,24 @@ def resolved_search_request_label(slots: dict, source_name: str | None = None) -
     residual = str(slots.get("residualQuery") or "").strip()
     if residual:
         facets.append(residual)
-    subject = " and ".join(facets) or "content"
+    if category and residual:
+        category_label = category.replace("-", " ")
+        tag_labels = [
+            str(tag).replace("-", " ")
+            for tag in slots.get("tags") or []
+            if str(tag or "").strip()
+        ]
+        subject = " and ".join([category_label, *tag_labels])
+        subject = f"{subject} about {residual}"
+    else:
+        subject = " and ".join(facets) or "content"
     if slots.get("latest"):
         subject = f"the latest {subject}"
-    source = str(source_name or "").strip()
+    has_source_filter = any(
+        slots.get(key)
+        for key in ("creatorIds", "organizationIds", "publicationIds")
+    )
+    source = str(source_name or "").strip() if has_source_filter else ""
     return f"{subject} from {source}" if source else subject
 
 

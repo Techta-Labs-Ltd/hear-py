@@ -64,6 +64,12 @@ def _apply_context_type_constraints(
     """Remove exact entities whose type conflicts with an explicit relation."""
     constrained = list(entities)
     for match in CONTEXT_PATTERN.finditer(text):
+        if any(
+            entity.start <= match.start()
+            and entity.end >= match.end()
+            for entity in entities
+        ):
+            continue
         allowed = set(_context_types(match))
         start, end = match.start(2), match.end(2)
         constrained = [
@@ -76,6 +82,29 @@ def _apply_context_type_constraints(
             )
         ]
     return constrained
+
+
+def _prune_unjoined_categories(
+    text: str,
+    entities: list[ResolvedEntity],
+) -> list[ResolvedEntity]:
+    """Keep multiple category filters only when speech explicitly joins them."""
+    categories = sorted(
+        (item for item in entities if item.entity_type == "category"),
+        key=lambda item: item.start,
+    )
+    if len(categories) < 2:
+        return entities
+    accepted = [categories[0]]
+    for candidate in categories[1:]:
+        previous = accepted[-1]
+        if re.search(r"\b(?:and|or)\b", text[previous.end:candidate.start]):
+            accepted.append(candidate)
+    accepted_ids = {id(item) for item in accepted}
+    return [
+        item for item in entities
+        if item.entity_type != "category" or id(item) in accepted_ids
+    ]
 
 
 def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], manager: TaxonomyManager):
@@ -239,12 +268,32 @@ def _facet_fuzzy(
                         entity_type, normalized_alias, record, distance,
                     )
             if len(candidates) != 1:
-                continue
-            entity_type, alias, record, distance = next(iter(candidates.values()))
+                canonical_values = {
+                    record.slug or record.canonical
+                    for _, _, record, _ in candidates.values()
+                }
+                category_candidates = [
+                    value for value in candidates.values() if value[0] == "category"
+                ]
+                if len(canonical_values) != 1 or len(category_candidates) != 1:
+                    continue
+                entity_type, alias, record, distance = category_candidates[0]
+            else:
+                entity_type, alias, record, distance = next(iter(candidates.values()))
             similarity = 1.0 - (
                 distance / max(len(normalized_phrase), len(alias))
             )
-            if similarity < 0.82:
+            short_asr_context = bool(
+                word_count == 1
+                and len(normalized_phrase) == 3
+                and distance == 1
+                and re.search(
+                    r"\b(?:latest|newest|recent)\s+$",
+                    text[max(0, start - 16):start],
+                )
+                and re.match(r"\s+(?:from|by)\b", text[end:])
+            )
+            if similarity < 0.82 and not short_asr_context:
                 continue
             proposals.append(ResolvedEntity(
                 entity_type,
@@ -308,6 +357,7 @@ class Resolver:
         protected_claimed = list(claimed)
         entities = self.taxonomy.snapshot.exact(normalized, claimed)
         entities = _apply_context_type_constraints(normalized, entities)
+        entities = _prune_unjoined_categories(normalized, entities)
         claimed.extend((item.start, item.end) for item in entities)
         fuzzy = _contextual_fuzzy(normalized, protected_claimed, self.taxonomy)
         # A fuzzy place must not override an exact creator/publisher occupying
@@ -347,6 +397,21 @@ class Resolver:
         facet_fuzzy = _facet_fuzzy(
             normalized, protected_claimed, self.taxonomy,
         )
+        exact_categories = [
+            item for item in entities
+            if item.entity_type == "category" and item.method == "exact"
+        ]
+        facet_fuzzy = [
+            item for item in facet_fuzzy
+            if not (
+                item.entity_type == "category"
+                and exact_categories
+                and not any(
+                    item.start < exact.end and item.end > exact.start
+                    for exact in exact_categories
+                )
+            )
+        ]
         entities = [
             item
             for item in entities
@@ -386,11 +451,14 @@ class Resolver:
             elif entity.entity_type == "tag":
                 _append_unique(plan.tags, entity.canonical_value)
             elif entity.entity_type == "creator":
-                _append_unique(plan.creator_ids, value)
+                for creator_id in entity.metadata.get("equivalentIds") or (value,):
+                    _append_unique(plan.creator_ids, creator_id)
             elif entity.entity_type == "organization":
-                _append_unique(plan.organization_ids, value)
+                for organization_id in entity.metadata.get("equivalentIds") or (value,):
+                    _append_unique(plan.organization_ids, organization_id)
             elif entity.entity_type == "publication":
-                _append_unique(plan.publication_ids, value)
+                for publication_id in entity.metadata.get("equivalentIds") or (value,):
+                    _append_unique(plan.publication_ids, publication_id)
             elif entity.entity_type == "location":
                 plan.city = entity.metadata.get("city") or entity.canonical_value
                 plan.country_code = (

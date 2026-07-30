@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     HEAR_SEMANTIC_ROUTER_INDEX_PATH: str = "/opt/hear-semantic-index.npz"
     HEAR_SEMANTIC_ROUTER_THRESHOLD: float = 0.72
     HEAR_SEMANTIC_ROUTER_THREADS: int = 2
+    HEAR_RESOLVER_FUNCTION_ARN: str = ""
+    HEAR_RESOLVER_TIMEOUT_MS: int = 2500
 
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "development"

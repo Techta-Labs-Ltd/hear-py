@@ -15,3 +15,14 @@ def test_ambiguous_reference_message_does_not_speak_raw_alias():
         "Burnley and District Talking Newspaper?"
     )
     assert "badtn" not in message.lower()
+
+
+def test_common_ambiguity_prefix_requests_distinguishing_words():
+    message = ambiguous_reference_message("sussex", [
+        {"name": "Sussex Coast Talking Magazine"},
+        {"name": "Sussex Coast Talking News"},
+        {"name": "Sussex Coast Talking Newspaper Worthing"},
+    ])
+
+    assert "beginning Sussex Coast Talking" in message
+    assert "Magazine, News, or Newspaper Worthing" in message

@@ -6,13 +6,16 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.resolver.integration import SEARCH_INTENTS, resolve_for_alexa
+from src.services.resolver_client import ResolverUnavailable, resolve_utterance
 
 logger = logging.getLogger(__name__)
 
 CONTENT_INTENTS = {
     "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
     "BrowseContentIntent", "WhatsTrendingIntent",
+}
+SEARCH_INTENTS = CONTENT_INTENTS | {
+    "BrowseByCategoryIntent", "PlayLocalIntent", "PlayRecommendationIntent",
 }
 
 NO_UTTERANCE_OK = {"BrowseContentIntent", "WhatsTrendingIntent"}
@@ -83,8 +86,10 @@ class CanFulfillIntentHandler(AbstractRequestHandler):
             return _reply("YES" if intent_name in NO_UTTERANCE_OK else "MAYBE", intent)
 
         try:
-            result = resolve_for_alexa(utterance)
-        except Exception:
+            result = await resolve_utterance(
+                "resolve_search", utterance, alexa_intent=intent_name,
+            )
+        except ResolverUnavailable:
             result = None
 
         if result and result.get("intent") in STRONG_INTENTS:

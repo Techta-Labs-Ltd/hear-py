@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
-
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
+from src.services.resolution_state import build_pending_resolution
 from src.utils.speech import resolved_search_request_label
 
 _CONFIRMABLE: set[str] = {
@@ -15,6 +15,8 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
         return None
     intent = nlp["intent"]
     slots = nlp.get("slots") or {}
+    if nlp.get("confirmationLabel"):
+        return str(nlp["confirmationLabel"])
     category = slots.get("category") or slots.get("topic") or None
     creator = (
         slots.get("creatorName") or slots.get("creatorQuery")
@@ -154,7 +156,16 @@ def _build_search_params(nlp: dict | None) -> dict | None:
     if slots.get("residualQuery"):
         parts.append(slots.get("residualQuery"))
     query = " ".join(parts) if parts else (slots.get("topic") or "")
-    return {"intent": nlp["intent"], "query": query, "slots": slots}
+    payload = nlp.get("searchPayload") or slots.get("searchPlan") or {}
+    return {
+        "intent": nlp["intent"],
+        "query": query,
+        "slots": slots,
+        "resolution": build_pending_resolution(
+            nlp,
+            nlp.get("confirmationLabel") or "",
+        ),
+    }
 
 
 class ConfirmationMiddleware(AbstractRequestInterceptor):
@@ -177,6 +188,8 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
         nlp = attrs.get("_nlp")
         if not nlp or not nlp.get("intent"):
             return
+        if nlp.get("status") and nlp.get("status") != "resolved":
+            return
         if nlp["intent"] == "unclear":
             return
         if nlp["intent"] not in _CONFIRMABLE:
@@ -188,6 +201,8 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
 
         search_params = _build_search_params(nlp) or {}
         search_params["confirmText"] = confirm_text
+        if search_params.get("resolution"):
+            search_params["resolution"]["confirmationLabel"] = confirm_text
 
         raw = _extract_raw_utterance_from_attrs(handler_input)
         alternatives = nlp.get("alternatives") or []

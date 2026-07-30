@@ -40,7 +40,7 @@ Globals:
         NODE_ENV: !Ref Stage
         SENTRY_ENVIRONMENT: !Ref Stage
         # --- non-secret config ---
-        HEAR_API_URL: https://alexa.hear.surf/api/v1
+        HEAR_API_URL: https://alexa.hear.media/api/v1
         HEAR_API_PATH_PREFIX: alexa
         HEAR_CLIENT_VERSION: alexa-skill
         HEAR_DDB_REGION: eu-west-1
@@ -63,7 +63,7 @@ Globals:
         HEAR_SEMANTIC_ROUTER_INDEX_PATH: /opt/hear-semantic-index.npz
         HEAR_SEMANTIC_ROUTER_THRESHOLD: "0.72"
         HEAR_SEMANTIC_ROUTER_THREADS: "2"
-        WEBHOOK_OUTBOUND_URL: https://alexa.hear.surf/api/v1/webhooks/event
+        WEBHOOK_OUTBOUND_URL: https://alexa.hear.media/api/v1/webhooks/event
         SQS_OUT_QUEUE_URL: !Ref OutboundQueue
         # --- secrets (from SSM via CI) ---
         HEAR_API_KEY: !Ref HearApiKey
@@ -74,6 +74,26 @@ Globals:
         POWERTOOLS_LOG_LEVEL: INFO
 
 Resources:
+  ResolverFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Resolver-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: [ "src.resolver.lambda_handler.handler" ]
+      MemorySize: 3072
+      Timeout: 8
+      AutoPublishAlias: live
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: 1
+
+  ResolverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/Hear-Resolver-Python-${ShortStage}
+      RetentionInDays: 14
+
   HearSkillFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -85,12 +105,20 @@ Resources:
       # Alexa's first-turn latency; the outbound worker remains at the global
       # one-GB default.
       MemorySize: 2048
+      Environment:
+        Variables:
+          HEAR_RESOLVER_FUNCTION_ARN: !Sub "${ResolverFunction.Arn}:live"
+          HEAR_RESOLVER_TIMEOUT_MS: "2500"
       Policies:
         - DynamoDBCrudPolicy: { TableName: hear-service }
         - DynamoDBCrudPolicy: { TableName: hear_settings }
         - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
         - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
         - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub "${ResolverFunction.Arn}:live"
 
   WebhookFunction:
     Type: AWS::Serverless::Function
@@ -200,6 +228,9 @@ Outputs:
   SkillFunctionArn:
     Description: Set this as the skill's Default Endpoint in the Alexa console
     Value: !GetAtt HearSkillFunction.Arn
+  ResolverFunctionArn:
+    Description: Provisioned resolver alias invoked by the Alexa Lambda
+    Value: !Sub "${ResolverFunction.Arn}:live"
   WebhookEndpoint:
     Description: Inbound webhook base URL
     Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook

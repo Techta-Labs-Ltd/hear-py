@@ -332,26 +332,80 @@ class YesIntentHandler(AbstractRequestHandler):
             .response
 
     async def _handle_search_confirmation(self, handler_input, store, session_attrs):
-        """Execute a pending search that was awaiting user confirmation."""
-        intent = store.get("pendingSearchIntent") or session_attrs.get("pendingSearchIntent")
-        query = store.get("pendingSearchQuery") or session_attrs.get("pendingSearchQuery")
-        suggestion_idx = store.get("suggestionIndex") or session_attrs.get("suggestionIndex", 0)
-        suggestions = (
-            store.get("pendingSuggestions") if store.get("pendingSuggestions") and store["pendingSuggestions"]
-            else session_attrs.get("pendingSuggestions", [])
-        )
-        pending_slots = (
-            store.get("pendingSearchSlots") if store.get("pendingSearchSlots") and store["pendingSearchSlots"]
-            else session_attrs.get("pendingSearchSlots")
-        )
+        """Execute exactly the immutable payload the user confirmed."""
+        resolution = store.get("pendingResolution") or session_attrs.get("pendingResolution")
+        if isinstance(resolution, dict) and resolution.get("searchPayload"):
+            if int(resolution.get("expiresAt") or 0) < int(time.time()):
+                update_store(handler_input, {
+                    "awaitingSearchConfirmation": False,
+                    "pendingResolution": None,
+                })
+                return handler_input.response_builder \
+                    .speak(ssml("That request has expired. Please say what you'd like to hear again.")) \
+                    .reprompt(WELCOME_REPROMPT) \
+                    .set_should_end_session(False) \
+                    .response
 
-        using_alternative = False
-        if suggestion_idx > 0 and suggestion_idx < len(suggestions):
-            alt = suggestions[suggestion_idx]
-            intent = alt.get("intent") or intent
-            query = alt.get("query") or query
-            using_alternative = True
+            payload = dict(resolution["searchPayload"])
+            label = str(resolution.get("confirmationLabel") or "that request")
+            update_store(handler_input, {
+                "awaitingSearchConfirmation": False,
+                "pendingResolution": None,
+                "lastExecutedResolutionId": resolution.get("requestId"),
+                "_requiresReliableSave": True,
+            })
+            handler_input.attributes_manager.set_session_attributes({})
+            logger.info(
+                "Hear: confirmed resolver search START id=%s label=%s",
+                resolution.get("requestId"), label,
+            )
+            search_result = await search(payload)
+            search_result["_search_payload"] = payload
+            if search_result.get("results"):
+                response = await auto_play_first_from_search(handler_input, search_result, {
+                    "discoveryIntent": resolution.get("intent") or "search",
+                    "q": payload.get("query") or "",
+                })
+                if response:
+                    return response
 
+            if search_result.get("failed"):
+                return handler_input.response_builder \
+                    .speak(ssml(
+                        "I couldn't reach the Hear catalogue to search for "
+                        f"{escape_ssml_lite(label)}. Please try again shortly."
+                    )) \
+                    .reprompt(WELCOME_REPROMPT) \
+                    .set_should_end_session(False) \
+                    .response
+
+            relaxed = self._source_only_relaxation(resolution)
+            if relaxed:
+                update_store(handler_input, {
+                    "awaitingSearchConfirmation": True,
+                    "pendingResolution": relaxed,
+                    "_requiresReliableSave": True,
+                })
+                source = relaxed["confirmationLabel"].removeprefix("the latest recordings from ")
+                failed_label = label.removeprefix("the latest ")
+                speech = (
+                    f"I couldn't find any {escape_ssml_lite(failed_label)}. "
+                    f"Would you like to hear the latest recordings from {escape_ssml_lite(source)} instead?"
+                )
+                return handler_input.response_builder \
+                    .speak(ssml(speech)) \
+                    .reprompt(ssml("Say yes to hear their latest recordings, or no to try something else.")) \
+                    .set_should_end_session(False) \
+                    .response
+
+            return handler_input.response_builder \
+                .speak(ssml(f"I couldn't find anything for {escape_ssml_lite(label)} right now. What would you like to try instead?")) \
+                .reprompt(WELCOME_REPROMPT) \
+                .set_should_end_session(False) \
+                .response
+
+        # Never reconstruct a search from legacy intent/slot fragments. They
+        # cannot prove which filters the user confirmed.
         update_store(handler_input, {
             "awaitingSearchConfirmation": False,
             "pendingOrganizationConfirmation": False,
@@ -363,48 +417,47 @@ class YesIntentHandler(AbstractRequestHandler):
             "excludedSuggestions": [],
         })
         handler_input.attributes_manager.set_session_attributes({})
-
-        if intent:
-            effective_query = query or ""
-            if not using_alternative and pending_slots and isinstance(pending_slots, dict):
-                r_attrs = handler_input.attributes_manager.get_request_attributes()
-                r_attrs["_nlp"] = {
-                    "intent": intent,
-                    "alexaIntent": intent,
-                    "slots": pending_slots,
-                    "confidence": "high",
-                    "nlpMatchesAlexa": True,
-                    "needsRedirect": False,
-                }
-                handler_input.attributes_manager.set_request_attributes(r_attrs)
-                effective_query = ""
-
-            logger.info("Hear: YesIntentHandler search START intent=%s q=%s", intent, effective_query)
-
-            search_result = await discover_content_via_search(handler_input, {
-                "q": effective_query, "intent": intent,
-            })
-
-            logger.info("Hear: YesIntentHandler search DONE hits=%s",
-                         len(search_result.get("results", [])))
-
-            if search_result and search_result.get("results"):
-                response = await auto_play_first_from_search(handler_input, search_result, {
-                    "discoveryIntent": "PlayContentIntent",
-                    "q": effective_query,
-                })
-                if response:
-                    return response
-
-            return handler_input.response_builder \
-                .speak(ssml(f"I couldn't find any {effective_query or intent} tracks. Try a different category or name.")) \
-                .response
-
         return handler_input.response_builder \
-            .speak(WELCOME_REPROMPT) \
-            .reprompt(WELCOME_REPROMPT) \
+            .speak(ssml("That earlier request has expired. Please tell me what you'd like to hear again.")) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
             .set_should_end_session(False) \
             .response
+
+    @staticmethod
+    def _source_only_relaxation(resolution: dict) -> dict | None:
+        payload = dict(resolution.get("searchPayload") or {})
+        filters = dict(payload.get("filter") or {})
+        source_keys = ("organizationIds", "creatorIds", "publicationIds")
+        if not any(filters.get(key) for key in source_keys):
+            return None
+        constrained = bool(
+            filters.get("categorySlugs")
+            or filters.get("tags")
+            or str(payload.get("query") or "").strip()
+        )
+        if not constrained:
+            return None
+        for key in ("categorySlugs", "tags"):
+            filters.pop(key, None)
+        payload["filter"] = filters
+        payload["query"] = ""
+        payload["sort"] = "latest"
+        source_name = next((
+            str(entity.get("canonicalValue") or "")
+            for entity in resolution.get("resolvedEntities") or []
+            if entity.get("type") in {"organization", "creator", "publication"}
+            and entity.get("canonicalValue")
+        ), "that source")
+        now = int(time.time())
+        return {
+            **resolution,
+            "requestId": f"{resolution.get('requestId')}:source-only",
+            "confirmationLabel": f"the latest recordings from {source_name}",
+            "searchPayload": payload,
+            "createdAt": now,
+            "expiresAt": now + 300,
+            "alternatives": [],
+        }
 
     async def _handle_list_mode_yes(self, handler_input, store):
         """Play the current item in list mode."""
@@ -726,6 +779,17 @@ class NoIntentHandler(AbstractRequestHandler):
 
     def _handle_search_no(self, handler_input, store, session_attrs):
         """Cycle through search suggestions or give up."""
+        if store.get("pendingResolution") or session_attrs.get("pendingResolution"):
+            update_store(handler_input, {
+                "awaitingSearchConfirmation": False,
+                "pendingResolution": None,
+                "_requiresReliableSave": True,
+            })
+            return handler_input.response_builder \
+                .speak(ssml("No problem. What would you like to listen to instead?")) \
+                .reprompt(ssml(WELCOME_REPROMPT)) \
+                .set_should_end_session(False) \
+                .response
         if store.get("pendingOrganizationConfirmation"):
             update_store(handler_input, {
                 "awaitingSearchConfirmation": False,

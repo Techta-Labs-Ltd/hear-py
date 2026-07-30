@@ -9,7 +9,7 @@ from ask_sdk_core.handler_input import HandlerInput
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
 from src.services.storage.persistence import get_store, update_store
-from src.resolver.location import resolve_location_phrase
+from src.services.resolver_client import ResolverUnavailable, resolve_utterance
 from src.utils.speech import (
     ssml, ONBOARDING_ASK_PERMISSION, ONBOARDING_CONSENT_CARD_SENT,
     ONBOARDING_LOCATION_DENIED, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
@@ -112,9 +112,21 @@ def resume_town_capture(handler_input: HandlerInput, store: Dict[str, Any]):
         .response
 
 
-def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, Any], phrase: str):
+async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, Any], phrase: str):
     """Resolve a manual town in location scope and ask for confirmation."""
-    resolution = resolve_location_phrase(phrase)
+    try:
+        response = await resolve_utterance(
+            "resolve_location",
+            phrase,
+            alexa_intent="TownCaptureIntent",
+        )
+        resolution = response.get("resolution") or {}
+    except ResolverUnavailable:
+        return handler_input.response_builder \
+            .speak(ssml("I'm having trouble checking that town right now. Please say it again.")) \
+            .reprompt(ssml(REPROMPT_ASK_TOWN)) \
+            .set_should_end_session(False) \
+            .response
     match = resolution.get("match")
     candidates = resolution.get("candidates") or []
     if not match:
@@ -152,10 +164,21 @@ async def finalize_town_captured(
     Kept as a small compatibility entry point for callers that already have an
     explicit town confirmation. New voice flows stage and confirm first.
     """
-    resolution = resolve_location_phrase(phrase)
+    try:
+        response = await resolve_utterance(
+            "resolve_location",
+            phrase,
+            alexa_intent="TownCaptureIntent",
+        )
+        resolution = response.get("resolution") or {}
+    except ResolverUnavailable:
+        return handler_input.response_builder \
+            .speak(ssml("I'm having trouble checking that town right now. Please try again.")) \
+            .set_should_end_session(False) \
+            .response
     match = resolution.get("match")
     if not match:
-        return stage_town_confirmation(handler_input, store, phrase)
+        return await stage_town_confirmation(handler_input, store, phrase)
     update_store(handler_input, {
         "userCity": match["city"],
         "locality": match.get("locality") or match["city"],

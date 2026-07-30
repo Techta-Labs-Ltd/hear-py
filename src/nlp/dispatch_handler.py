@@ -19,6 +19,7 @@ DISPATCHABLE_INTENTS: list[str] = [
     "browse", "show_more", "following", "general",
     "feedback_enjoyed", "feedback_not_enjoyed", "feedback_somewhat", "feedback_skip",
     "town_capture", "location_set", "unclear",
+    "resolver_unavailable",
 ]
 
 # Query-driven intents that are confirmed with the user before any search runs.
@@ -69,6 +70,12 @@ class IntentDispatchHandler(AbstractRequestHandler):
 
         if intent == "unclear":
             return self._handle_unclear(handler_input, nlp_data)
+        if intent == "resolver_unavailable":
+            return handler_input.response_builder \
+                .speak(ssml("I'm having trouble understanding that request right now. Please try again.")) \
+                .reprompt(ssml("Please say your request again.")) \
+                .set_should_end_session(False) \
+                .get_response()
 
         dispatch_map = {
             "trending": WhatsTrendingHandler,
@@ -108,11 +115,8 @@ class IntentDispatchHandler(AbstractRequestHandler):
         confirm_text = pending.get("confirmText")
         update_store(handler_input, {
             "awaitingSearchConfirmation": True,
-            "pendingSearchIntent": pending.get("intent") or nlp_data.get("intent"),
-            "pendingSearchQuery": pending.get("query") or "",
-            "pendingSearchSlots": pending.get("slots") or nlp_data.get("slots") or {},
-            "pendingSuggestions": pending.get("alternatives") or [],
-            "suggestionIndex": 0,
+            "pendingResolution": pending.get("resolution") or {},
+            "_requiresReliableSave": True,
         })
         logger.info("Hear: search confirmation asked intent=%s text=%s",
                     pending.get("intent"), confirm_text)
