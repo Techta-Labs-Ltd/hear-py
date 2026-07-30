@@ -9,6 +9,7 @@ from rapidfuzz import fuzz, process
 
 
 COMMAND_PATTERNS = (
+    r"\bwhat\b(?=\s+(?:the\s+)?(?:latest|newest|recent)\b)",
     r"\bcan you\b", r"\bcould you\b", r"\bplease\b", r"\bfind me\b", r"\bfind\b",
     r"\bplay me\b", r"\bplay\b", r"\bgive me\b", r"\bgive us\b",
     r"\blet me hear\b", r"\bi want to hear\b", r"\bi would like to hear\b",

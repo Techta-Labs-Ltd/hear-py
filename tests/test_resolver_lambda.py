@@ -209,6 +209,16 @@ def test_constrained_whats_latest_uses_resolved_search_contract(
     assert result["searchPayload"]["sort"] == "latest"
 
 
+def test_what_in_a_real_topic_is_not_removed_as_command_language():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play what matters from ytn",
+    })
+
+    assert result["searchPayload"]["query"] == "what matters"
+
+
 def test_duplicate_creator_ids_resolve_as_one_spoken_creator():
     result = handler({
         "version": 1,
