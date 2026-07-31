@@ -192,6 +192,12 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 return
 
             if not raw:
+                # Alexa does not expose the rejected utterance on a fallback
+                # request. Do not invent a generic search: preserve the
+                # request so the state-aware FallbackHandler can repeat the
+                # active clarification or give normal fallback guidance.
+                if alexa_intent == "AMAZON.FallbackIntent":
+                    return
                 known = ALEXA_TO_NLP.get(alexa_intent)
                 if known and alexa_intent not in SEARCH_INTENTS:
                     _set_nlp(handler_input, {

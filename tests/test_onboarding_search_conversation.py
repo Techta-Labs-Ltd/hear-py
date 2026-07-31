@@ -391,6 +391,36 @@ def test_fallback_during_ambiguity_repeats_candidates_not_welcome(
 
 
 @pytest.mark.asyncio
+async def test_fallback_without_raw_speech_is_not_reclassified_as_search(
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "pendingAmbiguity": {
+            "slots": {"ambiguousReferences": [{
+                "phrase": "wtn",
+                "candidates": [],
+            }]},
+            "candidates": [{
+                "type": "organization",
+                "id": "org-walsall",
+                "name": "Walsall Talking Newspaper",
+            }],
+        },
+    }
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    assert "_nlp" not in mock_handler_input.attributes_manager.request_attributes
+
+
+@pytest.mark.asyncio
 async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
     monkeypatch,
     mock_handler_input,
