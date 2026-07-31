@@ -6,7 +6,7 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 
 | Status | Count |
 | --- | --- |
-| OK | 51 |
+| OK | 52 |
 | GAP | 0 |
 | FAIL | 3 |
 
@@ -118,6 +118,11 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 | 1 | LaunchRequest | - | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
 | 2 | AMAZON.NoIntent | ask_permission | ask_town | OK | No worries. Which town or city are you in? |  |
 | 3 | LaunchRequest | ask_town | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
+### S14 granted permission no city in account
+
+| Step | Intent | Stage in | Stage out | Status | Speech | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | LaunchRequest | - | ask_town | OK | I couldn't find your location from your account. Would you like to tell me which city you're in so I can find content from your area? |  |
 
 ## GAPS
 

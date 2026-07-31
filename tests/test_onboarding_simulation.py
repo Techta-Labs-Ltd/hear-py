@@ -577,6 +577,17 @@ def scenario_relaunch_mid_onboarding_resets_stage():
             assert "where are you based" not in record["speech"].lower()
 
 
+def scenario_granted_permission_no_city_in_account():
+    steps = [
+        {"step": 1, "event": make_event("LaunchRequest", scopes=PERMISSION_GRANTED),
+         "expect_speech": ["couldn't find your location from your account"],
+         "expect_stage": "ask_town"},
+    ]
+    with patch("src.handlers.intents.onboarding.detect_device_location", AsyncMock(return_value=None)):
+        for record in run_scenario("S14 granted permission no city in account", steps):
+            assert "no worries" not in record["speech"].lower()
+
+
 @pytest.fixture(autouse=True)
 def _reset_records():
     RECORDS.clear()
@@ -619,6 +630,7 @@ def simulation():
         scenario_content_or_skip_classified_at_town_capture()
         scenario_returning_user_dangling_stage_is_redirected()
         scenario_relaunch_mid_onboarding_resets_stage()
+        scenario_granted_permission_no_city_in_account()
     return list(RECORDS)
 
 

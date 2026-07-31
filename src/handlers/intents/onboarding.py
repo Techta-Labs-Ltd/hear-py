@@ -20,7 +20,7 @@ from src.utils.speech import (
     WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY, WELCOME_RETURN_GENERIC,
     ONBOARDING_TOWN_CONFIRM, ONBOARDING_FETCHING_LOCATION,
     ONBOARDING_DETECTED_TOWN, CONSENT_CARD_THANKS, LOCATION_DECLINED,
-    ONBOARDING_DEFER_CONTENT,
+    ONBOARDING_DEFER_CONTENT, LOCATION_NOT_FOUND,
 )
 from src.services.semantic_routing import (
     ONBOARDING_ROUTE_NAMES, ONBOARDING_ROUTE_SKIP, SEARCH_ROUTE_NAMES,
@@ -258,11 +258,24 @@ def finalize_town_skipped(handler_input: HandlerInput, store: Dict[str, Any]):
         .response
 
 
+def handle_location_not_found(handler_input: HandlerInput, store: Dict[str, Any]):
+    """Handle device location lookup failure when permissions are granted."""
+    update_store(handler_input, {
+        "onboardingStage": ONBOARDING_ASK_TOWN,
+        "onboardingRetries": 0,
+        "_requiresReliableSave": True,
+    })
+    return handler_input.response_builder \
+        .speak(ssml(LOCATION_NOT_FOUND)) \
+        .set_should_end_session(False) \
+        .response
+
+
 async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dict[str, Any]):
     """Try Amazon-API city detection; fall back to manual town capture."""
     match = await detect_device_location(handler_input)
     if not match:
-        return handle_permission_no(handler_input, store)
+        return handle_location_not_found(handler_input, store)
     update_store(handler_input, {
         "pendingLocationConfirm": match,
         "awaitingLocationConfirm": True,

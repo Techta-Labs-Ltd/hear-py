@@ -203,6 +203,13 @@ def audit(root: Path) -> tuple[list[str], list[str]]:
         for name in ("DEVICE_ADDRESS", "GEOLOCATION_READ"):
             if name not in scopes:
                 hard.append(f"src/handlers/intents/onboarding.py: {name} must come from config.permission_scopes")
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "auto_detect_location_or_manual":
+                calls = [c.func.id for c in ast.walk(node) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)]
+                if "handle_permission_no" in calls:
+                    hard.append("src/handlers/intents/onboarding.py: auto_detect_location_or_manual must not call handle_permission_no on failed detection")
+                if "handle_location_not_found" not in calls:
+                    hard.append("src/handlers/intents/onboarding.py: auto_detect_location_or_manual must call handle_location_not_found on failed detection")
 
     for rel, expected in (("src/handlers/intents/onboarding.py", 3),
                           ("src/handlers/intents/launch.py", 3)):
