@@ -52,8 +52,9 @@ from src.handlers.intents.onboarding import (
 from src.services.tasks import run_background
 from src.services.playback.session import has_unfinished_playback, read_playback_session
 from src.services.feedback import feedback_service
-from src.services.dialog_state import activate_dialog
-from src.services.dialog_state import get_active_dialog
+from src.services.dialog_state import (
+    activate_dialog, clear_active_dialog, get_active_dialog,
+)
 
 logger = logging.getLogger(__name__)
 MAX_TOWN_ATTEMPTS = 3
@@ -83,6 +84,16 @@ def _listener_data_is_cached(store: Dict[str, Any]) -> bool:
 async def _handle_launch_request_body(handler_input: HandlerInput):
     """Core launch request logic: resolves state and routes to appropriate flow."""
     store = get_store(handler_input)
+    # A launch response replaces any unanswered discovery clarification. The
+    # next explicit play request must be resolved as a new request, not as an
+    # answer to an ambiguity left by an earlier session.
+    if store.get("pendingAmbiguity") or store.get("awaitingOrganizationName"):
+        clear_active_dialog(handler_input, "ambiguity")
+        update_store(handler_input, {
+            "pendingAmbiguity": None,
+            "awaitingOrganizationName": False,
+        })
+        store = get_store(handler_input)
     user_id = _get_user_id(handler_input)
     user_name = store.get("userName") or store.get("givenName") or store.get("fullName")
 

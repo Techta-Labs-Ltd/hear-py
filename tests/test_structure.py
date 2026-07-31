@@ -96,6 +96,22 @@ def test_resolver_has_a_dedicated_lambda_entry_point():
     assert "semantic_intent_router.warm()" not in source
 
 
+def test_runtime_and_container_do_not_install_or_import_spacy():
+    root = Path(__file__).resolve().parents[1]
+    runtime_sources = [
+        root / "requirements.txt",
+        root / "Dockerfile",
+        root / ".github" / "workflows" / "deploy.yml",
+        *sorted((root / "src").rglob("*.py")),
+    ]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8").lower() for path in runtime_sources
+    )
+
+    assert "spacy" not in combined
+    assert "en_core_web" not in combined
+
+
 def test_stateful_services_have_explicit_owners():
     assert isinstance(HearApiClient(), HearApiClient)
     assert isinstance(ApiRequester(), ApiRequester)

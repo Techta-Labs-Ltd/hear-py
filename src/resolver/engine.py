@@ -94,6 +94,24 @@ def _prune_unjoined_categories(
     ]
 
 
+def _prune_facets_overlapping_named_entities(
+    entities: list[ResolvedEntity],
+) -> list[ResolvedEntity]:
+    """Do not turn words inside a named entity into extra search filters."""
+    named_spans = [
+        (item.start, item.end)
+        for item in entities
+        if item.entity_type in {
+            "creator", "organization", "publication", "location",
+        }
+    ]
+    return [
+        item for item in entities
+        if item.entity_type not in {"category", "tag"}
+        or not _overlaps(item.start, item.end, named_spans)
+    ]
+
+
 def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], manager: TaxonomyManager):
     found: list[ResolvedEntity] = []
     for match in CONTEXT_PATTERN.finditer(text):
@@ -411,7 +429,12 @@ class Resolver:
             )
         ]
         entities.extend(facet_fuzzy)
-        claimed.extend((item.start, item.end) for item in facet_fuzzy)
+        entities = _prune_facets_overlapping_named_entities(entities)
+        claimed.extend(
+            (item.start, item.end)
+            for item in facet_fuzzy
+            if item in entities
+        )
         ambiguous_references = self.taxonomy.snapshot.ambiguous(normalized, claimed)
         claimed.extend((item.start, item.end) for item in ambiguous_references)
         unresolved_references = _unresolved_contextual_references(normalized, claimed)

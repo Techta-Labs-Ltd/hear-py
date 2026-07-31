@@ -785,6 +785,18 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                 and _has_active_browse_catalog(active_store):
             return await ShowMoreBrowseHandler().handle(handler_input)
 
+        if nlp_slots.get("ambiguousReferences"):
+            result = await discover_content_via_search(handler_input, {
+                "q": "",
+                "intent": "organization",
+            })
+            message = result.get("client_message") or TALKING_NEWSPAPER_NOT_RECOGNIZED(org_query)
+            return handler_input.response_builder \
+                .speak(ssml(message)) \
+                .reprompt(ssml("Please say the full talking newspaper name.")) \
+                .set_should_end_session(False) \
+                .response
+
         generic_request = (
             bool(nlp_slots.get("genericOrganizationRequest"))
             or bool(nlp_slots.get("unresolvedGenericOrganization"))
@@ -798,18 +810,6 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                     "type": "Dialog.ElicitSlot",
                     "slotToElicit": "organizationQuery",
                 }) \
-                .set_should_end_session(False) \
-                .response
-
-        if nlp_slots.get("ambiguousReferences"):
-            result = await discover_content_via_search(handler_input, {
-                "q": "",
-                "intent": "organization",
-            })
-            message = result.get("client_message") or TALKING_NEWSPAPER_NOT_RECOGNIZED(org_query)
-            return handler_input.response_builder \
-                .speak(ssml(message)) \
-                .reprompt(ssml("Please say the full talking newspaper name.")) \
                 .set_should_end_session(False) \
                 .response
 

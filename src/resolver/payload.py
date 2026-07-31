@@ -9,7 +9,11 @@ def build_hear_payload(plan: SearchPlan) -> dict:
         "limit": plan.limit,
         "page": plan.page,
         "query": plan.query,
-        "sort": plan.sort,
+        "sort": (
+            "nearest"
+            if plan.is_local and plan.sort == "relevance"
+            else plan.sort
+        ),
     }
     filters = {}
     for key, value in (

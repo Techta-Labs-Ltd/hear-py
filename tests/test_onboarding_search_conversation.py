@@ -303,6 +303,58 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
 
 
 @pytest.mark.asyncio
+async def test_ambiguity_response_without_original_slot_reprompts_candidates(
+    monkeypatch,
+    mock_handler_input,
+):
+    """A bare ambiguity follow-up must not become the generic TN prompt."""
+    from src.handlers.intents.play import PlayByOrganizationHandler
+
+    candidates = [
+        {"type": "organization", "id": "org-wakefield", "name": "Wakefield Talking Newspaper"},
+        {"type": "organization", "id": "org-walsall", "name": "Walsall Talking Newspaper"},
+        {"type": "organization", "id": "org-warrington", "name": "Warrington Talking Newspaper"},
+    ]
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {"name": "PlayByOrganizationIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_nlp": {
+            "status": "ambiguous",
+            "intent": "organization",
+            "slots": {"ambiguousReferences": [{
+                "phrase": "wtn",
+                "candidates": candidates,
+            }]},
+        },
+    })
+    discover = AsyncMock(return_value={
+        "results": [],
+        "total_hits": 0,
+        "failed": False,
+        "client_message": (
+            "I found more than one match for that name. Did you mean "
+            "Wakefield Talking Newspaper, Walsall Talking Newspaper, or "
+            "Warrington Talking Newspaper?"
+        ),
+    })
+    monkeypatch.setattr(
+        "src.handlers.intents.play.discover_content_via_search", discover,
+    )
+
+    await PlayByOrganizationHandler().handle(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "more than one match" in spoken
+    assert "Which talking newspaper" not in spoken
+    discover.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
     monkeypatch,
     mock_handler_input,
@@ -380,6 +432,74 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
         "organizationIds": ["org-walsall"],
     }
     assert get_store(mock_handler_input)["pendingAmbiguity"] is None
+    assert not TownCaptureHandler().can_handle(mock_handler_input)
+
+
+@pytest.mark.asyncio
+async def test_wakefield_reply_uses_legacy_ambiguity_before_onboarding(
+    monkeypatch,
+    mock_handler_input,
+):
+    """A WTN clarification reply must never become the listener's town."""
+    candidates = [
+        {"type": "organization", "id": "org-wakefield", "name": "Wakefield Talking Newspaper"},
+        {"type": "organization", "id": "org-walsall", "name": "Walsall Talking Newspaper"},
+        {"type": "organization", "id": "org-warrington", "name": "Warrington Talking Newspaper"},
+    ]
+    pending = {
+        "requestId": "ambiguous-wtn",
+        "intent": "organization",
+        "originalUtterance": "play wtn",
+        "searchPayload": {"query": "", "page": 0, "limit": 20},
+        "slots": {},
+        "candidates": candidates,
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "TownCaptureIntent",
+            "slots": {"townName": {"name": "townName", "value": "wakefield"}},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+        "pendingAmbiguity": pending,
+        "activeDialog": None,
+    }
+    monkeypatch.setattr(
+        "src.nlp.resolve_utterance",
+        AsyncMock(return_value={
+            "status": "resolved",
+            "intent": "organization",
+            "confirmationLabel": "content from Wakefield Talking Newspaper",
+            "searchPayload": {
+                "query": "",
+                "filter": {"organizationIds": ["org-wakefield"]},
+                "page": 0,
+                "limit": 20,
+            },
+            "slots": {
+                "organizationIds": ["org-wakefield"],
+                "organizationName": "Wakefield Talking Newspaper",
+                "residualQuery": "",
+            },
+        }),
+    )
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    store = get_store(mock_handler_input)
+    assert nlp["intent"] == "organization"
+    assert nlp["searchPayload"]["filter"] == {
+        "organizationIds": ["org-wakefield"],
+    }
+    assert store["userCity"] is None
+    assert store.get("pendingLocationConfirm") is None
     assert not TownCaptureHandler().can_handle(mock_handler_input)
 
 

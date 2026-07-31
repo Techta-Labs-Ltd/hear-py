@@ -140,6 +140,44 @@ def test_unresolved_source_is_removed_from_residual_topic_query():
     }]
 
 
+def test_my_community_uses_listener_local_search_without_category_or_query():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play something from my community",
+        "alexaIntent": "PlayLocalIntent",
+        "alexaUserId": "listener-1",
+    })
+
+    assert result["status"] == "resolved"
+    assert result["intent"] == "local"
+    assert result["confirmationLabel"] == "content from your community"
+    assert result["searchPayload"] == {
+        "alexaUserId": "listener-1",
+        "isLocal": True,
+        "isRecommended": False,
+        "limit": 20,
+        "page": 0,
+        "query": "",
+        "sort": "nearest",
+    }
+
+
+def test_named_city_search_is_not_listener_local_search():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play something in manchester",
+        "alexaIntent": "PlayLocalIntent",
+        "alexaUserId": "listener-1",
+    })
+
+    assert result["status"] == "resolved"
+    assert result["searchPayload"]["isLocal"] is False
+    assert result["searchPayload"]["filter"]["city"] == "Manchester"
+    assert result["confirmationLabel"] == "content in Manchester"
+
+
 def test_lates_sport_from_london_corrects_and_confirms_every_constraint():
     result = handler({
         "version": 1,
@@ -181,6 +219,39 @@ def test_sport_update_in_london_is_not_duplicated_or_called_a_source():
         "categorySlugs": ["sport"],
         "city": "London",
         "countryCode": "gb",
+    }
+
+
+def test_location_name_is_not_also_applied_as_a_tag():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play the latest sound recording in burnley",
+    })
+
+    assert result["confirmationLabel"] == (
+        "the latest sound recording in Burnley"
+    )
+    assert result["searchPayload"]["filter"] == {
+        "categorySlugs": ["sound-recording"],
+        "city": "Burnley",
+        "countryCode": "gb",
+    }
+
+
+def test_words_inside_full_organization_name_do_not_add_a_category():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play Barking and Dagenham Talking Newspaper",
+    })
+
+    assert result["intent"] == "organization"
+    assert result["confirmationLabel"] == (
+        "content from Barking and Dagenham Talking Newspaper"
+    )
+    assert result["searchPayload"]["filter"] == {
+        "organizationIds": ["012e0329-f6ad-48d9-8713-13ecee671f64"],
     }
 
 

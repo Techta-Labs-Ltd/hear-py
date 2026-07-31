@@ -373,6 +373,8 @@ def resolved_search_request_label(slots: dict, source_name: str | None = None) -
     city = str(slots.get("city") or slots.get("placeName") or "").strip()
     if city:
         subject = f"{subject} in {city}"
+    elif slots.get("isLocal"):
+        subject = f"{subject} from your community"
     return subject
 
 

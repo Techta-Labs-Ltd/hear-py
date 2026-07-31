@@ -8,6 +8,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
 from src.nlp.patterns import ALEXA_TO_NLP
 from src.services.resolver_client import ResolverUnavailable, resolve_utterance
+from src.services.dialog_state import activate_dialog, active_dialog_from_store
 from src.services.storage.persistence import update_store
 from src.utils.skill_request import get_user_id
 
@@ -87,9 +88,11 @@ class NlpInterceptor(AbstractRequestInterceptor):
             early_store = (
                 handler_input.attributes_manager.request_attributes.get("_store") or {}
             )
+            early_dialog = active_dialog_from_store(early_store)
             if (
                 alexa_intent == "TownCaptureIntent"
                 and not isinstance(early_store.get("pendingAmbiguity"), dict)
+                and (early_dialog or {}).get("type") != "ambiguity"
             ):
                 slot = (intent_obj.slots or {}).get("townName")
                 town = str(slot.value).strip() if slot and slot.value else None
@@ -121,15 +124,28 @@ class NlpInterceptor(AbstractRequestInterceptor):
                     )
                     if result.get("status") == "resolved":
                         update_store(handler_input, {"pendingAmbiguity": None})
+                        activate_dialog(
+                            handler_input,
+                            "ambiguity",
+                            context=pending_ambiguity,
+                        )
                     elif result.get("status") == "ambiguous":
                         narrowed = (result.get("ambiguities") or [{}])[0].get("candidates") or []
+                        narrowed_context = {
+                            **pending_ambiguity,
+                            "candidates": narrowed[:3],
+                            "expiresAt": int(time.time()) + 300,
+                        }
                         update_store(handler_input, {
                             "pendingAmbiguity": {
-                                **pending_ambiguity,
-                                "candidates": narrowed[:3],
-                                "expiresAt": int(time.time()) + 300,
+                                **narrowed_context,
                             },
                         })
+                        activate_dialog(
+                            handler_input,
+                            "ambiguity",
+                            context=narrowed_context,
+                        )
                     _set_nlp(handler_input, {
                         **result,
                         "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),

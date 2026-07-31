@@ -30,12 +30,12 @@ def active_dialog_from_store(store: dict | None) -> dict | None:
         if not expires_at or expires_at >= _now():
             return active
 
-    if state.get("onboardingStage"):
-        return {"type": "onboarding", "context": {"stage": state["onboardingStage"]}}
     if state.get("awaitingSearchConfirmation") and state.get("pendingResolution"):
         return {"type": "search_confirmation", "context": deepcopy(state["pendingResolution"])}
     if state.get("pendingAmbiguity"):
         return {"type": "ambiguity", "context": deepcopy(state["pendingAmbiguity"])}
+    if state.get("onboardingStage"):
+        return {"type": "onboarding", "context": {"stage": state["onboardingStage"]}}
     if state.get("awaitingReportDecision"):
         return {"type": "report_decision", "context": deepcopy(state.get("reportContext") or {})}
     if state.get("awaitingFeedback"):

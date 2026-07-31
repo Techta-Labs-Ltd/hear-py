@@ -133,6 +133,53 @@ class TestSpeechStrings:
 
 
 class TestLaunchSimulation:
+    @pytest.mark.asyncio
+    async def test_launch_clears_stale_discovery_clarification(self, monkeypatch):
+        pending = {
+            "intent": "organization",
+            "candidates": [{
+                "type": "organization",
+                "id": "org-walsall",
+                "name": "Walsall Talking Newspaper",
+            }],
+            "expiresAt": 4102444800,
+        }
+        hi = _build_handler_input(store_override={
+            "playCount": 5,
+            "lastToken": "token-123",
+            "onboardingComplete": True,
+            "pendingAmbiguity": pending,
+            "awaitingOrganizationName": True,
+            "activeDialog": {
+                "type": "ambiguity",
+                "context": pending,
+                "expiresAt": 4102444800,
+            },
+        })
+        monkeypatch.setattr(
+            "src.handlers.intents.launch.record_launch",
+            lambda *_args: {"save": {}},
+        )
+        monkeypatch.setattr(
+            "src.handlers.intents.launch.sync_listener_for_launch",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(
+            "src.handlers.intents.launch._ensure_listener_data_for_launch",
+            AsyncMock(side_effect=lambda _handler_input, store: store),
+        )
+        monkeypatch.setattr(
+            "src.handlers.intents.launch._schedule_launch_background_work",
+            lambda *_args: None,
+        )
+
+        await _handle_launch_request_body(hi)
+
+        store = get_store(hi)
+        assert store["pendingAmbiguity"] is None
+        assert store["awaitingOrganizationName"] is False
+        assert store["activeDialog"] is None
+
     @patch("src.handlers.intents.launch.record_launch")
     def test_new_user_empty_store(self, mock_record):
         hi = _build_handler_input()
