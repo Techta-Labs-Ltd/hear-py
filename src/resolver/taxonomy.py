@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -13,10 +14,8 @@ from typing import Any, Iterable
 from urllib.parse import urljoin
 
 import httpx
-import spacy
 import boto3
 from rapidfuzz import fuzz, process
-from spacy.matcher import PhraseMatcher
 
 from config import settings
 from src.resolver.normalize import CONTENT_NOUNS
@@ -27,6 +26,11 @@ from src.resolver.models import (
 )
 
 logger = logging.getLogger(__name__)
+_PHRASE_WORD = re.compile(r"[a-z0-9]+(?:['-][a-z0-9]+)?", re.I)
+
+
+def _phrase_key(value: str) -> str:
+    return " ".join(match.group(0).lower() for match in _PHRASE_WORD.finditer(value))
 
 ENTITY_TYPE_ALIASES = {
     "organisation": "organization",
@@ -92,11 +96,9 @@ class TaxonomySnapshot:
     def __init__(self, revision: str, records: Iterable[TaxonomyRecord]):
         self.revision = revision
         self.records = _consolidate_equivalent_records(records)
-        self.nlp = spacy.blank("en")
-        self.matcher = PhraseMatcher(self.nlp.vocab, attr="LOWER")
-        self.ambiguous_matcher = PhraseMatcher(self.nlp.vocab, attr="LOWER")
-        self.by_rule: dict[str, TaxonomyRecord] = {}
-        self.ambiguous_by_rule: dict[str, tuple[TaxonomyRecord, ...]] = {}
+        self.exact_by_phrase: dict[str, list[TaxonomyRecord]] = {}
+        self.ambiguous_by_phrase: dict[str, tuple[TaxonomyRecord, ...]] = {}
+        self.max_phrase_words = 1
         self.fuzzy: dict[str, dict[str, TaxonomyRecord]] = {}
         alias_owners: dict[tuple[str, str], set[str]] = {}
         alias_records: dict[tuple[str, str], list[TaxonomyRecord]] = {}
@@ -138,9 +140,9 @@ class TaxonomySnapshot:
             if len(records) < 2:
                 continue
             records.sort(key=lambda record: record.canonical.casefold())
-            rule = f"ambiguous:{index}"
-            self.ambiguous_by_rule[rule] = tuple(records)
-            self.ambiguous_matcher.add(rule, [self.nlp.make_doc(alias)])
+            key = _phrase_key(alias)
+            self.ambiguous_by_phrase[key] = tuple(records)
+            self.max_phrase_words = max(self.max_phrase_words, len(key.split()))
         for index, record in enumerate(self.records):
             canonical = record.canonical.strip().lower()
             identity = record.entity_id or record.slug or record.canonical
@@ -178,27 +180,40 @@ class TaxonomySnapshot:
             aliases = tuple(dict.fromkeys(accepted_aliases))
             if not aliases:
                 continue
-            rule = f"{record.entity_type}:{index}"
-            self.by_rule[rule] = record
-            self.matcher.add(rule, [self.nlp.make_doc(alias) for alias in aliases])
             choices = self.fuzzy.setdefault(record.entity_type, {})
             for alias in aliases:
+                key = _phrase_key(alias)
+                self.exact_by_phrase.setdefault(key, []).append(record)
+                self.max_phrase_words = max(self.max_phrase_words, len(key.split()))
                 choices[alias] = record
+
+    def _phrase_spans(self, text: str):
+        words = list(_PHRASE_WORD.finditer(text))
+        for start_index, first in enumerate(words):
+            limit = min(self.max_phrase_words, len(words) - start_index)
+            for word_count in range(1, limit + 1):
+                last = words[start_index + word_count - 1]
+                yield (
+                    " ".join(
+                        words[index].group(0).lower()
+                        for index in range(start_index, start_index + word_count)
+                    ),
+                    first.start(),
+                    last.end(),
+                )
 
     def exact(self, text: str, excluded: list[tuple[int, int]] | None = None) -> list[ResolvedEntity]:
         excluded = excluded or []
-        doc = self.nlp.make_doc(text)
         candidates: list[ResolvedEntity] = []
-        for match_id, start, end in self.matcher(doc):
-            span = doc[start:end]
-            if any(span.start_char < stop and span.end_char > begin for begin, stop in excluded):
+        for phrase, start, end in self._phrase_spans(text):
+            if any(start < stop and end > begin for begin, stop in excluded):
                 continue
-            record = self.by_rule[self.nlp.vocab.strings[match_id]]
-            candidates.append(ResolvedEntity(
-                record.entity_type, record.entity_id,
-                record.slug or record.canonical, span.text, 1.0, "exact",
-                span.start_char, span.end_char, record.metadata,
-            ))
+            for record in self.exact_by_phrase.get(phrase, ()):
+                candidates.append(ResolvedEntity(
+                    record.entity_type, record.entity_id,
+                    record.slug or record.canonical, text[start:end], 1.0, "exact",
+                    start, end, record.metadata,
+                ))
         type_priority = {
             "organization": 0, "publication": 1, "creator": 2,
             "location": 3, "category": 4, "tag": 5,
@@ -219,15 +234,15 @@ class TaxonomySnapshot:
         excluded: list[tuple[int, int]] | None = None,
     ) -> list[AmbiguousReference]:
         excluded = excluded or []
-        doc = self.nlp.make_doc(text)
         matches = []
-        for match_id, start, end in self.ambiguous_matcher(doc):
-            span = doc[start:end]
-            if any(span.start_char < stop and span.end_char > begin for begin, stop in excluded):
+        for phrase, start, end in self._phrase_spans(text):
+            if any(start < stop and end > begin for begin, stop in excluded):
                 continue
-            records = self.ambiguous_by_rule[self.nlp.vocab.strings[match_id]]
+            records = self.ambiguous_by_phrase.get(phrase)
+            if not records:
+                continue
             matches.append(AmbiguousReference(
-                phrase=span.text,
+                phrase=text[start:end],
                 candidates=tuple(
                     AmbiguousCandidate(
                         entity_type=record.entity_type,
@@ -236,8 +251,8 @@ class TaxonomySnapshot:
                     )
                     for record in records
                 ),
-                start=span.start_char,
-                end=span.end_char,
+                start=start,
+                end=end,
             ))
         matches.sort(key=lambda item: (-(item.end - item.start), item.start))
         accepted = []

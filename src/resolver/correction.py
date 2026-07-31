@@ -6,10 +6,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-import spacy
 from rapidfuzz import fuzz, process
 from rapidfuzz.distance import DamerauLevenshtein
-from spacy.matcher import PhraseMatcher
 
 from src.resolver.taxonomy import TaxonomySnapshot, taxonomy_manager
 from src.services.semantic_routing import SEARCH_ROUTE_NAMES, semantic_intent_router
@@ -27,16 +25,10 @@ class CorrectionResult:
 class ContextualCommandCorrector:
     def __init__(self, model_path: Path | None = None):
         self._model_path = model_path or Path(__file__).parents[2] / "en-GB.json"
-        self.nlp = spacy.blank("en")
-        self.command_matcher = PhraseMatcher(self.nlp.vocab, attr="LOWER")
         vocabulary, source_carriers, phrases = self._learn_interaction_language()
         self.vocabulary = tuple(sorted(vocabulary))
         self.source_carriers = frozenset(source_carriers)
-        if phrases:
-            self.command_matcher.add(
-                "ALEXA_COMMAND",
-                [self.nlp.make_doc(phrase) for phrase in phrases],
-            )
+        self.command_phrases = frozenset(phrases)
 
     def _learn_interaction_language(self) -> tuple[set[str], set[str], set[str]]:
         payload = json.loads(self._model_path.read_text(encoding="utf-8"))
@@ -93,19 +85,25 @@ class ContextualCommandCorrector:
         if not original:
             return CorrectionResult("", ())
         active_snapshot = snapshot or taxonomy_manager.snapshot
-        doc = self.nlp.make_doc(original)
-        command_ranges = [
-            (doc[start].idx, doc[end - 1].idx + len(doc[end - 1].text))
-            for _, start, end in self.command_matcher(doc)
-        ]
+        tokens = list(_WORD.finditer(original))
+        command_ranges = []
+        for start_index, first in enumerate(tokens):
+            for size in range(1, min(4, len(tokens) - start_index) + 1):
+                last = tokens[start_index + size - 1]
+                phrase = " ".join(
+                    tokens[index].group(0).lower()
+                    for index in range(start_index, start_index + size)
+                )
+                if phrase in self.command_phrases:
+                    command_ranges.append((first.start(), last.end()))
         replacements: list[tuple[int, int, str, str]] = []
-        for token in doc:
-            value = token.text.lower()
+        for token in tokens:
+            value = token.group(0).lower()
             if (
-                not token.is_alpha
+                not value.isalpha()
                 or value in self.vocabulary
                 or len(value) < 4
-                or self._overlaps_entity(token.idx, token.idx + len(token.text), active_snapshot, original)
+                or self._overlaps_entity(token.start(), token.end(), active_snapshot, original)
             ):
                 continue
             matches = process.extract(value, self.vocabulary, scorer=fuzz.ratio, limit=5)
@@ -115,10 +113,10 @@ class ContextualCommandCorrector:
                     candidate in self.source_carriers
                     and distance <= 2
                     and score >= 70
-                    and self._source_suffix_known(original, token.idx + len(token.text), active_snapshot)
+                    and self._source_suffix_known(original, token.end(), active_snapshot)
                 )
                 near_command = any(
-                    token.idx <= end + 2 and token.idx + len(token.text) >= start - 2
+                    token.start() <= end + 2 and token.end() >= start - 2
                     for start, end in command_ranges
                 )
                 general_context = (
@@ -126,7 +124,7 @@ class ContextualCommandCorrector:
                 )
                 if not source_context and not general_context:
                     continue
-                replacements.append((token.idx, token.idx + len(token.text), candidate, value))
+                replacements.append((token.start(), token.end(), candidate, value))
                 break
 
         if not replacements:
