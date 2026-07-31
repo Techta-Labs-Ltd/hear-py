@@ -17,7 +17,6 @@ from src.utils.speech import resolved_search_request_label
 
 logger = logging.getLogger(__name__)
 CONTRACT_VERSION = 1
-semantic_intent_router.warm()
 
 
 def _emit_metrics(operation: str, duration_ms: float, failed: bool) -> None:

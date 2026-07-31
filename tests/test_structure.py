@@ -93,7 +93,7 @@ def test_resolver_has_a_dedicated_lambda_entry_point():
     )
 
     assert "def handler(" in source
-    assert "semantic_intent_router.warm()" in source
+    assert "semantic_intent_router.warm()" not in source
 
 
 def test_stateful_services_have_explicit_owners():

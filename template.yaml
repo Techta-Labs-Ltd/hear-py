@@ -23,6 +23,11 @@ Parameters:
     Default: 0
     MinValue: 0
     Description: Provisioned resolver instances; keep at zero until the account concurrency quota allows it.
+  ResolverSemanticRouterEnabled:
+    Type: String
+    Default: "0"
+    AllowedValues: ["0", "1"]
+    Description: Enable the embedding router only when resolver instances are kept warm.
 
   # --- Secrets (pulled from SSM SecureString by CI and passed in as NoEcho) ---
   HearApiKey:            { Type: String, NoEcho: true, Default: "" }
@@ -88,8 +93,11 @@ Resources:
       ImageUri: !Ref ImageUri
       ImageConfig:
         Command: [ "src.resolver.lambda_handler.handler" ]
-      MemorySize: 3008
+      MemorySize: 4096
       Timeout: 8
+      Environment:
+        Variables:
+          HEAR_SEMANTIC_ROUTER_ENABLED: !Ref ResolverSemanticRouterEnabled
       AutoPublishAlias: live
       ProvisionedConcurrencyConfig: !If
         - HasResolverProvisionedConcurrency
@@ -116,7 +124,7 @@ Resources:
       Environment:
         Variables:
           HEAR_RESOLVER_FUNCTION_ARN: !Sub "${ResolverFunction.Arn}:live"
-          HEAR_RESOLVER_TIMEOUT_MS: "2500"
+          HEAR_RESOLVER_TIMEOUT_MS: "7000"
       Policies:
         - DynamoDBCrudPolicy: { TableName: hear-service }
         - DynamoDBCrudPolicy: { TableName: hear_settings }

@@ -94,6 +94,7 @@ jobs:
               ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" \
               ResolverProvisionedConcurrency="0" \
+              ResolverSemanticRouterEnabled="0" \
               HearApiKey="$HEAR_API_KEY" \
               WebhookSecret="$WEBHOOK_SECRET" \
               WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
