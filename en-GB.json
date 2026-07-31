@@ -992,6 +992,20 @@
           ]
         },
         {
+          "name": "ClarifySelectionIntent",
+          "slots": [
+            {
+              "name": "selection",
+              "type": "HEAR_CLARIFICATION"
+            }
+          ],
+          "samples": [
+            "{selection}",
+            "I meant {selection}",
+            "the {selection} one"
+          ]
+        },
+        {
           "name": "TownCaptureIntent",
           "slots": [
             {
@@ -1079,6 +1093,35 @@
               "name": {
                 "value": "Burnley",
                 "synonyms": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_CLARIFICATION",
+          "values": [
+            {
+              "name": {
+                "value": "Walsall",
+                "synonyms": ["wasall"]
+              }
+            },
+            {
+              "name": {
+                "value": "Wakefield",
+                "synonyms": ["wake field"]
+              }
+            },
+            {
+              "name": {
+                "value": "Warrington",
+                "synonyms": ["warington"]
+              }
+            },
+            {
+              "name": {
+                "value": "Sussex Coast",
+                "synonyms": ["sussex"]
               }
             }
           ]

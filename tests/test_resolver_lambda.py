@@ -67,6 +67,23 @@ def test_contextual_form_typo_resolves_complete_filter(resolver_snapshot):
     assert result["searchPayload"]["sort"] == "latest"
 
 
+def test_misspelled_initial_command_still_resolves_ambiguous_source():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "playt wtn",
+    })
+
+    assert result["normalizedUtterance"] == "play wtn"
+    assert result["corrections"] == [{
+        "original": "playt",
+        "replacement": "play",
+        "type": "contextual",
+    }]
+    assert result["status"] == "ambiguous"
+    assert result["searchPayload"]["query"] == ""
+
+
 def test_command_correction_is_model_derived_and_semantically_checked(
     monkeypatch,
     resolver_snapshot,
@@ -413,6 +430,34 @@ def test_repeated_ambiguous_alias_preserves_candidates_for_next_answer():
     assert selected["confirmationLabel"] == (
         "content from Walsall Talking Newspaper"
     )
+
+
+def test_misspelled_distinguishing_word_selects_offered_candidate():
+    initial = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play wtn",
+    })
+    candidates = initial["ambiguities"][0]["candidates"][:3]
+    selected = handler({
+        "version": 1,
+        "operation": "resolve_ambiguity_follow_up",
+        "utterance": "wasall",
+        "context": {
+            "intent": "organization",
+            "searchPayload": initial["searchPayload"],
+            "slots": initial["slots"],
+            "candidates": candidates,
+        },
+    })
+
+    assert selected["status"] == "resolved"
+    assert selected["confirmationLabel"] == (
+        "content from Walsall Talking Newspaper"
+    )
+    assert selected["searchPayload"]["filter"]["organizationIds"] == [
+        "ddce8ea4-d9a4-4b7b-b5c8-30ed5b89174e"
+    ]
 
 
 def test_resolver_client_rejects_malformed_contract(monkeypatch):

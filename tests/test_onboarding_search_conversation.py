@@ -354,6 +354,42 @@ async def test_ambiguity_response_without_original_slot_reprompts_candidates(
     discover.assert_awaited_once()
 
 
+def test_fallback_during_ambiguity_repeats_candidates_not_welcome(
+    mock_handler_input,
+):
+    from src.handlers.intents.system import FallbackHandler
+
+    candidates = [
+        {"type": "organization", "id": "org-wakefield", "name": "Wakefield Talking Newspaper"},
+        {"type": "organization", "id": "org-walsall", "name": "Walsall Talking Newspaper"},
+        {"type": "organization", "id": "org-warrington", "name": "Warrington Talking Newspaper"},
+    ]
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "pendingAmbiguity": {
+            "slots": {"ambiguousReferences": [{
+                "phrase": "wtn",
+                "candidates": candidates,
+            }]},
+            "candidates": candidates,
+        },
+    }
+
+    FallbackHandler().handle(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "Wakefield Talking Newspaper" in spoken
+    assert "Walsall Talking Newspaper" in spoken
+    assert "Warrington Talking Newspaper" in spoken
+    assert "play followed by a topic" not in spoken
+
+
 @pytest.mark.asyncio
 async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
     monkeypatch,

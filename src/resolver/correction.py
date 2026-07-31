@@ -25,23 +25,29 @@ class CorrectionResult:
 class ContextualCommandCorrector:
     def __init__(self, model_path: Path | None = None):
         self._model_path = model_path or Path(__file__).parents[2] / "en-GB.json"
-        vocabulary, source_carriers, phrases = self._learn_interaction_language()
+        vocabulary, source_carriers, phrases, starters = self._learn_interaction_language()
         self.vocabulary = tuple(sorted(vocabulary))
         self.source_carriers = frozenset(source_carriers)
         self.command_phrases = frozenset(phrases)
+        self.command_starters = frozenset(starters)
 
-    def _learn_interaction_language(self) -> tuple[set[str], set[str], set[str]]:
+    def _learn_interaction_language(
+        self,
+    ) -> tuple[set[str], set[str], set[str], set[str]]:
         payload = json.loads(self._model_path.read_text(encoding="utf-8"))
         intents = payload["interactionModel"]["languageModel"]["intents"]
         counts: Counter[str] = Counter()
         carriers: set[str] = set()
         phrases: set[str] = set()
+        starters: set[str] = set()
         for intent in intents:
             for raw_sample in intent.get("samples") or []:
                 sample = str(raw_sample).lower()
                 literals = _SLOT.sub(" ", sample)
                 words = _WORD.findall(literals)
                 counts.update(words)
+                if words and not sample.lstrip().startswith("{"):
+                    starters.add(words[0])
                 for size in range(1, min(4, len(words)) + 1):
                     phrases.update(
                         " ".join(words[index:index + size])
@@ -55,7 +61,7 @@ class ContextualCommandCorrector:
                     if prefix_words:
                         carriers.add(prefix_words[-1])
         vocabulary = {word for word, count in counts.items() if count >= 2 and len(word) >= 3}
-        return vocabulary, carriers, phrases
+        return vocabulary, carriers, phrases, starters
 
     @staticmethod
     def _source_suffix_known(text: str, token_end: int, snapshot: TaxonomySnapshot) -> bool:
@@ -122,7 +128,13 @@ class ContextualCommandCorrector:
                 general_context = (
                     near_command and len(value) >= 5 and distance <= 2 and score >= 78
                 )
-                if not source_context and not general_context:
+                initial_command = (
+                    token is tokens[0]
+                    and candidate in self.command_starters
+                    and distance <= 2
+                    and score >= 78
+                )
+                if not source_context and not general_context and not initial_command:
                     continue
                 replacements.append((token.start(), token.end(), candidate, value))
                 break

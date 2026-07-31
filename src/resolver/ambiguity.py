@@ -46,7 +46,13 @@ def resolve_ambiguity_follow_up(utterance: str, context: dict) -> dict:
         name_tokens = set(re.findall(r"[a-z0-9]+", name))
         if phrase_tokens and phrase_tokens <= name_tokens:
             containing.append(candidate)
-        ranked.append((fuzz.token_set_ratio(phrase, name), candidate))
+        token_scores = [
+            fuzz.ratio(phrase, token)
+            for token in name_tokens
+            if len(token) >= 3
+        ]
+        score = max([fuzz.token_set_ratio(phrase, name), *token_scores])
+        ranked.append((score, candidate))
     narrowed = containing or [
         item[1] for item in sorted(ranked, key=lambda item: item[0], reverse=True)[:3]
     ]

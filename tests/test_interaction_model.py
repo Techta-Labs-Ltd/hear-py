@@ -57,6 +57,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         },
         "PlayByCreatorIntent": {"creatorQuery": "AMAZON.SearchQuery"},
         "WhatsTrendingIntent": {"topic": "AMAZON.SearchQuery"},
+        "ClarifySelectionIntent": {"selection": "HEAR_CLARIFICATION"},
     }
 
     for intent_name, slots in expected.items():

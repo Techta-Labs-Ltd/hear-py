@@ -32,7 +32,7 @@ from src.utils.speech import (
     FOLLOW_NOTIFICATION_DECLINED_GENERIC, ASK_LISTEN_FIRST, ASK_LISTEN_NEXT,
     END_OF_LIST, NO_TRACKS_AVAILABLE, QUEUE_FINISHED, QUEUE_NEXT_ANNOUNCE,
     LOCATION_ASK_CITY, LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
-    ASK_TALKING_NEWSPAPER_REPROMPT,
+    ASK_TALKING_NEWSPAPER_REPROMPT, ambiguous_reference_message,
 )
 from src.services.api import sync_listener
 from src.handlers.intents.onboarding import ONBOARDING_ASK_TOWN
@@ -1031,6 +1031,25 @@ class FallbackHandler(AbstractRequestHandler):
         )
 
     def handle(self, handler_input: HandlerInput):
+        store = get_store(handler_input)
+        pending = store.get("pendingAmbiguity")
+        if isinstance(pending, dict) and pending.get("candidates"):
+            slots = pending.get("slots") or {}
+            references = slots.get("ambiguousReferences") or []
+            phrase = (
+                references[0].get("phrase")
+                if references and isinstance(references[0], dict)
+                else "that name"
+            )
+            message = ambiguous_reference_message(
+                str(phrase or "that name"),
+                list(pending.get("candidates") or [])[:3],
+            )
+            return handler_input.response_builder \
+                .speak(ssml(message)) \
+                .reprompt(ssml("Please say one of the names I just offered.")) \
+                .set_should_end_session(False) \
+                .response
         return handler_input.response_builder \
             .speak(FALLBACK_SPEECH) \
             .reprompt(WELCOME_REPROMPT) \

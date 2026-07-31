@@ -37,7 +37,7 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     ordered = priorities.get(
         alexa_intent,
         ("topic", "category", "creatorQuery", "organizationQuery",
-         "listPickPhrase", "feedbackPhrase", "query"),
+         "selection", "listPickPhrase", "feedbackPhrase", "query"),
     )
     for name in ordered:
         slot = slots.get(name)
