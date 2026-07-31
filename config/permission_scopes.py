@@ -1,4 +1,4 @@
-DEVICE_ADDRESS = "alexa::device_address:all:read"
+DEVICE_ADDRESS = "alexa::devices:all:address:full:read"
 NOTIFICATIONS_WRITE = "alexa::notifications:write"
 REMINDERS_READWRITE = "alexa::alerts:reminders:skill:readwrite"
 GEOLOCATION_READ = "alexa::devices:all:geolocation:read"
