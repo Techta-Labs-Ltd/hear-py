@@ -18,6 +18,11 @@ Parameters:
     Type: String
     Default: ""
     Description: Alexa Skill ID; when set, the Alexa trigger is wired to this skill.
+  ResolverProvisionedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    Description: Provisioned resolver instances; keep at zero until the account concurrency quota allows it.
 
   # --- Secrets (pulled from SSM SecureString by CI and passed in as NoEcho) ---
   HearApiKey:            { Type: String, NoEcho: true, Default: "" }
@@ -27,6 +32,7 @@ Parameters:
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
+  HasResolverProvisionedConcurrency: !Not [!Equals [!Ref ResolverProvisionedConcurrency, 0]]
 
 Globals:
   Function:
@@ -85,8 +91,10 @@ Resources:
       MemorySize: 3008
       Timeout: 8
       AutoPublishAlias: live
-      ProvisionedConcurrencyConfig:
-        ProvisionedConcurrentExecutions: 1
+      ProvisionedConcurrencyConfig: !If
+        - HasResolverProvisionedConcurrency
+        - ProvisionedConcurrentExecutions: !Ref ResolverProvisionedConcurrency
+        - !Ref AWS::NoValue
 
   ResolverFunctionLogGroup:
     Type: AWS::Logs::LogGroup

@@ -93,6 +93,7 @@ jobs:
               Stage="$STAGE" \
               ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" \
+              ResolverProvisionedConcurrency="0" \
               HearApiKey="$HEAR_API_KEY" \
               WebhookSecret="$WEBHOOK_SECRET" \
               WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
@@ -110,7 +111,7 @@ jobs:
           aws cloudformation describe-stack-events \
             --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" \
-            --query "StackEvents[?ResourceStatus=='CREATE_FAILED' || ResourceStatus=='UPDATE_FAILED'].[Timestamp,LogicalResourceId,ResourceStatusReason]" \
+            --query "reverse(sort_by(StackEvents[?ResourceStatus=='CREATE_FAILED' || ResourceStatus=='UPDATE_FAILED' || ResourceStatus=='DELETE_FAILED'], &Timestamp))[:20].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
             --output table
 
       - name: Stop after infrastructure deployment failure
