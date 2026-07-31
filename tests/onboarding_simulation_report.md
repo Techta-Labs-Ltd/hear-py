@@ -6,7 +6,7 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 
 | Status | Count |
 | --- | --- |
-| OK | 35 |
+| OK | 49 |
 | GAP | 0 |
 | FAIL | 3 |
 
@@ -86,6 +86,32 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 | 1 | LaunchRequest | - | await_location_confirm | OK | Bear with me a second, just finding you on the map... I think you're in Swindon — is that right? |  |
 | 2 | AMAZON.NoIntent | await_location_confirm | - | OK | No problem. Which city should I set instead? |  |
 | 3 | TownCaptureIntent | - | - | FAIL | Just say yes to share your location, or no to tell me your town instead. |  |
+### S10 off-script replies stay in stage
+
+| Step | Intent | Stage in | Stage out | Status | Speech | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | LaunchRequest | - | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
+| 2 | AMAZON.NoIntent | ask_permission | ask_town | OK | No worries. Which town or city are you in? |  |
+| 3 | AMAZON.FallbackIntent | ask_town | ask_town | OK | Just the town name please — like London or Manchester. Or say skip if you'd rather not. |  |
+| 4 | WhatsTrendingIntent | ask_town | ask_town | OK | Just the town name please — like London or Manchester. Or say skip if you'd rather not. |  |
+| 5 | TownCaptureIntent | ask_town | await_location_confirm | OK | Did you say Burnley? |  |
+| 6 | PlayContentIntent | await_location_confirm | await_location_confirm | OK | Did you say Burnley? |  |
+| 7 | LaunchRequest | await_location_confirm | await_location_confirm | OK | Did you say Burnley? |  |
+| 8 | AMAZON.YesIntent | await_location_confirm | - | OK | Thanks. I've set your location to Burnley. You can ask for local news or sport, play from a talking newspaper, or say what's trending. What would you like to hear? Would you like to hear the latest from Burnley? |  |
+| 9 | AMAZON.FallbackIntent | - | - | OK | Sorry, I didn't catch that. You can say play news, play from a creator by name, or what's trending. What would you like? |  |
+### S11 content or skip classified at town capture
+
+| Step | Intent | Stage in | Stage out | Status | Speech | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | LaunchRequest | - | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
+| 2 | AMAZON.NoIntent | ask_permission | ask_town | OK | No worries. Which town or city are you in? |  |
+| 3 | TownCaptureIntent | ask_town | ask_town | OK | Happy to play that for you. First, which town or city are you in? Or say skip. |  |
+| 4 | TownCaptureIntent | ask_town | - | OK | Okay. What would you like to listen to? |  |
+### S12 returning user dangling stage is redirected
+
+| Step | Intent | Stage in | Stage out | Status | Speech | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | AMAZON.FallbackIntent | ask_town | ask_town | OK | Just the town name please — like London or Manchester. Or say skip if you'd rather not. |  |
 
 ## GAPS
 

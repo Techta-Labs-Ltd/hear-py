@@ -38,6 +38,13 @@ SEARCH_ROUTE_NAMES = frozenset({
     "browse", "creator", "general", "local", "organization", "trending",
 })
 
+ONBOARDING_ROUTE_SKIP = "onboarding_skip"
+ONBOARDING_ROUTE_TOWN = "town_answer"
+
+ONBOARDING_ROUTE_NAMES = frozenset({
+    *SEARCH_ROUTE_NAMES, ONBOARDING_ROUTE_SKIP, ONBOARDING_ROUTE_TOWN,
+})
+
 ROUTE_SEEDS = {
     "general": (
         "play something about football",
@@ -69,6 +76,22 @@ ROUTE_SEEDS = {
         "let me browse the catalogue",
         "let us explore whatever is available",
         "what content do you have",
+    ),
+    "town_answer": (
+        "I am in london",
+        "my town is manchester",
+        "I live in birmingham",
+        "the city is leeds",
+        "bristol",
+        "swindon",
+    ),
+    "onboarding_skip": (
+        "skip this question",
+        "I do not want to say",
+        "skip the location question",
+        "do not ask about my town",
+        "move on",
+        "skip it",
     ),
 }
 

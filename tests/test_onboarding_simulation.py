@@ -38,6 +38,19 @@ AMBIGUOUS_TOWNS = {
 }
 
 
+class _FakeSemanticRouter:
+    """Deterministic stand-in for the Aurelio router during onboarding."""
+
+    def route(self, utterance, allowed_routes=None):
+        from src.services.semantic_routing import SemanticDecision
+        text = str(utterance or "").lower().strip()
+        if text == "skip":
+            return SemanticDecision("onboarding_skip", 0.93)
+        if "trending" in text:
+            return SemanticDecision("trending", 0.88)
+        return None
+
+
 def fake_resolver_invoke(payload: dict) -> dict:
     """Stand-in for the resolver Lambda: resolve_location + resolve_search."""
     operation = payload.get("operation")
@@ -464,6 +477,92 @@ def scenario_set_location():
             assert record["store"]["onboardingStage"] is None
 
 
+def scenario_off_script_replies_stay_in_stage():
+    steps = [
+        {"step": 1, "event": make_event("LaunchRequest"),
+         "expect_speech": ["Welcome to Hear"], "expect_stage": "ask_permission"},
+        {"step": 2, "event": make_event("IntentRequest", "AMAZON.NoIntent"),
+         "expect_speech": ["Which town or city"], "expect_stage": "ask_town"},
+        {"step": 3, "event": make_event("IntentRequest", "AMAZON.FallbackIntent"),
+         "expect_speech": ["Just the town name please"],
+         "expect_stage": "ask_town"},
+        {"step": 4, "event": make_event("IntentRequest", "WhatsTrendingIntent"),
+         "expect_speech": ["Just the town name please"],
+         "expect_stage": "ask_town"},
+        {"step": 5, "event": make_event("IntentRequest", "TownCaptureIntent",
+                                        {"townName": {"name": "townName",
+                                                     "value": "burnley"}}),
+         "expect_speech": ["Did you say Burnley"],
+         "expect_stage": "await_location_confirm"},
+        {"step": 6, "event": make_event("IntentRequest", "PlayContentIntent",
+                                        {"topic": {"name": "topic", "value": "news"}}),
+         "expect_speech": ["Did you say Burnley"],
+         "expect_stage": "await_location_confirm"},
+        {"step": 7, "event": make_event("LaunchRequest"),
+         "expect_speech": ["Did you say Burnley"],
+         "expect_stage": "await_location_confirm"},
+        {"step": 8, "event": make_event("IntentRequest", "AMAZON.YesIntent"),
+         "expect_speech": ["I've set your location to Burnley",
+                           "Would you like to hear the latest from Burnley"],
+         "expect_stage": None},
+        {"step": 9, "event": make_event("IntentRequest", "AMAZON.FallbackIntent"),
+         "expect_speech": ["Sorry, I didn't catch that"]},
+    ]
+    for record in run_scenario("S10 off-script replies stay in stage", steps):
+        store = record["store"]
+        if record["step"] == 3:
+            assert store["onboardingTownAttempts"] == 1
+        if record["step"] == 4:
+            assert store["onboardingTownAttempts"] == 2
+            assert "trending" not in record["speech"].lower()
+        if record["step"] == 6:
+            assert store["awaitingCommunityPlayback"] is False
+            assert store["pendingLocationConfirm"]["city"] == "Burnley"
+        if record["step"] == 9:
+            assert store["onboardingComplete"] is True
+
+
+def scenario_content_or_skip_classified_at_town_capture():
+    steps = [
+        {"step": 1, "event": make_event("LaunchRequest"),
+         "expect_speech": ["Welcome to Hear"], "expect_stage": "ask_permission"},
+        {"step": 2, "event": make_event("IntentRequest", "AMAZON.NoIntent"),
+         "expect_speech": ["Which town or city"], "expect_stage": "ask_town"},
+        {"step": 3, "event": make_event("IntentRequest", "TownCaptureIntent",
+                                        {"townName": {"name": "townName",
+                                                     "value": "what's trending"}}),
+         "expect_speech": ["Happy to play that for you"],
+         "expect_stage": "ask_town"},
+        {"step": 4, "event": make_event("IntentRequest", "TownCaptureIntent",
+                                        {"townName": {"name": "townName",
+                                                     "value": "skip"}}),
+         "expect_speech": ["Okay. What would you like to listen to?"],
+         "expect_stage": None},
+    ]
+    for record in run_scenario(
+            "S11 content or skip classified at town capture", steps):
+        store = record["store"]
+        if record["step"] == 3:
+            assert store["onboardingTownAttempts"] == 1
+        if record["step"] == 4:
+            assert store["onboardingComplete"] is True
+            assert store["onboardingStage"] is None
+
+
+def scenario_returning_user_dangling_stage_is_redirected():
+    preset = {"onboardingComplete": True, "playCount": 5, "lastToken": "tok",
+              "onboardingStage": "ask_town", "onboardingTownAttempts": 1}
+    steps = [
+        {"step": 1, "event": make_event("IntentRequest", "AMAZON.FallbackIntent"),
+         "expect_speech": ["Just the town name please"],
+         "expect_stage": "ask_town"},
+    ]
+    for record in run_scenario(
+            "S12 returning user dangling stage is redirected", steps,
+            store_preset=preset):
+        assert record["store"]["onboardingTownAttempts"] == 2
+
+
 @pytest.fixture(autouse=True)
 def _reset_records():
     RECORDS.clear()
@@ -489,6 +588,8 @@ def simulation():
                                           "failed": False})), \
             patch("src.handlers.intents.onboarding.detect_device_location",
                   AsyncMock(return_value=dict(DETECTED_MATCH))), \
+            patch("src.handlers.intents.onboarding.semantic_intent_router",
+                  _FakeSemanticRouter()), \
             patch("src.services.alexa.locality._fetch_profile_setting_with_status",
                   AsyncMock(return_value={"value": None, "status": 403})):
         scenario_permission_ask()
@@ -500,6 +601,9 @@ def simulation():
         scenario_set_location()
         scenario_consent_denied_falls_back_to_town()
         scenario_relaunch_after_grant_skips_permission_ask()
+        scenario_off_script_replies_stay_in_stage()
+        scenario_content_or_skip_classified_at_town_capture()
+        scenario_returning_user_dangling_stage_is_redirected()
     return list(RECORDS)
 
 
@@ -595,7 +699,36 @@ def test_simulation_report_is_written(simulation):
         "S7 set location",
         "S8 consent card denied",
         "S9 relaunch with granted scopes",
+        "S10 off-script replies stay in stage",
+        "S11 content or skip classified at town capture",
+        "S12 returning user dangling stage is redirected",
     ))
+
+
+def test_off_script_replies_stay_anchored_to_onboarding(simulation):
+    rows = [r for r in simulation if r["scenario"].startswith("S10")]
+    assert all(r["status"] == "OK" for r in rows)
+    assert rows[2]["speech"].startswith("Just the town name please")
+    assert rows[3]["speech"].startswith("Just the town name please")
+    assert any("Did you say Burnley" in r["speech"] for r in rows[4:])
+    assert "news" not in rows[5]["speech"].lower()
+
+
+def test_content_request_is_deferred_then_skip_completes_onboarding(simulation):
+    rows = [r for r in simulation if r["scenario"].startswith("S11")]
+    assert all(r["status"] == "OK" for r in rows)
+    deferred = next(r for r in rows if r["step"] == 3)
+    assert "Happy to play that for you" in deferred["speech"]
+    assert deferred["store"]["onboardingStage"] == "ask_town"
+    skipped = next(r for r in rows if r["step"] == 4)
+    assert "Okay. What would you like to listen to?" in skipped["speech"]
+    assert skipped["store"]["onboardingComplete"] is True
+
+
+def test_dangling_stage_on_returning_user_is_redirected(simulation):
+    rows = [r for r in simulation if r["scenario"].startswith("S12")]
+    assert rows and rows[0]["status"] == "OK"
+    assert rows[0]["store"]["onboardingTownAttempts"] == 2
 
 
 def _render_report(records) -> str:

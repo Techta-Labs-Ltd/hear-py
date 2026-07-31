@@ -1010,11 +1010,10 @@
           "slots": [
             {
               "name": "townName",
-              "type": "HEAR_TOWN"
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "{townName}",
             "I am in {townName}",
             "I live in {townName}",
             "my town is {townName}",
@@ -1068,35 +1067,6 @@
         }
       ],
       "types": [
-        {
-          "name": "HEAR_TOWN",
-          "values": [
-            {
-              "name": {
-                "value": "Swindon",
-                "synonyms": ["swidon", "swinton"]
-              }
-            },
-            {
-              "name": {
-                "value": "Manchester",
-                "synonyms": ["manchster"]
-              }
-            },
-            {
-              "name": {
-                "value": "London",
-                "synonyms": []
-              }
-            },
-            {
-              "name": {
-                "value": "Burnley",
-                "synonyms": []
-              }
-            }
-          ]
-        },
         {
           "name": "HEAR_CLARIFICATION",
           "values": [

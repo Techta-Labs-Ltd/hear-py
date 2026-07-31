@@ -20,12 +20,36 @@ from src.utils.speech import (
     WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY, WELCOME_RETURN_GENERIC,
     ONBOARDING_TOWN_CONFIRM, ONBOARDING_FETCHING_LOCATION,
     ONBOARDING_DETECTED_TOWN, CONSENT_CARD_THANKS, LOCATION_DECLINED,
+    ONBOARDING_DEFER_CONTENT,
+)
+from src.services.semantic_routing import (
+    ONBOARDING_ROUTE_NAMES, ONBOARDING_ROUTE_SKIP, SEARCH_ROUTE_NAMES,
+    semantic_intent_router,
 )
 
 ONBOARDING_ASK_TOWN = "ask_town"
+ONBOARDING_AWAIT_CONFIRM = "await_location_confirm"
 MAX_TOWN_ATTEMPTS = 3
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
 logger = logging.getLogger(__name__)
+
+TOWN_CONFIRM_REPROMPT = "Say yes to confirm, or no to set a different town."
+
+def onboarding_pending_redirect(handler_input: HandlerInput, store: Dict[str, Any]):
+    stage = store.get("onboardingStage")
+    if stage == ONBOARDING_ASK_TOWN:
+        return resume_town_capture(handler_input, store)
+    if stage == ONBOARDING_AWAIT_CONFIRM:
+        pending = store.get("pendingLocationConfirm") or {}
+        city = pending.get("city")
+        if not city:
+            return None
+        return handler_input.response_builder \
+            .speak(ssml(ONBOARDING_TOWN_CONFIRM(city))) \
+            .reprompt(ssml(TOWN_CONFIRM_REPROMPT)) \
+            .set_should_end_session(False) \
+            .response
+    return None
 
 
 def ask_for_permission(handler_input: HandlerInput, store: Dict[str, Any]):
@@ -145,15 +169,28 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
                 .reprompt(ssml(REPROMPT_ASK_TOWN)) \
                 .set_should_end_session(False) \
                 .response
+        decision = semantic_intent_router.route(phrase, ONBOARDING_ROUTE_NAMES)
+        if decision:
+            if decision.route == ONBOARDING_ROUTE_SKIP:
+                return finalize_town_skipped(handler_input, store)
+            if decision.route in SEARCH_ROUTE_NAMES:
+                update_store(handler_input, {
+                    "onboardingTownAttempts": store.get("onboardingTownAttempts", 0) + 1,
+                })
+                return handler_input.response_builder \
+                    .speak(ssml(ONBOARDING_DEFER_CONTENT)) \
+                    .reprompt(ssml(REPROMPT_ASK_TOWN)) \
+                    .set_should_end_session(False) \
+                    .response
         return resume_town_capture(handler_input, store)
     update_store(handler_input, {
         "pendingLocationConfirm": match,
         "awaitingLocationConfirm": True,
-        "onboardingStage": "await_location_confirm",
+        "onboardingStage": ONBOARDING_AWAIT_CONFIRM,
     })
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_TOWN_CONFIRM(match["city"]))) \
-        .reprompt(ssml("Say yes to confirm, or no to set a different town.")) \
+        .reprompt(ssml(TOWN_CONFIRM_REPROMPT)) \
         .set_should_end_session(False) \
         .response
 
@@ -229,14 +266,14 @@ async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dic
     update_store(handler_input, {
         "pendingLocationConfirm": match,
         "awaitingLocationConfirm": True,
-        "onboardingStage": "await_location_confirm",
+        "onboardingStage": ONBOARDING_AWAIT_CONFIRM,
         "onboardingTownAttempts": 0,
     })
     return handler_input.response_builder \
         .speak(ssml(
             f"{ONBOARDING_FETCHING_LOCATION} {ONBOARDING_DETECTED_TOWN(match['city'])}"
         )) \
-        .reprompt(ssml("Say yes to confirm, or no to set a different town.")) \
+        .reprompt(ssml(TOWN_CONFIRM_REPROMPT)) \
         .set_should_end_session(False) \
         .response
 

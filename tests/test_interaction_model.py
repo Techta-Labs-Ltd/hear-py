@@ -47,7 +47,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
-        "TownCaptureIntent": {"townName": "HEAR_TOWN"},
+        "TownCaptureIntent": {"townName": "AMAZON.SearchQuery"},
         "PlayContentIntent": {
             "topic": "AMAZON.SearchQuery",
             "format": "ContentFormat",

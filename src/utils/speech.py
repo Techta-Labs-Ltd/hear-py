@@ -158,6 +158,8 @@ REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
 
 REPROMPT_ASK_TOWN = "Where are you based? Or say skip."
 
+ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which town or city are you in? Or say skip."
+
 HELP_ONBOARDING = "You can say the latest, what's popular, what's on, or things like play news and play sport."
 
 COMMUNITY_NEEDS_TOWN = "I'll need your town to find local content. Would you like to set that up?"

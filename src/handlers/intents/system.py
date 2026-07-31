@@ -39,6 +39,7 @@ from src.services.api import sync_listener
 from src.utils.audio import build_stop_directive
 from src.services.playback.events import emit_user_playback_event, USER_PLAYBACK_EVENT_TYPES
 from src.utils.feedback_flow import idle_next_response
+from src.handlers.intents.onboarding import onboarding_pending_redirect
 from src.handlers.notifications import (
     has_notification_permission, complete_notification_opt_in,
     build_notification_permission_response,
@@ -1031,6 +1032,9 @@ class FallbackHandler(AbstractRequestHandler):
                 .reprompt(ssml("Please say one of the names I just offered.")) \
                 .set_should_end_session(False) \
                 .response
+        redirect = onboarding_pending_redirect(handler_input, store)
+        if redirect is not None:
+            return redirect
         return handler_input.response_builder \
             .speak(FALLBACK_SPEECH) \
             .reprompt(WELCOME_REPROMPT) \
@@ -1053,6 +1057,9 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
             pass
         logger.info("Hear: unmatched IntentRequest intentName=%s dialogState=%s",
                      intent_name, dialog_state)
+        redirect = onboarding_pending_redirect(handler_input, get_store(handler_input))
+        if redirect is not None:
+            return redirect
         return handler_input.response_builder \
             .speak(FALLBACK_SPEECH) \
             .reprompt(WELCOME_REPROMPT) \
@@ -1088,6 +1095,12 @@ class UnknownRequestHandler(AbstractRequestHandler):
             return {}
 
         logger.warning("Hear: unmatched request type %s", rt)
+        if rt == "IntentRequest":
+            redirect = onboarding_pending_redirect(
+                handler_input, get_store(handler_input),
+            )
+            if redirect is not None:
+                return redirect
         return handler_input.response_builder \
             .speak(ssml(ERROR_GENERIC)) \
             .reprompt(WELCOME_REPROMPT) \
