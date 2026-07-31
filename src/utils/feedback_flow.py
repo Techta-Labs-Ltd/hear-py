@@ -8,5 +8,5 @@ def idle_next_response(handler_input, speak_text: str, reprompt_text: str | None
     return handler_input.response_builder \
         .speak(ssml(speak_text)) \
         .reprompt(ssml(reprompt_text or IDLE_NEXT_REPROMPT)) \
-        .with_should_end_session(False) \
-        .get_response()
+        .set_should_end_session(False) \
+        .response

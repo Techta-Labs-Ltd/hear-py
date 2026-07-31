@@ -12,7 +12,7 @@ from src.handlers.feedback import (
 from src.handlers.intents import (
     BrowseContentHandler, CancelIntentHandler, ConnectionsResponseHandler,
     DecreaseSpeedHandler, FallbackHandler,
-    FastForwardIntentHandler, FollowCreatorHandler, HearNotificationsHandler,
+    FastForwardIntentHandler, FollowCreatorHandler,
     HelpIntentHandler, IncreaseSpeedHandler, LaunchRequestHandler,
     NavigateHomeHandler, NextIntentHandler, NoIntentHandler, PauseIntentHandler,
     PlayByCreatorHandler, PlayByOrganizationHandler, PlayContentHandler,
@@ -23,10 +23,10 @@ from src.handlers.intents import (
     UnsupportedIntentHandler, WhatsThisAboutHandler, WhatsTrendingHandler,
     WhoIsCreatorHandler, YesIntentHandler,
 )
-from src.handlers.notifications import DisableNotificationsHandler, EnableNotificationsHandler
+from src.handlers.notifications import (
+    DisableNotificationsHandler, EnableNotificationsHandler, HearNotificationsHandler,
+)
 
-
-# Specific handlers must precede fallbacks.
 REQUEST_HANDLERS = (
     LaunchRequestHandler, ConnectionsResponseHandler, WhatsTrendingHandler,
     BrowseContentHandler,

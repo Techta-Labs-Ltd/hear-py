@@ -22,7 +22,7 @@ from src.handlers.intents.system import (
     NavigateHomeHandler, UnsupportedIntentHandler, SessionEndedHandler,
     FallbackHandler, UnmatchedIntentHandler, UnknownRequestHandler, ErrorHandler,
 )
-from src.handlers.intents.hear_notifications import HearNotificationsHandler
+from src.handlers.notifications import HearNotificationsHandler
 
 __all__ = [
     "LaunchRequestHandler", "TownCaptureHandler", "SetLocationHandler", "start_playback", "prepare_playback_audio_and_store",
