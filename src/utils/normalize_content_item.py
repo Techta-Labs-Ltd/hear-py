@@ -28,6 +28,8 @@ def is_id_like_label(value) -> bool:
     t = value.strip()
     if not t:
         return True
+    if re.fullmatch(r"[a-z]?\d+(?:[-_]\d+)*", t, re.I):
+        return True
     if re.search(r"\d{3,}[_-]post", t, re.I):
         return True
     if re.search(r"[_-]post\d+", t, re.I):

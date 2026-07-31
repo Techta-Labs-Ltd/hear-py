@@ -6,6 +6,7 @@ from config import settings
 from src.services.storage.persistence import get_store, update_store
 from src.utils.skill_request import get_user_id
 from src.services.outbound_dispatch import dispatch
+from src.services.dialog_state import activate_dialog
 
 
 def _feedback_key(state: dict) -> str | None:
@@ -78,6 +79,7 @@ def activate_best_feedback_candidate(handler_input) -> dict | None:
         "awaitingFeedback": True,
         "_requiresReliableSave": True,
     })
+    activate_dialog(handler_input, "feedback", context=selected)
     return selected
 
 
@@ -92,6 +94,7 @@ def mark_pending_feedback_answered(handler_input) -> dict:
         "answeredFeedbackKeys": answered[-100:],
         "pendingFeedback": None,
         "awaitingFeedback": False,
+        "activeDialog": None,
         "_requiresReliableSave": False,
     })
 

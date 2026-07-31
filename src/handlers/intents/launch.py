@@ -52,6 +52,7 @@ from src.handlers.intents.onboarding import (
 from src.services.tasks import run_background
 from src.services.playback.session import has_unfinished_playback, read_playback_session
 from src.services.feedback import feedback_service
+from src.services.dialog_state import activate_dialog
 
 logger = logging.getLogger(__name__)
 MAX_TOWN_ATTEMPTS = 3
@@ -111,6 +112,7 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
         active = read_playback_session(store) or {}
         title = escape_ssml_lite(active.get("title") or "your recording")
         update_store(handler_input, {"awaitingResume": True})
+        activate_dialog(handler_input, "resume", context=active)
         return handler_input.response_builder \
             .speak(ssml(f"You did not finish {title}. Would you like to continue?")) \
             .reprompt(ssml("Would you like to continue listening?")) \

@@ -7,6 +7,7 @@ from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
 from src.services.storage.persistence import update_store
+from src.services.dialog_state import activate_dialog
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import ssml, escape_ssml_lite, FALLBACK_SPEECH, WELCOME_REPROMPT
 from src.handlers.intents import PlayContentHandler, PlayByCreatorHandler, PlayByOrganizationHandler, BrowseContentHandler, ShowMoreBrowseHandler, WhatsTrendingHandler, TownCaptureHandler, SetLocationHandler
@@ -113,11 +114,17 @@ class IntentDispatchHandler(AbstractRequestHandler):
         the alternatives instead.
         """
         confirm_text = pending.get("confirmText")
+        resolution = pending.get("resolution") or {}
         update_store(handler_input, {
             "awaitingSearchConfirmation": True,
-            "pendingResolution": pending.get("resolution") or {},
+            "pendingResolution": resolution,
             "_requiresReliableSave": True,
         })
+        activate_dialog(
+            handler_input,
+            "search_confirmation",
+            context=resolution,
+        )
         logger.info("Hear: search confirmation asked intent=%s text=%s",
                     pending.get("intent"), confirm_text)
         return handler_input.response_builder \

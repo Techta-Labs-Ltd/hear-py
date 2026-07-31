@@ -14,6 +14,7 @@ from src.utils.session_queue import sort_queue_items_by_listening_preferences, m
 from src.utils.session_queue import clone_queue_item
 from src.utils.lambda_deadline import persistence_load_budget_ms, should_skip_persistence_load, requires_reliable_persistence_load
 from src.utils.lambda_deadline import persistence_save_budget_ms, requires_reliable_persistence_save
+from src.services.dialog_state import activate_dialog, migrate_active_dialog
 
 
 _MAX_FEEDBACK_ASKED_TOKENS = 50
@@ -39,6 +40,7 @@ async def clear_feedback(handler_input) -> dict:
     except Exception:
         pass
     return update_store(handler_input, {
+        "activeDialog": None,
         "awaitingFeedback": False,
         "awaitingFollow": False,
         "awaitingNotificationOptIn": False,
@@ -87,7 +89,7 @@ def set_pending_feedback(
     resolved_creator_id = creator_id or store.get("feedbackCreatorId") or None
     resolved_title = title or store.get("feedbackContentTitle") or None
     resolved_creator_name = creator_name or store.get("feedbackCreator") or None
-    return update_store(handler_input, {
+    updated = update_store(handler_input, {
         "pendingFeedback": {
             "feedbackGiven": False,
             "contentId": str(resolved_content_id) if resolved_content_id is not None else None,
@@ -100,6 +102,8 @@ def set_pending_feedback(
         "feedbackContentId": str(resolved_content_id) if resolved_content_id is not None else store.get("feedbackContentId"),
         "_requiresReliableSave": True,
     })
+    activate_dialog(handler_input, "feedback", context=updated.get("pendingFeedback") or {})
+    return get_store(handler_input)
 
 
 def clear_pending_feedback(handler_input) -> dict:
@@ -413,7 +417,8 @@ def merge_initial_store(stored: dict | None) -> dict:
     """Merge persisted attributes into DEFAULT_STORE and apply migrations."""
     merged = {**DEFAULT_STORE, **(stored if isinstance(stored, dict) else {})}
     merged["recentTrackListens"] = normalize_recent_track_listens(merged.get("recentTrackListens"))
-    return _migrate_playback_fields(merged)
+    merged = _migrate_playback_fields(merged)
+    return migrate_active_dialog(merged)
 
 
 def _playback_fields_for_snapshot(item: dict) -> dict:

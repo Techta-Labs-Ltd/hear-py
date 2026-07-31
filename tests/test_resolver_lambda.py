@@ -183,6 +183,12 @@ def test_sport_update_in_london_is_not_duplicated_or_called_a_source():
             "update",
             "sport",
         ),
+        (
+            "what is the latest sport update from ytn",
+            "the latest sport update from York Talking News",
+            "update",
+            "sport",
+        ),
     ),
 )
 def test_constrained_whats_latest_uses_resolved_search_contract(
@@ -368,6 +374,57 @@ async def test_yes_executes_exact_pending_resolver_payload(
     assert response == {"playing": True}
     search.assert_awaited_once_with(payload)
     assert get_store(mock_handler_input)["pendingResolution"] is None
+
+
+@pytest.mark.asyncio
+async def test_yes_prefers_recent_search_confirmation_over_stale_resume(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.system import YesIntentHandler
+
+    payload = {
+        "query": "update",
+        "filter": {
+            "categorySlugs": ["sport"],
+            "organizationIds": ["org-ytn"],
+        },
+        "sort": "latest",
+        "page": 0,
+        "limit": 20,
+    }
+    store = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingResume": True,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": {
+            "requestId": "resolution-priority",
+            "intent": "category",
+            "confirmationLabel": "the latest sport update from York Talking News",
+            "searchPayload": payload,
+            "resolvedEntities": [],
+            "createdAt": 1,
+            "expiresAt": 4102444800,
+        },
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = store
+    search = AsyncMock(return_value={
+        "failed": False,
+        "results": [{"contentId": "content-1", "audioUrl": "https://example.com/a.mp3"}],
+        "total_hits": 1,
+    })
+    play = AsyncMock(return_value={"playing": True})
+    resume = AsyncMock(return_value={"resuming": True})
+    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    monkeypatch.setattr("src.handlers.intents.system.auto_play_first_from_search", play)
+    monkeypatch.setattr(YesIntentHandler, "_handle_resume_yes", resume)
+
+    response = await YesIntentHandler().handle(mock_handler_input)
+
+    assert response == {"playing": True}
+    search.assert_awaited_once_with(payload)
+    resume.assert_not_awaited()
 
 
 @pytest.mark.asyncio

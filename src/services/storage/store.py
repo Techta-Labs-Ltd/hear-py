@@ -9,6 +9,7 @@ here lets those modules share the primitives without importing the whole
 from __future__ import annotations
 
 DEFAULT_STORE: dict[str, object] = {
+    "activeDialog": None,
     "locality": None,
     "lastToken": None,
     "lastOffsetMs": 0,

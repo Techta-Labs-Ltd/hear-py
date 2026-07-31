@@ -72,6 +72,7 @@ from src.handlers.feedback.not_enjoyed import FeedbackNotEnjoyedHandler
 from src.handlers.intents.playback import NextIntentHandler
 from src.handlers.feedback.skip import SkipFeedbackHandler
 from src.services.observability import capture_skill_exception, flush_sentry, last_resort_skill_response
+from src.services.dialog_state import activate_dialog, get_active_dialog, clear_active_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,7 @@ class YesIntentHandler(AbstractRequestHandler):
     async def handle(self, handler_input: HandlerInput):
         store = get_store(handler_input)
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
+        dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
         # 0a. Location onboarding choice — user agrees to give their city
         if store.get("awaitingLocationChoice"):
@@ -180,15 +182,21 @@ class YesIntentHandler(AbstractRequestHandler):
         if store.get("awaitingCommunityPlayback"):
             return await self._handle_community_play_yes(handler_input, store)
 
-        # 1. Resume
-        if store.get("awaitingResume"):
-            return await self._handle_resume_yes(handler_input, store)
-
-        # 1. Search confirmation
-        if store.get("awaitingSearchConfirmation") or session_attrs.get("awaitingSearchConfirmation"):
+        # 1. Search confirmation. This must win over stale launch-time resume
+        # state because it is the question Alexa most recently asked.
+        if dialog_type == "search_confirmation" or (
+            not dialog_type and (
+                store.get("awaitingSearchConfirmation")
+                or session_attrs.get("awaitingSearchConfirmation")
+            )
+        ):
             return await self._handle_search_confirmation(handler_input, store, session_attrs)
 
-        # 2. List mode active
+        # 2. Resume
+        if dialog_type == "resume" or (not dialog_type and store.get("awaitingResume")):
+            return await self._handle_resume_yes(handler_input, store)
+
+        # 3. List mode active
         if store.get("listModeActive"):
             return await self._handle_list_mode_yes(handler_input, store)
 
@@ -354,6 +362,7 @@ class YesIntentHandler(AbstractRequestHandler):
                 "lastExecutedResolutionId": resolution.get("requestId"),
                 "_requiresReliableSave": True,
             })
+            clear_active_dialog(handler_input, "search_confirmation")
             handler_input.attributes_manager.set_session_attributes({})
             logger.info(
                 "Hear: confirmed resolver search START id=%s label=%s",
@@ -386,6 +395,11 @@ class YesIntentHandler(AbstractRequestHandler):
                     "pendingResolution": relaxed,
                     "_requiresReliableSave": True,
                 })
+                activate_dialog(
+                    handler_input,
+                    "search_confirmation",
+                    context=relaxed,
+                )
                 source = relaxed["confirmationLabel"].removeprefix("the latest recordings from ")
                 failed_label = label.removeprefix("the latest ")
                 speech = (
@@ -503,6 +517,7 @@ class YesIntentHandler(AbstractRequestHandler):
     async def _handle_resume_yes(self, handler_input, store):
         state = read_playback_session(store)
         update_store(handler_input, {"awaitingResume": False})
+        clear_active_dialog(handler_input, "resume")
         if not state or not state.get("contentId"):
             return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
         return await resume_playback(
@@ -691,6 +706,7 @@ class NoIntentHandler(AbstractRequestHandler):
     async def handle(self, handler_input: HandlerInput):
         store = get_store(handler_input)
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
+        dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
         # 0a. Location onboarding choice declined
         if store.get("awaitingLocationChoice"):
@@ -725,12 +741,25 @@ class NoIntentHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        # 1. Search confirmation
-        if store.get("awaitingResume"):
-            return self._handle_resume_no(handler_input, store)
-
-        if store.get("awaitingSearchConfirmation") or session_attrs.get("awaitingSearchConfirmation"):
+        # The active dialog is the question Alexa most recently asked.
+        if dialog_type == "search_confirmation" or (
+            not dialog_type and (
+                store.get("awaitingSearchConfirmation")
+                or session_attrs.get("awaitingSearchConfirmation")
+            )
+        ):
             return self._handle_search_no(handler_input, store, session_attrs)
+
+        if dialog_type == "report_decision" or (
+            not dialog_type and store.get("awaitingReportDecision")
+        ):
+            return await SkipFeedbackHandler().handle(handler_input)
+
+        if dialog_type == "feedback" or (not dialog_type and store.get("awaitingFeedback")):
+            return await SkipFeedbackHandler().handle(handler_input)
+
+        if dialog_type == "resume" or (not dialog_type and store.get("awaitingResume")):
+            return self._handle_resume_no(handler_input, store)
 
         # 2. List mode active
         if store.get("listModeActive"):
@@ -751,7 +780,7 @@ class NoIntentHandler(AbstractRequestHandler):
 
         # 6. Awaiting feedback
         if store.get("awaitingFeedback"):
-            return await FeedbackNotEnjoyedHandler().handle(handler_input)
+            return await SkipFeedbackHandler().handle(handler_input)
 
         # 7. Awaiting follow
         if store.get("awaitingFollow"):
@@ -785,6 +814,7 @@ class NoIntentHandler(AbstractRequestHandler):
                 "pendingResolution": None,
                 "_requiresReliableSave": True,
             })
+            clear_active_dialog(handler_input, "search_confirmation")
             return handler_input.response_builder \
                 .speak(ssml("No problem. What would you like to listen to instead?")) \
                 .reprompt(ssml(WELCOME_REPROMPT)) \
@@ -881,6 +911,7 @@ class NoIntentHandler(AbstractRequestHandler):
         if state:
             write_playback_session(handler_input, {"status": "abandoned"})
         update_store(handler_input, {"awaitingResume": False})
+        clear_active_dialog(handler_input, "resume")
         activate_best_feedback_candidate(handler_input)
         return handler_input.response_builder \
             .speak(ssml("Okay, I won't continue that recording.")) \

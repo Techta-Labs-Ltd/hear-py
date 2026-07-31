@@ -52,6 +52,7 @@ class FeedbackService:
         allowed = (
             self.rating_intents
             | self.replay_intents
+            | self.report_intents
             | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
         )
         return intent_name not in allowed

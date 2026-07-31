@@ -14,8 +14,8 @@ from src.utils.speech import (
 from src.services.feedback.candidates import submit_feedback
 from src.services.deferred_intent import (
     has_deferred_intent,
-    resume_deferred_intent,
 )
+from src.services.dialog_state import activate_dialog
 from src.utils.playback_context import snapshot_report_context
 
 
@@ -49,16 +49,20 @@ class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
 
         report_context = snapshot_report_context(store)
         dismiss_feedback_prompt(handler_input)
-        if has_deferred_intent(handler_input):
-            update_store(handler_input, {
-                "awaitingReportDecision": False,
-                "reportContext": None,
-            })
-            return await resume_deferred_intent(handler_input)
         update_store(handler_input, {
             "awaitingReportDecision": True,
             "reportContext": report_context,
         })
+        activate_dialog(
+            handler_input,
+            "report_decision",
+            context=report_context,
+            deferred_request=(
+                get_store(handler_input).get("deferredIntent")
+                if has_deferred_intent(handler_input)
+                else None
+            ),
+        )
 
         return handler_input.response_builder \
             .speak(ssml(FEEDBACK_NOT_ENJOYED)) \

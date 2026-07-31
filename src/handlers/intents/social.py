@@ -29,6 +29,8 @@ from src.handlers.notifications import has_notification_permission, complete_not
 from src.handlers.intents.play import play_from_followed_creators
 from src.utils.search_filters import wants_play_from_followed_creators
 from src.services.outbound_dispatch import dispatch
+from src.services.deferred_intent import has_deferred_intent, resume_deferred_intent
+from src.services.dialog_state import clear_active_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -210,15 +212,17 @@ class ReportContentHandler(AbstractRequestHandler):
 
         store = get_store(handler_input)
         audio = read_audio_player_context(handler_input)
-        report = build_report_context(store, {"audioToken": audio.get("token") if audio else None})
-        content_id = report.get("contentId")
+        report = build_report_context(
+            store,
+            audio_token=audio.get("token") if audio else None,
+        )
         content_id = report.get("contentId")
         title = report.get("title")
         creator_id = report.get("creatorId")
 
-        if not content_id or not content_id:
+        if not content_id:
             logger.warning(
-                "Hear: report content blocked contentId=%s contentId=%s", content_id, content_id,
+                "Hear: report content blocked contentId=%s", content_id,
             )
             return handler_input.response_builder \
                 .speak(REPORT_NOTHING_PLAYING) \
@@ -236,11 +240,19 @@ class ReportContentHandler(AbstractRequestHandler):
         try:
             dispatch("user.reported_content", {
                 "userId": user_id, "listenerId": store.get("listenerId"),
-                "contentId": content_id, "contentId": content_id,
+                "contentId": content_id,
                 "reason": "reported_via_alexa", "title": title,
                 "creatorId": creator_id, "locale": locale, "deviceId": device_id,
+                "clientEventId": f"alexa-report:{user_id}:{content_id}",
                 "timestamp": _current_timestamp_ms(),
             }, {"awaitQueue": True})
+            update_store(handler_input, {
+                "awaitingReportDecision": False,
+                "reportContext": None,
+            })
+            clear_active_dialog(handler_input, "report_decision")
+            if has_deferred_intent(handler_input):
+                return await resume_deferred_intent(handler_input)
             update_store(handler_input, {"awaitingContinueAfterFlag": True})
             return handler_input.response_builder \
                 .speak(ssml(REPORT_CONTENT_THEN_ASK_CONTINUE)) \
