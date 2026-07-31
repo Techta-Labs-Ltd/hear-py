@@ -8,7 +8,7 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 | --- | --- |
 | OK | 52 |
 | GAP | 0 |
-| FAIL | 3 |
+| FAIL | 5 |
 
 ## Scenarios
 
@@ -83,9 +83,10 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 
 | Step | Intent | Stage in | Stage out | Status | Speech | Note |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | LaunchRequest | - | await_location_confirm | OK | Bear with me a second, just finding you on the map... I think you're in Swindon — is that right? |  |
-| 2 | AMAZON.NoIntent | await_location_confirm | - | OK | No problem. Which city should I set instead? |  |
-| 3 | TownCaptureIntent | - | - | FAIL | Just say yes to share your location, or no to tell me your town instead. |  |
+| 1 | LaunchRequest | - | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
+| 2 | AMAZON.YesIntent | ask_permission | ask_permission | FAIL | I've sent a card to your Alexa app — open it and tap to share your location. If you'd rather not, you can just tell me your town and I'll take it from there. |  |
+| 3 | AMAZON.NoIntent | ask_permission | ask_town | FAIL | No worries. Which town or city are you in? |  |
+| 4 | TownCaptureIntent | ask_town | await_location_confirm | OK | Did you say Burnley? |  |
 ### S10 off-script replies stay in stage
 
 | Step | Intent | Stage in | Stage out | Status | Speech | Note |
@@ -122,7 +123,8 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 
 | Step | Intent | Stage in | Stage out | Status | Speech | Note |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | LaunchRequest | - | ask_town | OK | I couldn't find your location from your account. Would you like to tell me which city you're in so I can find content from your area? |  |
+| 1 | LaunchRequest | - | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
+| 2 | AMAZON.YesIntent | ask_permission | ask_permission | FAIL | I've sent a card to your Alexa app — open it and tap to share your location. If you'd rather not, you can just tell me your town and I'll take it from there. |  |
 
 ## GAPS
 

@@ -152,6 +152,14 @@ def audit(root: Path) -> tuple[list[str], list[str]]:
         if order.get("OnboardingGateHandler", 0) >= order.get("TownCaptureHandler", 10 ** 6):
             hard.append("src/middleware/pipeline.py: OnboardingGateHandler must precede TownCaptureHandler")
 
+    gate_path = root / "src/middleware/onboarding_gate.py"
+    if gate_path.exists():
+        for node in ast.walk(_ast(gate_path)):
+            if isinstance(node, ast.ClassDef) and node.name == "OnboardingGateHandler":
+                calls = [c.func.id for c in ast.walk(node) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)]
+                if "ask_for_permission" not in calls:
+                    hard.append("src/middleware/onboarding_gate.py: OnboardingGateHandler must call ask_for_permission for new users")
+
     dispatch = root / "src/nlp/dispatch_handler.py"
     if dispatch.exists():
         dispatchable = []

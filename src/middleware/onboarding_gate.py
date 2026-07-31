@@ -111,8 +111,6 @@ class OnboardingGateHandler(AbstractRequestHandler):
         rt = get_request_type(handler_input)
         if rt == "LaunchRequest":
             store = get_store(handler_input)
-            if _location_scopes_granted(handler_input):
-                return await auto_detect_location_or_manual(handler_input, store)
             return ask_for_permission(handler_input, store)
 
         intent = get_intent_name(handler_input)

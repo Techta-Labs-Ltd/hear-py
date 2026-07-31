@@ -291,12 +291,15 @@ def scenario_consent_denied_falls_back_to_town():
 def scenario_relaunch_after_grant_skips_permission_ask():
     steps = [
         {"step": 1, "event": make_event("LaunchRequest", scopes=PERMISSION_GRANTED),
+         "expect_speech": ["Welcome to Hear"],
+         "expect_stage": "ask_permission"},
+        {"step": 2, "event": make_event("IntentRequest", "AMAZON.YesIntent"),
          "expect_speech": ["I think you're in Swindon"],
          "expect_stage": "await_location_confirm"},
-        {"step": 2, "event": make_event("IntentRequest", "AMAZON.NoIntent"),
+        {"step": 3, "event": make_event("IntentRequest", "AMAZON.NoIntent"),
          "expect_speech": ["Which city should I set instead"],
          "expect_stage": None},
-        {"step": 3, "event": make_event("IntentRequest", "TownCaptureIntent",
+        {"step": 4, "event": make_event("IntentRequest", "TownCaptureIntent",
                                         {"townName": {"name": "townName",
                                                      "value": "burnley"}}),
          "expect_speech": ["Did you say Burnley"],
@@ -304,7 +307,7 @@ def scenario_relaunch_after_grant_skips_permission_ask():
     ]
     for record in run_scenario("S9 relaunch with granted scopes", steps):
         if record["step"] == 1:
-            assert "share your location" not in record["speech"].lower()
+            assert "Welcome to Hear" in record["speech"]
 
 
 def scenario_manual_town_happy_path():
@@ -580,12 +583,16 @@ def scenario_relaunch_mid_onboarding_resets_stage():
 def scenario_granted_permission_no_city_in_account():
     steps = [
         {"step": 1, "event": make_event("LaunchRequest", scopes=PERMISSION_GRANTED),
+         "expect_speech": ["Welcome to Hear"],
+         "expect_stage": "ask_permission"},
+        {"step": 2, "event": make_event("IntentRequest", "AMAZON.YesIntent"),
          "expect_speech": ["couldn't find your location from your account"],
          "expect_stage": "ask_town"},
     ]
     with patch("src.handlers.intents.onboarding.detect_device_location", AsyncMock(return_value=None)):
         for record in run_scenario("S14 granted permission no city in account", steps):
-            assert "no worries" not in record["speech"].lower()
+            if record["step"] == 2:
+                assert "no worries" not in record["speech"].lower()
 
 
 @pytest.fixture(autouse=True)
