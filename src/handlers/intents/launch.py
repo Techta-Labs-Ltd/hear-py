@@ -49,6 +49,7 @@ from src.handlers.intents.onboarding import (
     ONBOARDING_ASK_TOWN, handle_returning_user, start_town_capture,
     resume_town_capture, stage_town_confirmation, finalize_town_skipped,
 )
+from src.handlers.intents.play import _extract_slot_value
 from src.services.tasks import run_background
 from src.services.playback.session import has_unfinished_playback, read_playback_session
 from src.services.feedback import feedback_service

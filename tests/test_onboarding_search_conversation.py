@@ -55,6 +55,23 @@ async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_han
     assert store["awaitingLocationConfirm"] is True
 
 
+@pytest.mark.asyncio
+async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_handler_input):
+    monkeypatch.setattr(
+        "src.handlers.intents.onboarding.resolve_utterance",
+        AsyncMock(return_value={
+            "status": "resolved",
+            "resolution": {"match": {"city": "Swindon"}, "candidates": []},
+        }),
+    )
+    handler_input = _town_request(mock_handler_input, "swidon")
+    await TownCaptureHandler().handle(handler_input)
+
+    store = get_store(handler_input)
+    assert store["pendingLocationConfirm"]["city"] == "Swindon"
+    assert store["awaitingLocationConfirm"] is True
+
+
 def test_search_confirmation_runs_after_local_nlp_resolution():
     names = [interceptor.__name__ for interceptor in REQUEST_INTERCEPTORS]
     assert "ConfirmationMiddleware" in names
