@@ -415,6 +415,9 @@ class Resolver:
         ambiguous_references = self.taxonomy.snapshot.ambiguous(normalized, claimed)
         claimed.extend((item.start, item.end) for item in ambiguous_references)
         unresolved_references = _unresolved_contextual_references(normalized, claimed)
+        claimed.extend(
+            (item.start, item.end) for item in unresolved_references
+        )
         query = _extract_query(normalized, claimed)
         plan = SearchPlan(
             alexa_user_id=alexa_user_id,

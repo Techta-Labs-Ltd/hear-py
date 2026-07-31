@@ -92,7 +92,7 @@ def test_publication_is_spoken_as_collection_not_source():
 
 
 @pytest.mark.asyncio
-async def test_unresolved_creator_name_falls_back_to_search_query(
+async def test_unresolved_source_is_not_sent_as_a_search_query(
     monkeypatch,
     mock_handler_input,
 ):
@@ -119,15 +119,13 @@ async def test_unresolved_creator_name_falls_back_to_search_query(
     })
     monkeypatch.setattr("src.handlers.intents.play.search", search)
 
-    await discover_content_via_search(
+    result = await discover_content_via_search(
         handler_input,
         {"q": "", "intent": "category"},
     )
 
-    payload = search.await_args.args[0]
-    assert payload["query"] == "david"
-    assert payload["filter"]["categorySlugs"] == ["sports"]
-    assert payload["sort"] == "latest"
+    search.assert_not_awaited()
+    assert "creator, organisation or publication named david" in result["client_message"]
 
 
 @pytest.mark.asyncio
@@ -302,6 +300,51 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "more than one match" in spoken
     assert "couldn't match" not in spoken
+
+
+@pytest.mark.asyncio
+async def test_misrouted_unresolved_source_is_not_called_talking_newspaper(
+    mock_handler_input,
+):
+    from src.handlers.intents.play import PlayByOrganizationHandler
+
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayByOrganizationIntent",
+            "slots": {
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "value": "Orion meta glasses from Paul",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_nlp": {
+            "intent": "general",
+            "slots": {
+                "residualQuery": "orion meta glasses",
+                "unresolvedReferences": [{
+                    "relation": "from",
+                    "phrase": "paul",
+                    "expectedTypes": ["creator", "organization", "publication"],
+                }],
+            },
+        },
+    })
+
+    await PlayByOrganizationHandler().handle(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "creator, organisation or publication named paul" in spoken
+    assert "talking newspaper" not in spoken
+    assert get_store(mock_handler_input)["awaitingOrganizationName"] is False
 
 
 @pytest.mark.asyncio

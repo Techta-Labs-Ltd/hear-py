@@ -204,6 +204,17 @@ async def discover_content_via_search(
             ),
         }
     unresolved = nlp_slots.get("unresolvedReferences") or []
+    if unresolved:
+        reference = unresolved[0]
+        return {
+            "results": [],
+            "total_hits": 0,
+            "failed": False,
+            "client_message": unresolved_reference_message(
+                str(reference.get("phrase") or ""),
+                list(reference.get("expectedTypes") or []),
+            ),
+        }
 
     query = str(opts.get("q", ""))
     page = opts.get("page", 0)
@@ -799,6 +810,20 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             return handler_input.response_builder \
                 .speak(ssml(message)) \
                 .reprompt(ssml("Please say the full talking newspaper name.")) \
+                .set_should_end_session(False) \
+                .response
+
+        unresolved = nlp_slots.get("unresolvedReferences") or []
+        if unresolved:
+            reference = unresolved[0]
+            message = unresolved_reference_message(
+                str(reference.get("phrase") or org_query or ""),
+                list(reference.get("expectedTypes") or []),
+            )
+            update_store(handler_input, {"awaitingOrganizationName": False})
+            return handler_input.response_builder \
+                .speak(ssml(message)) \
+                .reprompt(ssml("Please say the creator, organisation, or publication's full name.")) \
                 .set_should_end_session(False) \
                 .response
 

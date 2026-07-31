@@ -124,6 +124,22 @@ def test_duplicated_source_slot_text_is_not_confirmable():
     assert result["unresolvedReferences"]
 
 
+def test_unresolved_source_is_removed_from_residual_topic_query():
+    result = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play something on orion meta glasses from paul",
+    })
+
+    assert result["status"] == "unresolved"
+    assert result["searchPayload"]["query"] == "orion meta glasses"
+    assert result["unresolvedReferences"] == [{
+        "relation": "from",
+        "phrase": "paul",
+        "expectedTypes": ["creator", "organization", "publication"],
+    }]
+
+
 def test_lates_sport_from_london_corrects_and_confirms_every_constraint():
     result = handler({
         "version": 1,

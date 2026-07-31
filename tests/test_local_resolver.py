@@ -290,7 +290,8 @@ def test_ambiguous_four_word_creator_is_not_guessed():
     ])
     plan = Resolver(manager).resolve("play from londn talking newspaper")
     assert plan.creator_ids == []
-    assert plan.query == "londn talking newspaper"
+    assert plan.query == ""
+    assert plan.unresolved_references
     assert [item.phrase for item in plan.unresolved_references] == [
         "londn talking newspaper",
     ]
@@ -336,7 +337,8 @@ def test_shared_acronym_returns_named_disambiguation_candidates():
 def test_low_confidence_name_is_left_as_query(resolver):
     plan = resolver.resolve("play news from damian")
     assert plan.creator_ids == []
-    assert plan.query == "damian"
+    assert plan.query == ""
+    assert plan.unresolved_references
     assert len(plan.unresolved_references) == 1
     assert plan.unresolved_references[0].phrase == "damian"
     assert plan.unresolved_references[0].expected_types == (
