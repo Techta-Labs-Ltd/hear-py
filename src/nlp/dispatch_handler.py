@@ -23,9 +23,6 @@ DISPATCHABLE_INTENTS: list[str] = [
     "resolver_unavailable",
 ]
 
-# Query-driven intents that are confirmed with the user before any search runs.
-# Broad "show me stuff" intents (trending/browse/following/show_more) act
-# immediately since there is no specific entity that could be misheard.
 NON_DISPATCHABLE_INTENTS: list[str] = [
     "ReportContentIntent", "ReportCreatorIntent",
     "FollowCreatorIntent", "UnfollowCreatorIntent", "WhoIsCreatorIntent", "WhatsThisAboutIntent",
@@ -39,12 +36,8 @@ NON_DISPATCHABLE_INTENTS: list[str] = [
     "AMAZON.StopIntent", "AMAZON.CancelIntent", "AMAZON.HelpIntent",
 ]
 
-
 class IntentDispatchHandler(AbstractRequestHandler):
-    """Request handler that dispatches NLP-classified intents to the appropriate handlers."""
-
     def can_handle(self, handler_input: HandlerInput) -> bool:
-        """Check whether this handler can handle the given request."""
         if get_request_type(handler_input) != "IntentRequest":
             return False
         alexa_intent = get_intent_name(handler_input)
@@ -57,7 +50,6 @@ class IntentDispatchHandler(AbstractRequestHandler):
         return nlp_data["intent"] in DISPATCHABLE_INTENTS
 
     def handle(self, handler_input: HandlerInput) -> Response:
-        """Dispatch the NLP intent to the appropriate handler."""
         attrs = handler_input.attributes_manager.request_attributes
         nlp_data = attrs.get("_nlp", {})
         intent = nlp_data.get("intent", "general")
@@ -107,12 +99,6 @@ class IntentDispatchHandler(AbstractRequestHandler):
             .get_response()
 
     def _ask_search_confirmation(self, handler_input: HandlerInput, nlp_data: dict, pending: dict) -> Response:
-        """Confirm the classified search with the user before running it.
-
-        Stores the pending intent/query/slots so ``YesIntentHandler`` can
-        execute the search on confirmation, and ``NoIntentHandler`` can offer
-        the alternatives instead.
-        """
         confirm_text = pending.get("confirmText")
         resolution = pending.get("resolution") or {}
         update_store(handler_input, {
@@ -134,7 +120,6 @@ class IntentDispatchHandler(AbstractRequestHandler):
             .get_response()
 
     def _handle_unclear(self, handler_input: HandlerInput, nlp_data: dict) -> Response:
-        """Handle an unclear intent by offering suggestions to the user."""
         suggestions = nlp_data.get("suggestions") or []
 
         if not suggestions:

@@ -1,4 +1,3 @@
-"""Dedicated AWS Lambda entry point for authenticated Hear webhooks."""
 from __future__ import annotations
 
 import asyncio

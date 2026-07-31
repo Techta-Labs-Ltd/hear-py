@@ -1,5 +1,3 @@
-"""Hint sets, intent mappings, and constants for NLP classification."""
-
 TRENDING_HINTS = {
     "what's trending", "whats trending", "what is trending", "what's popular",
     "what is popular", "what's hot", "what is hot", "trending", "popular",

@@ -1,8 +1,3 @@
-"""Lightweight classification for non-search Alexa utterances.
-
-Search meaning and taxonomy entities belong exclusively to ``src.resolver``.
-This module only recognizes conversational control and feedback intents.
-"""
 from __future__ import annotations
 
 from src.nlp.patterns import (
@@ -37,9 +32,7 @@ INTENT_HINTS = (
     ("browse", _normalized_hints(BROWSE_HINTS)),
 )
 
-
 def classify_utterance(raw: str | None) -> dict:
-    """Classify control language and expose resolver-derived search slots."""
     normalized = normalize_utterance(raw)
     if not normalized:
         return {"intent": "general", "confidence": "low", "slots": {}}

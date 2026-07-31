@@ -1,8 +1,5 @@
-"""Translate a SearchPlan into the Hear backend search contract."""
 from __future__ import annotations
-
 from src.resolver.models import SearchPlan
-
 
 def build_hear_payload(plan: SearchPlan) -> dict:
     payload = {

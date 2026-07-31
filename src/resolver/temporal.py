@@ -1,4 +1,3 @@
-"""Deterministic parsing for common Alexa temporal phrases."""
 from __future__ import annotations
 
 import re
@@ -12,7 +11,6 @@ WEEKDAYS = {
     "friday": 4, "saturday": 5, "sunday": 6,
 }
 
-
 def _zone(name: str | None):
     try:
         return ZoneInfo(name or "Europe/London")
@@ -25,7 +23,6 @@ def _range(text: str, start: datetime, end: datetime, match: re.Match) -> Tempor
         int(start.timestamp()), int(end.timestamp()), match.group(0),
         match.start(), match.end(),
     )
-
 
 def parse_temporal(
     text: str,

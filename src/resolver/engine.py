@@ -25,9 +25,7 @@ CONTEXT_TYPES = {
     "near": ("location",),
     "around": ("location",),
 }
-# A misspelled place following "from" should still be recoverable, while exact
-# "from Burnley" continues to prefer the organisation and unresolved names
-# retain the creator/publisher clarification contract.
+
 FUZZY_CONTEXT_TYPES = {
     **CONTEXT_TYPES,
     "from": (*CONTEXT_TYPES["from"], "location"),
@@ -39,23 +37,14 @@ CONTEXT_PATTERN = re.compile(
 )
 MAX_CONTEXT_ENTITY_WORDS = 4
 
-
 def _context_types(match: re.Match, *, fuzzy: bool = False) -> tuple[str, ...]:
-    """Return entity types allowed by a contextual phrase.
-
-    A spoken ``city`` qualifier is an explicit location signal, including
-    after ``from`` where a bare name may otherwise legitimately be an
-    organisation or creator.
-    """
     if re.search(r"\bcity\s*$", match.group(2)):
         return ("location",)
     mapping = FUZZY_CONTEXT_TYPES if fuzzy else CONTEXT_TYPES
     return mapping[match.group(1)]
 
-
 def _overlaps(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
     return any(start < stop and end > begin for begin, stop in spans)
-
 
 def _apply_context_type_constraints(
     text: str,
@@ -83,12 +72,10 @@ def _apply_context_type_constraints(
         ]
     return constrained
 
-
 def _prune_unjoined_categories(
     text: str,
     entities: list[ResolvedEntity],
 ) -> list[ResolvedEntity]:
-    """Keep multiple category filters only when speech explicitly joins them."""
     categories = sorted(
         (item for item in entities if item.entity_type == "category"),
         key=lambda item: item.start,
