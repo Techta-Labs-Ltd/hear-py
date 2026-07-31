@@ -12,6 +12,7 @@ from src.nlp.patterns import ALEXA_TO_NLP
 from src.resolver.engine import Resolver
 from src.resolver.payload import build_hear_payload
 from src.resolver.taxonomy import TaxonomyManager
+from src.services.api.client import ALLOWED_SORT_VALUES
 
 ROOT = Path(__file__).parents[1]
 MODEL_PATH = ROOT / "en-GB.json"
@@ -277,7 +278,11 @@ def test_every_simulated_utterance_resolves_without_error(resolver):
     for record in records:
         sig = record["signature"]
         payload = record["payload"]
-        assert set(payload) >= {"isLocal", "isRecommended", "query", "sort"}
+        assert set(payload) >= {"isLocal", "isRecommended", "query"}
+        if "sort" in payload:
+            assert payload["sort"] in ALLOWED_SORT_VALUES, record["utterance"]
+        else:
+            assert sig["sort"] == "relevance" and not sig["local"], record["utterance"]
 
 
 def test_category_carriers_preserve_the_topic(resolver):

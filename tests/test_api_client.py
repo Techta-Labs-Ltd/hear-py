@@ -7,9 +7,11 @@ import pytest
 from src.handlers.intents.play import auto_play_first_from_search
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.services.api.client import (
+    ALLOWED_SORT_VALUES,
     _build_alexa_relative_path,
     _build_alexa_search_path,
     _build_api_path,
+    search,
 )
 from src.services.playback.start import start_playback
 
@@ -39,6 +41,27 @@ def test_location_path_applies_configured_prefix_once(monkeypatch):
     )
 
     assert _build_api_path(_build_alexa_relative_path("location")) == "/alexa/location"
+
+
+@pytest.mark.asyncio
+async def test_search_omits_sort_values_the_api_rejects(monkeypatch):
+    sent = {}
+
+    async def fake_request(method, path, body, timeout_ms):
+        sent.update(body)
+        return 200, {"results": [], "total": 0}
+
+    monkeypatch.setattr("src.services.api.client._request", fake_request)
+
+    await search({"query": "news", "sort": "relevance"})
+    assert "sort" not in sent
+
+    await search({"query": "news", "sort": "recommended"})
+    assert sent["sort"] == "recommended"
+
+
+def test_allowed_sort_values_match_api_enum():
+    assert ALLOWED_SORT_VALUES == {"recommended", "nearest", "popular", "latest"}
 
 
 @pytest.mark.asyncio

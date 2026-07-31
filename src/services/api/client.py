@@ -7,6 +7,8 @@ from src.utils.normalize_content_item import normalize_content_items
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_SORT_VALUES = {"recommended", "nearest", "popular", "latest"}
+
 
 class HearApiClient:
     async def request(
@@ -126,11 +128,13 @@ async def search(payload: dict | None = None, timeout_ms: int | None = None) -> 
         "page": payload.get("page", 0),
     }
     for f in (
-        "alexaUserId", "sort", "filter", "isLocal", "isRecommended",
+        "alexaUserId", "filter", "isLocal", "isRecommended",
         "publishedFrom", "publishedTo",
     ):
         if payload.get(f) is not None:
             body[f] = payload[f]
+    if payload.get("sort") in ALLOWED_SORT_VALUES:
+        body["sort"] = payload["sort"]
 
     path = _build_alexa_search_path()
 

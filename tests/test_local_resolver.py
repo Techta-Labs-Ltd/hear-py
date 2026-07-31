@@ -94,6 +94,25 @@ def test_builds_exact_structured_payload(resolver):
 
 @pytest.mark.parametrize(
     "utterance",
+    ["play sport", "play news about the reservoir from david"],
+)
+def test_non_local_relevance_sort_is_omitted(resolver, utterance):
+    plan = resolver.resolve(utterance)
+    assert plan.sort == "relevance"
+    payload = build_hear_payload(plan)
+    assert "sort" not in payload
+    assert payload["isLocal"] is False
+
+
+def test_local_relevance_sort_becomes_nearest(resolver):
+    plan = resolver.resolve("play something from my community")
+    assert plan.is_local is True
+    assert plan.sort == "relevance"
+    assert build_hear_payload(plan)["sort"] == "nearest"
+
+
+@pytest.mark.parametrize(
+    "utterance",
     ["play recording", "play a track", "play audio", "play sound"],
 )
 def test_reserved_content_nouns_do_not_create_taxonomy_filters(
