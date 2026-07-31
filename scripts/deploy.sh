@@ -25,11 +25,16 @@ aws ecr get-login-password --region "$REGION" \
   | docker login --username AWS --password-stdin "$REGISTRY"
 
 echo ">> building + pushing image: $IMAGE"
-docker build --platform linux/amd64 -t "$IMAGE" .
+docker build --platform linux/amd64 --provenance=false -t "$IMAGE" .
 docker push "$IMAGE"
 
-ROLE=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$REGION" --query 'Role' --output text)
-ENVJSON=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$REGION" --query 'Environment' --output json)
+ROLE=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$REGION" --query 'Role' --output text 2>/dev/null)
+ENVJSON=$(aws lambda get-function-configuration --function-name "$SOURCE_FUNCTION" --region "$REGION" --query 'Environment' --output json 2>/dev/null)
+if [ -z "${ROLE:-}" ]; then
+  echo ">> source function '$SOURCE_FUNCTION' not found; copying role+env from '$FUNCTION'"
+  ROLE=$(aws lambda get-function-configuration --function-name "$FUNCTION" --region "$REGION" --query 'Role' --output text)
+  ENVJSON=$(aws lambda get-function-configuration --function-name "$FUNCTION" --region "$REGION" --query 'Environment' --output json)
+fi
 
 if aws lambda get-function --function-name "$FUNCTION" --region "$REGION" >/dev/null 2>&1; then
   echo ">> updating existing function code: $FUNCTION"
