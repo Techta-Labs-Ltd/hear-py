@@ -377,6 +377,44 @@ def test_ambiguity_follow_up_stays_with_offered_candidates():
     ]
 
 
+def test_repeated_ambiguous_alias_preserves_candidates_for_next_answer():
+    initial = handler({
+        "version": 1,
+        "operation": "resolve_search",
+        "utterance": "play wtn",
+    })
+    candidates = initial["ambiguities"][0]["candidates"][:3]
+    context = {
+        "intent": initial["intent"],
+        "searchPayload": initial["searchPayload"],
+        "slots": {
+            **initial["slots"],
+            "ambiguousReferences": [{"phrase": "wtn", "candidates": candidates}],
+        },
+        "candidates": candidates,
+    }
+
+    repeated = handler({
+        "version": 1,
+        "operation": "resolve_ambiguity_follow_up",
+        "utterance": "wtn",
+        "context": context,
+    })
+    selected = handler({
+        "version": 1,
+        "operation": "resolve_ambiguity_follow_up",
+        "utterance": "walsall",
+        "context": {**context, "candidates": repeated["ambiguities"][0]["candidates"]},
+    })
+
+    assert repeated["status"] == "ambiguous"
+    assert repeated["ambiguities"][0]["candidates"] == candidates
+    assert selected["status"] == "resolved"
+    assert selected["confirmationLabel"] == (
+        "content from Walsall Talking Newspaper"
+    )
+
+
 def test_resolver_client_rejects_malformed_contract(monkeypatch):
     from src.services import resolver_client
 

@@ -17,6 +17,27 @@ _FILTER_KEYS = {
 def resolve_ambiguity_follow_up(utterance: str, context: dict) -> dict:
     phrase = normalize_utterance(utterance)
     candidates = list(context.get("candidates") or [])
+    ambiguity_contexts = list((context.get("slots") or {}).get("ambiguousReferences") or [])
+    original_phrase = normalize_utterance(
+        ambiguity_contexts[0].get("phrase")
+        if ambiguity_contexts and isinstance(ambiguity_contexts[0], dict)
+        else ""
+    )
+    # Repeating an ambiguous alias means "I said the same name", not
+    # "restrict the choices to canonical names containing that acronym".
+    # Preserve the offered set so a following distinguishing answer remains
+    # resolvable (WTN -> WTN -> Walsall).
+    if original_phrase and phrase == original_phrase:
+        return {
+            "status": "ambiguous",
+            "intent": str(context.get("intent") or "general"),
+            "ambiguities": [{"phrase": original_phrase, "candidates": candidates}],
+            "slots": {"ambiguousReferences": [{
+                "phrase": original_phrase,
+                "candidates": candidates,
+            }]},
+            "alternatives": candidates,
+        }
     phrase_tokens = set(re.findall(r"[a-z0-9]+", phrase))
     containing = []
     ranked = []
