@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import json
 import logging
 import httpx
 from config import settings
@@ -137,9 +138,16 @@ async def search(payload: dict | None = None, timeout_ms: int | None = None) -> 
         body["sort"] = payload["sort"]
 
     path = _build_alexa_search_path()
+    logger.info(
+        "Hear API search request path=%s url=%s body=%s",
+        path,
+        f"{(settings.api_base_url or '').rstrip('/')}{path}",
+        json.dumps(body, default=str, ensure_ascii=False)[:2400],
+    )
 
     for attempt in range(retries + 1):
         status, data = await _request("POST", path, body, timeout_ms)
+        logger.info("Hear API search response attempt=%s status=%s", attempt + 1, status)
         if status == 200 and isinstance(data, dict):
             return {**_normalize_search_response(data), "failed": False}
         if attempt < retries and _is_retryable(status):
