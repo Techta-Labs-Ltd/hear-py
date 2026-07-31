@@ -53,6 +53,7 @@ from src.services.tasks import run_background
 from src.services.playback.session import has_unfinished_playback, read_playback_session
 from src.services.feedback import feedback_service
 from src.services.dialog_state import activate_dialog
+from src.services.dialog_state import get_active_dialog
 
 logger = logging.getLogger(__name__)
 MAX_TOWN_ATTEMPTS = 3
@@ -269,6 +270,10 @@ class TownCaptureHandler(AbstractRequestHandler):
             return False
         store = get_store(handler_input)
         if store.get("onboardingStage") != ONBOARDING_ASK_TOWN:
+            return False
+
+        active_dialog = get_active_dialog(handler_input)
+        if active_dialog and active_dialog.get("type") != "onboarding":
             return False
 
         attrs = handler_input.attributes_manager.get_request_attributes()

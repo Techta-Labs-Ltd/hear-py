@@ -84,7 +84,13 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 })
                 return
 
-            if alexa_intent == "TownCaptureIntent":
+            early_store = (
+                handler_input.attributes_manager.request_attributes.get("_store") or {}
+            )
+            if (
+                alexa_intent == "TownCaptureIntent"
+                and not isinstance(early_store.get("pendingAmbiguity"), dict)
+            ):
                 slot = (intent_obj.slots or {}).get("townName")
                 town = str(slot.value).strip() if slot and slot.value else None
                 _set_nlp(handler_input, {
@@ -100,18 +106,6 @@ class NlpInterceptor(AbstractRequestInterceptor):
 
             raw = _extract_raw_utterance(handler_input, alexa_intent)
             store = handler_input.attributes_manager.request_attributes.get("_store") or {}
-            if raw and store.get("onboardingStage") == "ask_town":
-                _set_nlp(handler_input, {
-                    "intent": "town_capture",
-                    "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
-                    "alexaRawIntent": alexa_intent,
-                    "nlpMatchesAlexa": False,
-                    "needsRedirect": True,
-                    "confidence": "high",
-                    "slots": {"townName": raw, "placeName": raw},
-                })
-                return
-
             pending_ambiguity = store.get("pendingAmbiguity")
             if raw and isinstance(pending_ambiguity, dict):
                 if int(pending_ambiguity.get("expiresAt") or 0) < int(time.time()):
@@ -145,6 +139,20 @@ class NlpInterceptor(AbstractRequestInterceptor):
                         "localResolved": True,
                     })
                     return
+
+            # The latest explicit prompt owns the reply. A stale onboarding
+            # stage must not steal an organization/creator ambiguity answer.
+            if raw and store.get("onboardingStage") == "ask_town":
+                _set_nlp(handler_input, {
+                    "intent": "town_capture",
+                    "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": False,
+                    "needsRedirect": True,
+                    "confidence": "high",
+                    "slots": {"townName": raw, "placeName": raw},
+                })
+                return
 
             if raw and store.get("awaitingOrganizationName"):
                 result = await resolve_utterance(

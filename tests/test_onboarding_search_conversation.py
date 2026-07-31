@@ -303,6 +303,87 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
 
 
 @pytest.mark.asyncio
+async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
+    monkeypatch,
+    mock_handler_input,
+):
+    """`wtn` -> `walsall` must select the organisation, not set a city."""
+    candidates = [
+        {"type": "organization", "id": "org-wakefield", "name": "Wakefield Talking Newspaper"},
+        {"type": "organization", "id": "org-walsall", "name": "Walsall Talking Newspaper"},
+        {"type": "organization", "id": "org-warrington", "name": "Warrington Talking Newspaper"},
+    ]
+    pending = {
+        "requestId": "ambiguous-wtn",
+        "intent": "organization",
+        "originalUtterance": "play wtn",
+        "searchPayload": {"query": "", "page": 0, "limit": 20},
+        "slots": {},
+        "candidates": candidates,
+        "createdAt": 1,
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            # Alexa can retain the town slot model even though Hear's latest
+            # prompt is an organization clarification.
+            "name": "TownCaptureIntent",
+            "slots": {"townName": {"name": "townName", "value": "walsall"}},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+        "pendingAmbiguity": pending,
+        "activeDialog": {
+            "type": "ambiguity",
+            "context": pending,
+            "createdAt": 1,
+            "expiresAt": 4102444800,
+        },
+    }
+    monkeypatch.setattr(
+        "src.nlp.resolve_utterance",
+        AsyncMock(return_value={
+            "version": 1,
+            "status": "resolved",
+            "intent": "organization",
+            "confidence": 1.0,
+            "confirmationLabel": "content from Walsall Talking Newspaper",
+            "searchPayload": {
+                "query": "",
+                "filter": {"organizationIds": ["org-walsall"]},
+                "page": 0,
+                "limit": 20,
+            },
+            "entities": [{
+                "type": "organization",
+                "id": "org-walsall",
+                "canonicalValue": "Walsall Talking Newspaper",
+            }],
+            "slots": {
+                "organizationIds": ["org-walsall"],
+                "organizationName": "Walsall Talking Newspaper",
+                "residualQuery": "",
+            },
+        }),
+    )
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "organization"
+    assert nlp["searchPayload"]["filter"] == {
+        "organizationIds": ["org-walsall"],
+    }
+    assert get_store(mock_handler_input)["pendingAmbiguity"] is None
+    assert not TownCaptureHandler().can_handle(mock_handler_input)
+
+
+@pytest.mark.asyncio
 async def test_misrouted_unresolved_source_is_not_called_talking_newspaper(
     mock_handler_input,
 ):
