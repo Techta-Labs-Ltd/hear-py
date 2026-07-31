@@ -68,7 +68,12 @@ class DynamoDbPersistenceAdapter:
             resp = self._client.get_item(
                 TableName=self.table_name,
                 Key=self._key(request_envelope),
-                ConsistentRead=False,
+                # Foreground dialogs span separate Alexa requests. An
+                # eventually consistent read can miss the ambiguity written
+                # by the immediately preceding response and route a reply as
+                # an unrelated intent (for example, WTN -> Wakefield becoming
+                # a location change). Always read the user's canonical state.
+                ConsistentRead=True,
             )
             item = resp.get("Item")
             if not item or self.attributes_name not in item:
