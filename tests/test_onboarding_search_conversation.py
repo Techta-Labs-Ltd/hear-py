@@ -247,6 +247,64 @@ async def test_resolved_organization_requires_confirmation_before_search(
 
 
 @pytest.mark.asyncio
+async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
+    mock_handler_input,
+):
+    from src.handlers.intents.play import PlayByOrganizationHandler
+
+    candidates = [
+        {"type": "organization", "id": f"org-{index}", "name": name}
+        for index, name in enumerate((
+            "Wakefield Talking Newspaper",
+            "Walsall Talking Newspaper",
+            "Warrington Talking Newspaper",
+            "Wirral Talking Newspaper",
+        ))
+    ]
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayByOrganizationIntent",
+            "slots": {
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "value": "wtn",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_nlp": {
+            "requestId": "ambiguous-wtn",
+            "intent": "organization",
+            "originalUtterance": "play wtn",
+            "searchPayload": {"query": "", "page": 0, "limit": 20},
+            "slots": {
+                "residualQuery": "",
+                "ambiguousReferences": [{
+                    "phrase": "wtn",
+                    "candidates": candidates,
+                }],
+            },
+        },
+    })
+
+    await PlayByOrganizationHandler().handle(mock_handler_input)
+
+    store = get_store(mock_handler_input)
+    assert store["activeDialog"]["type"] == "ambiguity"
+    assert store["pendingAmbiguity"]["candidates"] == candidates
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "more than one match" in spoken
+    assert "couldn't match" not in spoken
+
+
+@pytest.mark.asyncio
 async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     monkeypatch,
     mock_handler_input,

@@ -16,6 +16,7 @@ from src.services.storage.persistence import (
 )
 from src.services.api import search
 from src.services.resolution_state import build_pending_resolution
+from src.services.dialog_state import activate_dialog
 from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
     ssml, escape_ssml_lite, NO_CONTENT_AVAILABLE, SEARCH_UNAVAILABLE,
@@ -175,29 +176,31 @@ async def discover_content_via_search(
     ambiguous = nlp_slots.get("ambiguousReferences") or []
     if ambiguous:
         reference = ambiguous[0]
-        candidates = list(reference.get("candidates") or [])[:3]
+        candidates = list(reference.get("candidates") or [])
+        pending_ambiguity = {
+            "requestId": nlp.get("requestId"),
+            "intent": nlp.get("intent") or "general",
+            "originalUtterance": nlp.get("originalUtterance") or "",
+            "searchPayload": dict(
+                nlp.get("searchPayload") or nlp_slots.get("searchPlan") or {}
+            ),
+            "slots": dict(nlp_slots),
+            "candidates": candidates,
+            "createdAt": int(time.time()),
+            "expiresAt": int(time.time()) + 300,
+        }
         update_store(handler_input, {
-            "pendingAmbiguity": {
-                "requestId": nlp.get("requestId"),
-                "intent": nlp.get("intent") or "general",
-                "originalUtterance": nlp.get("originalUtterance") or "",
-                "searchPayload": dict(
-                    nlp.get("searchPayload") or nlp_slots.get("searchPlan") or {}
-                ),
-                "slots": dict(nlp_slots),
-                "candidates": candidates,
-                "createdAt": int(time.time()),
-                "expiresAt": int(time.time()) + 300,
-            },
+            "pendingAmbiguity": pending_ambiguity,
             "_requiresReliableSave": True,
         })
+        activate_dialog(handler_input, "ambiguity", context=pending_ambiguity)
         return {
             "results": [],
             "total_hits": 0,
             "failed": False,
             "client_message": ambiguous_reference_message(
                 str(reference.get("phrase") or ""),
-                candidates,
+                candidates[:3],
             ),
         }
     unresolved = nlp_slots.get("unresolvedReferences") or []
@@ -784,6 +787,18 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
                     "type": "Dialog.ElicitSlot",
                     "slotToElicit": "organizationQuery",
                 }) \
+                .set_should_end_session(False) \
+                .response
+
+        if nlp_slots.get("ambiguousReferences"):
+            result = await discover_content_via_search(handler_input, {
+                "q": "",
+                "intent": "organization",
+            })
+            message = result.get("client_message") or TALKING_NEWSPAPER_NOT_RECOGNIZED(org_query)
+            return handler_input.response_builder \
+                .speak(ssml(message)) \
+                .reprompt(ssml("Please say the full talking newspaper name.")) \
                 .set_should_end_session(False) \
                 .response
 
