@@ -111,17 +111,6 @@ class OnboardingGateHandler(AbstractRequestHandler):
         rt = get_request_type(handler_input)
         if rt == "LaunchRequest":
             store = get_store(handler_input)
-            stage = _get_stage(handler_input)
-            if stage == ONBOARDING_ASK_TOWN:
-                return handler_input.response_builder \
-                    .speak(ssml(REPROMPT_ASK_TOWN)) \
-                    .reprompt(ssml(REPROMPT_ASK_TOWN)) \
-                    .set_should_end_session(False) \
-                    .response
-            if stage == ONBOARDING_AWAIT_CONFIRM:
-                redirect = _confirm_echo(handler_input, store)
-                if redirect is not None:
-                    return redirect
             if _location_scopes_granted(handler_input):
                 return await auto_detect_location_or_manual(handler_input, store)
             return ask_for_permission(handler_input, store)

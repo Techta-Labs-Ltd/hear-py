@@ -115,9 +115,6 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
         update_store(handler_input, {"awaitingNotificationOptIn": False})
 
     # Foreground interaction priority: onboarding, resume, feedback, notifications.
-    if store.get("onboardingStage") == ONBOARDING_ASK_TOWN:
-        return resume_town_capture(handler_input, store)
-
     if store.get("onboardingStage") == "confirm_town_for_community":
         return start_town_capture(handler_input, store, user_name)
 

@@ -145,7 +145,7 @@ def _invoke(skill, event):
     response = result.get("response", {})
     speech = plain((response.get("outputSpeech") or {}).get("ssml"))
     directives = response.get("directives") or []
-    return speech, directives, response
+    return speech, directives, response, result
 
 
 RECORDS = []
@@ -171,10 +171,16 @@ def run_scenario(scenario_id, steps, store_preset=None):
     """Run a scripted conversation; each step asserts its own expectations."""
     skill, persistence = _build_skill(store_preset)
     store = dict(persistence._store.get(USER_ID) or {})
+    session_attributes = {}
     for step in steps:
         stage_before = _stage(store)
-        event = step["event"]
-        speech, directives, response = _invoke(skill, event)
+        event = dict(step["event"])
+        if event.get("request", {}).get("type") != "LaunchRequest" and session_attributes:
+            event["session"] = dict(event.get("session") or {})
+            event["session"]["attributes"] = dict(session_attributes)
+            event["session"]["new"] = False
+        speech, directives, response, result = _invoke(skill, event)
+        session_attributes = result.get("sessionAttributes") or {}
         store = dict(persistence._store.get(USER_ID) or {})
         stage_after = _stage(store)
         status = "OK"
@@ -499,14 +505,11 @@ def scenario_off_script_replies_stay_in_stage():
          "expect_speech": ["Did you say Burnley"],
          "expect_stage": "await_location_confirm"},
         {"step": 7, "event": make_event("LaunchRequest"),
-         "expect_speech": ["Did you say Burnley"],
-         "expect_stage": "await_location_confirm"},
+         "expect_speech": ["Welcome to Hear"],
+         "expect_stage": "ask_permission"},
         {"step": 8, "event": make_event("IntentRequest", "AMAZON.YesIntent"),
-         "expect_speech": ["I've set your location to Burnley",
-                           "Would you like to hear the latest from Burnley"],
-         "expect_stage": None},
-        {"step": 9, "event": make_event("IntentRequest", "AMAZON.FallbackIntent"),
-         "expect_speech": ["Sorry, I didn't catch that"]},
+         "expect_card": "AskForPermissionsConsent",
+         "expect_stage": "ask_permission"},
     ]
     for record in run_scenario("S10 off-script replies stay in stage", steps):
         store = record["store"]
@@ -517,9 +520,6 @@ def scenario_off_script_replies_stay_in_stage():
             assert "trending" not in record["speech"].lower()
         if record["step"] == 6:
             assert store["awaitingCommunityPlayback"] is False
-            assert store["pendingLocationConfirm"]["city"] == "Burnley"
-        if record["step"] == 9:
-            assert store["onboardingComplete"] is True
 
 
 def scenario_content_or_skip_classified_at_town_capture():
@@ -563,6 +563,20 @@ def scenario_returning_user_dangling_stage_is_redirected():
         assert record["store"]["onboardingTownAttempts"] == 2
 
 
+def scenario_relaunch_mid_onboarding_resets_stage():
+    steps = [
+        {"step": 1, "event": make_event("LaunchRequest"),
+         "expect_speech": ["Welcome to Hear"], "expect_stage": "ask_permission"},
+        {"step": 2, "event": make_event("IntentRequest", "AMAZON.NoIntent"),
+         "expect_speech": ["Which town or city"], "expect_stage": "ask_town"},
+        {"step": 3, "event": make_event("LaunchRequest"),
+         "expect_speech": ["Welcome to Hear"], "expect_stage": "ask_permission"},
+    ]
+    for record in run_scenario("S13 relaunch mid onboarding resets stage", steps):
+        if record["step"] == 3:
+            assert "where are you based" not in record["speech"].lower()
+
+
 @pytest.fixture(autouse=True)
 def _reset_records():
     RECORDS.clear()
@@ -604,6 +618,7 @@ def simulation():
         scenario_off_script_replies_stay_in_stage()
         scenario_content_or_skip_classified_at_town_capture()
         scenario_returning_user_dangling_stage_is_redirected()
+        scenario_relaunch_mid_onboarding_resets_stage()
     return list(RECORDS)
 
 

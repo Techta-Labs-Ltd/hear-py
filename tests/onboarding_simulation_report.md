@@ -6,7 +6,7 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 
 | Status | Count |
 | --- | --- |
-| OK | 49 |
+| OK | 51 |
 | GAP | 0 |
 | FAIL | 3 |
 
@@ -96,9 +96,8 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 | 4 | WhatsTrendingIntent | ask_town | ask_town | OK | Just the town name please — like London or Manchester. Or say skip if you'd rather not. |  |
 | 5 | TownCaptureIntent | ask_town | await_location_confirm | OK | Did you say Burnley? |  |
 | 6 | PlayContentIntent | await_location_confirm | await_location_confirm | OK | Did you say Burnley? |  |
-| 7 | LaunchRequest | await_location_confirm | await_location_confirm | OK | Did you say Burnley? |  |
-| 8 | AMAZON.YesIntent | await_location_confirm | - | OK | Thanks. I've set your location to Burnley. You can ask for local news or sport, play from a talking newspaper, or say what's trending. What would you like to hear? Would you like to hear the latest from Burnley? |  |
-| 9 | AMAZON.FallbackIntent | - | - | OK | Sorry, I didn't catch that. You can say play news, play from a creator by name, or what's trending. What would you like? |  |
+| 7 | LaunchRequest | await_location_confirm | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
+| 8 | AMAZON.YesIntent | ask_permission | ask_permission | OK | I've sent a card to your Alexa app — open it and tap to share your location. If you'd rather not, you can just tell me your town and I'll take it from there. |  |
 ### S11 content or skip classified at town capture
 
 | Step | Intent | Stage in | Stage out | Status | Speech | Note |
@@ -112,6 +111,13 @@ Live simulation of the onboarding checklist through the real skill stack (AsyncS
 | Step | Intent | Stage in | Stage out | Status | Speech | Note |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | AMAZON.FallbackIntent | ask_town | ask_town | OK | Just the town name please — like London or Manchester. Or say skip if you'd rather not. |  |
+### S13 relaunch mid onboarding resets stage
+
+| Step | Intent | Stage in | Stage out | Status | Speech | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | LaunchRequest | - | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
+| 2 | AMAZON.NoIntent | ask_permission | ask_town | OK | No worries. Which town or city are you in? |  |
+| 3 | LaunchRequest | ask_town | ask_permission | OK | Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright? |  |
 
 ## GAPS
 
