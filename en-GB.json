@@ -450,8 +450,17 @@
         },
         {
           "name": "WhatsTrendingIntent",
-          "slots": [],
+          "slots": [
+            {
+              "name": "topic",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
           "samples": [
+            "what's the latest {topic}",
+            "what is the latest {topic}",
+            "what's latest {topic}",
+            "what is latest {topic}",
             "what's trending",
             "what is trending",
             "tell me what's trending",
