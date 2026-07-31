@@ -844,8 +844,10 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     updated = get_store(handler_input)
     assert updated["onboardingComplete"] is True
     assert updated["userCity"] == "Swindon"
-    assert updated["awaitingCommunityPlayback"] is False
+    assert updated["locationSource"] == "manual"
+    assert updated["awaitingCommunityPlayback"] is True
     spoken = handler_input.response_builder.speak.call_args.args[0]
     assert "I've set your location to Swindon" in spoken
     assert "What would you like to hear?" in spoken
+    assert "Would you like to hear the latest from Swindon" in spoken
     sync.assert_awaited_once()

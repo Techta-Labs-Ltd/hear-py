@@ -1,4 +1,5 @@
 from src.handlers.intents.launch import LaunchRequestHandler, TownCaptureHandler, SetLocationHandler
+from src.handlers.intents.onboarding import ConnectionsResponseHandler
 from src.services.playback.start import start_playback, prepare_playback_audio_and_store
 from src.handlers.intents.play import (
     PlayByCreatorHandler, PlayByOrganizationHandler, PlayContentHandler,
@@ -25,6 +26,7 @@ from src.handlers.intents.hear_notifications import HearNotificationsHandler
 
 __all__ = [
     "LaunchRequestHandler", "TownCaptureHandler", "SetLocationHandler", "start_playback", "prepare_playback_audio_and_store",
+    "ConnectionsResponseHandler",
     "PlayByCreatorHandler", "PlayByOrganizationHandler", "PlayContentHandler",
     "WhatsTrendingHandler", "BrowseContentHandler", "ShowMoreBrowseHandler",
     "discover_content_via_search", "auto_play_first_from_search",

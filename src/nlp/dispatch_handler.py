@@ -104,6 +104,7 @@ class IntentDispatchHandler(AbstractRequestHandler):
         update_store(handler_input, {
             "awaitingSearchConfirmation": True,
             "pendingResolution": resolution,
+            "awaitingCommunityPlayback": False,
             "_requiresReliableSave": True,
         })
         activate_dialog(

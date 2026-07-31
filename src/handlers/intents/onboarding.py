@@ -4,18 +4,22 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
+from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
 from src.services.storage.persistence import get_store, update_store
+from src.services.alexa.locality import detect_device_location
 from src.services.resolver_client import ResolverUnavailable, resolve_utterance
+from src.utils.skill_request import get_request_type
 from src.utils.speech import (
     ssml, ONBOARDING_ASK_PERMISSION, ONBOARDING_CONSENT_CARD_SENT,
     ONBOARDING_LOCATION_DENIED, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
     TOWN_NOT_UNDERSTOOD, TOWN_GOT_IT, REPROMPT_CITY, TOWN_SKIPPED, REPROMPT_NO_CITY,
     WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY, WELCOME_RETURN_GENERIC,
-    ONBOARDING_TOWN_CONFIRM,
+    ONBOARDING_TOWN_CONFIRM, ONBOARDING_FETCHING_LOCATION,
+    ONBOARDING_DETECTED_TOWN, CONSENT_CARD_THANKS, LOCATION_DECLINED,
 )
 
 ONBOARDING_ASK_TOWN = "ask_town"
@@ -205,6 +209,7 @@ def finalize_town_skipped(handler_input: HandlerInput, store: Dict[str, Any]):
     update_store(handler_input, {
         "onboardingStage": None,
         "onboardingTownAttempts": 0,
+        "onboardingComplete": True,
     })
 
     logger.info("Hear: onboarding town skipped")
@@ -214,3 +219,50 @@ def finalize_town_skipped(handler_input: HandlerInput, store: Dict[str, Any]):
         .reprompt(ssml(REPROMPT_NO_CITY)) \
         .set_should_end_session(False) \
         .response
+
+
+async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dict[str, Any]):
+    """Try Amazon-API city detection; fall back to manual town capture."""
+    match = await detect_device_location(handler_input)
+    if not match:
+        return handle_permission_no(handler_input, store)
+    update_store(handler_input, {
+        "pendingLocationConfirm": match,
+        "awaitingLocationConfirm": True,
+        "onboardingStage": "await_location_confirm",
+        "onboardingTownAttempts": 0,
+    })
+    return handler_input.response_builder \
+        .speak(ssml(
+            f"{ONBOARDING_FETCHING_LOCATION} {ONBOARDING_DETECTED_TOWN(match['city'])}"
+        )) \
+        .reprompt(ssml("Say yes to confirm, or no to set a different town.")) \
+        .set_should_end_session(False) \
+        .response
+
+
+def _consent_status_code(handler_input) -> str:
+    try:
+        request = handler_input.request_envelope.request
+        return str((getattr(request, "status", None) or {}).get("code") or "")
+    except Exception:
+        return ""
+
+
+class ConnectionsResponseHandler(AbstractRequestHandler):
+    """Handles the in-session response to the AskForPermissionsConsent card."""
+
+    def can_handle(self, handler_input: HandlerInput) -> bool:
+        return get_request_type(handler_input) == "Connections.Response"
+
+    async def handle(self, handler_input: HandlerInput):
+        store = get_store(handler_input)
+        granted = _consent_status_code(handler_input).startswith("2")
+        if store.get("onboardingComplete"):
+            return handler_input.response_builder \
+                .speak(ssml(CONSENT_CARD_THANKS if granted else LOCATION_DECLINED)) \
+                .set_should_end_session(False) \
+                .response
+        if granted:
+            return await auto_detect_location_or_manual(handler_input, store)
+        return handle_permission_no(handler_input, store)

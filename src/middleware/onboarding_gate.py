@@ -5,11 +5,15 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
+
+from src.services.alexa.locality import has_permission
 from src.services.storage.persistence import get_store
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import ssml
 from src.handlers.intents.onboarding import (
     ask_for_permission, handle_permission_yes, handle_permission_no,
+    auto_detect_location_or_manual,
 )
 
 
@@ -28,6 +32,13 @@ def _get_stage(handler_input: HandlerInput) -> str | None:
         sess = handler_input.attributes_manager.get_session_attributes() or {}
         stage = sess.get("onboardingStage")
     return stage or None
+
+
+def _location_scopes_granted(handler_input: HandlerInput) -> bool:
+    """Whether the user already granted a device location scope."""
+    return has_permission(handler_input, DEVICE_ADDRESS) or has_permission(
+        handler_input, GEOLOCATION_READ
+    )
 
 
 class OnboardingGateHandler(AbstractRequestHandler):
@@ -57,10 +68,13 @@ class OnboardingGateHandler(AbstractRequestHandler):
         stage = _get_stage(handler_input)
         return stage == "ask_permission" or not stage
 
-    def handle(self, handler_input: HandlerInput):
+    async def handle(self, handler_input: HandlerInput):
         rt = get_request_type(handler_input)
         if rt == "LaunchRequest":
-            return ask_for_permission(handler_input, get_store(handler_input))
+            store = get_store(handler_input)
+            if _location_scopes_granted(handler_input):
+                return await auto_detect_location_or_manual(handler_input, store)
+            return ask_for_permission(handler_input, store)
 
         intent = get_intent_name(handler_input)
         stage = _get_stage(handler_input)
@@ -68,6 +82,8 @@ class OnboardingGateHandler(AbstractRequestHandler):
 
         if stage == "ask_permission" or not stage:
             if intent == "AMAZON.YesIntent":
+                if _location_scopes_granted(handler_input):
+                    return await auto_detect_location_or_manual(handler_input, store)
                 return handle_permission_yes(handler_input, store)
             if intent == "AMAZON.NoIntent":
                 return handle_permission_no(handler_input, store)

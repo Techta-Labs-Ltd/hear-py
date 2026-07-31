@@ -6,7 +6,6 @@ from src.services.storage.persistence import get_store, update_store
 
 
 def get_geolocation(handler_input) -> dict | None:
-    """Extract latitude/longitude/accuracy from the Alexa request context."""
     try:
         geo = handler_input.request_envelope.context.Geolocation
     except Exception:
@@ -22,7 +21,6 @@ def get_geolocation(handler_input) -> dict | None:
 
 
 async def get_device_address(handler_input) -> dict | None:
-    """Fetch the device's country-and-postal-code address via the Alexa API."""
     try:
         sys = handler_input.request_envelope.context.System
         if not sys.apiEndpoint or sys.apiAccessToken is None or not (sys.device and sys.device.deviceId):
@@ -35,7 +33,7 @@ async def get_device_address(handler_input) -> dict | None:
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"{api_endpoint}/v1/devices/{device_id}/settings/address/countryAndPostalCode",
+                f"{api_endpoint}/v1/devices/{device_id}/settings/address",
                 headers={"Authorization": f"Bearer {api_access_token}"},
             )
             if resp.status_code == 403:
@@ -44,18 +42,53 @@ async def get_device_address(handler_input) -> dict | None:
                 return None
             resp.raise_for_status()
             data = resp.json()
-            return {"postalCode": data.get("postalCode"), "countryCode": data.get("countryCode")}
+            return {
+                "city": data.get("city"),
+                "postalCode": data.get("postalCode"),
+                "countryCode": data.get("countryCode"),
+                "stateOrRegion": data.get("stateOrRegion"),
+                "addressLine3": data.get("addressLine3"),
+            }
     except Exception:
         return None
 
 
 def has_permission(handler_input, scope: str) -> bool:
-    """Check whether the Alexa request grants the specified permission scope."""
     try:
         scopes = handler_input.request_envelope.context.System.user.permissions.scopes
         return (scopes or {}).get(scope, {}).get("status") == "GRANTED"
     except Exception:
         return False
+
+
+async def detect_device_location(handler_input) -> dict | None:
+    """Best-effort city detection from granted Amazon device permissions.
+
+    Returns a location match dict (``source="device"``) ready for the town
+    confirmation flow, or None when no city can be derived.
+    """
+    address = None
+    if has_permission(handler_input, permission_scopes.DEVICE_ADDRESS):
+        fetched = await get_device_address(handler_input)
+        if fetched and not fetched.get("denied"):
+            address = fetched
+    geo = None
+    if has_permission(handler_input, permission_scopes.GEOLOCATION_READ):
+        geo = get_geolocation(handler_input)
+
+    city = (address or {}).get("city") or (address or {}).get("addressLine3")
+    if not city:
+        return None
+    return {
+        "city": str(city).strip(),
+        "locality": str(city).strip(),
+        "countryCode": (address or {}).get("countryCode"),
+        "postalCode": (address or {}).get("postalCode"),
+        "stateOrRegion": (address or {}).get("stateOrRegion"),
+        "latitude": (geo or {}).get("latitude"),
+        "longitude": (geo or {}).get("longitude"),
+        "source": "device",
+    }
 
 
 def _parse_profile_setting_value(data) -> str | None:

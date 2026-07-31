@@ -655,9 +655,12 @@ ONBOARDING_ASK_PERMISSION = "Welcome to Hear. I can bring you the latest audio f
 ONBOARDING_CONSENT_CARD_SENT = "I've sent a card to your Alexa app \u2014 open it and tap to share your location. If you'd rather not, you can just tell me your town and I'll take it from there."
 ONBOARDING_LOCATION_DENIED = "No worries. Which town or city are you in?"
 ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
+ONBOARDING_DETECTED_TOWN = lambda city: f"I think you're in {escape_ssml_lite(city)} \u2014 is that right?"
 ONBOARDING_TOWN_CONFIRM = lambda city: f"Did you say {escape_ssml_lite(city)}?"
 ONBOARDING_TOWN_RETRY = "Sorry, didn\u2019t quite catch that. Say your town or city again."
 ONBOARDING_TOWN_GIVE_UP = "I'm having trouble catching that. Not to worry \u2014 you can still browse everything. Say what's trending to get started. What would you like?"
+CONSENT_CARD_THANKS = "Thanks \u2014 you're all set. What would you like to listen to?"
+COMMUNITY_PLAYBACK_OFFER = lambda city: f"Would you like to hear the latest from {escape_ssml_lite(city)}?"
 
 # \u2500\u2500 Location (set / confirm / resolution failure) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 LOCATION_NOT_FOUND = "I couldn't find your location from your account. Would you like to tell me which city you're in so I can find content from your area?"

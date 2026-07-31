@@ -31,11 +31,11 @@ from src.utils.speech import (
     FEEDBACK_FOLLOW_DECLINED, FOLLOW_CREATOR_NOTIFICATION_DECLINED,
     FOLLOW_NOTIFICATION_DECLINED_GENERIC, ASK_LISTEN_FIRST, ASK_LISTEN_NEXT,
     END_OF_LIST, NO_TRACKS_AVAILABLE, QUEUE_FINISHED, QUEUE_NEXT_ANNOUNCE,
-    LOCATION_ASK_CITY, LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
+    LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
+    COMMUNITY_PLAYBACK_OFFER,
     ASK_TALKING_NEWSPAPER_REPROMPT, ambiguous_reference_message,
 )
 from src.services.api import sync_listener
-from src.handlers.intents.onboarding import ONBOARDING_ASK_TOWN
 from src.utils.audio import build_stop_directive
 from src.services.playback.events import emit_user_playback_event, USER_PLAYBACK_EVENT_TYPES
 from src.utils.feedback_flow import idle_next_response
@@ -162,20 +162,7 @@ class YesIntentHandler(AbstractRequestHandler):
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
         dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
-        # 0a. Location onboarding choice — user agrees to give their city
-        if store.get("awaitingLocationChoice"):
-            update_store(handler_input, {
-                "onboardingStage": ONBOARDING_ASK_TOWN,
-                "onboardingTownAttempts": 0,
-                "awaitingLocationChoice": False,
-            })
-            return handler_input.response_builder \
-                .speak(ssml(LOCATION_ASK_CITY)) \
-                .reprompt(ssml(LOCATION_ASK_CITY)) \
-                .set_should_end_session(False) \
-                .response
-
-        # 0b. Location confirmation — user confirms the town to save
+        # 0. Location confirmation — user confirms the town to save
         if store.get("awaitingLocationConfirm"):
             return await self._confirm_location(handler_input, store)
 
@@ -261,15 +248,16 @@ class YesIntentHandler(AbstractRequestHandler):
             "userCity": final_city,
             "locality": pending.get("locality") or final_city,
             "deviceCountryCode": pending.get("countryCode"),
+            "devicePostalCode": pending.get("postalCode") or store.get("devicePostalCode"),
             "latitude": pending.get("latitude"),
             "longitude": pending.get("longitude"),
             "onboardingComplete": True,
             "onboardingStage": None,
-            "locationSource": "manual",
+            "locationSource": pending.get("source") or "manual",
             "localityResolvedAt": _current_timestamp_ms(),
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
-            "awaitingCommunityPlayback": False,
+            "awaitingCommunityPlayback": True,
         })
         confirmed = get_store(handler_input)
         if user_id:
@@ -290,15 +278,20 @@ class YesIntentHandler(AbstractRequestHandler):
             except Exception as err:
                 logger.warning("Hear: listener sync failed error=%s", type(err).__name__)
         return handler_input.response_builder \
-            .speak(ssml(LOCATION_CONFIRMED(final_city))) \
-            .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
+            .speak(ssml(f"{LOCATION_CONFIRMED(final_city)} {COMMUNITY_PLAYBACK_OFFER(final_city)}")) \
+            .reprompt(ssml(COMMUNITY_PLAYBACK_OFFER(final_city))) \
             .set_should_end_session(False) \
             .response
 
     async def _handle_community_play_yes(self, handler_input, store):
         """Play local content after the user accepts the location follow-up."""
         city = store.get("userCity") or store.get("locality")
-        update_store(handler_input, {"awaitingCommunityPlayback": False})
+        update_store(handler_input, {
+            "awaitingCommunityPlayback": False,
+            "awaitingSearchConfirmation": False,
+            "pendingResolution": None,
+        })
+        clear_active_dialog(handler_input, "search_confirmation")
         attrs = handler_input.attributes_manager.get_request_attributes()
         attrs["_nlp"] = {
             "intent": "local",
@@ -708,19 +701,7 @@ class NoIntentHandler(AbstractRequestHandler):
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
         dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
-        # 0a. Location onboarding choice declined
-        if store.get("awaitingLocationChoice"):
-            update_store(handler_input, {
-                "awaitingLocationChoice": False,
-                "onboardingStage": None,
-            })
-            return handler_input.response_builder \
-                .speak(ssml(LOCATION_DECLINED)) \
-                .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
-                .set_should_end_session(False) \
-                .response
-
-        # 0b. Location confirmation rejected — ask for a different town
+        # 0. Location confirmation rejected — ask for a different town
         if store.get("awaitingLocationConfirm"):
             update_store(handler_input, {
                 "awaitingLocationConfirm": False,
