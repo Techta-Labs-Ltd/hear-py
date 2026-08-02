@@ -248,6 +248,27 @@ def pick_content_credit(item: dict) -> str | None:
     return pick_attribution_credit(item)
 
 
+def pick_content_source(item: dict) -> dict | None:
+    if not isinstance(item, dict):
+        return None
+    organization_name = _pick_organization_name(item)
+    organization_id = item.get("organizationId")
+    organization = item.get("organization")
+    if isinstance(organization, dict):
+        organization_id = organization.get("id") or organization_id
+    if _is_organization_publisher(item) and organization_id:
+        return {
+            "kind": "organization",
+            "id": organization_id,
+            "name": organization_name,
+        }
+    creator_name = _extract_creator_name(item)
+    creator_id = _extract_creator_id(item)
+    if creator_id and creator_name and not is_bad_credit_name(creator_name):
+        return {"kind": "creator", "id": creator_id, "name": creator_name}
+    return None
+
+
 def pick_menu_credit(item: dict) -> str | None:
     """Pick the menu credit for browse listing display."""
     return pick_attribution_credit(item)

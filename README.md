@@ -28,11 +28,11 @@ the registries instead of registering them in the Lambda entry point.
 Search utterances are resolved locally in Lambda. The resolver separates exact
 taxonomy facets from residual full-text terms, emits the structured Hear search
 contract, and preserves that contract through browse pagination and queue refill.
-The container build downloads, hash-checks, and stores the taxonomy under
-`/opt/hear-taxonomy`. Alexa requests load only that immutable local snapshot and
-never fetch the CDN manifest. The separately deployed `/webhook/taxonomy`
-endpoint records new revisions for the next image build. Bundled
-`src/data/locations.json` remains the static location source.
+The deployed `/webhook/taxonomy` endpoint queues background runtime refreshes.
+A worker validates and stores an immutable snapshot, warms a candidate resolver
+Lambda version using the existing image, and atomically promotes its alias.
+Alexa requests never fetch the CDN manifest. Bundled `src/data/locations.json`
+remains the static location source.
 
 ## Local checks
 
@@ -48,3 +48,11 @@ local development only.
 
 See [Outbound listening and feedback events](docs/outbound-listening-events.md)
 for the playback/feedback webhook contract and AWS delivery checks.
+
+See [Backend creator notification integration](docs/backend-notifications.md)
+for follow/subscription events and the new track/publication notification
+webhook contract.
+
+See [Runtime taxonomy revisions and zero-downtime activation](docs/runtime-taxonomy.md)
+for the backend taxonomy webhook, default DynamoDB revision, immutable resolver
+build, and alias-promotion contract.

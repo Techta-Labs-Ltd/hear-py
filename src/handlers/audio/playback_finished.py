@@ -10,12 +10,13 @@ from src.services.playback.events import emit_listening_event
 from src.services.playback.session import read_playback_session, write_playback_session
 from src.services.queue.advance import play_next_queued_item
 from src.services.queue.state import read_playback_queue
-from src.services.storage.persistence import get_store
+from src.services.storage.persistence import get_store, update_store
 from src.utils.skill_request import (
     get_audio_player_offset_ms,
     get_audio_player_token,
     get_request_type,
 )
+from src.utils.normalize_content_item import pick_content_source
 
 
 class PlaybackFinishedHandler(AbstractRequestHandler):
@@ -38,6 +39,22 @@ class PlaybackFinishedHandler(AbstractRequestHandler):
                 "offsetMs": max(offset_ms, duration_ms),
                 "listenedMs": listened_ms,
             })
+            source = {
+                "contentId": state.get("contentId"),
+                "organizationId": state.get("organizationId"),
+                "organizationName": state.get("organizationName"),
+                "creatorId": state.get("creatorId"),
+                "creatorName": state.get("creatorName"),
+                "completedAt": state.get("updatedAt"),
+            }
+            selected_source = pick_content_source(source)
+            if selected_source:
+                source.update({
+                    "sourceKind": selected_source["kind"],
+                    "sourceId": selected_source["id"],
+                    "sourceName": selected_source["name"],
+                })
+                update_store(handler_input, {"lastCompletedSource": source})
             record_feedback_candidate(handler_input, state, completed=True)
             await emit_listening_event(handler_input, "finished", state)
             queue = read_playback_queue(get_store(handler_input))

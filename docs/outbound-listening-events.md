@@ -85,10 +85,11 @@ The worker signs the exact JSON request body using HMAC-SHA256 and
 `WEBHOOK_OUTBOUND_SECRET`. It sends:
 
 - `Content-Type: application/json`
+- `X-Api-Key: <HEAR_API_KEY>`
 - `x-webhook-signature: t=<unix-seconds>,v1=<hex-digest>`
 - `x-webhook-timestamp: <unix-seconds>`
 
-The receiving API must verify the signature against the raw request body and
+The receiving API authenticates `X-Api-Key`, verifies the signature against the raw request body, and
 reject timestamps outside `WEBHOOK_SIGNATURE_TOLERANCE_SECONDS`.
 
 ## AWS verification

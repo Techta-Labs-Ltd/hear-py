@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     HEAR_TAXONOMY_REFRESH_SECONDS: int = 300
     HEAR_TAXONOMY_AUTO_REFRESH: bool = _is_lambda()
     HEAR_TAXONOMY_BUNDLE_DIR: str = ""
+    HEAR_TAXONOMY_REFRESH_QUEUE_URL: str = ""
+    HEAR_TAXONOMY_SNAPSHOT_BUCKET: str = ""
+    HEAR_TAXONOMY_SNAPSHOT_KEY: str = ""
+    HEAR_TAXONOMY_ACTIVE_REVISION: str = ""
+    HEAR_RESOLVER_FUNCTION_NAME: str = ""
+    HEAR_RESOLVER_LIVE_ALIAS: str = "live"
+    HEAR_RESOLVER_CANDIDATE_ALIAS: str = "candidate"
     HEAR_SEMANTIC_ROUTER_ENABLED: bool = _is_lambda()
     HEAR_SEMANTIC_ROUTER_MODEL: str = "BAAI/bge-small-en-v1.5"
     HEAR_SEMANTIC_ROUTER_CACHE_DIR: str = "/opt/hear-semantic-models"
@@ -65,6 +72,13 @@ class Settings(BaseSettings):
     HEAR_SEMANTIC_ROUTER_THREADS: int = 2
     HEAR_RESOLVER_FUNCTION_ARN: str = ""
     HEAR_RESOLVER_TIMEOUT_MS: int = 2500
+    NOTIFICATION_INGEST_QUEUE_URL: str = ""
+    ALEXA_PROACTIVE_CLIENT_ID: str = ""
+    ALEXA_PROACTIVE_CLIENT_SECRET: str = ""
+    ALEXA_PROACTIVE_STAGE: str = "development"
+    WEBHOOK_ALLOW_LEGACY_SECRET: bool = not _is_lambda()
+    WEBHOOK_SIGNATURE_TOLERANCE_SECONDS: int = 300
+    WEBHOOK_REPLAY_TABLE: str = ""
 
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "development"
@@ -115,7 +129,7 @@ class Settings(BaseSettings):
 
     @cached_property
     def speeds(self) -> list[float]:
-        return [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0]
+        return [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
     @cached_property
     def default_speed(self) -> float:

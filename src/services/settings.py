@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from urllib.parse import urlparse
 
 import boto3
 
@@ -59,7 +60,22 @@ def invalidate_settings():
 async def handle_settings_webhook(event: dict) -> dict:
     """Handle an incoming settings webhook by writing to DynamoDB."""
     body = event.get("body")
-    parsed = json.loads(body) if isinstance(body, str) else body
+    try:
+        parsed = json.loads(body) if isinstance(body, str) else body
+    except (json.JSONDecodeError, TypeError):
+        parsed = None
+    if not isinstance(parsed, dict):
+        return {"statusCode": 400, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": "Body must be a JSON object"})}
+    allowed = {"autoPlay", "outroEnabled", "outroUrl", "outroUrlFinal", "feedbackEnabled"}
+    unknown = sorted(set(parsed) - allowed)
+    if unknown:
+        return {"statusCode": 400, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": "Unknown settings fields", "fields": unknown})}
+    for field in ("outroUrl", "outroUrlFinal"):
+        value = parsed.get(field)
+        if value:
+            parsed_url = urlparse(str(value))
+            if parsed_url.scheme != "https" or not parsed_url.netloc:
+                return {"statusCode": 400, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": f"{field} must be an HTTPS URL"})}
 
     table_name = settings.SETTINGS_TABLE or "hear_settings"
     item = {
@@ -77,7 +93,7 @@ async def handle_settings_webhook(event: dict) -> dict:
         table = client.Table(table_name)
         table.put_item(Item=item)
     except Exception:
-        pass
+        return {"statusCode": 503, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": "Settings store unavailable"})}
 
     invalidate_settings()
 

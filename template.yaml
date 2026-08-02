@@ -33,11 +33,14 @@ Parameters:
   HearApiKey:            { Type: String, NoEcho: true, Default: "" }
   WebhookSecret:         { Type: String, NoEcho: true, Default: "" }
   WebhookOutboundSecret: { Type: String, NoEcho: true, Default: "" }
+  AlexaProactiveClientId: { Type: String, NoEcho: true, Default: "" }
+  AlexaProactiveClientSecret: { Type: String, NoEcho: true, Default: "" }
   SentryDsn:             { Type: String, NoEcho: true, Default: "" }
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
   HasResolverProvisionedConcurrency: !Not [!Equals [!Ref ResolverProvisionedConcurrency, 0]]
+  IsProduction: !Equals [!Ref Stage, production]
 
 Globals:
   Function:
@@ -58,12 +61,17 @@ Globals:
         HEAR_DDB_TABLE: hear-service
         SETTINGS_TABLE: hear_settings
         NOTIFICATIONS_TABLE: !Ref NotificationInboxTable
+        NOTIFICATION_INGEST_QUEUE_URL: !Ref NotificationIngestQueue
         HEAR_PERSISTENCE_DRIVER: dynamodb
         HEAR_PERSISTENCE_CONDITIONAL: "0"
         HEAR_PERSISTENCE_TTL_DAYS: "180"
         HEAR_AUDIO_SPEED_PARAM: speed
         HEAR_TAXONOMY_MANIFEST_URL: https://cdn.hear.media/runtime/taxonomy/v3/manifest.json
         HEAR_TAXONOMY_REVISION_TABLE: !Ref TaxonomyRevisionTable
+        HEAR_TAXONOMY_REFRESH_QUEUE_URL: !Ref TaxonomyRefreshQueue
+        HEAR_TAXONOMY_SNAPSHOT_BUCKET: !Ref TaxonomySnapshotBucket
+        WEBHOOK_REPLAY_TABLE: !Ref WebhookReplayTable
+        WEBHOOK_ALLOW_LEGACY_SECRET: "0"
         # The image build downloads and validates the immutable taxonomy.
         # Alexa requests must not perform manifest or revision checks.
         HEAR_TAXONOMY_AUTO_REFRESH: "0"
@@ -80,6 +88,9 @@ Globals:
         HEAR_API_KEY: !Ref HearApiKey
         WEBHOOK_SECRET: !Ref WebhookSecret
         WEBHOOK_OUTBOUND_SECRET: !Ref WebhookOutboundSecret
+        ALEXA_PROACTIVE_CLIENT_ID: !Ref AlexaProactiveClientId
+        ALEXA_PROACTIVE_CLIENT_SECRET: !Ref AlexaProactiveClientSecret
+        ALEXA_PROACTIVE_STAGE: !If [IsProduction, production, development]
         SENTRY_DSN: !Ref SentryDsn
         POWERTOOLS_SERVICE_NAME: hear-alexa-skill
         POWERTOOLS_LOG_LEVEL: INFO
@@ -103,6 +114,8 @@ Resources:
         - HasResolverProvisionedConcurrency
         - ProvisionedConcurrentExecutions: !Ref ResolverProvisionedConcurrency
         - !Ref AWS::NoValue
+      Policies:
+        - S3ReadPolicy: { BucketName: !Ref TaxonomySnapshotBucket }
 
   ResolverFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -149,7 +162,10 @@ Resources:
         - DynamoDBCrudPolicy: { TableName: hear_settings }
         - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
         - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref WebhookReplayTable }
         - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt TaxonomyRefreshQueue.QueueName }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt NotificationIngestQueue.QueueName }
       Events:
         ApiGatewayWebhook:
           Type: Api
@@ -186,6 +202,100 @@ Resources:
         - AttributeName: pk
           KeyType: HASH
 
+  WebhookReplayTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  TaxonomyRevisionSeedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Taxonomy-Seed-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: [ "src.webhooks.taxonomy_seed.handler" ]
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
+
+  TaxonomyRevisionSeed:
+    Type: Custom::TaxonomyRevisionSeed
+    DependsOn: TaxonomyRevisionTable
+    Properties:
+      ServiceToken: !GetAtt TaxonomyRevisionSeedFunction.Arn
+      Revision: v1
+      ManifestUrl: https://cdn.hear.media/runtime/taxonomy/v3/manifest.json
+
+  TaxonomySnapshotBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration: { Status: Enabled }
+
+  TaxonomyRefreshQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 900
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TaxonomyRefreshDLQ.Arn
+        maxReceiveCount: 3
+
+  TaxonomyRefreshDLQ:
+    Type: AWS::SQS::Queue
+
+  TaxonomyRefreshFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Taxonomy-Refresh-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: [ "src.webhooks.taxonomy_refresh_consumer.handler" ]
+      Timeout: 300
+      MemorySize: 2048
+      Environment:
+        Variables:
+          HEAR_RESOLVER_FUNCTION_NAME: !Ref ResolverFunction
+      Policies:
+        - SQSPollerPolicy: { QueueName: !GetAtt TaxonomyRefreshQueue.QueueName }
+        - S3CrudPolicy: { BucketName: !Ref TaxonomySnapshotBucket }
+        - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:GetFunctionConfiguration
+                - lambda:UpdateFunctionConfiguration
+                - lambda:PublishVersion
+                - lambda:CreateAlias
+                - lambda:UpdateAlias
+                - lambda:InvokeFunction
+              Resource:
+                - !GetAtt ResolverFunction.Arn
+                - !Sub "${ResolverFunction.Arn}:*"
+      Events:
+        TaxonomyRefresh:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt TaxonomyRefreshQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+
   NotificationInboxTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -204,6 +314,36 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
+
+  NotificationIngestQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt NotificationIngestDLQ.Arn
+        maxReceiveCount: 5
+
+  NotificationIngestDLQ:
+    Type: AWS::SQS::Queue
+
+  NotificationConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Notification-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: [ "src.webhooks.notification_consumer.handler" ]
+      Policies:
+        - SQSPollerPolicy: { QueueName: !GetAtt NotificationIngestQueue.QueueName }
+        - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
+      Events:
+        NotificationIngest:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt NotificationIngestQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
 
   OutboundQueue:
     Type: AWS::SQS::Queue
@@ -250,5 +390,11 @@ Outputs:
   WebhookEndpoint:
     Description: Inbound webhook base URL
     Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook
+  NotificationWebhookEndpoint:
+    Description: Hear backend posts new track and publication notifications here
+    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook/notification
+  TaxonomyWebhookEndpoint:
+    Description: Hear backend posts runtime taxonomy revisions here
+    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook/taxonomy
   OutboundQueueUrl:
     Value: !Ref OutboundQueue

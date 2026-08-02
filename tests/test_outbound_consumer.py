@@ -4,6 +4,7 @@ import json
 from unittest.mock import AsyncMock
 
 from src.webhooks.outbound_consumer import handler
+from src.utils.webhook_signing import signed_webhook_headers
 
 
 def _sqs_event(*bodies: dict) -> dict:
@@ -54,3 +55,12 @@ def test_outbound_consumer_retries_when_url_is_missing(monkeypatch):
     assert handler(event) == {
         "batchItemFailures": [{"itemIdentifier": "message-1"}],
     }
+
+
+def test_outbound_headers_include_api_key_and_signature():
+    headers = signed_webhook_headers("{}", "secret", "hear-api-key")
+
+    assert headers["X-Api-Key"] == "hear-api-key"
+    assert headers["Content-Type"] == "application/json"
+    assert headers["x-webhook-signature"].startswith("t=")
+    assert headers["x-webhook-timestamp"]

@@ -35,6 +35,7 @@ from src.utils.speech import (
     COMMUNITY_PLAYBACK_OFFER,
     RESUME_DECLINED_NEXT_OPTIONS, RESUME_DECLINED_NEXT_OPTIONS_REPROMPT,
     ASK_TALKING_NEWSPAPER_REPROMPT, ambiguous_reference_message,
+    LATEST_SOURCE_DECLINED,
 )
 from src.services.api import sync_listener
 from src.utils.audio import build_stop_directive
@@ -74,6 +75,7 @@ from src.handlers.intents.playback import NextIntentHandler
 from src.handlers.feedback.skip import SkipFeedbackHandler
 from src.services.observability import capture_skill_exception, flush_sentry, last_resort_skill_response
 from src.services.dialog_state import activate_dialog, get_active_dialog, clear_active_dialog
+from src.utils.normalize_content_item import pick_content_source
 logger = logging.getLogger(__name__)
 
 
@@ -172,6 +174,9 @@ class YesIntentHandler(AbstractRequestHandler):
                 .reprompt(ssml("Say one of the names, or say show more.")) \
                 .set_should_end_session(False) \
                 .response
+
+        if dialog_type == "latest_source":
+            return await self._handle_latest_source_yes(handler_input, store)
 
         # 0. Location confirmation — user confirms the town to save
         # 1. Search confirmation. This must win over stale launch-time resume
@@ -291,6 +296,43 @@ class YesIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder \
             .speak(ssml(f"{LOCATION_CONFIRMED(final_city)} {COMMUNITY_PLAYBACK_OFFER(final_city)}")) \
             .reprompt(ssml(COMMUNITY_PLAYBACK_OFFER(final_city))) \
+            .set_should_end_session(False) \
+            .response
+
+    async def _handle_latest_source_yes(self, handler_input, store):
+        source = store.get("pendingLatestSource") or {}
+        selected_source = pick_content_source(source) or {}
+        source_kind = source.get("sourceKind") or selected_source.get("kind")
+        source_id = source.get("sourceId") or selected_source.get("id")
+        source_name = source.get("sourceName") or selected_source.get("name") or "that source"
+        update_store(handler_input, {"pendingLatestSource": None})
+        clear_active_dialog(handler_input, "latest_source")
+        if not source_id or source_kind not in {"organization", "creator"}:
+            return handler_input.response_builder \
+                .speak(ssml(LATEST_SOURCE_DECLINED)) \
+                .reprompt(ssml(WELCOME_REPROMPT)) \
+                .set_should_end_session(False) \
+                .response
+        filter_key = "organizationIds" if source_kind == "organization" else "creatorIds"
+        filters = {filter_key: [source_id]}
+        payload = {"query": "", "filter": filters, "sort": "latest", "page": 0, "limit": 3}
+        user_id = get_alexa_user_id(handler_input)
+        if user_id:
+            payload["alexaUserId"] = user_id
+        result = await search(payload)
+        previous_id = source.get("contentId")
+        result["results"] = [item for item in result.get("results", []) if item.get("contentId") != previous_id]
+        result["_search_payload"] = payload
+        if result["results"]:
+            return await auto_play_first_from_search(handler_input, result, {
+                "discoveryIntent": "latest_source",
+                "q": "",
+                "introOverride": f"Here is the latest from {escape_ssml_lite(source_name)}.",
+            })
+        speech = f"There is nothing newer from {escape_ssml_lite(source_name)} right now. What would you like to listen to?"
+        return handler_input.response_builder \
+            .speak(ssml(speech)) \
+            .reprompt(ssml(WELCOME_REPROMPT)) \
             .set_should_end_session(False) \
             .response
 
@@ -741,6 +783,15 @@ class NoIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder \
                 .speak(ssml("No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?")) \
                 .reprompt(ssml("You can ask for news or sport, a talking newspaper, or what's trending.")) \
+                .set_should_end_session(False) \
+                .response
+
+        if dialog_type == "latest_source":
+            update_store(handler_input, {"pendingLatestSource": None})
+            clear_active_dialog(handler_input, "latest_source")
+            return handler_input.response_builder \
+                .speak(ssml(LATEST_SOURCE_DECLINED)) \
+                .reprompt(ssml(LATEST_SOURCE_DECLINED)) \
                 .set_should_end_session(False) \
                 .response
 

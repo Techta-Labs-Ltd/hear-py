@@ -1,4 +1,3 @@
-"""Foreground playback controls for the canonical content queue."""
 from __future__ import annotations
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
@@ -8,6 +7,7 @@ from ask_sdk_core.utils.request_util import get_slot_value
 from config import settings
 from src.services.api import search
 from src.services.playback.session import read_playback_session, write_playback_session
+from src.services.playback.events import emit_listening_event
 from src.services.playback.start import resume_playback, start_playback
 from src.services.queue.state import move_queue
 from src.services.storage.persistence import get_store, update_store
@@ -82,6 +82,7 @@ async def _restart_active(
         **state,
         "offsetMs": state.get("offsetMs", 0) if offset_ms is None else offset_ms,
     }
+    await emit_listening_event(handler_input, "resumed", resume_state)
     return await resume_playback(handler_input, resume_state, speech)
 
 
@@ -180,8 +181,9 @@ class PauseIntentHandler(AbstractRequestHandler):
             and get_intent_name(handler_input) in ("AMAZON.PauseIntent", "AMAZON.StopIntent")
         )
 
-    def handle(self, handler_input: HandlerInput):
-        write_playback_session(handler_input, {"status": "paused"})
+    async def handle(self, handler_input: HandlerInput):
+        state = write_playback_session(handler_input, {"status": "paused"})
+        await emit_listening_event(handler_input, "paused", state)
         return handler_input.response_builder.add_directive(build_stop_directive()).response
 
 

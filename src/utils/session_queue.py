@@ -4,19 +4,25 @@ from __future__ import annotations
 def clone_browse_menu_item(item) -> dict | None:
     if not isinstance(item, dict):
         return item
+    content_id = item.get("contentId") or item.get("id")
     return {
-        "id": item.get("id"),
+        "id": content_id,
+        "contentId": content_id,
         "title": item.get("title"),
         "displayTitle": item.get("displayTitle"),
         "spokenTitle": item.get("spokenTitle"),
-        "creator": item.get("creator"),
+        "creator": item.get("creator") or item.get("creatorName"),
+        "creatorName": item.get("creatorName") or item.get("creator"),
         "creatorId": item.get("creatorId"),
+        "publicationId": item.get("publicationId"),
+        "publicationTitle": item.get("publicationTitle"),
         "category": item.get("category"),
         "type": item.get("type"),
         "summary": item.get("summary") or None,
         "audioUrl": item.get("audioUrl") or None,
-        "playback_speed": item.get("playback_speed") or None,
-        "durationSecs": None if "durationSecs" not in item else item.get("durationSecs"),
+        "playbackSpeeds": item.get("playbackSpeeds") or item.get("playback_speed") or [],
+        "durationMs": item.get("durationMs"),
+        "durationSecs": item.get("durationSecs"),
         "tracks": item.get("tracks") or None,
     }
 
@@ -59,7 +65,10 @@ def _score_locality_match(item: dict, locality: str | None) -> int:
 
 def sort_queue_items_by_listening_preferences(items: list, listening_pattern: dict | None, locality: str | None) -> list:
     """Sort queue items by the user's listening preferences and locality."""
-    lst = [x for x in (items or []) if isinstance(x, dict) and x.get("id")]
+    lst = [
+        x for x in (items or [])
+        if isinstance(x, dict) and (x.get("contentId") or x.get("id"))
+    ]
     preferred_lower = [
         k.replace("category:", "").lower()
         for k, v in sorted(
@@ -76,12 +85,14 @@ def merge_browse_items_preserve_order(prev_items: list, raw_items: list) -> list
     seen: set = set()
     out: list = []
     for item in (prev_items or []):
-        if isinstance(item, dict) and item.get("id") and item["id"] not in seen:
-            seen.add(item["id"])
+        item_id = item.get("contentId") or item.get("id") if isinstance(item, dict) else None
+        if item_id and item_id not in seen:
+            seen.add(item_id)
             out.append(item)
     for item in (raw_items or []):
-        if isinstance(item, dict) and item.get("id") and item["id"] not in seen:
-            seen.add(item["id"])
+        item_id = item.get("contentId") or item.get("id") if isinstance(item, dict) else None
+        if item_id and item_id not in seen:
+            seen.add(item_id)
             out.append(item)
     return out
 

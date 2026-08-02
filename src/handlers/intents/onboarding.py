@@ -10,9 +10,11 @@ from ask_sdk_core.handler_input import HandlerInput
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
 from src.services.storage.persistence import get_store, update_store
+from src.services.dialog_state import activate_dialog
 from src.services.alexa.locality import detect_device_location
 from src.services.resolver_client import ResolverUnavailable, resolve_utterance
 from src.utils.skill_request import get_request_type
+from src.utils.normalize_content_item import pick_content_source
 from src.utils.speech import (
     ssml, ONBOARDING_ASK_PERMISSION, ONBOARDING_CONSENT_CARD_SENT,
     ONBOARDING_LOCATION_DENIED, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
@@ -21,6 +23,7 @@ from src.utils.speech import (
     ONBOARDING_TOWN_CONFIRM, ONBOARDING_FETCHING_LOCATION,
     ONBOARDING_DETECTED_TOWN, CONSENT_CARD_THANKS, LOCATION_DECLINED,
     ONBOARDING_DEFER_CONTENT, LOCATION_NOT_FOUND,
+    LATEST_SOURCE_OFFER, LATEST_SOURCE_REPROMPT,
 )
 from src.services.semantic_routing import (
     ONBOARDING_ROUTE_NAMES, ONBOARDING_ROUTE_SKIP, SEARCH_ROUTE_NAMES,
@@ -97,6 +100,23 @@ def handle_returning_user(
     resolved_user_name: Optional[str],
     resolved_locality: Optional[str],
 ):
+    source = store.get("lastCompletedSource")
+    if isinstance(source, dict):
+        content_id = source.get("contentId")
+        selected_source = pick_content_source(source)
+        source_name = source.get("sourceName") or (selected_source or {}).get("name")
+        source_id = source.get("sourceId") or (selected_source or {}).get("id")
+        if source_name and source_id and content_id != store.get("lastLatestSourceOfferContentId"):
+            update_store(handler_input, {
+                "pendingLatestSource": source,
+                "lastLatestSourceOfferContentId": content_id,
+            })
+            activate_dialog(handler_input, "latest_source", context=source)
+            return handler_input.response_builder \
+                .speak(ssml(LATEST_SOURCE_OFFER(source_name))) \
+                .reprompt(ssml(LATEST_SOURCE_REPROMPT(source_name))) \
+                .set_should_end_session(False) \
+                .response
     city = store.get("userCity") or resolved_locality
     if resolved_user_name and city:
         return handler_input.response_builder \

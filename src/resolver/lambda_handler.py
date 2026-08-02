@@ -118,7 +118,14 @@ def handler(event: dict, context=None) -> dict:
     if int(request.get("version") or 0) != CONTRACT_VERSION:
         return {"version": CONTRACT_VERSION, "status": "error", "error": "unsupported_version"}
     try:
-        if operation == "resolve_location":
+        if operation == "health":
+            response = {
+                "version": CONTRACT_VERSION,
+                "status": "ready",
+                "taxonomyRevision": taxonomy_manager.snapshot.revision,
+                "recordCount": len(taxonomy_manager.snapshot.records),
+            }
+        elif operation == "resolve_location":
             resolution = resolve_location_phrase(str(request.get("utterance") or ""))
             response = {
                 "version": CONTRACT_VERSION,

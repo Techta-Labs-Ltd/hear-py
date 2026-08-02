@@ -5,6 +5,7 @@ import uuid
 
 from src.services.storage.persistence import get_store, update_store
 from src.utils.normalize_content_item import is_playable_content_item
+from src.utils.session_queue import clone_queue_item
 
 
 def read_playback_queue(store: dict) -> dict | None:
@@ -37,6 +38,17 @@ def create_playback_queue(
     }
     update_store(handler_input, {"playbackQueue": queue})
     return queue
+
+
+def cache_queue_content_items(handler_input, items: list[dict]) -> list[dict]:
+    cached = [
+        clone_queue_item(item)
+        for item in items or []
+        if is_playable_content_item(item)
+    ]
+    cached = [item for item in cached if item]
+    update_store(handler_input, {"browseQueueItems": cached or None})
+    return cached
 
 
 def queue_content_id(store: dict, index: int | None = None) -> str | None:

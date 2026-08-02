@@ -10,7 +10,7 @@ import boto3
 import httpx
 
 from config import settings
-from src.utils.webhook_signing import sign_payload
+from src.utils.webhook_signing import signed_webhook_headers
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +52,16 @@ def _dispatch_via_sqs(queue_url: str, envelope: dict, await_queue: bool):
 def _dispatch_via_http(url: str, secret: str, envelope: dict, await_queue: bool):
     del await_queue
     body = json.dumps(envelope)
-    signature = sign_payload(body, secret)
-
     async def _send():
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, content=body, headers={
-                    "Content-Type": "application/json",
-                    "x-webhook-signature": signature["signature"],
-                    "x-webhook-timestamp": signature["timestamp"],
-                })
+                response = await client.post(
+                    url,
+                    content=body,
+                    headers=signed_webhook_headers(
+                        body, secret, settings.api_key or "",
+                    ),
+                )
                 response.raise_for_status()
             except Exception:
                 logger.exception(

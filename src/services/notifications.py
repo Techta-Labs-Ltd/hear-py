@@ -11,7 +11,7 @@ from boto3.dynamodb.conditions import Key
 
 from config import settings
 from src.services.api import search
-from src.services.queue.state import create_playback_queue
+from src.services.queue.state import cache_queue_content_items, create_playback_queue
 from src.utils.skill_request import get_user_id
 from src.utils.speech import (
     NOTIFICATIONS_MULTI_CREATOR,
@@ -75,6 +75,9 @@ def _parse_webhook(event: dict) -> tuple[dict | None, str | None]:
         "contentId": content_id,
         "publicationId": publication_id,
         "title": str(parsed.get("title") or "").strip() or "a new recording",
+        "creatorId": str(parsed.get("creatorId") or "").strip() or None,
+        "creatorName": str(parsed.get("creatorName") or "").strip() or None,
+        "organizationId": str(parsed.get("organizationId") or "").strip() or None,
         "alexaUserIds": list(dict.fromkeys(
             str(value).strip() for value in users if str(value).strip()
         )),
@@ -103,30 +106,82 @@ async def _put_inbox_item(item: dict) -> None:
             raise
 
 
+def _inbox_item(payload: dict, user_id: str, now: int | None = None) -> dict:
+    created_at = int(now or time.time())
+    return {
+        "alexaUserId": user_id,
+        "notificationId": f"{payload['eventId']}:{user_id}",
+        "eventId": payload["eventId"],
+        "notificationType": payload["notificationType"],
+        "contentId": payload["contentId"],
+        "publicationId": payload["publicationId"],
+        "title": payload["title"],
+        "creatorId": payload.get("creatorId"),
+        "creatorName": payload.get("creatorName"),
+        "organizationId": payload.get("organizationId"),
+        "publishedAt": payload["publishedAt"],
+        "status": "pending",
+        "deliveryStatus": "pending",
+        "ttl": created_at + 7 * 24 * 60 * 60,
+    }
+
+
+async def ingest_notification_payload(payload: dict) -> list[dict]:
+    now = int(time.time())
+    items = [_inbox_item(payload, user_id, now) for user_id in payload["alexaUserIds"]]
+    for item in items:
+        await _put_inbox_item(item)
+    return items
+
+
+def _enqueue_notification(payload: dict) -> int:
+    queue_url = settings.NOTIFICATION_INGEST_QUEUE_URL
+    if not queue_url:
+        return 0
+    client = boto3.client("sqs", region_name=settings.ddb_region)
+    users = payload["alexaUserIds"]
+    chunks = [users[index:index + 100] for index in range(0, len(users), 100)]
+    for chunk in chunks:
+        client.send_message(
+            QueueUrl=queue_url,
+            MessageBody=json.dumps({**payload, "alexaUserIds": chunk}, separators=(",", ":")),
+        )
+    return len(chunks)
+
+
 async def handle_notification_webhook(event: dict) -> dict:
     """Validate and expand one backend event into per-user inbox records."""
     payload, error = _parse_webhook(event)
     if error:
         return _response(400, {"error": error})
     assert payload is not None
-    now = int(time.time())
-    for user_id in payload["alexaUserIds"]:
-        await _put_inbox_item({
-            "alexaUserId": user_id,
-            "notificationId": f"{payload['eventId']}:{user_id}",
-            "eventId": payload["eventId"],
-            "notificationType": payload["notificationType"],
-            "contentId": payload["contentId"],
-            "publicationId": payload["publicationId"],
-            "title": payload["title"],
-            "publishedAt": payload["publishedAt"],
-            "status": "pending",
-            "ttl": now + 7 * 24 * 60 * 60,
-        })
-    return _response(200, {
-        "status": "ok",
+    if len(payload["alexaUserIds"]) > 5000:
+        return _response(400, {"error": "alexaUserIds cannot exceed 5000 recipients"})
+    queued = _enqueue_notification(payload)
+    if not queued:
+        await ingest_notification_payload(payload)
+    return _response(202 if queued else 200, {
+        "status": "queued" if queued else "ok",
         "recipients": len(payload["alexaUserIds"]),
+        "batches": queued,
     })
+
+
+async def update_notification_delivery_status(
+    user_id: str,
+    notification_id: str,
+    delivery_status: str,
+) -> None:
+    key = (user_id, notification_id)
+    if _use_memory():
+        if key in _memory_inbox:
+            _memory_inbox[key]["deliveryStatus"] = delivery_status
+        return
+    _get_doc_client().Table(settings.NOTIFICATIONS_TABLE).update_item(
+        Key={"alexaUserId": user_id, "notificationId": notification_id},
+        UpdateExpression="SET deliveryStatus = :deliveryStatus",
+        ExpressionAttributeValues={":deliveryStatus": delivery_status},
+    )
 
 
 async def check_notifications(user_id: str, limit: int = 20) -> list[dict]:
@@ -137,6 +192,7 @@ async def check_notifications(user_id: str, limit: int = 20) -> list[dict]:
         items = [
             dict(item) for (uid, _), item in _memory_inbox.items()
             if uid == user_id and item.get("status") in PENDING_STATUSES
+            and int(item.get("ttl") or 0) > int(time.time())
         ]
     else:
         try:
@@ -146,6 +202,7 @@ async def check_notifications(user_id: str, limit: int = 20) -> list[dict]:
             items = [
                 item for item in response.get("Items", [])
                 if item.get("status") in PENDING_STATUSES
+                and int(item.get("ttl") or 0) > int(time.time())
             ]
         except Exception:
             logger.exception("Notification inbox query failed")
@@ -212,13 +269,26 @@ async def reset_notification_for_content(user_id: str, content_id: str) -> None:
             )
 
 
+async def reset_notification_for_playback(
+    user_id: str,
+    content_id: str,
+    publication_id: str | None = None,
+) -> None:
+    for item in await check_notifications(user_id):
+        matches = item.get("contentId") == content_id or (
+            publication_id and item.get("publicationId") == publication_id
+        )
+        if matches and item.get("status") in {"resolving", "queued"}:
+            await update_notification_status(user_id, item["notificationId"], "pending")
+
+
 async def resolve_notification_queue(handler_input, notifications: list[dict]) -> dict:
     """Resolve pending notification references through catalog search."""
     user_id = get_user_id(handler_input)
     pending = list(notifications or [])[:20]
     content_items = [item for item in pending if item.get("contentId")]
     publication_items = [item for item in pending if item.get("publicationId")]
-    selected = content_items or publication_items[:1]
+    selected = content_items or publication_items
     if not selected:
         return {"results": [], "failed": False}
     for item in selected:
@@ -230,7 +300,7 @@ async def resolve_notification_queue(handler_input, notifications: list[dict]) -
     filter_value = (
         {"contentIds": [item["contentId"] for item in selected]}
         if content_items
-        else {"publicationIds": [selected[0]["publicationId"]]}
+        else {"publicationIds": [item["publicationId"] for item in selected]}
     )
     result = await search({
         "query": "",
@@ -266,18 +336,20 @@ async def resolve_notification_queue(handler_input, notifications: list[dict]) -
     else:
         ordered = list(result.get("results", []))
         status = "queued" if ordered else "unavailable"
-        await update_notification_status(
-            selected[0].get("alexaUserId") or user_id,
-            selected[0]["notificationId"],
-            status,
-        )
-        publication_id = selected[0]["publicationId"]
-        publication_title = selected[0].get("title")
+        for notification in selected:
+            await update_notification_status(
+                notification.get("alexaUserId") or user_id,
+                notification["notificationId"],
+                status,
+            )
+        publication_id = selected[0]["publicationId"] if len(selected) == 1 else None
+        publication_title = selected[0].get("title") if len(selected) == 1 else None
         source = "publication_notification"
         for item in ordered:
             item["publicationId"] = item.get("publicationId") or publication_id
             item["publicationTitle"] = item.get("publicationTitle") or publication_title
     if ordered:
+        cache_queue_content_items(handler_input, ordered)
         queue = create_playback_queue(
             handler_input,
             [item["contentId"] for item in ordered],
@@ -291,8 +363,16 @@ async def resolve_notification_queue(handler_input, notifications: list[dict]) -
 
 
 def group_notifications_by_creator(items: list) -> list:
-    """Retain the existing speech interface for compact notification prompts."""
-    return [{"creatorId": "notifications", "creatorName": "your subscriptions", "tracks": items}] if items else []
+    groups: dict[str, dict] = {}
+    for item in items or []:
+        key = item.get("creatorId") or item.get("creatorName") or "subscriptions"
+        group = groups.setdefault(key, {
+            "creatorId": item.get("creatorId"),
+            "creatorName": item.get("creatorName") or "your subscriptions",
+            "tracks": [],
+        })
+        group["tracks"].append(item)
+    return list(groups.values())
 
 
 def build_notification_speech(groups: list) -> str:

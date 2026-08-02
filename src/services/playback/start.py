@@ -75,6 +75,8 @@ async def prepare_playback_audio_and_store(
         "currentContentTitle": title,
         "currentCreator": creator,
         "currentCreatorId": content.get("creatorId"),
+        "currentOrganization": content.get("organizationName"),
+        "currentOrganizationId": content.get("organizationId"),
         "currentCategory": content.get("category"),
         "currentDurationSecs": (
             content["durationMs"] / 1000

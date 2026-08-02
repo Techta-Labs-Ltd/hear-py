@@ -4,7 +4,7 @@ import logging
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
-from src.services.notifications import reset_notification_for_content
+from src.services.notifications import reset_notification_for_playback
 from src.services.playback.events import emit_listening_event
 from src.services.playback.session import read_playback_session, write_playback_session
 from src.services.storage.persistence import get_store, update_store
@@ -25,7 +25,11 @@ class PlaybackFailedHandler(AbstractRequestHandler):
             previous_status = state.get("status")
             state = write_playback_session(handler_input, {"status": "failed"})
             if previous_status == "starting":
-                await reset_notification_for_content(get_user_id(handler_input), token)
+                await reset_notification_for_playback(
+                    get_user_id(handler_input),
+                    token,
+                    state.get("publicationId"),
+                )
             await emit_listening_event(handler_input, "failed", state)
             update_store(handler_input, {"preparedNextContent": None})
         logger.warning("Hear audio playback failed contentId=%s", token)

@@ -47,6 +47,8 @@ def create_playback_session(
         "title": content.get("spokenTitle") or content.get("displayTitle") or content.get("title"),
         "creatorId": content.get("creatorId"),
         "creatorName": content.get("creatorName") or content.get("creator"),
+        "organizationId": content.get("organizationId"),
+        "organizationName": content.get("organizationName"),
         "publicationId": content.get("publicationId"),
         "publicationTitle": content.get("publicationTitle"),
         "queueId": queue_id,

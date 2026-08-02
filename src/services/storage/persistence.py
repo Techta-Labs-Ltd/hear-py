@@ -446,15 +446,23 @@ def _browse_item_snapshot(item: dict) -> dict | None:
         return None
     credit = pick_content_credit(item)
     spoken = content_title_for_speech(item)
+    content_id = item.get("contentId") or item.get("id")
     return {
-        "id": item.get("id"),
+        "id": content_id,
+        "contentId": content_id,
         "title": item.get("title"),
         "displayTitle": spoken or item.get("displayTitle"),
         "spokenTitle": spoken,
-        "creator": credit or item.get("creator"),
+        "creator": credit or item.get("creator") or item.get("creatorName"),
+        "creatorName": item.get("creatorName") or item.get("creator") or credit,
+        "creatorId": item.get("creatorId"),
+        "publicationId": item.get("publicationId"),
+        "publicationTitle": item.get("publicationTitle"),
         "summary": item.get("summary") or None,
         "category": item.get("category") or None,
-        **_playback_fields_for_snapshot(item),
+        "audioUrl": item.get("audioUrl"),
+        "playbackSpeeds": item.get("playbackSpeeds") or [],
+        "durationMs": item.get("durationMs"),
     }
 
 
@@ -480,7 +488,11 @@ def set_browse_catalog(
             raw_items, store.get("listeningPattern"), store.get("locality")
         )
 
-    browse_ids = [i.get("id") for i in sorted_items if i.get("id")]
+    browse_ids = [
+        i.get("contentId") or i.get("id")
+        for i in sorted_items
+        if i.get("contentId") or i.get("id")
+    ]
     cap = min(len(sorted_items), settings.HEAR_BROWSE_MAX_CATALOG or 50)
     capped = sorted_items[:cap]
     snapshot = [s for s in (_browse_item_snapshot(i) for i in capped) if s is not None]

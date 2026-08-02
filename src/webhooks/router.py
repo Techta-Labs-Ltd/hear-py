@@ -4,11 +4,16 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import hashlib
+import time
+
+import boto3
 
 from config import settings
 from src.services.notifications import handle_notification_webhook
 from src.services.settings import handle_settings_webhook
 from src.services.taxonomy_updates import handle_taxonomy_webhook
+from src.utils.webhook_signing import verify_signature
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +27,28 @@ _ROUTES = {
 def _verify_secret(event: dict) -> dict | None:
     headers = event.get("headers") or {}
     supplied = headers.get("x-webhook-secret") or headers.get("X-Webhook-Secret")
-    if supplied and supplied == settings.WEBHOOK_SECRET:
+    if settings.WEBHOOK_ALLOW_LEGACY_SECRET and supplied and supplied == settings.WEBHOOK_SECRET:
+        return None
+    signature = headers.get("x-webhook-signature") or headers.get("X-Webhook-Signature") or ""
+    api_key = headers.get("x-api-key") or headers.get("X-Api-Key") or ""
+    body = event.get("body") or ""
+    configured_api_key = str(settings.HEAR_API_KEY or "").strip()
+    if api_key != configured_api_key or not verify_signature(body, signature, settings.WEBHOOK_SECRET):
+        return _response(401, {"error": "Unauthorised"})
+    if settings.WEBHOOK_REPLAY_TABLE:
+        replay_id = hashlib.sha256(f"{signature}:{body}".encode()).hexdigest()
+        try:
+            boto3.resource("dynamodb", region_name=settings.ddb_region).Table(
+                settings.WEBHOOK_REPLAY_TABLE
+            ).put_item(
+                Item={"pk": replay_id, "ttl": int(time.time()) + settings.WEBHOOK_SIGNATURE_TOLERANCE_SECONDS},
+                ConditionExpression="attribute_not_exists(pk)",
+            )
+        except Exception as exc:
+            if getattr(exc, "response", {}).get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return _response(409, {"error": "Webhook replay rejected"})
+            return _response(503, {"error": "Replay protection unavailable"})
+    if signature:
         return None
     return _response(401, {"error": "Unauthorised"})
 

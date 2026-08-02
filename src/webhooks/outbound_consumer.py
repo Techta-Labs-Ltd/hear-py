@@ -7,7 +7,7 @@ import logging
 import httpx
 
 from config import settings
-from src.utils.webhook_signing import sign_payload
+from src.utils.webhook_signing import signed_webhook_headers
 
 logger = logging.getLogger(__name__)
 
@@ -15,13 +15,14 @@ logger = logging.getLogger(__name__)
 async def _forward_to_backend(url: str, secret: str, envelope: dict):
     """Forward an event envelope to a backend HTTP endpoint with HMAC signing."""
     body = json.dumps(envelope)
-    sig = sign_payload(body, secret)
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-        resp = await client.post(url, content=body, headers={
-            "Content-Type": "application/json",
-            "x-webhook-signature": sig["signature"],
-            "x-webhook-timestamp": sig["timestamp"],
-        })
+        resp = await client.post(
+            url,
+            content=body,
+            headers=signed_webhook_headers(
+                body, secret, settings.api_key or "",
+            ),
+        )
         resp.raise_for_status()
     return resp
 

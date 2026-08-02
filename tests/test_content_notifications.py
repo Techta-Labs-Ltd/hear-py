@@ -48,6 +48,27 @@ async def test_webhook_is_idempotent_per_recipient_and_requires_one_identifier()
 
 
 @pytest.mark.asyncio
+async def test_webhook_batches_large_recipient_lists_to_sqs(monkeypatch):
+    sent = []
+    client = type("Client", (), {"send_message": lambda self, **kwargs: sent.append(kwargs)})()
+    monkeypatch.setattr(notifications.settings, "NOTIFICATION_INGEST_QUEUE_URL", "queue-url")
+    monkeypatch.setattr(notifications.boto3, "client", lambda *args, **kwargs: client)
+
+    response = await notifications.handle_notification_webhook({
+        "body": json.dumps({
+            "eventId": "event-batched",
+            "notificationType": "content",
+            "contentId": "content-1",
+            "alexaUserIds": [f"user-{index}" for index in range(205)],
+        }),
+    })
+
+    assert response["statusCode"] == 202
+    assert len(sent) == 3
+    assert [len(json.loads(message["MessageBody"])["alexaUserIds"]) for message in sent] == [100, 100, 5]
+
+
+@pytest.mark.asyncio
 async def test_content_batch_uses_one_search_and_consumes_only_after_start(
     monkeypatch,
     mock_handler_input,
@@ -86,6 +107,8 @@ async def test_content_batch_uses_one_search_and_consumes_only_after_start(
         item["contentId"] for item in pending
     ]
     assert len(resolved["queue"]["orderedContentIds"]) == 5
+    cached = mock_handler_input.attributes_manager.request_attributes["_store"]["browseQueueItems"]
+    assert [item["contentId"] for item in cached] == resolved["queue"]["orderedContentIds"]
     assert all(item["status"] == "queued" for item in await notifications.check_notifications(user_id))
 
     first = resolved["results"][0]["contentId"]

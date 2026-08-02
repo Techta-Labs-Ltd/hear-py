@@ -11,6 +11,9 @@ async def test_taxonomy_webhook_records_revision_without_loading_resolver(monkey
     monkeypatch.setattr("src.services.taxonomy_updates._store_revision", lambda revision, url: observed.update(
         revision=revision, url=url,
     ))
+    monkeypatch.setattr("src.services.taxonomy_updates._enqueue_refresh", lambda revision, url: observed.update(
+        queued_revision=revision, queued_url=url,
+    ))
     result = await handle_taxonomy_webhook({"body": json.dumps({
         "event": "taxonomy.updated",
         "schemaVersion": 3,
@@ -21,4 +24,6 @@ async def test_taxonomy_webhook_records_revision_without_loading_resolver(monkey
     assert observed == {
         "revision": "revision-3",
         "url": "https://example.test/manifest.json",
+        "queued_revision": "revision-3",
+        "queued_url": "https://example.test/manifest.json",
     }

@@ -54,3 +54,15 @@ def sign_payload(payload: str, secret: str) -> dict:
         "signature": f"t={timestamp},v1={signature}",
         "timestamp": timestamp,
     }
+
+
+def signed_webhook_headers(payload: str, secret: str, api_key: str = "") -> dict:
+    signature = sign_payload(payload, secret)
+    headers = {
+        "Content-Type": "application/json",
+        "x-webhook-signature": signature["signature"],
+        "x-webhook-timestamp": signature["timestamp"],
+    }
+    if api_key:
+        headers["X-Api-Key"] = api_key
+    return headers

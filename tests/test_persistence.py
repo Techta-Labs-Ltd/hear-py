@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from src.services.storage.persistence import (
     DEFAULT_STORE, merge_initial_store, get_store, update_store,
     add_to_history, add_followed_creator, is_following,
-    recent_content_ids, clear_queue, init_queue,
+    recent_content_ids, clear_queue, init_queue, set_browse_catalog,
 )
 
 
@@ -64,3 +64,23 @@ class TestPersistence:
         assert store["playbackQueue"]["orderedContentIds"] == ["1", "2"]
         store = clear_queue(mock_handler_input)
         assert store["playbackQueue"] is None
+
+    def test_browse_queue_cache_preserves_canonical_playback_fields(self, mock_handler_input):
+        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(DEFAULT_STORE)
+        content = {
+            "contentId": "content-2",
+            "title": "Second bulletin",
+            "spokenTitle": "Second bulletin",
+            "creatorId": "creator-1",
+            "creatorName": "York Talking News",
+            "audioUrl": "https://cdn.hear.media/content-2.mp3",
+            "durationMs": 180000,
+            "playbackSpeeds": [],
+        }
+
+        store = set_browse_catalog(mock_handler_input, {"items": [content]})
+
+        cached = store["browseQueueItems"][0]
+        assert cached["contentId"] == "content-2"
+        assert cached["audioUrl"] == content["audioUrl"]
+        assert cached["durationMs"] == 180000

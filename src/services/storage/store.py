@@ -106,6 +106,9 @@ DEFAULT_STORE: dict[str, object] = {
     "pendingSuggestions": [],
     "suggestionIndex": 0,
     "excludedSuggestions": [],
+    "lastCompletedSource": None,
+    "pendingLatestSource": None,
+    "lastLatestSourceOfferContentId": None,
 }
 
 

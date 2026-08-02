@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,6 +24,15 @@ class _InvokeClient:
             "FunctionError": self.function_error,
             "Payload": io.BytesIO(json.dumps(self.body).encode("utf-8")),
         }
+
+
+@pytest.fixture(autouse=True)
+def resolver_fixture_taxonomy(monkeypatch):
+    from src.resolver.taxonomy import TaxonomyManager
+
+    manager = TaxonomyManager(bundle_dir=Path(__file__).parent / "fixtures" / "taxonomy")
+    monkeypatch.setattr(taxonomy_manager, "_snapshot", manager.snapshot)
+    monkeypatch.setattr(resolver.taxonomy, "_snapshot", manager.snapshot)
 
 
 @pytest.fixture

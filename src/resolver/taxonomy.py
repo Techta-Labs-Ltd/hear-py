@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import threading
+import tarfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -406,6 +407,24 @@ class TaxonomyManager:
                 logger.exception(
                     "Bundled taxonomy snapshot is invalid; using locations only"
                 )
+        runtime_bucket = settings.HEAR_TAXONOMY_SNAPSHOT_BUCKET
+        runtime_key = settings.HEAR_TAXONOMY_SNAPSHOT_KEY
+        if runtime_bucket and runtime_key:
+            try:
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
+                archive = self.cache_dir / "snapshot.tar.gz"
+                boto3.client("s3").download_file(runtime_bucket, runtime_key, str(archive))
+                with tarfile.open(archive, "r:gz") as source:
+                    members = source.getmembers()
+                    if any(Path(member.name).is_absolute() or ".." in Path(member.name).parts for member in members):
+                        raise ValueError("Unsafe taxonomy archive")
+                    source.extractall(self.cache_dir)
+                self.load_directory(self.cache_dir)
+                expected = settings.HEAR_TAXONOMY_ACTIVE_REVISION
+                if expected and self.snapshot.revision != expected:
+                    raise ValueError("Runtime taxonomy revision mismatch")
+            except Exception:
+                logger.exception("Runtime taxonomy snapshot could not be loaded")
 
     @property
     def snapshot(self) -> TaxonomySnapshot:

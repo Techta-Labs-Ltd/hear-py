@@ -764,6 +764,9 @@ ONBOARDING_DISCOVERY_NATIONAL = "Right, you\u2019re all set. Ask for news or spo
 WELCOME_RETURN_NAMED = lambda user_name, city=None: f"Welcome back to Hear, {escape_ssml_lite(user_name)}. You can say what's trending, play news, or play from a talking newspaper. What would you like?"
 WELCOME_RETURN_CITY = lambda city=None: "Welcome back to Hear. You can say what's trending, play news, or play from a talking newspaper. What would you like?"
 WELCOME_RETURN_GENERIC = "Welcome back to Hear. You can say what's trending, or play news. What would you like?"
+LATEST_SOURCE_OFFER = lambda source: f"Welcome back to Hear. Would you like to hear the latest from {escape_ssml_lite(source)}?"
+LATEST_SOURCE_REPROMPT = lambda source: f"Say yes to hear the latest from {escape_ssml_lite(source)}, or no to choose something else."
+LATEST_SOURCE_DECLINED = "No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
 
 # ── Confirm ─────────────────────────────────────────────────────────
 

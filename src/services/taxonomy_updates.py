@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 import boto3
 
@@ -26,10 +27,24 @@ def _store_revision(revision: str, manifest_url: str) -> None:
         settings.HEAR_TAXONOMY_REVISION_TABLE
     )
     table.put_item(Item={
-        "pk": "taxonomy#current",
+        "pk": f"taxonomy#revision#{revision}",
         "revision": revision,
         "manifestUrl": manifest_url,
+        "status": "pending",
+        "updatedAt": int(time.time()),
     })
+
+
+def _enqueue_refresh(revision: str, manifest_url: str) -> None:
+    if not settings.HEAR_TAXONOMY_REFRESH_QUEUE_URL:
+        raise RuntimeError("Taxonomy refresh queue is not configured")
+    boto3.client("sqs", region_name=settings.ddb_region).send_message(
+        QueueUrl=settings.HEAR_TAXONOMY_REFRESH_QUEUE_URL,
+        MessageBody=json.dumps({
+            "revision": revision,
+            "manifestUrl": manifest_url,
+        }, separators=(",", ":")),
+    )
 
 
 async def handle_taxonomy_webhook(event: dict) -> dict:
@@ -47,7 +62,8 @@ async def handle_taxonomy_webhook(event: dict) -> dict:
         return _response(400, {"error": "revision and manifestUrl are required"})
     try:
         _store_revision(revision, manifest_url)
+        _enqueue_refresh(revision, manifest_url)
     except Exception:
         logger.exception("Could not persist taxonomy revision")
-        return _response(503, {"error": "Revision store unavailable"})
+        return _response(503, {"error": "Taxonomy refresh unavailable"})
     return _response(202, {"ok": True, "revision": revision})

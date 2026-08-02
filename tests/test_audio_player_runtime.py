@@ -79,6 +79,108 @@ def _queued_content(content_id: str, title: str) -> dict:
 
 
 @pytest.mark.asyncio
+async def test_returning_user_latest_source_offer_searches_only_after_yes(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playCount": 1,
+        "lastToken": CONTENT_ID,
+        "lastCompletedSource": {
+            "contentId": CONTENT_ID,
+            "organizationId": "org-york",
+            "organizationName": "York Talking News",
+        },
+    }
+    search = AsyncMock(return_value={
+        "results": [_queued_content(SECOND_CONTENT_ID, "York weekly news")],
+        "total_hits": 1,
+    })
+    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    skill = build_skill(persistence)
+
+    launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
+
+    search.assert_not_awaited()
+    assert "latest from York Talking News" in launch["response"]["outputSpeech"]["ssml"]
+    assert persistence._store[USER_ID]["activeDialog"]["type"] == "latest_source"
+
+    accepted = await skill.invoke(_event({
+        "type": "IntentRequest",
+        "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+    }), None)
+
+    search.assert_awaited_once()
+    payload = search.await_args.args[0]
+    assert payload["filter"] == {"organizationIds": ["org-york"]}
+    assert payload["sort"] == "latest"
+    assert accepted["response"]["directives"][0]["audioItem"]["stream"]["token"] == SECOND_CONTENT_ID
+
+
+@pytest.mark.asyncio
+async def test_latest_source_offer_is_once_per_completed_item_and_no_clears_it(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playCount": 1,
+        "lastToken": CONTENT_ID,
+        "lastCompletedSource": {
+            "contentId": CONTENT_ID,
+            "creatorId": "creator-1",
+            "creatorName": "Sheffield Talking Newspaper",
+        },
+    }
+    search = AsyncMock()
+    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    skill = build_skill(persistence)
+    await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
+
+    declined = await skill.invoke(_event({
+        "type": "IntentRequest",
+        "intent": {"name": "AMAZON.NoIntent", "slots": {}},
+    }), None)
+
+    search.assert_not_awaited()
+    assert persistence._store[USER_ID]["pendingLatestSource"] is None
+    assert persistence._store[USER_ID]["activeDialog"] is None
+    assert "news or sport" in declined["response"]["outputSpeech"]["ssml"]
+    relaunched = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
+    assert "Would you like to hear the latest" not in relaunched["response"]["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
+async def test_independent_creator_latest_offer_uses_creator_name_and_id(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playCount": 1,
+        "lastToken": CONTENT_ID,
+        "lastCompletedSource": {
+            "contentId": CONTENT_ID,
+            "organizationId": "org-independent",
+            "organizationName": "Independent Creator",
+            "creatorId": "creator-david",
+            "creatorName": "David Beard",
+        },
+    }
+    search = AsyncMock(return_value={
+        "results": [_queued_content(SECOND_CONTENT_ID, "David's latest")],
+        "total_hits": 1,
+    })
+    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    skill = build_skill(persistence)
+
+    launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
+    assert "latest from David Beard" in launch["response"]["outputSpeech"]["ssml"]
+    assert "Independent Creator" not in launch["response"]["outputSpeech"]["ssml"]
+
+    await skill.invoke(_event({
+        "type": "IntentRequest",
+        "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+    }), None)
+    assert search.await_args.args[0]["filter"] == {"creatorIds": ["creator-david"]}
+
+
+@pytest.mark.asyncio
 async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypatch):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
@@ -349,6 +451,44 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
     assert second_stream["token"] == THIRD_CONTENT_ID
     assert second_stream["expectedPreviousToken"] == SECOND_CONTENT_ID
     assert "progressReportDelayInMilliseconds" in second_stream
+
+
+@pytest.mark.asyncio
+async def test_queue_prefetch_uses_persisted_content_id_cache_without_search(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    second = _queued_content(SECOND_CONTENT_ID, "Second bulletin")
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=170_000),
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": "search",
+            "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID],
+            "currentIndex": 0,
+        },
+        "browseQueueItems": [second],
+    }
+    search = AsyncMock()
+    monkeypatch.setattr("src.handlers.audio.playback_nearly_finished.search", search)
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_nearly_finished.emit_listening_event",
+        AsyncMock(),
+    )
+
+    result = await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackNearlyFinished",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 170_000,
+        }),
+        None,
+    )
+
+    search.assert_not_awaited()
+    directive = result["response"]["directives"][0]
+    assert directive["playBehavior"] == "ENQUEUE"
+    assert directive["audioItem"]["stream"]["token"] == SECOND_CONTENT_ID
+    assert directive["audioItem"]["stream"]["expectedPreviousToken"] == CONTENT_ID
 
 
 @pytest.mark.asyncio
