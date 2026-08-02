@@ -93,6 +93,35 @@ async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_resume_no_abandons_playback_and_offers_next_listening_options():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "awaitingResume": True,
+        "activePlayback": _playback_state(),
+    }
+
+    result = await build_skill(persistence).invoke(
+        _event({
+            "type": "IntentRequest",
+            "intent": {"name": "AMAZON.NoIntent", "slots": {}},
+        }),
+        None,
+    )
+
+    response = result["response"]
+    state = persistence._store[USER_ID]
+    assert state["activePlayback"]["status"] == "abandoned"
+    assert state["awaitingResume"] is False
+    assert state["activeDialog"] is None
+    assert response["shouldEndSession"] is False
+    assert "Okay, I won't continue that recording." in response["outputSpeech"]["ssml"]
+    assert "news or sport" in response["outputSpeech"]["ssml"]
+    assert "talking newspaper" in response["reprompt"]["outputSpeech"]["ssml"]
+    assert "what's trending" in response["reprompt"]["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
 async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {

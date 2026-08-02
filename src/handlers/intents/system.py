@@ -33,6 +33,7 @@ from src.utils.speech import (
     END_OF_LIST, NO_TRACKS_AVAILABLE, QUEUE_FINISHED, QUEUE_NEXT_ANNOUNCE,
     LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
     COMMUNITY_PLAYBACK_OFFER,
+    RESUME_DECLINED_NEXT_OPTIONS, RESUME_DECLINED_NEXT_OPTIONS_REPROMPT,
     ASK_TALKING_NEWSPAPER_REPROMPT, ambiguous_reference_message,
 )
 from src.services.api import sync_listener
@@ -74,7 +75,6 @@ from src.handlers.intents.playback import NextIntentHandler
 from src.handlers.feedback.skip import SkipFeedbackHandler
 from src.services.observability import capture_skill_exception, flush_sentry, last_resort_skill_response
 from src.services.dialog_state import activate_dialog, get_active_dialog, clear_active_dialog
-
 logger = logging.getLogger(__name__)
 
 
@@ -82,11 +82,9 @@ def _current_timestamp_ms() -> int:
     """Return current UTC time in milliseconds."""
     return int(time.time() * 1000)
 
-
 # ---------------------------------------------------------------------------
 # Help, Cancel
 # ---------------------------------------------------------------------------
-
 
 class HelpIntentHandler(AbstractRequestHandler):
     """Provides help guidance to the user."""
@@ -896,8 +894,8 @@ class NoIntentHandler(AbstractRequestHandler):
         clear_active_dialog(handler_input, "resume")
         activate_best_feedback_candidate(handler_input)
         return handler_input.response_builder \
-            .speak(ssml("Okay, I won't continue that recording.")) \
-            .reprompt(ssml(WELCOME_REPROMPT)) \
+            .speak(ssml(RESUME_DECLINED_NEXT_OPTIONS)) \
+            .reprompt(ssml(RESUME_DECLINED_NEXT_OPTIONS_REPROMPT)) \
             .set_should_end_session(False) \
             .response
 
@@ -981,7 +979,6 @@ class UnsupportedIntentHandler(AbstractRequestHandler):
             .reprompt(WELCOME_REPROMPT) \
             .set_should_end_session(False) \
             .response
-
 
 class SessionEndedHandler(AbstractRequestHandler):
     """Handles SessionEndedRequest — flushes state on session close."""

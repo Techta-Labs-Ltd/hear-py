@@ -5,6 +5,7 @@ import logging
 import httpx
 from config import settings
 from src.utils.normalize_content_item import normalize_content_items
+from src.utils.search_query import normalize_search_query
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +124,11 @@ async def search(payload: dict | None = None, timeout_ms: int | None = None) -> 
     """
     payload = payload or {}
     retries = settings.api_retry_count
+    query = payload.get("query")
+    if query is None:
+        query = payload.get("q")
     body: dict = {
-        "query": str(payload.get("query", payload.get("q", ""))),
+        "query": normalize_search_query(query),
         "limit": payload.get("limit", settings.search_page_limit),
         "page": payload.get("page", 0),
     }

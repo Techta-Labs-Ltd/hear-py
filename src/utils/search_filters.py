@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from src.utils.skill_request import get_intent_name, get_user_id
+from src.utils.search_query import normalize_search_query
 
 
 def to_slug(value) -> str | None:
@@ -108,7 +109,7 @@ class SearchPayload:
 
         payload = {
             "alexaUserId": get_user_id(self.handler_input),
-            "query": str(self.q) if self.q is not None else "",
+            "query": normalize_search_query(self.q),
             "isLocal": is_local,
             "isRecommended": bool((self.nlp_filter or {}).get("isRecommended")),
             "limit": self.limit,

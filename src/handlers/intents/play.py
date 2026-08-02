@@ -38,6 +38,7 @@ from src.utils.browse_catalog import (
     build_catalog_from_search_result, has_more_server_pages, catalog_search_context,
 )
 from src.utils.search_filters import SearchPayload
+from src.utils.search_query import normalize_search_query
 from src.utils.lambda_deadline import (
     compute_search_timeout_ms, get_lambda_remaining_ms,
 )
@@ -216,7 +217,7 @@ async def discover_content_via_search(
             ),
         }
 
-    query = str(opts.get("q", ""))
+    query = normalize_search_query(opts.get("q"))
     page = opts.get("page", 0)
     intent_override = opts.get("intent")
     limit = opts.get("limit")

@@ -14,6 +14,7 @@ from src.utils.session_queue import sort_queue_items_by_listening_preferences, m
 from src.utils.session_queue import clone_queue_item
 from src.utils.lambda_deadline import persistence_load_budget_ms, should_skip_persistence_load, requires_reliable_persistence_load
 from src.utils.lambda_deadline import persistence_save_budget_ms, requires_reliable_persistence_save
+from src.utils.search_query import normalize_search_query
 from src.services.dialog_state import activate_dialog, migrate_active_dialog
 
 
@@ -488,7 +489,7 @@ def set_browse_catalog(
 
     clean = {
         "intent": (catalog.get("intent") if catalog else None) or intent or "general",
-        "q": str(catalog.get("q", "")) if catalog else "",
+        "q": normalize_search_query(catalog.get("q")) if catalog else "",
         "categorySlug": catalog.get("categorySlug") or None if catalog else None,
         "tags": catalog.get("tags") or None if catalog else None,
         "limit": (catalog.get("limit") if catalog else None) or settings.search_page_limit,

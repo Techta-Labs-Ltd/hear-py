@@ -166,6 +166,17 @@ COMMUNITY_NEEDS_TOWN = "I'll need your town to find local content. Would you lik
 
 WELCOME_REPROMPT = "You can say play followed by a topic, or what's trending. What would you like?"
 
+RESUME_DECLINED_NEXT_OPTIONS = (
+    "Okay, I won't continue that recording. You can ask for news or sport, "
+    "play from a talking newspaper, or say what's trending. "
+    "What would you like to listen to?"
+)
+
+RESUME_DECLINED_NEXT_OPTIONS_REPROMPT = (
+    "You can ask for news or sport, play from a talking newspaper, "
+    "or say what's trending. What would you like to listen to?"
+)
+
 LAUNCH_CHOICE_OUTRO = "Say the first one, the second one, or the third one. You can also say play number one, play number two, or play number three."
 
 WELCOME_ERROR = "Welcome to Hear. I'm having a bit of trouble loading content at the moment. You can try again shortly."

@@ -42,3 +42,9 @@ def test_different_named_city_uses_exact_city_not_listener_radius(
     assert payload["isLocal"] is False
     assert payload["filter"] == {"city": "Manchester"}
     assert "sort" not in payload
+
+
+def test_absent_query_is_serialized_as_an_empty_string(mock_handler_input):
+    payload = SearchPayload.build(mock_handler_input, q=None)
+
+    assert payload["query"] == ""

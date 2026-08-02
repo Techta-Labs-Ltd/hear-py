@@ -1,5 +1,6 @@
 from __future__ import annotations
 from src.resolver.models import SearchPlan
+from src.utils.search_query import normalize_search_query
 
 def build_hear_payload(plan: SearchPlan) -> dict:
     payload = {
@@ -8,7 +9,7 @@ def build_hear_payload(plan: SearchPlan) -> dict:
         "isRecommended": plan.is_recommended,
         "limit": plan.limit,
         "page": plan.page,
-        "query": plan.query,
+        "query": normalize_search_query(plan.query),
     }
     if plan.sort != "relevance":
         payload["sort"] = plan.sort
