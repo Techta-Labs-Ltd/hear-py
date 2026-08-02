@@ -277,6 +277,19 @@ def test_location_relations_prefer_city_over_same_named_organization(
 ):
     plan = resolver.resolve(f"play recordings {relation} burnley")
     assert plan.city == "Burnley"
+
+
+def test_named_city_payload_preserves_coordinates(resolver):
+    plan = resolver.resolve("play local content in burnley")
+    plan.latitude = 53.789
+    plan.longitude = -2.248
+
+    payload = build_hear_payload(plan)
+
+    assert payload["filter"]["city"] == "Burnley"
+    assert payload["filter"]["latitude"] == 53.789
+    assert payload["filter"]["longitude"] == -2.248
+    assert payload["sort"] == "nearest"
     assert plan.country_code == "gb"
     assert plan.organization_ids == []
 

@@ -9,7 +9,7 @@ Alexa AudioPlayer or feedback handler
   -> Hear skill Lambda
   -> SQS outbound queue
   -> Hear outbound Lambda
-  -> POST https://alexa.hear.media/api/v1/webhooks/event
+  -> POST https://alexa.hear.media/api/v1/alexa/events
 ```
 
 The skill Lambda publishes through `src/services/outbound_dispatch.py`. The
@@ -109,7 +109,7 @@ reject timestamps outside `WEBHOOK_SIGNATURE_TOLERANCE_SECONDS`.
 
 If the worker reports that the webhook URL is not configured, verify
 `WEBHOOK_OUTBOUND_URL` on the outbound Lambda. Production currently sets it to
-`https://alexa.hear.media/api/v1/webhooks/event` in `template.yaml`.
+`https://alexa.hear.media/api/v1/alexa/events` in `template.yaml`.
 
 ## Retry behavior
 

@@ -61,6 +61,8 @@ class SearchPlan:
     organization_ids: list[str] = field(default_factory=list)
     publication_ids: list[str] = field(default_factory=list)
     city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     country_code: str | None = None
     is_local: bool = False
     is_recommended: bool = False

@@ -216,6 +216,13 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
         if not alternatives and raw:
             alternatives = []
         search_params["alternatives"] = alternatives
+        search_params["ambiguityResolution"] = bool(nlp.get("ambiguityResolution"))
+        if search_params["ambiguityResolution"]:
+            search_params["ambiguityCandidateName"] = next((
+                str(entity.get("canonicalValue") or "").strip()
+                for entity in nlp.get("entities") or []
+                if entity.get("canonicalValue")
+            ), confirm_text)
 
         attrs["_pendingConfirmation"] = search_params
         handler_input.attributes_manager.request_attributes = attrs

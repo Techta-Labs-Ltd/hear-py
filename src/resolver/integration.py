@@ -115,6 +115,10 @@ def resolve_for_alexa(
         )
     if plan.city:
         slots["city"] = plan.city
+    if plan.latitude is not None:
+        slots["latitude"] = plan.latitude
+    if plan.longitude is not None:
+        slots["longitude"] = plan.longitude
     return {
         "intent": intent,
         "confidence": (

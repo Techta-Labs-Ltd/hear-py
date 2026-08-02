@@ -112,6 +112,12 @@ class CancelIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
+        update_store(handler_input, {
+            "pendingAmbiguity": None,
+            "awaitingLocationConfirm": False,
+            "pendingLocationConfirm": None,
+        })
+        clear_active_dialog(handler_input, "ambiguity")
         try:
             await emit_user_playback_event(handler_input, {
                 "eventType": USER_PLAYBACK_EVENT_TYPES["CANCELLED"],
@@ -160,13 +166,14 @@ class YesIntentHandler(AbstractRequestHandler):
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
         dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
+        if dialog_type == "ambiguity":
+            return handler_input.response_builder \
+                .speak(ssml("Please say one of the names I offered, or say show more.")) \
+                .reprompt(ssml("Say one of the names, or say show more.")) \
+                .set_should_end_session(False) \
+                .response
+
         # 0. Location confirmation — user confirms the town to save
-        if store.get("awaitingLocationConfirm"):
-            return await self._confirm_location(handler_input, store)
-
-        if store.get("awaitingCommunityPlayback"):
-            return await self._handle_community_play_yes(handler_input, store)
-
         # 1. Search confirmation. This must win over stale launch-time resume
         # state because it is the question Alexa most recently asked.
         if dialog_type == "search_confirmation" or (
@@ -176,6 +183,12 @@ class YesIntentHandler(AbstractRequestHandler):
             )
         ):
             return await self._handle_search_confirmation(handler_input, store, session_attrs)
+
+        if store.get("awaitingLocationConfirm"):
+            return await self._confirm_location(handler_input, store)
+
+        if store.get("awaitingCommunityPlayback"):
+            return await self._handle_community_play_yes(handler_input, store)
 
         # 2. Resume
         if dialog_type == "resume" or (not dialog_type and store.get("awaitingResume")):
@@ -350,6 +363,8 @@ class YesIntentHandler(AbstractRequestHandler):
             update_store(handler_input, {
                 "awaitingSearchConfirmation": False,
                 "pendingResolution": None,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
                 "lastExecutedResolutionId": resolution.get("requestId"),
                 "_requiresReliableSave": True,
             })
@@ -715,7 +730,30 @@ class NoIntentHandler(AbstractRequestHandler):
         session_attrs = handler_input.attributes_manager.get_session_attributes() or {}
         dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
+        if dialog_type == "ambiguity":
+            update_store(handler_input, {
+                "pendingAmbiguity": None,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "_requiresReliableSave": True,
+            })
+            clear_active_dialog(handler_input, "ambiguity")
+            return handler_input.response_builder \
+                .speak(ssml("No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?")) \
+                .reprompt(ssml("You can ask for news or sport, a talking newspaper, or what's trending.")) \
+                .set_should_end_session(False) \
+                .response
+
         # 0. Location confirmation rejected — ask for a different town
+        # The active dialog is the question Alexa most recently asked.
+        if dialog_type == "search_confirmation" or (
+            not dialog_type and (
+                store.get("awaitingSearchConfirmation")
+                or session_attrs.get("awaitingSearchConfirmation")
+            )
+        ):
+            return self._handle_search_no(handler_input, store, session_attrs)
+
         if store.get("awaitingLocationConfirm"):
             update_store(handler_input, {
                 "awaitingLocationConfirm": False,
@@ -735,15 +773,6 @@ class NoIntentHandler(AbstractRequestHandler):
                 .reprompt(ssml(WELCOME_REPROMPT)) \
                 .set_should_end_session(False) \
                 .response
-
-        # The active dialog is the question Alexa most recently asked.
-        if dialog_type == "search_confirmation" or (
-            not dialog_type and (
-                store.get("awaitingSearchConfirmation")
-                or session_attrs.get("awaitingSearchConfirmation")
-            )
-        ):
-            return self._handle_search_no(handler_input, store, session_attrs)
 
         if dialog_type == "report_decision" or (
             not dialog_type and store.get("awaitingReportDecision")
@@ -807,12 +836,15 @@ class NoIntentHandler(AbstractRequestHandler):
             update_store(handler_input, {
                 "awaitingSearchConfirmation": False,
                 "pendingResolution": None,
+                "pendingAmbiguity": None,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
                 "_requiresReliableSave": True,
             })
             clear_active_dialog(handler_input, "search_confirmation")
             return handler_input.response_builder \
-                .speak(ssml("No problem. What would you like to listen to instead?")) \
-                .reprompt(ssml(WELCOME_REPROMPT)) \
+                .speak(ssml("No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?")) \
+                .reprompt(ssml("You can ask for news or sport, a talking newspaper, or what's trending.")) \
                 .set_should_end_session(False) \
                 .response
         if store.get("pendingOrganizationConfirmation"):

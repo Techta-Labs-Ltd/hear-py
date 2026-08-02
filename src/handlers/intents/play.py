@@ -28,7 +28,8 @@ from src.utils.speech import (
     TALKING_NEWSPAPER_NOT_RECOGNIZED, CONFIRM_RESOLVED_SEARCH,
     resolved_search_request_label,
     unresolved_reference_message,
-    ambiguous_reference_message,
+    ambiguous_reference_message, ambiguity_exhausted_message,
+    ambiguity_retry_message,
 )
 from src.utils.normalize_content_item import (
     content_title_for_speech, pick_content_credit, normalize_content_items,
@@ -177,31 +178,61 @@ async def discover_content_via_search(
     ambiguous = nlp_slots.get("ambiguousReferences") or []
     if ambiguous:
         reference = ambiguous[0]
-        candidates = list(reference.get("candidates") or [])
+        existing_ambiguity = store.get("pendingAmbiguity") or {}
+        candidates = list(
+            existing_ambiguity.get("candidates")
+            or reference.get("candidates")
+            or []
+        )
+        displayed = list(reference.get("candidates") or [])[:3]
         pending_ambiguity = {
-            "requestId": nlp.get("requestId"),
+            **existing_ambiguity,
+            "requestId": nlp.get("requestId") or existing_ambiguity.get("requestId"),
             "intent": nlp.get("intent") or "general",
-            "originalUtterance": nlp.get("originalUtterance") or "",
-            "searchPayload": dict(
-                nlp.get("searchPayload") or nlp_slots.get("searchPlan") or {}
+            "originalUtterance": (
+                nlp.get("originalUtterance")
+                or existing_ambiguity.get("originalUtterance")
+                or ""
             ),
-            "slots": dict(nlp_slots),
+            "searchPayload": dict(
+                nlp.get("searchPayload")
+                or nlp_slots.get("searchPlan")
+                or existing_ambiguity.get("searchPayload")
+                or {}
+            ),
+            "slots": {
+                **dict(existing_ambiguity.get("slots") or {}),
+                **dict(nlp_slots),
+            },
             "candidates": candidates,
-            "createdAt": int(time.time()),
+            "displayedCandidates": displayed or candidates[:3],
+            "spokenCandidateOffset": (
+                existing_ambiguity.get("spokenCandidateOffset")
+                or min(3, len(candidates))
+            ),
+            "createdAt": existing_ambiguity.get("createdAt") or int(time.time()),
             "expiresAt": int(time.time()) + 300,
         }
         update_store(handler_input, {
             "pendingAmbiguity": pending_ambiguity,
+            "awaitingLocationConfirm": False,
+            "pendingLocationConfirm": None,
             "_requiresReliableSave": True,
         })
         activate_dialog(handler_input, "ambiguity", context=pending_ambiguity)
+        message_candidates = list(
+            pending_ambiguity.get("displayedCandidates") or candidates[:3]
+        )
         return {
             "results": [],
             "total_hits": 0,
             "failed": False,
-            "client_message": ambiguous_reference_message(
-                str(reference.get("phrase") or ""),
-                candidates[:3],
+            "client_message": (
+                ambiguity_retry_message(message_candidates)
+                if nlp.get("ambiguityRetry")
+                else ambiguous_reference_message(
+                    str(reference.get("phrase") or ""), message_candidates,
+                )
             ),
         }
     unresolved = nlp_slots.get("unresolvedReferences") or []
@@ -234,6 +265,9 @@ async def discover_content_via_search(
     city_val = nlp_slots.get("city") or nlp_slots.get("placeName")
     if city_val:
         nlp_filter["city"] = str(city_val).strip()
+    for key in ("latitude", "longitude"):
+        if nlp_slots.get(key) is not None:
+            nlp_filter[key] = nlp_slots[key]
     nlp_tags = nlp_slots.get("tags")
     if isinstance(nlp_tags, list) and nlp_tags:
         nlp_filter["tags"] = list(nlp_tags)
@@ -968,14 +1002,42 @@ class ShowMoreBrowseHandler(AbstractRequestHandler):
     """Handles the ShowMoreBrowse intent — paginates browse catalogs."""
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
+        if get_request_type(handler_input) != "IntentRequest":
+            return False
+        intent_name = get_intent_name(handler_input)
+        if intent_name == "ShowMoreBrowseIntent":
+            return True
         return (
-            get_request_type(handler_input) == "IntentRequest"
-            and get_intent_name(handler_input) == "ShowMoreBrowseIntent"
+            intent_name == "HearNotificationsIntent"
+            and isinstance(get_store(handler_input).get("pendingAmbiguity"), dict)
         )
 
     async def handle(self, handler_input: HandlerInput):
 
         store = get_store(handler_input)
+        pending = store.get("pendingAmbiguity")
+        if isinstance(pending, dict) and pending.get("candidates"):
+            candidates = list(pending["candidates"])
+            offset = max(3, int(pending.get("spokenCandidateOffset") or 3))
+            next_candidates = candidates[offset:offset + 3]
+            if not next_candidates:
+                next_candidates = list(pending.get("displayedCandidates") or candidates[:3])
+                message = ambiguity_exhausted_message(next_candidates)
+            else:
+                message = ambiguous_reference_message("that name", next_candidates)
+                pending = {
+                    **pending,
+                    "displayedCandidates": next_candidates,
+                    "spokenCandidateOffset": offset + len(next_candidates),
+                }
+                update_store(handler_input, {"pendingAmbiguity": pending})
+                activate_dialog(handler_input, "ambiguity", context=pending)
+            return handler_input.response_builder \
+                .speak(ssml(message)) \
+                .reprompt(ssml("Please say one of the names I just offered.")) \
+                .set_should_end_session(False) \
+                .response
+
         catalog = get_browse_catalog(store)
         if not catalog or not catalog.get("items"):
             return handler_input.response_builder \

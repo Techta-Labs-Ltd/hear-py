@@ -309,6 +309,21 @@ def ambiguous_reference_message(phrase: str, candidates: list[dict]) -> str:
     )
 
 
+def ambiguity_retry_message(candidates: list[dict]) -> str:
+    return (
+        "That did not match the available choices. "
+        f"{ambiguous_reference_message('that name', candidates)} "
+        "You can also say show more."
+    )
+
+
+def ambiguity_exhausted_message(candidates: list[dict]) -> str:
+    return (
+        "Those are all the matches I found. "
+        f"{ambiguous_reference_message('that name', candidates)}"
+    )
+
+
 SEARCH_UNAVAILABLE = "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."
 
 # ── Browse / Catalog ────────────────────────────────────────────────

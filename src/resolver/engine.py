@@ -30,6 +30,13 @@ FUZZY_CONTEXT_TYPES = {
     **CONTEXT_TYPES,
     "from": (*CONTEXT_TYPES["from"], "location"),
 }
+
+
+def _coordinate(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 CONTEXT_PATTERN = re.compile(
     r"\b(by|from|in|near|around)\s+"
     r"([a-z0-9][a-z0-9' -]{2,80}?)"
@@ -475,6 +482,12 @@ class Resolver:
                     _append_unique(plan.publication_ids, publication_id)
             elif entity.entity_type == "location":
                 plan.city = entity.metadata.get("city") or entity.canonical_value
+                plan.latitude = _coordinate(
+                    entity.metadata.get("latitude", entity.metadata.get("lat"))
+                )
+                plan.longitude = _coordinate(
+                    entity.metadata.get("longitude", entity.metadata.get("lng"))
+                )
                 plan.country_code = (
                     entity.metadata.get("countryCode") or entity.metadata.get("country_code")
                 )

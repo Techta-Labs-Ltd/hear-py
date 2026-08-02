@@ -230,3 +230,42 @@ def test_prompted_spoken_organization_initialism_is_compacted(monkeypatch):
 
     assert result["slots"]["organizationIds"] == ["org-ytn"]
     assert result["slots"]["organizationName"] == "York Talking News"
+
+
+def test_ambiguity_follow_up_marks_unique_candidate_for_confirmation():
+    candidates = [
+        {"type": "organization", "id": "org-bromley", "name": "Bromley TN"},
+        {"type": "organization", "id": "org-neston", "name": "Ellesmere Port and Neston TN"},
+        {"type": "organization", "id": "org-north", "name": "The Northumbrian"},
+    ]
+
+    resolved = resolve_ambiguity_follow_up("neston", {
+        "intent": "organization",
+        "candidates": candidates,
+        "slots": {},
+        "searchPayload": {"query": "", "filter": {}, "sort": "latest"},
+    })
+
+    assert resolved["status"] == "resolved"
+    assert resolved["ambiguityResolution"] is True
+    assert resolved["searchPayload"]["filter"] == {
+        "organizationIds": ["org-neston"],
+    }
+
+
+def test_unrelated_ambiguity_reply_is_not_treated_as_a_candidate():
+    candidates = [
+        {"type": "organization", "id": "org-bromley", "name": "Bromley TN"},
+        {"type": "organization", "id": "org-neston", "name": "Neston TN"},
+        {"type": "organization", "id": "org-north", "name": "The Northumbrian"},
+    ]
+
+    unresolved = resolve_ambiguity_follow_up("banana weather", {
+        "intent": "organization",
+        "candidates": candidates,
+        "slots": {},
+        "searchPayload": {"query": "", "filter": {}},
+    })
+
+    assert unresolved["status"] == "ambiguous"
+    assert unresolved["followUpMatched"] is False

@@ -575,6 +575,52 @@ def test_fallback_during_ambiguity_repeats_candidates_not_welcome(
 
 
 @pytest.mark.asyncio
+async def test_show_more_pages_pending_ambiguity_before_notifications(
+    mock_handler_input,
+):
+    from src.handlers.intents.play import ShowMoreBrowseHandler
+    from src.handlers.notifications import HearNotificationsHandler
+
+    names = ["Alpha TN", "Bravo TN", "Charlie TN", "Delta TN", "Echo TN"]
+    candidates = [
+        {"type": "organization", "id": f"org-{index}", "name": name}
+        for index, name in enumerate(names, 1)
+    ]
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {"name": "HearNotificationsIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "pendingAmbiguity": {
+            "candidates": candidates,
+            "expiresAt": 4102444800,
+        },
+    }
+
+    handler = ShowMoreBrowseHandler()
+    assert handler.can_handle(mock_handler_input)
+    assert HearNotificationsHandler().can_handle(mock_handler_input)
+
+    await handler.handle(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "Delta TN" in spoken
+    assert "Echo TN" in spoken
+    assert "notifications enabled" not in spoken
+    assert get_store(mock_handler_input)["pendingAmbiguity"]["spokenCandidateOffset"] == 5
+
+    await handler.handle(mock_handler_input)
+
+    exhausted = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "Those are all the matches" in exhausted
+    assert "Delta TN" in exhausted
+    assert "Echo TN" in exhausted
+
+
+@pytest.mark.asyncio
 async def test_fallback_without_raw_speech_is_not_reclassified_as_search(
     mock_handler_input,
 ):
@@ -632,8 +678,8 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
         "intent": {
             # Alexa can retain the town slot model even though Hear's latest
             # prompt is an organization clarification.
-            "name": "TownCaptureIntent",
-            "slots": {"townName": {"name": "townName", "value": "walsall"}},
+            "name": "SetLocationIntent",
+            "slots": {"location": {"name": "location", "value": "walsall"}},
         },
     })
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
@@ -654,6 +700,7 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
             "status": "resolved",
             "intent": "organization",
             "confidence": 1.0,
+            "ambiguityResolution": True,
             "confirmationLabel": "content from Walsall Talking Newspaper",
             "searchPayload": {
                 "query": "",
@@ -684,6 +731,116 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
     assert get_store(mock_handler_input)["pendingAmbiguity"] is None
     assert get_store(mock_handler_input)["activeDialog"] is None
     assert not TownCaptureHandler().can_handle(mock_handler_input)
+
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.nlp.dispatch_handler import IntentDispatchHandler
+
+    ConfirmationMiddleware().process(mock_handler_input)
+    IntentDispatchHandler().handle(mock_handler_input)
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "Did you mean Walsall Talking Newspaper?" in spoken
+    store = get_store(mock_handler_input)
+    assert store["activeDialog"]["type"] == "search_confirmation"
+    assert store["awaitingLocationConfirm"] is False
+    assert store["pendingLocationConfirm"] is None
+
+
+@pytest.mark.asyncio
+async def test_no_declines_ambiguity_confirmation_before_stale_location(
+    mock_handler_input,
+):
+    from src.handlers.intents.system import NoIntentHandler
+
+    resolution = {
+        "requestId": "resolved-neston",
+        "intent": "organization",
+        "confirmationLabel": "Ellesmere Port and Neston TN",
+        "searchPayload": {
+            "query": "",
+            "filter": {"organizationIds": ["org-neston"]},
+        },
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "intent": {"name": "AMAZON.NoIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": resolution,
+        "awaitingLocationConfirm": True,
+        "pendingLocationConfirm": {"city": "Neston"},
+        "activeDialog": {
+            "type": "search_confirmation",
+            "context": resolution,
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await NoIntentHandler().handle(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    store = get_store(mock_handler_input)
+    assert "news or sport" in spoken
+    assert "Which town" not in spoken
+    assert store["pendingResolution"] is None
+    assert store["awaitingLocationConfirm"] is False
+    assert store["pendingLocationConfirm"] is None
+
+
+@pytest.mark.asyncio
+async def test_yes_executes_ambiguity_resolution_before_stale_location(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.system import YesIntentHandler
+
+    payload = {
+        "query": "",
+        "filter": {"organizationIds": ["org-neston"]},
+        "sort": "latest",
+    }
+    resolution = {
+        "requestId": "resolved-neston",
+        "intent": "organization",
+        "confirmationLabel": "Ellesmere Port and Neston TN",
+        "searchPayload": payload,
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": resolution,
+        "awaitingLocationConfirm": True,
+        "pendingLocationConfirm": {"city": "Neston"},
+        "activeDialog": {
+            "type": "search_confirmation",
+            "context": resolution,
+            "expiresAt": 4102444800,
+        },
+    }
+    search = AsyncMock(return_value={"results": [{"contentId": "content-1"}]})
+    play = AsyncMock(return_value={"shouldEndSession": True})
+    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    monkeypatch.setattr("src.handlers.intents.system.auto_play_first_from_search", play)
+
+    response = await YesIntentHandler().handle(mock_handler_input)
+
+    search.assert_awaited_once_with(payload)
+    play.assert_awaited_once()
+    assert response == {"shouldEndSession": True}
+    store = get_store(mock_handler_input)
+    assert store.get("userCity") is None
+    assert store["pendingResolution"] is None
+    assert store["awaitingLocationConfirm"] is False
+    assert store["pendingLocationConfirm"] is None
 
 
 @pytest.mark.asyncio
@@ -723,7 +880,7 @@ async def test_explicit_search_replaces_pending_ambiguity(
             "expiresAt": 4102444800,
         },
     }
-    resolve = AsyncMock(return_value={
+    resolved_search = {
         "version": 1,
         "status": "resolved",
         "intent": "organization",
@@ -740,18 +897,108 @@ async def test_explicit_search_replaces_pending_ambiguity(
             "organizationName": "Talking News Federation",
             "residualQuery": "",
         },
-    })
+    }
+
+    async def resolve(operation, utterance, **kwargs):
+        if operation == "resolve_ambiguity_follow_up":
+            return {
+                "status": "ambiguous",
+                "intent": "organization",
+                "followUpMatched": False,
+                "ambiguities": [{"phrase": utterance, "candidates": pending["candidates"]}],
+                "slots": {"ambiguousReferences": [{
+                    "phrase": utterance,
+                    "candidates": pending["candidates"],
+                }]},
+            }
+        return resolved_search
+
+    resolve = AsyncMock(side_effect=resolve)
     monkeypatch.setattr("src.nlp.resolve_utterance", resolve)
 
     await NlpInterceptor().process(mock_handler_input)
 
-    assert resolve.await_args.args == ("resolve_search", "tnf")
+    assert [call.args[:2] for call in resolve.await_args_list] == [
+        ("resolve_ambiguity_follow_up", "tnf"),
+        ("resolve_search", "tnf"),
+    ]
     store = get_store(mock_handler_input)
     assert store["pendingAmbiguity"] is None
     assert store["activeDialog"] is None
     assert mock_handler_input.attributes_manager.request_attributes["_nlp"][
         "confirmationLabel"
     ] == "content from Talking News Federation"
+
+
+@pytest.mark.asyncio
+async def test_candidate_in_topic_slot_resolves_before_new_search(
+    monkeypatch,
+    mock_handler_input,
+):
+    pending = {
+        "requestId": "ambiguous-tn",
+        "intent": "organization",
+        "originalUtterance": "play tn",
+        "searchPayload": {"query": "", "filter": {}, "page": 0, "limit": 20},
+        "slots": {},
+        "candidates": [
+            {"type": "organization", "id": "org-bromley", "name": "Bromley TN"},
+            {"type": "organization", "id": "org-neston", "name": "Ellesmere Port and Neston TN"},
+            {"type": "organization", "id": "org-north", "name": "The Northumbrian"},
+        ],
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "requestId": "candidate-topic-request",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {"topic": {"name": "topic", "value": "neston"}},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "pendingAmbiguity": pending,
+        "activeDialog": {
+            "type": "ambiguity",
+            "context": pending,
+            "expiresAt": 4102444800,
+        },
+    }
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "intent": "organization",
+        "ambiguityResolution": True,
+        "confirmationLabel": "content from Ellesmere Port and Neston TN",
+        "searchPayload": {
+            "query": "",
+            "filter": {"organizationIds": ["org-neston"]},
+            "page": 0,
+            "limit": 20,
+        },
+        "entities": [{
+            "type": "organization",
+            "id": "org-neston",
+            "canonicalValue": "Ellesmere Port and Neston TN",
+        }],
+        "slots": {
+            "organizationIds": ["org-neston"],
+            "organizationName": "Ellesmere Port and Neston TN",
+        },
+    })
+    monkeypatch.setattr("src.nlp.resolve_utterance", resolve)
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    resolve.assert_awaited_once()
+    assert resolve.await_args.args[:2] == ("resolve_ambiguity_follow_up", "neston")
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["ambiguityResolution"] is True
+    assert nlp["searchPayload"]["filter"] == {
+        "organizationIds": ["org-neston"],
+    }
 
 
 @pytest.mark.asyncio

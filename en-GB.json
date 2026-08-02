@@ -337,6 +337,7 @@
           "name": "ShowMoreBrowseIntent",
           "slots": [],
           "samples": [
+            "show more",
             "show me more",
             "what are the next ones",
             "what are the next results",
@@ -1034,8 +1035,7 @@
             "tell me about my notifications",
             "show me my notifications",
             "anything new from my creators",
-            "what's new from people I follow",
-            "show more"
+            "what's new from people I follow"
           ]
         },
         {

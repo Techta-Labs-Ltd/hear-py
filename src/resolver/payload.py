@@ -29,6 +29,10 @@ def build_hear_payload(plan: SearchPlan) -> dict:
             filters[key] = value
     if plan.city:
         filters["city"] = plan.city
+    if plan.latitude is not None:
+        filters["latitude"] = plan.latitude
+    if plan.longitude is not None:
+        filters["longitude"] = plan.longitude
     if plan.country_code:
         filters["countryCode"] = plan.country_code
     if plan.temporal:

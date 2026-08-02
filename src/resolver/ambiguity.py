@@ -66,6 +66,7 @@ def resolve_ambiguity_follow_up(utterance: str, context: dict) -> dict:
         ):
             winner = ranked[0][1]
     if winner is None:
+        best_score = max((item[0] for item in ranked), default=0)
         return {
             "status": "ambiguous",
             "intent": str(context.get("intent") or "general"),
@@ -75,6 +76,7 @@ def resolve_ambiguity_follow_up(utterance: str, context: dict) -> dict:
                 "candidates": narrowed,
             }]},
             "alternatives": narrowed,
+            "followUpMatched": best_score >= 60,
         }
 
     entity_type = str(winner.get("type") or "")
@@ -108,4 +110,5 @@ def resolve_ambiguity_follow_up(utterance: str, context: dict) -> dict:
         "alternatives": [],
         "ambiguities": [],
         "unresolvedReferences": [],
+        "ambiguityResolution": True,
     }

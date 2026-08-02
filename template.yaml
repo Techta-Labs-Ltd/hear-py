@@ -74,7 +74,7 @@ Globals:
         HEAR_SEMANTIC_ROUTER_INDEX_PATH: /opt/hear-semantic-index.npz
         HEAR_SEMANTIC_ROUTER_THRESHOLD: "0.72"
         HEAR_SEMANTIC_ROUTER_THREADS: "2"
-        WEBHOOK_OUTBOUND_URL: https://alexa.hear.media/api/v1/webhooks/event
+        WEBHOOK_OUTBOUND_URL: https://alexa.hear.media/api/v1/alexa/events
         SQS_OUT_QUEUE_URL: !Ref OutboundQueue
         # --- secrets (from SSM via CI) ---
         HEAR_API_KEY: !Ref HearApiKey

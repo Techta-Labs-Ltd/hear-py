@@ -23,7 +23,11 @@ SEARCH_INTENTS = {
     "BrowseContentIntent", "BrowseByCategoryIntent", "WhatsTrendingIntent",
     "PlayLocalIntent", "PlayRecommendationIntent",
 }
-AMBIGUITY_FOLLOW_UP_INTENTS = {"ClarifySelectionIntent", "TownCaptureIntent"}
+AMBIGUITY_CONTROL_INTENTS = {
+    "AMAZON.YesIntent", "AMAZON.NoIntent", "AMAZON.CancelIntent",
+    "AMAZON.StopIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
+    "ShowMoreBrowseIntent", "HearNotificationsIntent",
+}
 
 
 def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | None:
@@ -50,7 +54,8 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
             parts.extend(("from", str(source).strip()))
         return " ".join(parts)
     priorities = {
-        "TownCaptureIntent": ("townName",),
+        "TownCaptureIntent": ("townName", "selection"),
+        "SetLocationIntent": ("location", "townName", "selection"),
         "PlayLocalIntent": ("localQuery", "topic", "category"),
         "PlayRecommendationIntent": ("recommendationQuery", "topic", "category"),
         "PlayByCreatorIntent": ("creatorQuery", "topic"),
@@ -60,8 +65,9 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     }
     ordered = priorities.get(
         alexa_intent,
-        ("topic", "category", "creatorQuery", "organizationQuery", "publicationSourceQuery",
-         "selection", "listPickPhrase", "feedbackPhrase", "query"),
+        ("selection", "townName", "location", "topic", "category", "creatorQuery",
+         "organizationQuery", "publicationSourceQuery", "listPickPhrase",
+         "feedbackPhrase", "query"),
     )
     for name in ordered:
         slot = slots.get(name)
@@ -98,7 +104,16 @@ class NlpInterceptor(AbstractRequestInterceptor):
             if not alexa_intent:
                 return
 
-            if alexa_intent == "SetLocationIntent":
+            early_store = (
+                handler_input.attributes_manager.request_attributes.get("_store") or {}
+            )
+            early_dialog = active_dialog_from_store(early_store)
+            ambiguity_active = (
+                isinstance(early_store.get("pendingAmbiguity"), dict)
+                or (early_dialog or {}).get("type") == "ambiguity"
+            )
+
+            if alexa_intent == "SetLocationIntent" and not ambiguity_active:
                 slot = (intent_obj.slots or {}).get("location")
                 town = str(slot.value).strip() if slot and slot.value else None
                 _set_nlp(handler_input, {
@@ -113,10 +128,6 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 })
                 return
 
-            early_store = (
-                handler_input.attributes_manager.request_attributes.get("_store") or {}
-            )
-            early_dialog = active_dialog_from_store(early_store)
             if (
                 alexa_intent == "TownCaptureIntent"
                 and not isinstance(early_store.get("pendingAmbiguity"), dict)
@@ -142,10 +153,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 if int(pending_ambiguity.get("expiresAt") or 0) < int(time.time()):
                     update_store(handler_input, {"pendingAmbiguity": None})
                     clear_active_dialog(handler_input, "ambiguity")
-                elif alexa_intent in SEARCH_INTENTS:
-                    update_store(handler_input, {"pendingAmbiguity": None})
-                    clear_active_dialog(handler_input, "ambiguity")
-                elif alexa_intent in AMBIGUITY_FOLLOW_UP_INTENTS:
+                elif alexa_intent not in AMBIGUITY_CONTROL_INTENTS:
                     result = await resolve_utterance(
                         "resolve_ambiguity_follow_up",
                         raw,
@@ -154,35 +162,50 @@ class NlpInterceptor(AbstractRequestInterceptor):
                         request_id=str(getattr(request, "request_id", "") or ""),
                         context=pending_ambiguity,
                     )
-                    if result.get("status") == "resolved":
+                    replace_ambiguity = (
+                        alexa_intent in SEARCH_INTENTS
+                        and result.get("status") != "resolved"
+                        and not result.get("followUpMatched", False)
+                    )
+                    if replace_ambiguity:
                         update_store(handler_input, {"pendingAmbiguity": None})
                         clear_active_dialog(handler_input, "ambiguity")
-                    elif result.get("status") == "ambiguous":
-                        narrowed = (result.get("ambiguities") or [{}])[0].get("candidates") or []
-                        narrowed_context = {
-                            **pending_ambiguity,
-                            "candidates": narrowed[:3],
-                            "expiresAt": int(time.time()) + 300,
-                        }
-                        update_store(handler_input, {
-                            "pendingAmbiguity": {
-                                **narrowed_context,
-                            },
+                    else:
+                        if result.get("status") == "resolved":
+                            update_store(handler_input, {
+                                "pendingAmbiguity": None,
+                                "awaitingLocationConfirm": False,
+                                "pendingLocationConfirm": None,
+                            })
+                            clear_active_dialog(handler_input, "ambiguity")
+                        elif result.get("status") == "ambiguous":
+                            narrowed = (result.get("ambiguities") or [{}])[0].get("candidates") or []
+                            displayed = (
+                                narrowed[:3]
+                                if result.get("followUpMatched", True)
+                                else list(pending_ambiguity.get("displayedCandidates") or [])[:3]
+                            )
+                            narrowed_context = {
+                                **pending_ambiguity,
+                                "displayedCandidates": displayed,
+                                "expiresAt": int(time.time()) + 300,
+                            }
+                            update_store(handler_input, {"pendingAmbiguity": narrowed_context})
+                            activate_dialog(
+                                handler_input,
+                                "ambiguity",
+                                context=narrowed_context,
+                            )
+                        _set_nlp(handler_input, {
+                            **result,
+                            "ambiguityRetry": result.get("status") == "ambiguous",
+                            "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
+                            "alexaRawIntent": alexa_intent,
+                            "nlpMatchesAlexa": False,
+                            "needsRedirect": True,
+                            "localResolved": True,
                         })
-                        activate_dialog(
-                            handler_input,
-                            "ambiguity",
-                            context=narrowed_context,
-                        )
-                    _set_nlp(handler_input, {
-                        **result,
-                        "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
-                        "alexaRawIntent": alexa_intent,
-                        "nlpMatchesAlexa": False,
-                        "needsRedirect": True,
-                        "localResolved": True,
-                    })
-                    return
+                        return
 
             # The latest explicit prompt owns the reply. A stale onboarding
             # stage must not steal an organization/creator ambiguity answer.

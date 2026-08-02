@@ -115,8 +115,13 @@ class IntentDispatchHandler(AbstractRequestHandler):
         )
         logger.info("Hear: search confirmation asked intent=%s text=%s",
                     pending.get("intent"), confirm_text)
+        prompt = (
+            f"Did you mean {escape_ssml_lite(pending.get('ambiguityCandidateName') or confirm_text)}?"
+            if pending.get("ambiguityResolution")
+            else f"Did you want me to play {escape_ssml_lite(confirm_text)}?"
+        )
         return handler_input.response_builder \
-            .speak(ssml(f"Did you want me to play {escape_ssml_lite(confirm_text)}?")) \
+            .speak(ssml(prompt)) \
             .reprompt(ssml("Say yes to go ahead, or no for other options.")) \
             .set_should_end_session(False) \
             .get_response()

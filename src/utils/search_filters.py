@@ -48,7 +48,7 @@ class SearchPayload:
     _FILTER_KEYS = (
         "contentIds", "creatorIds", "organizationIds", "publicationIds",
         "categorySlugs", "city", "countryCode", "isPublication",
-        "publishedFrom", "publishedTo",
+        "latitude", "longitude", "publishedFrom", "publishedTo",
     )
 
     def __init__(
@@ -76,7 +76,7 @@ class SearchPayload:
             return {}
         out: dict = {}
         for key in self._FILTER_KEYS:
-            if f.get(key):
+            if f.get(key) is not None and f.get(key) != "":
                 out[key] = f[key]
         if isinstance(f.get("tags"), list) and f["tags"]:
             out["tags"] = list(f["tags"])
@@ -97,16 +97,13 @@ class SearchPayload:
                 or (self.store or {}).get("locality")
                 or ""
             ).strip()
-            if not requested_city or (
-                saved_city and requested_city.casefold() == saved_city.casefold()
-            ):
-                # Local search uses the registered listener coordinates. An
-                # exact city facet can incorrectly empty that radius search.
-                filter_obj.pop("city", None)
-            else:
-                # A different named city is an exact catalogue request, not a
-                # radius search around the listener's saved coordinates.
-                is_local = False
+            if not requested_city and saved_city:
+                requested_city = saved_city
+                filter_obj["city"] = saved_city
+            if saved_city and requested_city.casefold() == saved_city.casefold():
+                for key in ("latitude", "longitude"):
+                    if filter_obj.get(key) is None and (self.store or {}).get(key) is not None:
+                        filter_obj[key] = (self.store or {})[key]
 
         payload = {
             "alexaUserId": get_user_id(self.handler_input),
