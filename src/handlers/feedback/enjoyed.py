@@ -40,17 +40,18 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
+        pending = dict(store.get("pendingFeedback") or {})
         await submit_feedback(handler_input, "enjoyed")
 
         record_listening_event(
             handler_input,
-            category=store.get("feedbackCategory"),
-            creator=store.get("feedbackCreator"),
+            category=pending.get("category") or store.get("feedbackCategory"),
+            creator=pending.get("creatorName") or store.get("feedbackCreator"),
             liked=True,
         )
 
-        creator_id = store.get("feedbackCreatorId")
-        creator_name = store.get("feedbackCreator")
+        creator_id = pending.get("creatorId") or store.get("feedbackCreatorId")
+        creator_name = pending.get("creatorName") or store.get("feedbackCreator")
 
         update_store(handler_input, {
             "awaitingFollow": False,
@@ -76,7 +77,7 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
                 .response
 
         await clear_feedback(handler_input)
-        title = store.get("feedbackContentTitle") or store.get("currentContentTitle")
+        title = pending.get("title") or store.get("feedbackContentTitle") or store.get("currentContentTitle")
         already_msg = FEEDBACK_ENJOYED_ALREADY_FOLLOWING(title, creator_name) \
             if (title or creator_name) else FEEDBACK_FOLLOW_DECLINED
         return idle_next_response(handler_input, already_msg)

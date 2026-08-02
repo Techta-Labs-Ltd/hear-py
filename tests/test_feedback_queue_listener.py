@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.handlers.feedback.not_enjoyed import FeedbackNotEnjoyedHandler
+from src.handlers.feedback.enjoyed import FeedbackEnjoyedHandler
 from src.handlers.feedback.skip import SkipFeedbackHandler
 from src.handlers.intents.social import ReportContentHandler
 from src.handlers.intents.system import NoIntentHandler
@@ -38,6 +39,65 @@ def test_normalized_credit_prefers_real_organization_then_independent_creator():
         "organization": {"id": "org-2", "name": "Independent Creator"},
     })
     assert pick_content_credit(independent) == "David Beard"
+
+
+@pytest.mark.asyncio
+async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
+    monkeypatch,
+    mock_handler_input,
+):
+    dispatched = []
+    store = {
+        **DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "track-115",
+            "contentId": "track-115",
+            "title": "TRACK115",
+            "creatorId": "creator-tynedale",
+            "creatorName": "Tynedale Talking Magazine",
+            "category": "news",
+            "listenedMs": 120000,
+            "completed": True,
+        },
+        "feedbackContentTitle": "WhatsApp Ptt 2026-08-02 at 09.26.41",
+        "feedbackCreatorId": "creator-other",
+        "feedbackCreator": "Other Creator",
+        "currentContentTitle": "Another current track",
+        "followedCreators": [{
+            "id": "creator-tynedale",
+            "name": "Tynedale Talking Magazine",
+        }],
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = store
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
+    })
+    monkeypatch.setattr(
+        "src.services.feedback.candidates.dispatch",
+        lambda event, data: dispatched.append((event, data)),
+    )
+
+    await FeedbackEnjoyedHandler().handle(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "feedback on TRACK115 by Tynedale Talking Magazine" in spoken
+    assert "WhatsApp Ptt" not in spoken
+    assert dispatched == [("feedback.given", {
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "feedbackKey": "track-115",
+        "contentId": "track-115",
+        "publicationId": None,
+        "creatorId": "creator-tynedale",
+        "creatorName": "Tynedale Talking Magazine",
+        "title": "TRACK115",
+        "category": "news",
+        "listenedMs": 120000,
+        "feedback": "enjoyed",
+        "timestamp": dispatched[0][1]["timestamp"],
+    })]
 
 
 def test_normalization_repairs_common_api_text_encoding():

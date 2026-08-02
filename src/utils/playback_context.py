@@ -61,7 +61,7 @@ def resolve_report_track_context(store: dict, *, audio_token: str | None = None)
         return {"contentId": str(store["reportContext"]["contentId"])}
     pf = store.get("pendingFeedback") or {}
     active = store.get("activePlayback") or {}
-    content_id = active.get("contentId") or audio_token or pf.get("contentId")
+    content_id = pf.get("contentId") or active.get("contentId") or audio_token
     return {"contentId": str(content_id) if content_id is not None else None}
 
 

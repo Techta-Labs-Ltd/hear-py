@@ -35,11 +35,12 @@ class FeedbackSomewhatHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
+        pending = dict(store.get("pendingFeedback") or {})
         await submit_feedback(handler_input, "somewhat")
         record_listening_event(
             handler_input,
-            category=store.get("feedbackCategory"),
-            creator=store.get("feedbackCreator"),
+            category=pending.get("category") or store.get("feedbackCategory"),
+            creator=pending.get("creatorName") or store.get("feedbackCreator"),
             liked=None,
         )
 

@@ -72,6 +72,9 @@ of `enjoyed`, `somewhat`, `not_enjoyed`, or `skipped`.
     "contentId": "content-id",
     "publicationId": "publication-id",
     "creatorId": "creator-id",
+    "creatorName": "Creator name",
+    "title": "Recording title",
+    "category": "news",
     "listenedMs": 180000,
     "feedback": "enjoyed",
     "timestamp": 1785672300000

@@ -51,6 +51,7 @@ def create_playback_session(
         "organizationName": content.get("organizationName"),
         "publicationId": content.get("publicationId"),
         "publicationTitle": content.get("publicationTitle"),
+        "category": content.get("category"),
         "queueId": queue_id,
         "queueIndex": max(0, int(queue_index or 0)),
         "audioUrl": content.get("audioUrl"),
