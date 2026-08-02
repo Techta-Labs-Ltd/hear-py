@@ -215,6 +215,8 @@ def test_lates_sport_from_london_corrects_and_confirms_every_constraint():
     assert result["searchPayload"]["filter"] == {
         "categorySlugs": ["sport"],
         "city": "London",
+        "latitude": 51.5072,
+        "longitude": -0.1275,
         "countryCode": "gb",
     }
     assert result["searchPayload"]["sort"] == "latest"
@@ -235,6 +237,8 @@ def test_sport_update_in_london_is_not_duplicated_or_called_a_source():
     assert result["searchPayload"]["filter"] == {
         "categorySlugs": ["sport"],
         "city": "London",
+        "latitude": 51.5072,
+        "longitude": -0.1275,
         "countryCode": "gb",
     }
 
@@ -252,6 +256,8 @@ def test_location_name_is_not_also_applied_as_a_tag():
     assert result["searchPayload"]["filter"] == {
         "categorySlugs": ["sound-recording"],
         "city": "Burnley",
+        "latitude": 53.789,
+        "longitude": -2.248,
         "countryCode": "gb",
     }
 
