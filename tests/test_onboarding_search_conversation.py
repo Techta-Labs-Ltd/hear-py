@@ -117,6 +117,19 @@ def test_publication_format_is_spoken_with_creator_source():
     }) == "the latest publication from Adeshina Ayomide"
 
 
+def test_epoch_month_filter_is_spoken_in_readable_calendar_format():
+    assert resolved_search_request_label({
+        "latest": True,
+        "searchPlan": {
+            "filter": {
+                "publishedFrom": 1780272000,
+                "publishedTo": 1782864000,
+            },
+            "sort": "latest",
+        },
+    }) == "the latest content published in June 2026"
+
+
 @pytest.mark.asyncio
 async def test_publication_intent_reconstructs_sort_and_source_for_resolver(
     monkeypatch,
@@ -171,6 +184,44 @@ async def test_publication_intent_reconstructs_sort_and_source_for_resolver(
         "play latest publication from tnf",
     )
     assert resolve.await_args.kwargs["alexa_intent"] == "PlayPublicationIntent"
+
+
+@pytest.mark.asyncio
+async def test_publication_intent_carries_alexa_date_with_source_to_resolver(
+    monkeypatch,
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "requestId": "dated-publication-request",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayPublicationIntent",
+            "slots": {
+                "dateQuery": {"name": "dateQuery", "value": "2026-08-02"},
+                "publicationSourceQuery": {
+                    "name": "publicationSourceQuery",
+                    "value": "wtn",
+                },
+            },
+        },
+    })
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "intent": "organization",
+        "slots": {"searchPlan": {}},
+    })
+    monkeypatch.setattr("src.nlp.resolve_utterance", resolve)
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    assert resolve.await_args.args == (
+        "resolve_search",
+        "play 2026-08-02 publication from wtn",
+    )
 
 
 @pytest.mark.asyncio
@@ -631,7 +682,76 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
         "organizationIds": ["org-walsall"],
     }
     assert get_store(mock_handler_input)["pendingAmbiguity"] is None
+    assert get_store(mock_handler_input)["activeDialog"] is None
     assert not TownCaptureHandler().can_handle(mock_handler_input)
+
+
+@pytest.mark.asyncio
+async def test_explicit_search_replaces_pending_ambiguity(
+    monkeypatch,
+    mock_handler_input,
+):
+    pending = {
+        "requestId": "ambiguous-tn",
+        "intent": "organization",
+        "originalUtterance": "play tn",
+        "searchPayload": {"query": "", "page": 0, "limit": 20},
+        "slots": {},
+        "candidates": [
+            {"type": "organization", "id": "org-1", "name": "First TN"},
+            {"type": "organization", "id": "org-2", "name": "Second TN"},
+        ],
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "requestId": "fresh-tnf-request",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {"topic": {"name": "topic", "value": "tnf"}},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "pendingAmbiguity": pending,
+        "activeDialog": {
+            "type": "ambiguity",
+            "context": pending,
+            "createdAt": 1,
+            "expiresAt": 4102444800,
+        },
+    }
+    resolve = AsyncMock(return_value={
+        "version": 1,
+        "status": "resolved",
+        "intent": "organization",
+        "confidence": 1.0,
+        "confirmationLabel": "content from Talking News Federation",
+        "searchPayload": {
+            "query": "",
+            "filter": {"organizationIds": ["org-tnf"]},
+            "page": 0,
+            "limit": 20,
+        },
+        "slots": {
+            "organizationIds": ["org-tnf"],
+            "organizationName": "Talking News Federation",
+            "residualQuery": "",
+        },
+    })
+    monkeypatch.setattr("src.nlp.resolve_utterance", resolve)
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    assert resolve.await_args.args == ("resolve_search", "tnf")
+    store = get_store(mock_handler_input)
+    assert store["pendingAmbiguity"] is None
+    assert store["activeDialog"] is None
+    assert mock_handler_input.attributes_manager.request_attributes["_nlp"][
+        "confirmationLabel"
+    ] == "content from Talking News Federation"
 
 
 @pytest.mark.asyncio

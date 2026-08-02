@@ -248,8 +248,9 @@ async def discover_content_via_search(
     ):
         nlp_filter["isPublication"] = True
     for key in ("publishedFrom", "publishedTo"):
-        if search_plan_payload.get(key) is not None:
-            nlp_filter[key] = search_plan_payload[key]
+        value = search_plan_filter.get(key, search_plan_payload.get(key))
+        if value is not None:
+            nlp_filter[key] = value
 
     residual = nlp_slots.get("residualQuery")
     if isinstance(residual, str) and (not query or query == _raw_search_phrase(handler_input)):

@@ -17,6 +17,8 @@ async def send_playback_events(
     listener_id = None
     if handler_input is not None:
         listener_id = get_store(handler_input).get("listenerId")
+    dispatched = 0
+    failed = 0
     for event in events:
         normalized = normalize_playback_event(event)
         content_id = normalized.get("contentId")
@@ -27,8 +29,15 @@ async def send_playback_events(
             "alexaUserId": alexa_user_id,
             "listenerId": listener_id,
         }
-        dispatch(
+        if dispatch(
             f"playback.{str(normalized.get('eventType') or 'event').lower()}",
             payload,
-        )
-    return {"status": "dispatched"}
+        ):
+            dispatched += 1
+        else:
+            failed += 1
+    return {
+        "status": "dispatched" if dispatched and not failed else "failed",
+        "dispatched": dispatched,
+        "failed": failed,
+    }

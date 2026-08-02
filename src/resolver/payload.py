@@ -31,11 +31,11 @@ def build_hear_payload(plan: SearchPlan) -> dict:
         filters["city"] = plan.city
     if plan.country_code:
         filters["countryCode"] = plan.country_code
-    if filters:
-        payload["filter"] = filters
     if plan.temporal:
         if plan.temporal.start_timestamp is not None:
-            payload["publishedFrom"] = plan.temporal.start_timestamp
+            filters["publishedFrom"] = plan.temporal.start_timestamp
         if plan.temporal.end_timestamp is not None:
-            payload["publishedTo"] = plan.temporal.end_timestamp
+            filters["publishedTo"] = plan.temporal.end_timestamp
+    if filters:
+        payload["filter"] = filters
     return payload

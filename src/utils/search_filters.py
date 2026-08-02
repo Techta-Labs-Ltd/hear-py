@@ -48,6 +48,7 @@ class SearchPayload:
     _FILTER_KEYS = (
         "contentIds", "creatorIds", "organizationIds", "publicationIds",
         "categorySlugs", "city", "countryCode", "isPublication",
+        "publishedFrom", "publishedTo",
     )
 
     def __init__(
@@ -121,9 +122,6 @@ class SearchPayload:
             payload["sort"] = "nearest"
         if filter_obj:
             payload["filter"] = filter_obj
-        for key in ("publishedFrom", "publishedTo"):
-            if isinstance((self.nlp_filter or {}).get(key), (int, float)):
-                payload[key] = int(self.nlp_filter[key])
         return payload
 
     @classmethod

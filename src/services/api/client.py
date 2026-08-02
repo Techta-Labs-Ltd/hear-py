@@ -132,12 +132,16 @@ async def search(payload: dict | None = None, timeout_ms: int | None = None) -> 
         "limit": payload.get("limit", settings.search_page_limit),
         "page": payload.get("page", 0),
     }
-    for f in (
-        "alexaUserId", "filter", "isLocal", "isRecommended",
-        "publishedFrom", "publishedTo",
-    ):
+    for f in ("alexaUserId", "filter", "isLocal", "isRecommended"):
         if payload.get(f) is not None:
             body[f] = payload[f]
+    # Normalize persisted payloads created before dates moved under filter.
+    filters = dict(body.get("filter") or {})
+    for key in ("publishedFrom", "publishedTo"):
+        if key not in filters and payload.get(key) is not None:
+            filters[key] = payload[key]
+    if filters:
+        body["filter"] = filters
     if payload.get("sort") in ALLOWED_SORT_VALUES:
         body["sort"] = payload["sort"]
 

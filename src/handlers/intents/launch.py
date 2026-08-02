@@ -286,8 +286,11 @@ class TownCaptureHandler(AbstractRequestHandler):
             return False
 
         attrs = handler_input.attributes_manager.get_request_attributes()
-        if attrs and attrs.get("_nlp", {}).get("intent") == "town_capture":
+        nlp_intent = (attrs or {}).get("_nlp", {}).get("intent")
+        if nlp_intent == "town_capture":
             return True
+        if nlp_intent:
+            return False
 
         intent_name = get_intent_name(handler_input)
         return intent_name in (

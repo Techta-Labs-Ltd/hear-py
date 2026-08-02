@@ -451,3 +451,15 @@ def test_on_monday_is_one_calendar_day():
     value = parse_temporal("play news on monday", "Europe/London", now)
     assert value is not None
     assert value.end_timestamp - value.start_timestamp == 86400
+
+
+def test_alexa_iso_date_is_removed_from_query_and_becomes_one_day_filter(resolver):
+    plan = resolver.resolve(
+        "play 2026-07-28 publication from wtn",
+        timezone="Europe/London",
+    )
+
+    assert plan.temporal is not None
+    assert plan.temporal.original_text == "28 July 2026"
+    assert plan.temporal.end_timestamp - plan.temporal.start_timestamp == 86400
+    assert "2026" not in plan.query

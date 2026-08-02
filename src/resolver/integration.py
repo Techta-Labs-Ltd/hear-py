@@ -77,6 +77,8 @@ def resolve_for_alexa(
         "semanticRoute": semantic.route if semantic else None,
         "semanticScore": semantic.score if semantic else None,
     }
+    if plan.temporal:
+        slots["temporalOriginal"] = plan.temporal.original_text
     if plan.category_slugs:
         slots["category"] = plan.category_slugs[0]
     if plan.tags:

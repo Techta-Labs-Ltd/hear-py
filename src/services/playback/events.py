@@ -19,7 +19,7 @@ async def emit_listening_event(handler_input, event_type: str, state: dict | Non
     user_id = get_user_id(handler_input)
     if not user_id or not active or not active.get("contentId") or not active.get("sessionId"):
         return False
-    await send_playback_events(
+    result = await send_playback_events(
         alexa_user_id=user_id,
         handler_input=handler_input,
         events=[build_playback_event(
@@ -34,7 +34,7 @@ async def emit_listening_event(handler_input, event_type: str, state: dict | Non
             queue_id=active.get("queueId"),
         )],
     )
-    return True
+    return result.get("status") == "dispatched"
 
 
 async def emit_user_playback_event(

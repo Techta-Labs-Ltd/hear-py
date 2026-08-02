@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
+from src.services.playback.events import emit_listening_event
 from src.services.playback.session import read_playback_session, write_playback_session
 from src.services.storage.persistence import get_store, update_store
 from src.utils.skill_request import (
@@ -13,7 +14,10 @@ from src.utils.skill_request import (
 
 class PlaybackProgressReportHandler(AbstractRequestHandler):
     def can_handle(self, handler_input) -> bool:
-        return get_request_type(handler_input) == "AudioPlayer.PlaybackProgressReport"
+        return get_request_type(handler_input) in {
+            "AudioPlayer.PlaybackProgressReportDelayPassed",
+            "AudioPlayer.PlaybackProgressReportIntervalPassed",
+        }
 
     async def handle(self, handler_input):
         token = get_audio_player_token(handler_input)
@@ -23,7 +27,7 @@ class PlaybackProgressReportHandler(AbstractRequestHandler):
             "starting", "playing", "paused",
         }:
             listened_ms = max(int(state.get("listenedMs") or 0), offset_ms)
-            write_playback_session(handler_input, {
+            state = write_playback_session(handler_input, {
                 "offsetMs": offset_ms,
                 "listenedMs": listened_ms,
                 "status": "playing",
@@ -32,4 +36,5 @@ class PlaybackProgressReportHandler(AbstractRequestHandler):
                 "lastOffsetMs": offset_ms,
                 "lastToken": token,
             })
+            await emit_listening_event(handler_input, "progress", state)
         return handler_input.response_builder.response

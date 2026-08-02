@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 
-from config import settings
 from src.services.storage.persistence import get_store, update_store
 from src.utils.skill_request import get_user_id
 from src.services.outbound_dispatch import dispatch
@@ -10,7 +9,7 @@ from src.services.dialog_state import activate_dialog
 
 
 def _feedback_key(state: dict) -> str | None:
-    return state.get("publicationId") or state.get("contentId")
+    return state.get("contentId")
 
 
 def record_feedback_candidate(
@@ -20,10 +19,11 @@ def record_feedback_candidate(
     completed: bool,
 ) -> dict | None:
     """Record one meaningful, deduplicated feedback candidate."""
+    if not completed:
+        return None
     key = _feedback_key(state)
     listened_ms = max(0, int(state.get("listenedMs") or 0))
-    meaningful = completed or listened_ms >= settings.feedback_trigger_ms
-    if not key or not meaningful:
+    if not key:
         return None
     store = get_store(handler_input)
     if key in (store.get("answeredFeedbackKeys") or []):
@@ -55,6 +55,7 @@ def activate_best_feedback_candidate(handler_input) -> dict | None:
         return store.get("pendingFeedback")
     candidates = [
         item for item in (store.get("feedbackCandidates") or [])
+        if item.get("completed") is True
         if item.get("feedbackKey") not in (store.get("answeredFeedbackKeys") or [])
     ]
     if not candidates:

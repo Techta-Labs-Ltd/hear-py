@@ -77,6 +77,31 @@ async def test_search_serializes_an_absent_query_as_an_empty_string(monkeypatch)
     assert sent["query"] == "TNF"
 
 
+@pytest.mark.asyncio
+async def test_search_normalizes_legacy_top_level_dates_into_filter(monkeypatch):
+    sent = {}
+
+    async def fake_request(method, path, body, timeout_ms):
+        sent.update(body)
+        return 200, {"results": [], "total": 0}
+
+    monkeypatch.setattr("src.services.api.client._request", fake_request)
+
+    await search({
+        "query": "",
+        "publishedFrom": 1780272000,
+        "publishedTo": 1782864000,
+        "sort": "latest",
+    })
+
+    assert sent["filter"] == {
+        "publishedFrom": 1780272000,
+        "publishedTo": 1782864000,
+    }
+    assert "publishedFrom" not in sent
+    assert "publishedTo" not in sent
+
+
 def test_allowed_sort_values_match_api_enum():
     assert ALLOWED_SORT_VALUES == {
         "recommended", "nearest", "popular", "latest", "trending",

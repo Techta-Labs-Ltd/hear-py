@@ -55,7 +55,6 @@ from src.services.playback.session import (
     read_playback_session,
     write_playback_session,
 )
-from src.services.feedback.candidates import activate_best_feedback_candidate
 from src.services.queue.state import (
     move_queue,
     queue_content_id,
@@ -908,7 +907,6 @@ class NoIntentHandler(AbstractRequestHandler):
             write_playback_session(handler_input, {"status": "abandoned"})
         update_store(handler_input, {"awaitingResume": False})
         clear_active_dialog(handler_input, "resume")
-        activate_best_feedback_candidate(handler_input)
         return handler_input.response_builder \
             .speak(ssml(RESUME_DECLINED_NEXT_OPTIONS)) \
             .reprompt(ssml(RESUME_DECLINED_NEXT_OPTIONS_REPROMPT)) \

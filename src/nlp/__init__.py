@@ -8,7 +8,11 @@ from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
 from src.nlp.patterns import ALEXA_TO_NLP
 from src.services.resolver_client import ResolverUnavailable, resolve_utterance
-from src.services.dialog_state import activate_dialog, active_dialog_from_store
+from src.services.dialog_state import (
+    activate_dialog,
+    active_dialog_from_store,
+    clear_active_dialog,
+)
 from src.services.storage.persistence import update_store
 from src.utils.skill_request import get_user_id
 
@@ -19,6 +23,7 @@ SEARCH_INTENTS = {
     "BrowseContentIntent", "BrowseByCategoryIntent", "WhatsTrendingIntent",
     "PlayLocalIntent", "PlayRecommendationIntent",
 }
+AMBIGUITY_FOLLOW_UP_INTENTS = {"ClarifySelectionIntent", "TownCaptureIntent"}
 
 
 def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | None:
@@ -27,12 +32,17 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     slots = intent.get("slots") if intent else None
     if not slots:
         return None
+    date_slot = slots.get("dateQuery")
+    date_value = getattr(date_slot, "value", None) if date_slot else None
+    date_text = str(date_value).strip() if date_value else ""
     if alexa_intent == "PlayPublicationIntent":
         source_slot = slots.get("publicationSourceQuery")
         sort_slot = slots.get("publicationSort")
         source = getattr(source_slot, "value", None) if source_slot else None
         requested_sort = getattr(sort_slot, "value", None) if sort_slot else None
         parts = ["play"]
+        if date_text:
+            parts.append(date_text)
         if requested_sort and str(requested_sort).strip():
             parts.append(str(requested_sort).strip())
         parts.append("publication")
@@ -57,12 +67,16 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
         slot = slots.get(name)
         value = getattr(slot, "value", None) if slot else None
         if value and str(value).strip():
-            return str(value).strip()
+            raw = str(value).strip()
+            return f"{date_text} {raw}".strip()
     for slot in slots.values():
+        if slot is date_slot:
+            continue
         value = getattr(slot, "value", None) if slot else None
         if value and str(value).strip():
-            return str(value).strip()
-    return None
+            raw = str(value).strip()
+            return f"{date_text} {raw}".strip()
+    return date_text or None
 
 
 def _set_nlp(handler_input, payload: dict) -> None:
@@ -127,7 +141,11 @@ class NlpInterceptor(AbstractRequestInterceptor):
             if raw and isinstance(pending_ambiguity, dict):
                 if int(pending_ambiguity.get("expiresAt") or 0) < int(time.time()):
                     update_store(handler_input, {"pendingAmbiguity": None})
-                else:
+                    clear_active_dialog(handler_input, "ambiguity")
+                elif alexa_intent in SEARCH_INTENTS:
+                    update_store(handler_input, {"pendingAmbiguity": None})
+                    clear_active_dialog(handler_input, "ambiguity")
+                elif alexa_intent in AMBIGUITY_FOLLOW_UP_INTENTS:
                     result = await resolve_utterance(
                         "resolve_ambiguity_follow_up",
                         raw,
@@ -138,11 +156,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
                     )
                     if result.get("status") == "resolved":
                         update_store(handler_input, {"pendingAmbiguity": None})
-                        activate_dialog(
-                            handler_input,
-                            "ambiguity",
-                            context=pending_ambiguity,
-                        )
+                        clear_active_dialog(handler_input, "ambiguity")
                     elif result.get("status") == "ambiguous":
                         narrowed = (result.get("ambiguities") or [{}])[0].get("candidates") or []
                         narrowed_context = {

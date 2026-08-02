@@ -71,7 +71,11 @@ def persistence_save_budget_ms(handler_input) -> int:
 def should_skip_persistence_load(handler_input) -> bool:
     """Check whether persistence load should be skipped due to time pressure."""
     rtype = get_request_type(handler_input)
-    if rtype in ("AudioPlayer.PlaybackStarted", "AudioPlayer.PlaybackProgressReport"):
+    if rtype in {
+        "AudioPlayer.PlaybackStarted",
+        "AudioPlayer.PlaybackProgressReportDelayPassed",
+        "AudioPlayer.PlaybackProgressReportIntervalPassed",
+    }:
         return get_lambda_remaining_ms(handler_input) < 900
     if rtype in ("AudioPlayer.PlaybackStopped", "AudioPlayer.PlaybackFailed"):
         return get_lambda_remaining_ms(handler_input) < 700

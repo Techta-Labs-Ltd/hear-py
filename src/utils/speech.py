@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 
 from src.utils.normalize_content_item import is_bad_credit_name, is_id_like_label
 
@@ -339,6 +340,55 @@ CONFIRM_TALKING_NEWSPAPER = lambda name: (
 )
 
 
+def _spoken_date(value: datetime, *, include_year: bool = True) -> str:
+    label = f"{value.day} {value.strftime('%B')}"
+    return f"{label} {value.year}" if include_year else label
+
+
+def _published_period_label(slots: dict) -> str:
+    original = str(slots.get("temporalOriginal") or "").strip()
+    if original:
+        if re.match(r"^(?:on|from|since)\b", original, re.I):
+            return original
+        if re.match(r"^\d{1,2}\s+[A-Za-z]+\s+\d{4}$", original):
+            return f"on {original}"
+        return original
+
+    search_plan = slots.get("searchPlan") or {}
+    filters = search_plan.get("filter") or {}
+    start_value = filters.get("publishedFrom", search_plan.get("publishedFrom"))
+    end_value = filters.get("publishedTo", search_plan.get("publishedTo"))
+    if not isinstance(start_value, (int, float)) or not isinstance(
+        end_value, (int, float)
+    ):
+        return ""
+    try:
+        start = datetime.fromtimestamp(start_value, timezone.utc)
+        end = datetime.fromtimestamp(end_value, timezone.utc)
+    except (OSError, OverflowError, ValueError):
+        return ""
+    if end <= start:
+        return ""
+    if end - start <= timedelta(days=1):
+        return f"on {_spoken_date(start)}"
+    if (
+        start.day == 1
+        and end.day == 1
+        and end == (
+            start.replace(year=start.year + 1, month=1)
+            if start.month == 12 else start.replace(month=start.month + 1)
+        )
+    ):
+        return f"in {start.strftime('%B %Y')}"
+    last_day = end - timedelta(days=1)
+    if start.year == last_day.year:
+        return (
+            f"from {_spoken_date(start, include_year=False)} to "
+            f"{_spoken_date(last_day)}"
+        )
+    return f"from {_spoken_date(start)} to {_spoken_date(last_day)}"
+
+
 def resolved_search_request_label(slots: dict, source_name: str | None = None) -> str:
     """Build the complete spoken interpretation of a resolved search."""
     facets = []
@@ -390,6 +440,9 @@ def resolved_search_request_label(slots: dict, source_name: str | None = None) -
         subject = f"{subject} in {city}"
     elif slots.get("isLocal"):
         subject = f"{subject} from your community"
+    published_period = _published_period_label(slots)
+    if published_period:
+        subject = f"{subject} published {published_period}"
     return subject
 
 

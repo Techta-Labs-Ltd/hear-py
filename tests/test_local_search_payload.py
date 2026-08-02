@@ -60,3 +60,20 @@ def test_publication_filter_is_nested_in_search_filter(mock_handler_input):
 
     assert payload["filter"] == {"isPublication": True}
     assert payload["sort"] == "trending"
+
+
+def test_publication_dates_are_nested_in_search_filter(mock_handler_input):
+    payload = SearchPayload.build(
+        mock_handler_input,
+        q="",
+        sort="latest",
+        nlp_filter={
+            "publishedFrom": 1780272000,
+            "publishedTo": 1782864000,
+        },
+    )
+
+    assert payload["filter"] == {
+        "publishedFrom": 1780272000,
+        "publishedTo": 1782864000,
+    }

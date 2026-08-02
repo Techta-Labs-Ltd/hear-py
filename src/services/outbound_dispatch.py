@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 
 import boto3
@@ -10,6 +11,8 @@ import httpx
 
 from config import settings
 from src.utils.webhook_signing import sign_payload
+
+logger = logging.getLogger(__name__)
 
 
 def dispatch(event_type: str, data: dict | None = None, options: dict | None = None):
@@ -36,13 +39,14 @@ def _dispatch_via_sqs(queue_url: str, envelope: dict, await_queue: bool):
     del await_queue
     try:
         region = settings.HEAR_DDB_REGION or settings.AWS_REGION or "eu-west-1"
-        boto3.client("sqs", region_name=region).send_message(
+        response = boto3.client("sqs", region_name=region).send_message(
             QueueUrl=queue_url,
             MessageBody=json.dumps(envelope),
         )
+        return bool(response.get("MessageId"))
     except Exception:
-        pass
-    return None
+        logger.exception("Hear outbound SQS dispatch failed event=%s", envelope["event"])
+        return False
 
 
 def _dispatch_via_http(url: str, secret: str, envelope: dict, await_queue: bool):
@@ -53,13 +57,17 @@ def _dispatch_via_http(url: str, secret: str, envelope: dict, await_queue: bool)
     async def _send():
         async with httpx.AsyncClient() as client:
             try:
-                await client.post(url, json=envelope, headers={
+                response = await client.post(url, json=envelope, headers={
                     "Content-Type": "application/json",
                     "x-webhook-signature": signature["signature"],
                     "x-webhook-timestamp": signature["timestamp"],
                 })
+                response.raise_for_status()
             except Exception:
-                pass
+                logger.exception(
+                    "Hear outbound HTTP dispatch failed event=%s",
+                    envelope["event"],
+                )
 
     try:
         loop = asyncio.get_event_loop()
@@ -68,5 +76,6 @@ def _dispatch_via_http(url: str, secret: str, envelope: dict, await_queue: bool)
         else:
             asyncio.run(_send())
     except Exception:
-        pass
-    return None
+        logger.exception("Hear outbound dispatch failed event=%s", envelope["event"])
+        return False
+    return True

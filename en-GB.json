@@ -179,9 +179,14 @@
             {
               "name": "format",
               "type": "ContentFormat"
+            },
+            {
+              "name": "dateQuery",
+              "type": "AMAZON.DATE"
             }
           ],
           "samples": [
+            "play {dateQuery} content",
             "play the latest {topic}",
             "play me the latest {topic}",
             "play me the newest {topic}",
@@ -236,7 +241,7 @@
             "find a {format}",
             "find me a {format}",
             "put on a {format}",
-            "play today's {format}",
+            "play {dateQuery} {format}",
             "play me a {format}",
             "play me the {format}",
             "play me latest {topic}",
@@ -380,9 +385,14 @@
             {
               "name": "publicationSort",
               "type": "HEAR_PUBLICATION_SORT"
+            },
+            {
+              "name": "dateQuery",
+              "type": "AMAZON.DATE"
             }
           ],
           "samples": [
+            "play {dateQuery} publication",
             "play a publication",
             "play publications",
             "play something from a publication",
@@ -390,10 +400,7 @@
             "play the {publicationSort} publication",
             "play a publication from {publicationSourceQuery}",
             "play publications from {publicationSourceQuery}",
-            "play {publicationSort} publications from {publicationSourceQuery}",
-            "play the {publicationSort} publication from {publicationSourceQuery}",
             "play a publication by {publicationSourceQuery}",
-            "play the {publicationSort} publication by {publicationSourceQuery}",
             "find publications from {publicationSourceQuery}",
             "give me a publication from {publicationSourceQuery}"
           ]
@@ -461,8 +468,15 @@
         },
         {
           "name": "BrowseContentIntent",
-          "slots": [],
+          "slots": [
+            {
+              "name": "dateQuery",
+              "type": "AMAZON.DATE"
+            }
+          ],
           "samples": [
+            "what was published {dateQuery}",
+            "show me content from {dateQuery}",
             "what's on",
             "what's available",
             "what have you got",
@@ -483,9 +497,14 @@
             {
               "name": "topic",
               "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "dateQuery",
+              "type": "AMAZON.DATE"
             }
           ],
           "samples": [
+            "what was trending {dateQuery}",
             "what's the latest {topic}",
             "what is the latest {topic}",
             "what's latest {topic}",

@@ -43,6 +43,14 @@ class FeedbackService:
         if not self.should_evaluate(handler_input):
             return False
         store = get_store(handler_input)
+        pending = store.get("pendingFeedback") or {}
+        if store.get("awaitingFeedback") and pending.get("completed") is False:
+            update_store(handler_input, {
+                "pendingFeedback": None,
+                "awaitingFeedback": False,
+                "activeDialog": None,
+            })
+            return False
         if not store.get("awaitingFeedback"):
             self.clear_stale_state(handler_input)
             return False

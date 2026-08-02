@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
-from src.services.feedback.candidates import record_feedback_candidate
 from src.services.playback.events import emit_listening_event
 from src.services.playback.session import read_playback_session, write_playback_session
 from src.services.storage.persistence import get_store, update_store
@@ -28,6 +27,5 @@ class PlaybackStoppedHandler(AbstractRequestHandler):
                 "listenedMs": max(int(state.get("listenedMs") or 0), offset_ms),
             })
             update_store(handler_input, {"lastOffsetMs": offset_ms, "lastToken": token})
-            record_feedback_candidate(handler_input, state, completed=False)
             await emit_listening_event(handler_input, "stopped", state)
         return handler_input.response_builder.response

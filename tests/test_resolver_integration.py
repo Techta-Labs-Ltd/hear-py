@@ -20,11 +20,11 @@ def test_catalog_preserves_complete_resolver_payload_across_pages():
         "filter": {
             "categorySlugs": ["news"],
             "creatorIds": ["creator-1"],
+            "publishedFrom": 100,
+            "publishedTo": 200,
         },
         "isLocal": True,
         "isRecommended": False,
-        "publishedFrom": 100,
-        "publishedTo": 200,
         "sort": "latest",
         "limit": 3,
         "page": 0,
@@ -103,7 +103,7 @@ def test_ambiguous_alias_candidates_are_exposed_to_alexa(monkeypatch):
     }]
 
 
-def test_publication_ambiguity_preserves_format_filter_and_sort(monkeypatch):
+def test_publication_ambiguity_preserves_format_sort_and_date(monkeypatch):
     from src.resolver.taxonomy import TaxonomyRecord
 
     manager = TaxonomyManager()
@@ -118,7 +118,7 @@ def test_publication_ambiguity_preserves_format_filter_and_sort(monkeypatch):
     monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
 
     initial = resolve_for_alexa(
-        "play the latest publication from press",
+        "play 2026-07-28 latest publication from press",
         alexa_intent="PlayPublicationIntent",
     )
     candidates = initial["slots"]["ambiguousReferences"][0]["candidates"]
@@ -131,9 +131,17 @@ def test_publication_ambiguity_preserves_format_filter_and_sort(monkeypatch):
 
     assert resolved["status"] == "resolved"
     assert resolved["searchPayload"]["sort"] == "latest"
+    assert resolved["searchPayload"]["filter"]["publishedFrom"] == (
+        initial["slots"]["searchPlan"]["filter"]["publishedFrom"]
+    )
+    assert resolved["searchPayload"]["filter"]["publishedTo"] == (
+        initial["slots"]["searchPlan"]["filter"]["publishedTo"]
+    )
     assert resolved["searchPayload"]["filter"] == {
         "isPublication": True,
         "organizationIds": ["org-north"],
+        "publishedFrom": initial["slots"]["searchPlan"]["filter"]["publishedFrom"],
+        "publishedTo": initial["slots"]["searchPlan"]["filter"]["publishedTo"],
     }
 
 

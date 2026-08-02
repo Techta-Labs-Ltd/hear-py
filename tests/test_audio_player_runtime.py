@@ -122,6 +122,35 @@ async def test_resume_no_abandons_playback_and_offers_next_listening_options():
 
 
 @pytest.mark.asyncio
+async def test_resume_no_does_not_activate_incomplete_feedback_candidate():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "awaitingResume": True,
+        "activePlayback": _playback_state(offset_ms=120_000),
+        "feedbackCandidates": [{
+            "feedbackKey": CONTENT_ID,
+            "contentId": CONTENT_ID,
+            "listenedMs": 120_000,
+            "completed": False,
+            "sessionId": f"{CONTENT_ID}:session",
+        }],
+    }
+
+    await build_skill(persistence).invoke(
+        _event({
+            "type": "IntentRequest",
+            "intent": {"name": "AMAZON.NoIntent", "slots": {}},
+        }),
+        None,
+    )
+
+    state = persistence._store[USER_ID]
+    assert state.get("awaitingFeedback") is not True
+    assert state.get("pendingFeedback") is None
+
+
+@pytest.mark.asyncio
 async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
@@ -152,6 +181,94 @@ async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
     assert state["listenedMs"] == 12_345
 
 
+@pytest.mark.parametrize("event_type", [
+    "AudioPlayer.PlaybackProgressReportDelayPassed",
+    "AudioPlayer.PlaybackProgressReportIntervalPassed",
+])
+@pytest.mark.asyncio
+async def test_playback_progress_events_persist_and_sync(
+    monkeypatch,
+    event_type,
+):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=12_345),
+    }
+    emit = AsyncMock()
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_progress_report.emit_listening_event",
+        emit,
+    )
+
+    await build_skill(persistence).invoke(
+        _event({
+            "type": event_type,
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 91_000,
+        }),
+        None,
+    )
+
+    state = persistence._store[USER_ID]["activePlayback"]
+    assert state["offsetMs"] == 91_000
+    assert state["listenedMs"] == 91_000
+    emit.assert_awaited_once()
+    assert emit.await_args.args[1] == "progress"
+
+
+@pytest.mark.asyncio
+async def test_playback_stopped_never_creates_feedback_candidate(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=120_000),
+    }
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_stopped.emit_listening_event",
+        AsyncMock(),
+    )
+
+    await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackStopped",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 120_000,
+        }),
+        None,
+    )
+
+    state = persistence._store[USER_ID]
+    assert state["activePlayback"]["status"] == "paused"
+    assert state.get("feedbackCandidates") in (None, [])
+
+
+@pytest.mark.asyncio
+async def test_playback_nearly_finished_syncs_without_a_queue(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=170_000),
+    }
+    emit = AsyncMock()
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_nearly_finished.emit_listening_event",
+        emit,
+    )
+
+    await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackNearlyFinished",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 170_000,
+        }),
+        None,
+    )
+
+    emit.assert_awaited_once()
+    assert emit.await_args.args[1] == "nearly_finished"
+
+
 @pytest.mark.asyncio
 async def test_playback_finished_accepts_raw_camel_case_offset(monkeypatch):
     persistence = MemoryPersistenceAdapter()
@@ -177,3 +294,6 @@ async def test_playback_finished_accepts_raw_camel_case_offset(monkeypatch):
     assert state["status"] == "completed"
     assert state["offsetMs"] == 180_000
     assert state["listenedMs"] == 180_000
+    pending = persistence._store[USER_ID]["pendingFeedback"]
+    assert pending["feedbackKey"] == CONTENT_ID
+    assert pending["completed"] is True

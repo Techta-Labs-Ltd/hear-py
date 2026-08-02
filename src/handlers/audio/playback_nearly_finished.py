@@ -25,6 +25,7 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         state = read_playback_session(store)
         if not state or state.get("contentId") != token:
             return handler_input.response_builder.response
+        await emit_listening_event(handler_input, "nearly_finished", state)
         queue = read_playback_queue(store)
         if not queue:
             return handler_input.response_builder.response
@@ -45,7 +46,6 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
                 return handler_input.response_builder.response
             content = result["results"][0]
         update_store(handler_input, {"preparedNextContent": content})
-        await emit_listening_event(handler_input, "nearly_finished", state)
         directive = build_play_directive(
             url=content["audioUrl"],
             token=content["contentId"],
