@@ -28,6 +28,8 @@ CITY_MATCHES = {
                   "countryCode": "GB", "latitude": 53.6833, "longitude": -1.4977},
     "burnley": {"city": "Burnley", "locality": "Burnley",
                 "countryCode": "GB", "latitude": 53.7893, "longitude": -2.2405},
+    "herne bay": {"city": "Herne Bay", "locality": "Herne Bay",
+                  "countryCode": "GB", "latitude": 51.3706, "longitude": 1.1270},
 }
 AMBIGUOUS_TOWNS = {
     "walsall": [
@@ -763,6 +765,32 @@ def test_dangling_stage_on_returning_user_is_redirected(simulation):
     rows = [r for r in simulation if r["scenario"].startswith("S12")]
     assert rows and rows[0]["status"] == "OK"
     assert rows[0]["store"]["onboardingTownAttempts"] == 2
+
+
+def test_bare_herne_bay_keeps_manual_town_session_open():
+    with patch("src.services.resolver_client._invoke", fake_resolver_invoke):
+        skill, _ = _build_skill()
+        _, _, permission_response, _ = _invoke(skill, make_event("LaunchRequest"))
+        assert permission_response["shouldEndSession"] is False
+
+        _, _, town_prompt, town_prompt_envelope = _invoke(
+            skill, make_event("IntentRequest", "AMAZON.NoIntent"),
+        )
+        assert town_prompt["shouldEndSession"] is False
+        assert town_prompt.get("reprompt")
+        assert town_prompt_envelope["sessionAttributes"]["onboardingStage"] == "ask_town"
+
+        speech, _, confirmation, _ = _invoke(
+            skill,
+            make_event(
+                "IntentRequest",
+                "SetLocationIntent",
+                {"location": {"name": "location", "value": "Herne Bay"}},
+            ),
+        )
+        assert "Did you say Herne Bay" in speech
+        assert confirmation["shouldEndSession"] is False
+        assert confirmation.get("reprompt")
 
 
 def _render_report(records) -> str:

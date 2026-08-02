@@ -88,8 +88,12 @@ def handle_permission_no(handler_input: HandlerInput, store: Dict[str, Any]):
         "onboardingRetries": 0,
         "_requiresReliableSave": True,
     })
+    handler_input.attributes_manager.set_session_attributes({
+        "onboardingStage": ONBOARDING_ASK_TOWN,
+    })
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_LOCATION_DENIED)) \
+        .reprompt(ssml(REPROMPT_ASK_TOWN)) \
         .set_should_end_session(False) \
         .response
 
@@ -139,6 +143,9 @@ def start_town_capture(handler_input: HandlerInput, store: Dict[str, Any], name:
     update_store(handler_input, {
         "onboardingStage": ONBOARDING_ASK_TOWN,
         "onboardingTownAttempts": 0,
+    })
+    handler_input.attributes_manager.set_session_attributes({
+        "onboardingStage": ONBOARDING_ASK_TOWN,
     })
     return handler_input.response_builder \
         .speak(ssml(WELCOME_FIRST_ASK_TOWN(name))) \
@@ -285,8 +292,12 @@ def handle_location_not_found(handler_input: HandlerInput, store: Dict[str, Any]
         "onboardingRetries": 0,
         "_requiresReliableSave": True,
     })
+    handler_input.attributes_manager.set_session_attributes({
+        "onboardingStage": ONBOARDING_ASK_TOWN,
+    })
     return handler_input.response_builder \
         .speak(ssml(LOCATION_NOT_FOUND)) \
+        .reprompt(ssml(REPROMPT_ASK_TOWN)) \
         .set_should_end_session(False) \
         .response
 
