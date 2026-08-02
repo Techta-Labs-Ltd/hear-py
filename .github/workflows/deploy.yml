@@ -83,7 +83,14 @@ jobs:
           SENTRY_DSN=$(get "/hear/$STAGE/SENTRY_DSN")
           ALEXA_PROACTIVE_CLIENT_ID=$(get_optional "/hear/$STAGE/ALEXA_PROACTIVE_CLIENT_ID")
           ALEXA_PROACTIVE_CLIENT_SECRET=$(get_optional "/hear/$STAGE/ALEXA_PROACTIVE_CLIENT_SECRET")
-          for v in "$HEAR_API_KEY" "$WEBHOOK_SECRET" "$WEBHOOK_OUTBOUND_SECRET" "$SENTRY_DSN" "$ALEXA_PROACTIVE_CLIENT_ID" "$ALEXA_PROACTIVE_CLIENT_SECRET"; do echo "::add-mask::$v"; done
+          for v in "$HEAR_API_KEY" "$WEBHOOK_SECRET" "$WEBHOOK_OUTBOUND_SECRET" "$SENTRY_DSN"; do
+            echo "::add-mask::$v"
+          done
+          for v in "$ALEXA_PROACTIVE_CLIENT_ID" "$ALEXA_PROACTIVE_CLIENT_SECRET"; do
+            if [ -n "$v" ]; then
+              echo "::add-mask::$v"
+            fi
+          done
 
           aws cloudformation deploy \
             --template-file template.yaml \
