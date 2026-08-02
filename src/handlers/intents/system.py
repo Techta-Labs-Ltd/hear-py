@@ -22,7 +22,6 @@ from src.services.storage.persistence import (
     get_store, update_store, clear_queue, clear_feedback, reset_queue_items_completed,
 )
 from src.utils.skill_request import get_user_id as get_alexa_user_id
-from src.utils.skill_request import get_access_token
 from src.services.playback import flush_previous_track
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import (
@@ -291,7 +290,7 @@ class YesIntentHandler(AbstractRequestHandler):
                     "latitude": confirmed.get("latitude"),
                     "longitude": confirmed.get("longitude"),
                     "clientVersion": "alexa-skill",
-                }, access_token=get_access_token(handler_input))
+                })
             except Exception as err:
                 logger.warning("Hear: listener sync failed error=%s", type(err).__name__)
         return handler_input.response_builder \

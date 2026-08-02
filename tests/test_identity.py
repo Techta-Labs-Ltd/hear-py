@@ -8,7 +8,7 @@ from src.resolver.payload import build_hear_payload
 from src.runtime import AttrDict
 from src.services.alexa.client import send_playback_events
 from src.services.storage.store import DEFAULT_STORE
-from src.utils.skill_request import get_access_token, get_person_id, get_user_id
+from src.utils.skill_request import get_user_id
 
 
 def test_identity_extracts_raw_alexa_context_and_session_fallback(mock_handler_input):
@@ -17,9 +17,7 @@ def test_identity_extracts_raw_alexa_context_and_session_fallback(mock_handler_i
             "System": {
                 "user": {
                     "userId": "amzn1.ask.account.REAL",
-                    "accessToken": "linked-token",
                 },
-                "person": {"personId": "amzn1.ask.person.PERSON"},
             },
         },
         "session": {"user": {"userId": "session-user"}},
@@ -27,8 +25,6 @@ def test_identity_extracts_raw_alexa_context_and_session_fallback(mock_handler_i
     })
 
     assert get_user_id(mock_handler_input) == "amzn1.ask.account.REAL"
-    assert get_person_id(mock_handler_input) == "amzn1.ask.person.PERSON"
-    assert get_access_token(mock_handler_input) == "linked-token"
 
     mock_handler_input.request_envelope.context.System.user.userId = "   "
     assert get_user_id(mock_handler_input) == "session-user"
@@ -40,17 +36,13 @@ def test_identity_extracts_ask_sdk_style_snake_case_models(mock_handler_input):
             system=SimpleNamespace(
                 user=SimpleNamespace(
                     user_id="amzn1.ask.account.SDK",
-                    access_token="sdk-token",
                 ),
-                person=SimpleNamespace(person_id="amzn1.ask.person.SDK"),
             ),
         ),
         session=None,
     )
 
     assert get_user_id(mock_handler_input) == "amzn1.ask.account.SDK"
-    assert get_person_id(mock_handler_input) == "amzn1.ask.person.SDK"
-    assert get_access_token(mock_handler_input) == "sdk-token"
 
 
 @pytest.mark.asyncio
@@ -59,7 +51,6 @@ async def test_identity_interceptor_persists_real_id_without_storing_token(mock_
     mock_handler_input.request_envelope = AttrDict({
         "context": {"System": {"user": {
             "userId": "amzn1.ask.account.REAL",
-            "accessToken": "secret-token",
         }}},
         "request": {"type": "IntentRequest"},
     })
@@ -70,10 +61,7 @@ async def test_identity_interceptor_persists_real_id_without_storing_token(mock_
     assert attrs["_store"]["alexaUserId"] == "amzn1.ask.account.REAL"
     assert attrs["_identity"] == {
         "alexaUserId": "amzn1.ask.account.REAL",
-        "personId": None,
-        "accountLinked": True,
     }
-    assert "secret-token" not in str(attrs["_store"])
 
 
 @pytest.mark.asyncio

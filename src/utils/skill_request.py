@@ -46,26 +46,6 @@ def get_user_id(handler_input) -> str | None:
     return _non_empty_string(_read(session_user, "userId", "user_id"))
 
 
-def get_person_id(handler_input) -> str | None:
-    envelope = getattr(handler_input, "request_envelope", None)
-    context = _read(envelope, "context")
-    system = _read(context, "System", "system")
-    person = _read(system, "person")
-    return _non_empty_string(_read(person, "personId", "person_id"))
-
-
-def get_access_token(handler_input) -> str | None:
-    envelope = getattr(handler_input, "request_envelope", None)
-    context = _read(envelope, "context")
-    system = _read(context, "System", "system")
-    user = _read(system, "user")
-    token = _non_empty_string(_read(user, "accessToken", "access_token"))
-    if token:
-        return token
-    session = _read(envelope, "session")
-    return _non_empty_string(_read(_read(session, "user"), "accessToken", "access_token"))
-
-
 def get_audio_player_token(handler_input) -> str:
     """Read an AudioPlayer token from raw JSON or an ASK SDK request model."""
     request = handler_input.request_envelope.request

@@ -65,8 +65,8 @@ for follow/subscription events and the new track/publication notification
 webhook contract.
 
 See [Alexa listener identity and backend authentication](docs/backend-identity.md)
-for non-empty Alexa identity handling, atomic listener upserts, and the
-recommended OAuth account-linking contract.
+for non-empty Alexa identity handling, atomic listener upserts, and automatic
+reconnection using the listener's permission-sourced email.
 
 See [Runtime taxonomy revisions and zero-downtime activation](docs/runtime-taxonomy.md)
 for the backend taxonomy webhook, default DynamoDB revision, immutable resolver
