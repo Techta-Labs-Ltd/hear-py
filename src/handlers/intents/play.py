@@ -432,7 +432,7 @@ async def auto_play_first_from_search(
 
     init_queue(
         handler_input,
-        [{"contentId": i.get("contentId")} for i in search_result["results"]],
+        search_result["results"],
         source=intent or "search",
         locality=store.get("locality"),
         start_index=0,
@@ -459,7 +459,7 @@ def _build_next_playable_response(
         )
         init_queue(
             handler_input,
-            [{"contentId": it.get("contentId")} for it in items],
+            items,
             source=discovery_intent or "search",
             locality=store.get("locality"),
             start_index=i,

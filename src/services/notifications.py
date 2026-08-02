@@ -12,6 +12,7 @@ from boto3.dynamodb.conditions import Key
 from config import settings
 from src.services.api import search
 from src.services.queue.state import cache_queue_content_items, create_playback_queue
+from src.utils.normalize_content_item import normalize_content_items
 from src.utils.skill_request import get_user_id
 from src.utils.speech import (
     NOTIFICATIONS_MULTI_CREATOR,
@@ -317,6 +318,7 @@ async def resolve_notification_queue(handler_input, notifications: list[dict]) -
                 "pending",
             )
         return result
+    result["results"] = normalize_content_items(result.get("results", []))
     by_id = {
         item["contentId"]: item for item in result.get("results", [])
         if item.get("contentId")

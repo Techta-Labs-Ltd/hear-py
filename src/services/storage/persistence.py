@@ -456,8 +456,14 @@ def _browse_item_snapshot(item: dict) -> dict | None:
         "creator": credit or item.get("creator") or item.get("creatorName"),
         "creatorName": item.get("creatorName") or item.get("creator") or credit,
         "creatorId": item.get("creatorId"),
+        "organizationId": item.get("organizationId"),
+        "organizationName": item.get("organizationName"),
         "publicationId": item.get("publicationId"),
         "publicationTitle": item.get("publicationTitle"),
+        "type": item.get("type"),
+        "isPublication": bool(item.get("isPublication")),
+        "trackIndex": item.get("trackIndex"),
+        "trackCount": item.get("trackCount"),
         "summary": item.get("summary") or None,
         "category": item.get("category") or None,
         "audioUrl": item.get("audioUrl"),
@@ -561,11 +567,21 @@ def init_queue(
         value = item.get("contentId") if isinstance(item, dict) else item
         if value and str(value) not in content_ids:
             content_ids.append(str(value))
+    publication_ids = {
+        str(item.get("publicationId"))
+        for item in items or []
+        if isinstance(item, dict) and item.get("publicationId")
+    }
+    publication_titles = {
+        str(item.get("publicationTitle"))
+        for item in items or []
+        if isinstance(item, dict) and item.get("publicationTitle")
+    }
     queue = {
         "queueId": uuid.uuid4().hex,
         "source": source or "search",
-        "publicationId": None,
-        "publicationTitle": None,
+        "publicationId": next(iter(publication_ids)) if len(publication_ids) == 1 else None,
+        "publicationTitle": next(iter(publication_titles)) if len(publication_titles) == 1 else None,
         "orderedContentIds": content_ids,
         "currentIndex": max(0, min(int(start_index or 0), max(len(content_ids) - 1, 0))),
         "createdAt": int(time.time() * 1000),

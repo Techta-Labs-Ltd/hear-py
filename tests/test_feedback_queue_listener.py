@@ -53,6 +53,8 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
         "pendingFeedback": {
             "feedbackKey": "track-115",
             "contentId": "track-115",
+            "publicationId": "publication-tynedale-weekly",
+            "publicationTitle": "Tynedale weekly edition",
             "title": "TRACK115",
             "creatorId": "creator-tynedale",
             "creatorName": "Tynedale Talking Magazine",
@@ -89,7 +91,8 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
         "alexaUserId": "amzn1.ask.account.TEST",
         "feedbackKey": "track-115",
         "contentId": "track-115",
-        "publicationId": None,
+        "publicationId": "publication-tynedale-weekly",
+        "publicationTitle": "Tynedale weekly edition",
         "creatorId": "creator-tynedale",
         "creatorName": "Tynedale Talking Magazine",
         "title": "TRACK115",
@@ -161,6 +164,7 @@ async def test_negative_feedback_reports_then_resumes_deferred_play_request(
         "pendingFeedback": {
             "feedbackKey": "old-content",
             "contentId": "old-content",
+            "publicationId": "publication-old-weekly",
             "title": "Old bulletin",
             "creatorName": "Old Publisher",
         },
@@ -221,7 +225,11 @@ async def test_negative_feedback_reports_then_resumes_deferred_play_request(
         "name": "ReportContentIntent",
         "slots": {},
     })
-    monkeypatch.setattr("src.handlers.intents.social.dispatch", lambda *args, **kwargs: None)
+    reports = []
+    monkeypatch.setattr(
+        "src.handlers.intents.social.dispatch",
+        lambda event, data, options=None: reports.append((event, data, options)),
+    )
 
     response = await ReportContentHandler().handle(mock_handler_input)
 
@@ -233,6 +241,9 @@ async def test_negative_feedback_reports_then_resumes_deferred_play_request(
         response["outputSpeech"]["ssml"]
     )
     assert response["directives"][0]["type"] == "AudioPlayer.Play"
+    assert reports[0][0] == "user.reported_content"
+    assert reports[0][1]["contentId"] == "old-content"
+    assert reports[0][1]["publicationId"] == "publication-old-weekly"
 
 
 @pytest.mark.asyncio

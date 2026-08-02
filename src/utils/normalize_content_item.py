@@ -304,7 +304,10 @@ def _extract_named_entity(item: dict, key: str) -> tuple[str | None, str | None]
     value = item.get(key)
     if isinstance(value, dict):
         return nullable_string(value.get("id")), nullable_string(value.get("name"))
-    return nullable_string(item.get(f"{key}Id")), nullable_string(value)
+    return (
+        nullable_string(item.get(f"{key}Id")),
+        nullable_string(value) or nullable_string(item.get(f"{key}Name")),
+    )
 
 
 def _category_value(item: dict):
@@ -329,6 +332,17 @@ def normalize_content_item(item: dict) -> dict:
     creator_id, creator_name = _extract_named_entity(item, "creator")
     organization_id, organization_name = _extract_named_entity(item, "organization")
     publication_id, publication_title = _extract_named_entity(item, "publication")
+    is_publication = bool(item.get("isPublication") or item.get("type") == "publication")
+    publication_id = (
+        nullable_string(item.get("publicationId"))
+        or publication_id
+        or (content_id if is_publication else None)
+    )
+    publication_title = (
+        repair_mojibake(item.get("publicationTitle"))
+        or publication_title
+        or (repair_mojibake(item.get("title")) if is_publication else None)
+    )
     duration_secs = _pick_duration_secs(item)
     return {
         "contentId": content_id,
@@ -343,6 +357,10 @@ def normalize_content_item(item: dict) -> dict:
         "organizationName": organization_name,
         "publicationId": publication_id,
         "publicationTitle": publication_title,
+        "type": item.get("type"),
+        "isPublication": is_publication,
+        "trackIndex": item.get("trackIndex"),
+        "trackCount": item.get("trackCount"),
         "category": _category_value(item),
         "tags": item.get("tags") if isinstance(item.get("tags"), list) else [],
         "audioUrl": nullable_string(item.get("audioUrl")),
@@ -366,7 +384,40 @@ def normalize_content_items(items) -> list:
     playable (e.g. a publication that came back with no tracks)."""
     if not isinstance(items, list):
         return []
-    normalized = (normalize_content_item(i) for i in items if i)
+    expanded = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        tracks = item.get("tracks")
+        is_publication = bool(
+            item.get("isPublication")
+            or item.get("type") == "publication"
+            or (item.get("publicationId") and isinstance(tracks, list))
+        )
+        if not is_publication or not isinstance(tracks, list) or not tracks:
+            expanded.append(item)
+            continue
+        publication_id = nullable_string(item.get("publicationId")) or nullable_string(item.get("contentId"))
+        publication_title = repair_mojibake(item.get("title"))
+        track_count = int(item.get("trackCount") or len(tracks))
+        for index, track in enumerate(tracks):
+            if not isinstance(track, dict):
+                continue
+            merged = dict(item)
+            merged.pop("tracks", None)
+            merged.pop("durationSecs", None)
+            merged.pop("duration_secs", None)
+            merged.update(track)
+            merged.update({
+                "publicationId": publication_id,
+                "publicationTitle": publication_title,
+                "type": "publication_track",
+                "isPublication": True,
+                "trackIndex": index,
+                "trackCount": track_count,
+            })
+            expanded.append(merged)
+    normalized = (normalize_content_item(item) for item in expanded)
     return [i for i in normalized if is_playable_content_item(i)]
 
 

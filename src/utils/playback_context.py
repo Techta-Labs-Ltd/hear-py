@@ -58,11 +58,19 @@ def resolve_report_track_context(store: dict, *, audio_token: str | None = None)
     if not isinstance(store, dict):
         return {"contentId": None}
     if store.get("reportContext") and store["reportContext"].get("contentId"):
-        return {"contentId": str(store["reportContext"]["contentId"])}
+        saved = store["reportContext"]
+        return {
+            "contentId": str(saved["contentId"]),
+            "publicationId": saved.get("publicationId"),
+        }
     pf = store.get("pendingFeedback") or {}
     active = store.get("activePlayback") or {}
     content_id = pf.get("contentId") or active.get("contentId") or audio_token
-    return {"contentId": str(content_id) if content_id is not None else None}
+    publication_id = pf.get("publicationId") or active.get("publicationId")
+    return {
+        "contentId": str(content_id) if content_id is not None else None,
+        "publicationId": str(publication_id) if publication_id is not None else None,
+    }
 
 
 def build_report_context(store: dict, *, audio_token: str | None = None) -> dict:
@@ -75,6 +83,7 @@ def build_report_context(store: dict, *, audio_token: str | None = None) -> dict
     saved = store.get("reportContext") or {}
     return {
         "contentId": ctx["contentId"],
+        "publicationId": saved.get("publicationId") or ctx.get("publicationId"),
         "title": saved.get("title") or pf.get("title") or active.get("title"),
         "creatorId": saved.get("creatorId") or pf.get("creatorId") or active.get("creatorId"),
         "creatorName": saved.get("creatorName") or pf.get("creatorName") or active.get("creatorName"),
@@ -88,6 +97,7 @@ def snapshot_report_context(store: dict, *, audio_token: str | None = None) -> d
         return None
     return {
         "contentId": ctx["contentId"],
+        "publicationId": ctx.get("publicationId"),
         "title": ctx["title"],
         "creatorId": ctx["creatorId"],
         "creatorName": ctx["creatorName"],

@@ -65,6 +65,37 @@ class TestPersistence:
         store = clear_queue(mock_handler_input)
         assert store["playbackQueue"] is None
 
+    def test_publication_queue_preserves_parent_and_track_metadata(self, mock_handler_input):
+        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(DEFAULT_STORE)
+        tracks = [{
+            "contentId": "track-1",
+            "publicationId": "publication-1",
+            "publicationTitle": "Weekly publication",
+            "isPublication": True,
+            "trackIndex": 0,
+            "trackCount": 2,
+            "audioUrl": "https://cdn.hear.media/track-1.mp3",
+        }, {
+            "contentId": "track-2",
+            "publicationId": "publication-1",
+            "publicationTitle": "Weekly publication",
+            "isPublication": True,
+            "trackIndex": 1,
+            "trackCount": 2,
+            "audioUrl": "https://cdn.hear.media/track-2.mp3",
+        }]
+
+        store = init_queue(mock_handler_input, tracks)
+        assert store["playbackQueue"]["orderedContentIds"] == ["track-1", "track-2"]
+        assert store["playbackQueue"]["publicationId"] == "publication-1"
+        assert store["playbackQueue"]["publicationTitle"] == "Weekly publication"
+
+        store = set_browse_catalog(mock_handler_input, {"items": tracks})
+        cached = store["browseQueueItems"][1]
+        assert cached["publicationId"] == "publication-1"
+        assert cached["trackIndex"] == 1
+        assert cached["trackCount"] == 2
+
     def test_browse_queue_cache_preserves_canonical_playback_fields(self, mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"] = dict(DEFAULT_STORE)
         content = {

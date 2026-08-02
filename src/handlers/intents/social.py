@@ -241,6 +241,7 @@ class ReportContentHandler(AbstractRequestHandler):
             dispatch("user.reported_content", {
                 "userId": user_id, "listenerId": store.get("listenerId"),
                 "contentId": content_id,
+                "publicationId": report.get("publicationId"),
                 "reason": "reported_via_alexa", "title": title,
                 "creatorId": creator_id, "locale": locale, "deviceId": device_id,
                 "clientEventId": f"alexa-report:{user_id}:{content_id}",
