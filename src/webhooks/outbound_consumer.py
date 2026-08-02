@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 import httpx
 
 from config import settings
 from src.utils.webhook_signing import sign_payload
+
+logger = logging.getLogger(__name__)
 
 
 async def _forward_to_backend(url: str, secret: str, envelope: dict):
@@ -14,7 +17,7 @@ async def _forward_to_backend(url: str, secret: str, envelope: dict):
     body = json.dumps(envelope)
     sig = sign_payload(body, secret)
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-        resp = await client.post(url, json=envelope, headers={
+        resp = await client.post(url, content=body, headers={
             "Content-Type": "application/json",
             "x-webhook-signature": sig["signature"],
             "x-webhook-timestamp": sig["timestamp"],
@@ -35,7 +38,14 @@ def handler(event: dict, context=None):
     secret = settings.WEBHOOK_OUTBOUND_SECRET or ""
 
     if not url:
-        return {"batchItemFailures": []}
+        logger.error("Hear outbound webhook URL is not configured")
+        return {
+            "batchItemFailures": [
+                {"itemIdentifier": record.get("messageId")}
+                for record in (event.get("Records") or [])
+                if record.get("messageId")
+            ],
+        }
 
     async def _run():
         records = event.get("Records") or []
@@ -46,14 +56,20 @@ def handler(event: dict, context=None):
             except (json.JSONDecodeError, TypeError):
                 continue  # unparseable — acknowledge (don't retry a poison message)
             try:
-                await _forward_to_backend(url, secret, envelope)
+                response = await _forward_to_backend(url, secret, envelope)
+                logger.info(
+                    "Hear outbound webhook delivered event=%s messageId=%s status=%s",
+                    envelope.get("event"),
+                    record.get("messageId"),
+                    response.status_code,
+                )
             except Exception:
+                logger.exception(
+                    "Hear outbound webhook failed event=%s messageId=%s",
+                    envelope.get("event"),
+                    record.get("messageId"),
+                )
                 failures.append({"itemIdentifier": record.get("messageId")})
         return {"batchItemFailures": failures}
 
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        future = asyncio.run_coroutine_threadsafe(_run(), loop)
-        return future.result()
-    else:
-        return asyncio.run(_run())
+    return asyncio.run(_run())

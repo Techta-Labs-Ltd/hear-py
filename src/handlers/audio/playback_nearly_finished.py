@@ -51,6 +51,7 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
             token=content["contentId"],
             prev_token=token,
             metadata=build_content_metadata(content),
+            progress_report=True,
             duration_secs=(
                 content["durationMs"] / 1000
                 if isinstance(content.get("durationMs"), (int, float))

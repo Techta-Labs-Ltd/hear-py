@@ -57,7 +57,7 @@ def _dispatch_via_http(url: str, secret: str, envelope: dict, await_queue: bool)
     async def _send():
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=envelope, headers={
+                response = await client.post(url, content=body, headers={
                     "Content-Type": "application/json",
                     "x-webhook-signature": signature["signature"],
                     "x-webhook-timestamp": signature["timestamp"],

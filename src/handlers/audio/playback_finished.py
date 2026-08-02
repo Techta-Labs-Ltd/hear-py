@@ -8,6 +8,7 @@ from src.services.feedback.candidates import (
 )
 from src.services.playback.events import emit_listening_event
 from src.services.playback.session import read_playback_session, write_playback_session
+from src.services.queue.advance import play_next_queued_item
 from src.services.queue.state import read_playback_queue
 from src.services.storage.persistence import get_store
 from src.utils.skill_request import (
@@ -41,6 +42,18 @@ class PlaybackFinishedHandler(AbstractRequestHandler):
             await emit_listening_event(handler_input, "finished", state)
             queue = read_playback_queue(get_store(handler_input))
             has_prepared_next = bool(get_store(handler_input).get("preparedNextContent"))
+            if (
+                queue
+                and not has_prepared_next
+                and int(queue.get("currentIndex") or 0)
+                < len(queue["orderedContentIds"]) - 1
+            ):
+                response = await play_next_queued_item(
+                    handler_input,
+                    speak_intro=False,
+                )
+                if response is not None:
+                    return response
             if not queue or (
                 int(queue.get("currentIndex") or 0) >= len(queue["orderedContentIds"]) - 1
                 and not has_prepared_next

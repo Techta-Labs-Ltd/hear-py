@@ -11,6 +11,8 @@ from src.application import build_skill
 USER_ID = "amzn1.ask.account.AUDIO_RUNTIME_TEST"
 APPLICATION_ID = "amzn1.ask.skill.test"
 CONTENT_ID = "11111111-1111-1111-1111-111111111111"
+SECOND_CONTENT_ID = "22222222-2222-2222-2222-222222222222"
+THIRD_CONTENT_ID = "33333333-3333-3333-3333-333333333333"
 
 
 def _event(request: dict, *, new: bool = False) -> dict:
@@ -63,6 +65,19 @@ def _playback_state(*, status: str = "paused", offset_ms: int = 42_000) -> dict:
     }
 
 
+def _queued_content(content_id: str, title: str) -> dict:
+    return {
+        "contentId": content_id,
+        "title": title,
+        "spokenTitle": title,
+        "creatorId": "creator-1",
+        "creatorName": "Sheffield Talking Newspaper",
+        "audioUrl": f"https://cdn.hear.media/audio/{content_id}.mp3",
+        "durationMs": 180_000,
+        "playbackSpeeds": [],
+    }
+
+
 @pytest.mark.asyncio
 async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypatch):
     persistence = MemoryPersistenceAdapter()
@@ -100,7 +115,6 @@ async def test_resume_no_abandons_playback_and_offers_next_listening_options():
         "awaitingResume": True,
         "activePlayback": _playback_state(),
     }
-
     result = await build_skill(persistence).invoke(
         _event({
             "type": "IntentRequest",
@@ -267,6 +281,113 @@ async def test_playback_nearly_finished_syncs_without_a_queue(monkeypatch):
 
     emit.assert_awaited_once()
     assert emit.await_args.args[1] == "nearly_finished"
+
+
+@pytest.mark.asyncio
+async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    second = _queued_content(SECOND_CONTENT_ID, "Second bulletin")
+    third = _queued_content(THIRD_CONTENT_ID, "Third bulletin")
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=170_000),
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": "search",
+            "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID, THIRD_CONTENT_ID],
+            "currentIndex": 0,
+        },
+        "browseCatalog": {"items": [second, third]},
+    }
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_nearly_finished.emit_listening_event",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_started.consume_notification_for_playback",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_started.emit_listening_event",
+        AsyncMock(),
+    )
+
+    first_result = await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackNearlyFinished",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 170_000,
+        }),
+        None,
+    )
+    first_stream = first_result["response"]["directives"][0]["audioItem"]["stream"]
+    assert first_result["response"]["directives"][0]["playBehavior"] == "ENQUEUE"
+    assert first_stream["token"] == SECOND_CONTENT_ID
+    assert first_stream["expectedPreviousToken"] == CONTENT_ID
+    assert "progressReportDelayInMilliseconds" in first_stream
+    assert "progressReportIntervalInMilliseconds" in first_stream
+
+    await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackStarted",
+            "token": SECOND_CONTENT_ID,
+            "offsetInMilliseconds": 0,
+        }),
+        None,
+    )
+    assert persistence._store[USER_ID]["playbackQueue"]["currentIndex"] == 1
+
+    second_result = await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackNearlyFinished",
+            "token": SECOND_CONTENT_ID,
+            "offsetInMilliseconds": 170_000,
+        }),
+        None,
+    )
+    second_stream = second_result["response"]["directives"][0]["audioItem"]["stream"]
+    assert second_stream["token"] == THIRD_CONTENT_ID
+    assert second_stream["expectedPreviousToken"] == SECOND_CONTENT_ID
+    assert "progressReportDelayInMilliseconds" in second_stream
+
+
+@pytest.mark.asyncio
+async def test_playback_finished_starts_next_when_prefetch_was_missed(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=179_000),
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": "search",
+            "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID],
+            "currentIndex": 0,
+        },
+        "preparedNextContent": None,
+    }
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_finished.emit_listening_event",
+        AsyncMock(),
+    )
+    fallback_response = {"directives": [{"type": "AudioPlayer.Play"}]}
+    advance = AsyncMock(return_value=fallback_response)
+    monkeypatch.setattr(
+        "src.handlers.audio.playback_finished.play_next_queued_item",
+        advance,
+    )
+
+    result = await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackFinished",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 180_000,
+        }),
+        None,
+    )
+
+    advance.assert_awaited_once()
+    assert advance.await_args.kwargs == {"speak_intro": False}
+    assert result["response"] == fallback_response
 
 
 @pytest.mark.asyncio

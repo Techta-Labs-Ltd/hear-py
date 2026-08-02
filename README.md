@@ -45,3 +45,6 @@ python .agents/skills/hear-alexa-python/scripts/audit_project.py .
 Copy `.env.example` to `.env` for local configuration. Production persistence
 uses DynamoDB when `HEAR_DDB_TABLE` is set; memory persistence is intended for
 local development only.
+
+See [Outbound listening and feedback events](docs/outbound-listening-events.md)
+for the playback/feedback webhook contract and AWS delivery checks.
