@@ -4,13 +4,14 @@ from src.utils.search_query import normalize_search_query
 
 def build_hear_payload(plan: SearchPlan) -> dict:
     payload = {
-        "alexaUserId": plan.alexa_user_id,
         "isLocal": plan.is_local,
         "isRecommended": plan.is_recommended,
         "limit": plan.limit,
         "page": plan.page,
         "query": normalize_search_query(plan.query),
     }
+    if plan.alexa_user_id:
+        payload["alexaUserId"] = plan.alexa_user_id
     if plan.sort != "relevance":
         payload["sort"] = plan.sort
     elif plan.is_local:

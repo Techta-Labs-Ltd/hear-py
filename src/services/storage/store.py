@@ -92,6 +92,7 @@ DEFAULT_STORE: dict[str, object] = {
     "awaitingNotificationChoice": False,
     "_announcedInSession": [],
     "listenerId": None,
+    "alexaUserId": None,
     "onboardingComplete": False,
     "onboardingStage": None,
     "onboardingRetries": 0,

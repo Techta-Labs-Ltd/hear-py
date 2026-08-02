@@ -4,6 +4,7 @@ import time
 import uuid
 
 from src.services.storage.persistence import get_store, update_store
+from src.utils.skill_request import get_user_id
 
 ACTIVE_STATUSES = {"starting", "playing", "paused"}
 TERMINAL_STATUSES = {"completed", "abandoned", "failed"}
@@ -41,7 +42,7 @@ def create_playback_session(
     """Create a starting playback record from one flat playable content item."""
     now = int(time.time() * 1000)
     state = {
-        "alexaUserId": None,
+        "alexaUserId": get_user_id(handler_input),
         "contentId": content["contentId"],
         "token": content["contentId"],
         "title": content.get("spokenTitle") or content.get("displayTitle") or content.get("title"),

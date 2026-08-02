@@ -5,7 +5,7 @@ import time
 
 from src.services.api import sync_listener
 from src.services.storage.persistence import get_store, update_store
-from src.utils.skill_request import get_user_id
+from src.utils.skill_request import get_access_token, get_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,11 @@ async def sync_listener_for_launch(handler_input) -> bool:
         bool(profile.get("locality") or profile.get("city")),
         profile.get("playCount", 0),
     )
-    result = await sync_listener(profile, timeout_ms=2500)
+    result = await sync_listener(
+        profile,
+        timeout_ms=2500,
+        access_token=get_access_token(handler_input),
+    )
     if not result:
         logger.warning("Hear: listener sync failed")
         return False

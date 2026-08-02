@@ -19,6 +19,7 @@ class HearApiClient:
         path: str,
         json_data: dict | None = None,
         timeout_ms: int | None = None,
+        headers: dict[str, str] | None = None,
     ) -> tuple[int, dict | list | None]:
         extra = {}
         if timeout_ms is not None:
@@ -28,7 +29,7 @@ class HearApiClient:
             async with httpx.AsyncClient(
                 base_url=(settings.api_base_url or "").rstrip("/"),
                 timeout=httpx.Timeout(timeout_seconds),
-                headers={"X-Api-Key": settings.api_key},
+                headers={"X-Api-Key": settings.api_key, **(headers or {})},
             ) as client:
                 response = await client.request(
                     method,
@@ -94,8 +95,9 @@ async def _request(
     path: str,
     json_data: dict | None = None,
     timeout_ms: int | None = None,
+    headers: dict[str, str] | None = None,
 ) -> tuple[int, dict | list | None]:
-    return await hear_api_client.request(method, path, json_data, timeout_ms)
+    return await hear_api_client.request(method, path, json_data, timeout_ms, headers)
 
 
 def _normalize_search_response(data: dict) -> dict:
@@ -205,6 +207,7 @@ async def sync_listener(
     profile: dict,
     *,
     timeout_ms: int | None = None,
+    access_token: str | None = None,
 ) -> dict | None:
     """Register or update a listener through the documented sync endpoint."""
     alexa_user_id = profile.get("alexaUserId") if isinstance(profile, dict) else None
@@ -215,5 +218,6 @@ async def sync_listener(
         _build_alexa_relative_path("listeners/sync"),
         profile,
         timeout_ms,
+        {"Authorization": f"Bearer {access_token}"} if access_token else None,
     )
     return data if status == 200 and isinstance(data, dict) else None

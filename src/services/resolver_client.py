@@ -58,7 +58,7 @@ async def resolve_utterance(
     utterance: str,
     *,
     alexa_intent: str = "",
-    alexa_user_id: str = "",
+    alexa_user_id: str | None = None,
     timezone: str = "Europe/London",
     request_id: str = "",
     context: dict | None = None,
@@ -69,9 +69,10 @@ async def resolve_utterance(
         "operation": operation,
         "utterance": utterance,
         "alexaIntent": alexa_intent,
-        "alexaUserId": alexa_user_id,
         "timezone": timezone,
     }
+    if alexa_user_id:
+        payload["alexaUserId"] = alexa_user_id
     if context:
         payload["context"] = context
     try:

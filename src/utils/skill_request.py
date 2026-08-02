@@ -1,6 +1,22 @@
 """Extract Alexa request type and intent name from handler_input."""
 
 
+def _read(value, *names):
+    for name in names:
+        if isinstance(value, dict) and name in value:
+            return value.get(name)
+        if value is not None and hasattr(value, name):
+            return getattr(value, name)
+    return None
+
+
+def _non_empty_string(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
 def get_request_type(handler_input) -> str:
     """Extract the Alexa request type from the handler input."""
     envelope = getattr(handler_input, "request_envelope", {}) or {}
@@ -17,14 +33,37 @@ def get_intent_name(handler_input) -> str | None:
 
 
 def get_user_id(handler_input) -> str | None:
-    """Extract the Alexa user ID from the request context."""
-    try:
-        ctx = handler_input.request_envelope.context
-    except Exception:
-        return None
-    if ctx and getattr(ctx, "System", None) and ctx.System.user:
-        return ctx.System.user.userId
-    return None
+    """Extract the Alexa user ID from raw JSON or ASK SDK request models."""
+    envelope = getattr(handler_input, "request_envelope", None)
+    context = _read(envelope, "context")
+    system = _read(context, "System", "system")
+    user = _read(system, "user")
+    user_id = _non_empty_string(_read(user, "userId", "user_id"))
+    if user_id:
+        return user_id
+    session = _read(envelope, "session")
+    session_user = _read(session, "user")
+    return _non_empty_string(_read(session_user, "userId", "user_id"))
+
+
+def get_person_id(handler_input) -> str | None:
+    envelope = getattr(handler_input, "request_envelope", None)
+    context = _read(envelope, "context")
+    system = _read(context, "System", "system")
+    person = _read(system, "person")
+    return _non_empty_string(_read(person, "personId", "person_id"))
+
+
+def get_access_token(handler_input) -> str | None:
+    envelope = getattr(handler_input, "request_envelope", None)
+    context = _read(envelope, "context")
+    system = _read(context, "System", "system")
+    user = _read(system, "user")
+    token = _non_empty_string(_read(user, "accessToken", "access_token"))
+    if token:
+        return token
+    session = _read(envelope, "session")
+    return _non_empty_string(_read(_read(session, "user"), "accessToken", "access_token"))
 
 
 def get_audio_player_token(handler_input) -> str:

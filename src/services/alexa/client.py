@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.services.storage.persistence import get_store
 from src.utils.playback_event_builder import normalize_playback_event
 from src.services.outbound_dispatch import dispatch
+from src.utils.skill_request import get_user_id
 
 
 async def send_playback_events(
@@ -12,7 +13,10 @@ async def send_playback_events(
     handler_input=None,
 ) -> dict:
     """Dispatch canonical content listening events to the outbound pipeline."""
-    if not alexa_user_id or not isinstance(events, list) or not events:
+    resolved_user_id = str(alexa_user_id or "").strip()
+    if not resolved_user_id and handler_input is not None:
+        resolved_user_id = get_user_id(handler_input) or ""
+    if not resolved_user_id or not isinstance(events, list) or not events:
         return {"status": None}
     listener_id = None
     if handler_input is not None:
@@ -26,7 +30,7 @@ async def send_playback_events(
             continue
         payload = {
             **normalized,
-            "alexaUserId": alexa_user_id,
+            "alexaUserId": resolved_user_id,
             "listenerId": listener_id,
         }
         if dispatch(

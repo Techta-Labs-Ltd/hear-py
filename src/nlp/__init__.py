@@ -158,7 +158,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
                         "resolve_ambiguity_follow_up",
                         raw,
                         alexa_intent=alexa_intent,
-                        alexa_user_id=get_user_id(handler_input) or "",
+                        alexa_user_id=get_user_id(handler_input),
                         request_id=str(getattr(request, "request_id", "") or ""),
                         context=pending_ambiguity,
                     )
@@ -226,7 +226,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
                     "resolve_organization_follow_up",
                     raw,
                     alexa_intent=alexa_intent,
-                    alexa_user_id=get_user_id(handler_input) or "",
+                    alexa_user_id=get_user_id(handler_input),
                     request_id=str(getattr(request, "request_id", "") or ""),
                 )
                 result["intent"] = "organization"
@@ -267,7 +267,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
                     "resolve_search",
                     raw,
                     alexa_intent=alexa_intent,
-                    alexa_user_id=get_user_id(handler_input) or "",
+                    alexa_user_id=get_user_id(handler_input),
                     request_id=str(getattr(request, "request_id", "") or ""),
                 )
             else:

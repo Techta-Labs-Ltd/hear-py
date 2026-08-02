@@ -64,6 +64,10 @@ See [Backend creator notification integration](docs/backend-notifications.md)
 for follow/subscription events and the new track/publication notification
 webhook contract.
 
+See [Alexa listener identity and backend authentication](docs/backend-identity.md)
+for non-empty Alexa identity handling, atomic listener upserts, and the
+recommended OAuth account-linking contract.
+
 See [Runtime taxonomy revisions and zero-downtime activation](docs/runtime-taxonomy.md)
 for the backend taxonomy webhook, default DynamoDB revision, immutable resolver
 build, and alias-promotion contract.

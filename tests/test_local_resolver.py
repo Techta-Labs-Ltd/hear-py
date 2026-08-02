@@ -117,7 +117,6 @@ def test_publication_request_uses_publication_filter_and_trending_sort(resolver)
     assert plan.is_publication is True
     assert plan.query == ""
     assert build_hear_payload(plan) == {
-        "alexaUserId": "",
         "isLocal": False,
         "isRecommended": False,
         "limit": 20,

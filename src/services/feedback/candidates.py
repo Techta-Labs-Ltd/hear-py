@@ -105,9 +105,10 @@ async def submit_feedback(handler_input, value: str) -> dict:
     """Dispatch one explicit feedback response and close the pending prompt."""
     store = get_store(handler_input)
     pending = store.get("pendingFeedback") or {}
-    if pending.get("feedbackKey"):
+    user_id = get_user_id(handler_input)
+    if pending.get("feedbackKey") and user_id:
         dispatch("feedback.given", {
-            "alexaUserId": get_user_id(handler_input),
+            "alexaUserId": user_id,
             "feedbackKey": pending.get("feedbackKey"),
             "contentId": pending.get("contentId"),
             "publicationId": pending.get("publicationId"),
