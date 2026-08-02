@@ -48,3 +48,15 @@ def test_absent_query_is_serialized_as_an_empty_string(mock_handler_input):
     payload = SearchPayload.build(mock_handler_input, q=None)
 
     assert payload["query"] == ""
+
+
+def test_publication_filter_is_nested_in_search_filter(mock_handler_input):
+    payload = SearchPayload.build(
+        mock_handler_input,
+        q="",
+        sort="trending",
+        nlp_filter={"isPublication": True},
+    )
+
+    assert payload["filter"] == {"isPublication": True}
+    assert payload["sort"] == "trending"

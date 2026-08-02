@@ -5,6 +5,7 @@ from src.utils.browse_catalog import (
     catalog_search_context,
 )
 from src.resolver.engine import Resolver
+from src.resolver.ambiguity import resolve_ambiguity_follow_up
 from src.resolver.integration import (
     resolve_for_alexa,
     resolve_organization_follow_up,
@@ -100,6 +101,40 @@ def test_ambiguous_alias_candidates_are_exposed_to_alexa(monkeypatch):
             {"type": "organization", "id": "org-2", "name": "Burnley Publisher"},
         ],
     }]
+
+
+def test_publication_ambiguity_preserves_format_filter_and_sort(monkeypatch):
+    from src.resolver.taxonomy import TaxonomyRecord
+
+    manager = TaxonomyManager()
+    manager._snapshot = TaxonomySnapshot("publication-ambiguity", [
+        TaxonomyRecord(
+            "organization", "North Press", "org-north", aliases=("press",),
+        ),
+        TaxonomyRecord(
+            "organization", "South Press", "org-south", aliases=("press",),
+        ),
+    ])
+    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+
+    initial = resolve_for_alexa(
+        "play the latest publication from press",
+        alexa_intent="PlayPublicationIntent",
+    )
+    candidates = initial["slots"]["ambiguousReferences"][0]["candidates"]
+    resolved = resolve_ambiguity_follow_up("north", {
+        "intent": initial["intent"],
+        "searchPayload": initial["slots"]["searchPlan"],
+        "slots": initial["slots"],
+        "candidates": candidates,
+    })
+
+    assert resolved["status"] == "resolved"
+    assert resolved["searchPayload"]["sort"] == "latest"
+    assert resolved["searchPayload"]["filter"] == {
+        "isPublication": True,
+        "organizationIds": ["org-north"],
+    }
 
 
 def test_resolved_organization_keeps_a_spoken_display_name(monkeypatch):

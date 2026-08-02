@@ -78,7 +78,9 @@ async def test_search_serializes_an_absent_query_as_an_empty_string(monkeypatch)
 
 
 def test_allowed_sort_values_match_api_enum():
-    assert ALLOWED_SORT_VALUES == {"recommended", "nearest", "popular", "latest"}
+    assert ALLOWED_SORT_VALUES == {
+        "recommended", "nearest", "popular", "latest", "trending",
+    }
 
 
 @pytest.mark.asyncio

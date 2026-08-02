@@ -611,6 +611,22 @@ class YesIntentHandler(AbstractRequestHandler):
             attrs["_nlp"] = {"intent": "local", "slots": {}}
             handler_input.attributes_manager.set_request_attributes(attrs)
             return await PlayContentHandler().handle(handler_input)
+        if intent == "publication":
+            attrs = handler_input.attributes_manager.get_request_attributes()
+            attrs["_nlp"] = {
+                "intent": "publication",
+                "slots": {
+                    "isPublication": True,
+                    "residualQuery": query or "",
+                    "searchPlan": {
+                        "query": query or "",
+                        "filter": {"isPublication": True},
+                        "sort": "trending",
+                    },
+                },
+            }
+            handler_input.attributes_manager.set_request_attributes(attrs)
+            return await PlayContentHandler().handle(handler_input)
         if intent == "following":
             attrs = handler_input.attributes_manager.get_request_attributes()
             attrs["_nlp"] = {"intent": "following", "slots": {}}

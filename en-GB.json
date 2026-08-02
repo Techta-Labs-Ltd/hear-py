@@ -371,6 +371,34 @@
           ]
         },
         {
+          "name": "PlayPublicationIntent",
+          "slots": [
+            {
+              "name": "publicationSourceQuery",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "publicationSort",
+              "type": "HEAR_PUBLICATION_SORT"
+            }
+          ],
+          "samples": [
+            "play a publication",
+            "play publications",
+            "play something from a publication",
+            "play {publicationSort} publications",
+            "play the {publicationSort} publication",
+            "play a publication from {publicationSourceQuery}",
+            "play publications from {publicationSourceQuery}",
+            "play {publicationSort} publications from {publicationSourceQuery}",
+            "play the {publicationSort} publication from {publicationSourceQuery}",
+            "play a publication by {publicationSourceQuery}",
+            "play the {publicationSort} publication by {publicationSourceQuery}",
+            "find publications from {publicationSourceQuery}",
+            "give me a publication from {publicationSourceQuery}"
+          ]
+        },
+        {
           "name": "WhatsThisAboutIntent",
           "slots": [],
           "samples": [
@@ -1067,6 +1095,23 @@
         }
       ],
       "types": [
+        {
+          "name": "HEAR_PUBLICATION_SORT",
+          "values": [
+            {
+              "name": {
+                "value": "latest",
+                "synonyms": ["newest", "most recent", "recent"]
+              }
+            },
+            {
+              "name": {
+                "value": "trending",
+                "synonyms": ["popular", "top"]
+              }
+            }
+          ]
+        },
         {
           "name": "HEAR_CLARIFICATION",
           "values": [

@@ -15,6 +15,7 @@ from src.utils.skill_request import get_user_id
 logger = logging.getLogger(__name__)
 SEARCH_INTENTS = {
     "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
+    "PlayPublicationIntent",
     "BrowseContentIntent", "BrowseByCategoryIntent", "WhatsTrendingIntent",
     "PlayLocalIntent", "PlayRecommendationIntent",
 }
@@ -26,17 +27,30 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     slots = intent.get("slots") if intent else None
     if not slots:
         return None
+    if alexa_intent == "PlayPublicationIntent":
+        source_slot = slots.get("publicationSourceQuery")
+        sort_slot = slots.get("publicationSort")
+        source = getattr(source_slot, "value", None) if source_slot else None
+        requested_sort = getattr(sort_slot, "value", None) if sort_slot else None
+        parts = ["play"]
+        if requested_sort and str(requested_sort).strip():
+            parts.append(str(requested_sort).strip())
+        parts.append("publication")
+        if source and str(source).strip():
+            parts.extend(("from", str(source).strip()))
+        return " ".join(parts)
     priorities = {
         "TownCaptureIntent": ("townName",),
         "PlayLocalIntent": ("localQuery", "topic", "category"),
         "PlayRecommendationIntent": ("recommendationQuery", "topic", "category"),
         "PlayByCreatorIntent": ("creatorQuery", "topic"),
         "PlayByOrganizationIntent": ("organizationQuery", "topic"),
+        "PlayPublicationIntent": ("publicationSourceQuery", "topic"),
         "BrowseByCategoryIntent": ("category", "topic"),
     }
     ordered = priorities.get(
         alexa_intent,
-        ("topic", "category", "creatorQuery", "organizationQuery",
+        ("topic", "category", "creatorQuery", "organizationQuery", "publicationSourceQuery",
          "selection", "listPickPhrase", "feedbackPhrase", "query"),
     )
     for name in ordered:

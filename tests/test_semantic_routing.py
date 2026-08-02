@@ -98,3 +98,20 @@ def test_semantic_route_handles_non_exact_control_language(monkeypatch):
     assert result["intent"] == "browse"
     assert result["semanticRoute"] == "browse"
     assert result["confidence"] == "high"
+
+
+def test_publication_language_routes_deterministically_without_semantic_backend(
+    monkeypatch,
+):
+    backend = FakeBackend("general", 0.99)
+    monkeypatch.setattr(
+        "src.nlp.classifier.semantic_intent_router",
+        SemanticIntentRouter(enabled=True, backend=backend),
+    )
+
+    result = classify_utterance("play a publication")
+
+    assert result["intent"] == "publication"
+    assert result["slots"]["isPublication"] is True
+    assert result["confidence"] == "high"
+    assert backend.calls == []

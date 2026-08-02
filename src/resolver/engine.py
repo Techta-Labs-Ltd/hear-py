@@ -447,6 +447,7 @@ class Resolver:
             query=query,
             is_local=commands.is_local,
             is_recommended=commands.is_recommended,
+            is_publication=commands.is_publication,
             sort=commands.sort,
             page=page,
             limit=limit,

@@ -108,6 +108,122 @@ def test_publication_is_spoken_as_collection_not_source():
     )
 
 
+def test_publication_format_is_spoken_with_creator_source():
+    assert resolved_search_request_label({
+        "isPublication": True,
+        "latest": True,
+        "creatorIds": ["creator-1"],
+        "creatorName": "Adeshina Ayomide",
+    }) == "the latest publication from Adeshina Ayomide"
+
+
+@pytest.mark.asyncio
+async def test_publication_intent_reconstructs_sort_and_source_for_resolver(
+    monkeypatch,
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "requestId": "publication-request",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayPublicationIntent",
+            "slots": {
+                "publicationSort": {
+                    "name": "publicationSort",
+                    "value": "latest",
+                },
+                "publicationSourceQuery": {
+                    "name": "publicationSourceQuery",
+                    "value": "tnf",
+                },
+            },
+        },
+    })
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "intent": "organization",
+        "slots": {
+            "isPublication": True,
+            "latest": True,
+            "organizationIds": ["org-tnf"],
+            "organizationName": "Talking News Federation",
+            "residualQuery": "",
+            "searchPlan": {
+                "query": "",
+                "filter": {
+                    "isPublication": True,
+                    "organizationIds": ["org-tnf"],
+                },
+                "sort": "latest",
+            },
+        },
+    })
+    monkeypatch.setattr("src.nlp.resolve_utterance", resolve)
+
+    await NlpInterceptor().process(mock_handler_input)
+
+    assert resolve.await_args.args == (
+        "resolve_search",
+        "play latest publication from tnf",
+    )
+    assert resolve.await_args.kwargs["alexa_intent"] == "PlayPublicationIntent"
+
+
+@pytest.mark.asyncio
+async def test_publication_discovery_sends_format_and_creator_filters(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.intents.play import discover_content_via_search
+
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {"name": "PlayPublicationIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_nlp": {
+            "intent": "creator",
+            "slots": {
+                "isPublication": True,
+                "creatorIds": ["creator-1"],
+                "residualQuery": "",
+                "searchPlan": {
+                    "filter": {
+                        "isPublication": True,
+                        "creatorIds": ["creator-1"],
+                    },
+                    "sort": "trending",
+                },
+            },
+        },
+    })
+    search = AsyncMock(return_value={
+        "failed": False,
+        "results": [],
+        "total_hits": 0,
+    })
+    monkeypatch.setattr("src.handlers.intents.play.search", search)
+
+    await discover_content_via_search(mock_handler_input)
+
+    payload = search.await_args.args[0]
+    assert payload["query"] == ""
+    assert payload["filter"] == {
+        "creatorIds": ["creator-1"],
+        "isPublication": True,
+    }
+    assert payload["sort"] == "trending"
+
+
 @pytest.mark.asyncio
 async def test_unresolved_source_is_not_sent_as_a_search_query(
     monkeypatch,

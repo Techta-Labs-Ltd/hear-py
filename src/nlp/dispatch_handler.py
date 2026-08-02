@@ -16,7 +16,7 @@ from src.handlers.feedback import FeedbackEnjoyedHandler, FeedbackNotEnjoyedHand
 logger = logging.getLogger(__name__)
 
 DISPATCHABLE_INTENTS: list[str] = [
-    "trending", "local", "creator", "organization", "category",
+    "trending", "local", "creator", "organization", "publication", "category",
     "browse", "show_more", "following", "general",
     "feedback_enjoyed", "feedback_not_enjoyed", "feedback_somewhat", "feedback_skip",
     "town_capture", "location_set", "unclear",
@@ -75,6 +75,7 @@ class IntentDispatchHandler(AbstractRequestHandler):
             "local": PlayContentHandler,
             "creator": PlayByCreatorHandler,
             "organization": PlayByOrganizationHandler,
+            "publication": PlayContentHandler,
             "category": PlayContentHandler,
             "browse": BrowseContentHandler,
             "show_more": ShowMoreBrowseHandler,

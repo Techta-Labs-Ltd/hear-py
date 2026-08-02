@@ -64,6 +64,7 @@ class SearchPlan:
     country_code: str | None = None
     is_local: bool = False
     is_recommended: bool = False
+    is_publication: bool = False
     sort: str = "relevance"
     page: int = 0
     limit: int = 20

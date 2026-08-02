@@ -26,6 +26,7 @@ ALEXA_SEMANTIC_ROUTES = {
     "ShowMoreBrowseIntent": "show_more",
     "PlayByOrganizationIntent": "organization",
     "PlayByCreatorIntent": "creator",
+    "PlayPublicationIntent": "publication",
     "BrowseContentIntent": "browse",
     "WhatsTrendingIntent": "trending",
     "FeedbackEnjoyedIntent": "feedback_enjoyed",
@@ -35,7 +36,7 @@ ALEXA_SEMANTIC_ROUTES = {
 }
 
 SEARCH_ROUTE_NAMES = frozenset({
-    "browse", "creator", "general", "local", "organization", "trending",
+    "browse", "creator", "general", "local", "organization", "publication", "trending",
 })
 
 ONBOARDING_ROUTE_SKIP = "onboarding_skip"
@@ -65,6 +66,11 @@ ROUTE_SEEDS = {
         "play recordings from a talking newspaper",
         "find content from an organisation",
         "play something published by this group",
+    ),
+    "publication": (
+        "play a publication",
+        "play the latest publication from a creator",
+        "find publications from an organisation",
     ),
     "trending": (
         "what is popular right now",

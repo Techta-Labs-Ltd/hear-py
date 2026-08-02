@@ -111,6 +111,55 @@ def test_local_relevance_sort_becomes_nearest(resolver):
     assert build_hear_payload(plan)["sort"] == "nearest"
 
 
+def test_publication_request_uses_publication_filter_and_trending_sort(resolver):
+    plan = resolver.resolve("play a publication")
+
+    assert plan.is_publication is True
+    assert plan.query == ""
+    assert build_hear_payload(plan) == {
+        "alexaUserId": "",
+        "isLocal": False,
+        "isRecommended": False,
+        "limit": 20,
+        "page": 0,
+        "query": "",
+        "sort": "trending",
+        "filter": {"isPublication": True},
+    }
+
+
+@pytest.mark.parametrize(
+    "utterance,source_key,source_ids",
+    [
+        (
+            "play the latest publication from david",
+            "creatorIds",
+            ["creator-david"],
+        ),
+        (
+            "play a publication from hra",
+            "organizationIds",
+            ["org-hra"],
+        ),
+    ],
+)
+def test_publication_request_combines_creator_or_organization_source(
+    resolver,
+    utterance,
+    source_key,
+    source_ids,
+):
+    payload = build_hear_payload(resolver.resolve(utterance))
+
+    assert payload["filter"] == {
+        "isPublication": True,
+        source_key: source_ids,
+    }
+    assert payload["sort"] == (
+        "latest" if "latest" in utterance else "trending"
+    )
+
+
 @pytest.mark.parametrize(
     "utterance",
     ["play recording", "play a track", "play audio", "play sound"],

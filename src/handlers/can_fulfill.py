@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 CONTENT_INTENTS = {
     "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
+    "PlayPublicationIntent",
     "BrowseContentIntent", "WhatsTrendingIntent",
 }
 SEARCH_INTENTS = CONTENT_INTENTS | {
@@ -20,9 +21,9 @@ SEARCH_INTENTS = CONTENT_INTENTS | {
 
 NO_UTTERANCE_OK = {"BrowseContentIntent", "WhatsTrendingIntent"}
 
-STRONG_INTENTS = {"creator", "organization", "category", "local"}
+STRONG_INTENTS = {"creator", "organization", "publication", "category", "local"}
 
-SLOT_PRIORITY = ["creatorQuery", "organizationQuery", "topic", "category",
+SLOT_PRIORITY = ["creatorQuery", "organizationQuery", "publicationSourceQuery", "topic", "category",
                  "listPickPhrase", "query"]
 
 

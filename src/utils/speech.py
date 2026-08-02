@@ -362,7 +362,9 @@ def resolved_search_request_label(slots: dict, source_name: str | None = None) -
         subject = " and ".join([category_label, *tag_labels])
         subject = f"{subject} {residual}"
     else:
-        subject = " and ".join(facets) or "content"
+        subject = " and ".join(facets) or (
+            "publication" if slots.get("isPublication") else "content"
+        )
     if slots.get("latest"):
         subject = f"the latest {subject}"
     has_creator = bool(slots.get("creatorIds"))

@@ -16,6 +16,8 @@ def build_hear_payload(plan: SearchPlan) -> dict:
     elif plan.is_local:
         payload["sort"] = "nearest"
     filters = {}
+    if plan.is_publication:
+        filters["isPublication"] = True
     for key, value in (
         ("categorySlugs", plan.category_slugs),
         ("tags", plan.tags),

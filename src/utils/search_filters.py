@@ -47,7 +47,7 @@ def build_user_field(handler_input, store: dict | None = None) -> dict:
 class SearchPayload:
     _FILTER_KEYS = (
         "contentIds", "creatorIds", "organizationIds", "publicationIds",
-        "categorySlugs", "city", "countryCode",
+        "categorySlugs", "city", "countryCode", "isPublication",
     )
 
     def __init__(

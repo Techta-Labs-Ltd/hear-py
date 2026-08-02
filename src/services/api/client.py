@@ -9,7 +9,7 @@ from src.utils.search_query import normalize_search_query
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_SORT_VALUES = {"recommended", "nearest", "popular", "latest"}
+ALLOWED_SORT_VALUES = {"recommended", "nearest", "popular", "latest", "trending"}
 
 
 class HearApiClient:

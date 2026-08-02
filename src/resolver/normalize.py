@@ -31,8 +31,9 @@ CONTENT_NOUNS = {
     "a", "an", "the", "some", "something",
     "article", "articles", "audio", "content", "episode", "episodes",
     "item", "items", "podcast", "podcasts", "record", "recording", "recordings",
-    "sound", "story", "stories", "track", "tracks",
+    "publication", "publications", "sound", "story", "stories", "track", "tracks",
 }
+PUBLICATION_PATTERNS = (r"\bpublication\b", r"\bpublications\b")
 _FUZZY_CONTENT_NOUNS = tuple(
     value for value in CONTENT_NOUNS if len(value) >= 5
 )
@@ -51,6 +52,7 @@ class CommandState:
     sort: str
     is_recommended: bool
     is_local: bool
+    is_publication: bool
 
 
 def normalize_utterance(value: str | None) -> str:
@@ -92,11 +94,19 @@ def parse_command_modifiers(text: str) -> CommandState:
     latest = _spans(LATEST_PATTERNS, text)
     recommended = _spans(RECOMMENDED_PATTERNS, text)
     local = _spans(LOCAL_PATTERNS, text)
-    claimed.extend(latest + recommended + local)
+    publication = _spans(PUBLICATION_PATTERNS, text)
+    claimed.extend(latest + recommended + local + publication)
     is_recommended = bool(recommended)
+    is_publication = bool(publication)
     return CommandState(
         claimed=tuple(claimed),
-        sort="latest" if latest else "recommended" if is_recommended else "relevance",
+        sort=(
+            "latest" if latest
+            else "recommended" if is_recommended
+            else "trending" if is_publication
+            else "relevance"
+        ),
         is_recommended=is_recommended,
         is_local=bool(local),
+        is_publication=is_publication,
     )

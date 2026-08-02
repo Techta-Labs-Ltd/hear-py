@@ -14,6 +14,7 @@ DISCOVERY_INTENTS = {
     "PlayRecommendationIntent",
     "PlayByOrganizationIntent",
     "PlayByCreatorIntent",
+    "PlayPublicationIntent",
     "BrowseContentIntent",
     "WhatsTrendingIntent",
 }

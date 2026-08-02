@@ -240,6 +240,13 @@ async def discover_content_via_search(
     nlp_filter["isLocal"] = bool(nlp_slots.get("isLocal"))
     nlp_filter["isRecommended"] = bool(nlp_slots.get("isRecommended"))
     search_plan_payload = nlp_slots.get("searchPlan") or {}
+    search_plan_filter = search_plan_payload.get("filter") or {}
+    if (
+        nlp_slots.get("isPublication")
+        or search_plan_filter.get("isPublication")
+        or get_intent_name(handler_input) == "PlayPublicationIntent"
+    ):
+        nlp_filter["isPublication"] = True
     for key in ("publishedFrom", "publishedTo"):
         if search_plan_payload.get(key) is not None:
             nlp_filter[key] = search_plan_payload[key]
@@ -255,7 +262,11 @@ async def discover_content_via_search(
         raw_latest = not nlp_latest and wants_latest_playback(_raw_search_phrase(handler_input) or "")
     except Exception:
         raw_latest = False
-    sort = "latest" if (nlp_latest or raw_latest) else None
+    sort = (
+        "latest" if (nlp_latest or raw_latest)
+        else "trending" if nlp_filter.get("isPublication")
+        else None
+    )
 
     page_limit = limit or _DEFAULT_SEARCH_PAGE_LIMIT
 
@@ -571,7 +582,7 @@ class PlayContentHandler(AbstractRequestHandler):
         name = get_intent_name(handler_input)
         return (
             get_request_type(handler_input) == "IntentRequest"
-            and name == "PlayContentIntent"
+            and name in {"PlayContentIntent", "PlayPublicationIntent"}
         )
 
     async def handle(self, handler_input: HandlerInput):
@@ -655,7 +666,7 @@ class PlayContentHandler(AbstractRequestHandler):
                 discover_intro = PLAY_COMMUNITY_INTRO(resolve_loc, search_result.get("total_hits", 0))
 
             response = await auto_play_first_from_search(handler_input, search_result, {
-                "discoveryIntent": "PlayContentIntent",
+                "discoveryIntent": get_intent_name(handler_input) or "PlayContentIntent",
                 "q": search_q,
                 "locality": active_store.get("locality"),
                 "introOverride": discover_intro,

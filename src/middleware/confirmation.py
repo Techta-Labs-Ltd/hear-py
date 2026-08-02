@@ -6,7 +6,7 @@ from src.services.resolution_state import build_pending_resolution
 from src.utils.speech import resolved_search_request_label
 
 _CONFIRMABLE: set[str] = {
-    "local", "creator", "organization", "category", "general",
+    "local", "creator", "organization", "publication", "category", "general",
 }
 
 
@@ -26,6 +26,7 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
         slots.get("organizationName") or slots.get("organizationQuery")
         or slots.get("organization") or None
     )
+    publication_source = slots.get("publicationSourceQuery") or None
     city = slots.get("city") or slots.get("placeName") or None
     residual = str(slots.get("residualQuery", "")).strip() or ""
 
@@ -33,6 +34,8 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
         return resolved_search_request_label(slots, org)
     if intent == "creator" and creator:
         return resolved_search_request_label(slots, creator)
+    if intent == "publication":
+        return resolved_search_request_label(slots, publication_source)
     if intent in {"category", "general"} and (
         category or slots.get("tags") or residual
     ):
@@ -128,6 +131,8 @@ def _extract_raw_utterance_from_attrs(handler_input) -> str | None:
         priority = ["creatorQuery", "topic", "organizationQuery", "listPickPhrase", "category", "feedbackPhrase"]
     elif alexa_intent == "PlayByOrganizationIntent":
         priority = ["organizationQuery", "topic", "creatorQuery", "listPickPhrase", "category", "feedbackPhrase"]
+    elif alexa_intent == "PlayPublicationIntent":
+        priority = ["publicationSourceQuery", "topic", "creatorQuery", "organizationQuery", "listPickPhrase", "category"]
     elif alexa_intent == "BrowseByCategoryIntent":
         priority = ["category", "topic", "creatorQuery", "organizationQuery", "listPickPhrase", "feedbackPhrase"]
     else:
@@ -151,6 +156,8 @@ def _build_search_params(nlp: dict | None) -> dict | None:
         parts.append(slots.get("creatorQuery") or slots.get("creator"))
     if slots.get("organizationQuery") or slots.get("organization"):
         parts.append(slots.get("organizationQuery") or slots.get("organization"))
+    if slots.get("publicationSourceQuery"):
+        parts.append(slots.get("publicationSourceQuery"))
     if slots.get("city") or slots.get("placeName"):
         parts.append(slots.get("city") or slots.get("placeName"))
     if slots.get("residualQuery"):

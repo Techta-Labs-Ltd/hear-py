@@ -9,18 +9,30 @@ from src.services.semantic_routing import SEARCH_ROUTE_NAMES, semantic_intent_ro
 
 SEARCH_INTENTS = {
     "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
+    "PlayPublicationIntent",
     "BrowseContentIntent", "BrowseByCategoryIntent", "WhatsTrendingIntent",
     "PlayLocalIntent", "PlayRecommendationIntent",
 }
 
 
-def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "Europe/London") -> dict:
+def resolve_for_alexa(
+    utterance: str,
+    alexa_user_id: str = "",
+    timezone: str = "Europe/London",
+    *,
+    alexa_intent: str = "",
+) -> dict:
     plan = resolver.resolve(utterance, alexa_user_id, timezone)
+    if alexa_intent == "PlayPublicationIntent":
+        plan.is_publication = True
+        if plan.sort == "relevance":
+            plan.sort = "trending"
     deterministic_intent = (
         "category" if plan.category_slugs or plan.tags else
         "local" if plan.is_local or plan.city else
         "creator" if plan.creator_ids else
-        "organization" if plan.organization_ids else ""
+        "organization" if plan.organization_ids else
+        "publication" if plan.is_publication or plan.publication_ids else ""
     )
     has_deterministic_evidence = bool(
         plan.entities
@@ -29,7 +41,7 @@ def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "
     )
     semantic = (
         None
-        if has_deterministic_evidence
+        if deterministic_intent or has_deterministic_evidence
         else semantic_intent_router.route(utterance, SEARCH_ROUTE_NAMES)
     )
     intent = deterministic_intent or (semantic.route if semantic else "general")
@@ -38,6 +50,7 @@ def resolve_for_alexa(utterance: str, alexa_user_id: str = "", timezone: str = "
         "latest": plan.sort == "latest",
         "isLocal": plan.is_local,
         "isRecommended": plan.is_recommended,
+        "isPublication": plan.is_publication,
         "searchPlan": build_hear_payload(plan),
         "unresolvedReferences": [
             {

@@ -44,6 +44,7 @@ def classify_utterance(raw: str | None) -> dict:
     plan = resolver.resolve(normalized)
     slots = {
         "latest": plan.sort == "latest",
+        "isPublication": plan.is_publication,
         "residualQuery": plan.query,
     }
     if plan.category_slugs:
@@ -55,6 +56,7 @@ def classify_utterance(raw: str | None) -> dict:
     intent = (
         "local" if plan.is_local else
         "category" if plan.category_slugs else
+        "publication" if plan.is_publication else
         ""
     )
     has_deterministic_evidence = bool(
@@ -64,7 +66,7 @@ def classify_utterance(raw: str | None) -> dict:
     )
     semantic = (
         None
-        if has_deterministic_evidence
+        if intent or has_deterministic_evidence
         else semantic_intent_router.route(normalized)
     )
     intent = intent or (semantic.route if semantic else "general")
@@ -72,7 +74,7 @@ def classify_utterance(raw: str | None) -> dict:
         "intent": intent,
         "confidence": (
             "high"
-            if plan.is_local or plan.category_slugs
+            if plan.is_local or plan.category_slugs or plan.is_publication
             else "high"
             if semantic and semantic.score >= 0.82
             else "medium"

@@ -71,10 +71,18 @@ def _resolve_search(event: dict, *, organization_follow_up: bool = False) -> dic
     corrected = correction.utterance
     corrections = list(correction.corrections)
     resolve = resolve_organization_follow_up if organization_follow_up else resolve_for_alexa
-    result = resolve(
+    resolve_args = (
         corrected,
         str(event.get("alexaUserId") or ""),
         str(event.get("timezone") or "Europe/London"),
+    )
+    result = (
+        resolve(*resolve_args)
+        if organization_follow_up
+        else resolve(
+            *resolve_args,
+            alexa_intent=str(event.get("alexaIntent") or ""),
+        )
     )
     slots = dict(result.get("slots") or {})
     if is_generic_organization_request(corrected):
