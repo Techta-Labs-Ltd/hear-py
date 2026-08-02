@@ -42,6 +42,17 @@ python -m compileall -q main.py src config
 python .agents/skills/hear-alexa-python/scripts/audit_project.py .
 ```
 
+## Deployment permissions
+
+The GitHub OIDC deployment role must be able to manage the stack's Lambda,
+API Gateway, SQS, log, and generated IAM resources. Its DynamoDB scope must
+include `hear-notification-inbox-*`, `hear-taxonomy-revision-*`, and
+`hear-webhook-replay-*`. Its S3 scope must include both the bucket and objects
+under `hear-taxonomy-snapshots-*`. These permissions are needed only when
+CloudFormation creates or updates infrastructure. Runtime taxonomy refreshes
+use the deployed webhook, queue, and Lambda resources and do not invoke
+GitHub Actions or rebuild the container.
+
 Copy `.env.example` to `.env` for local configuration. Production persistence
 uses DynamoDB when `HEAR_DDB_TABLE` is set; memory persistence is intended for
 local development only.

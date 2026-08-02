@@ -205,6 +205,7 @@ Resources:
   WebhookReplayTable:
     Type: AWS::DynamoDB::Table
     Properties:
+      TableName: !Sub hear-webhook-replay-${Stage}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: pk
@@ -238,6 +239,7 @@ Resources:
   TaxonomySnapshotBucket:
     Type: AWS::S3::Bucket
     Properties:
+      BucketName: !Sub hear-taxonomy-snapshots-${AWS::AccountId}-${Stage}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
