@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import tarfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -117,6 +118,16 @@ class TaxonomyRecord:
     slug: str | None = None
     aliases: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _ArtifactDownload:
+    logical: tuple[str, ...]
+    url: str
+    filename: str
+    sha256: str
+    compressed_bytes: int
+    uncompressed_bytes: int
 
 
 def _consolidate_equivalent_records(
@@ -553,7 +564,7 @@ class TaxonomyManager:
                 raise ValueError(f"Missing required taxonomy artifact: {'.'.join(required)}")
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        sqlite_paths: dict[tuple[str, ...], Path] = {}
+        downloads: list[_ArtifactDownload] = []
         seen_filenames: set[str] = set()
         for logical, descriptor in artifacts:
             artifact_url = urljoin(manifest_url, str(descriptor["url"]))
@@ -570,37 +581,42 @@ class TaxonomyManager:
             uncompressed_size = int(descriptor["uncompressedBytes"])
             if compressed_size <= 0 or uncompressed_size <= 0:
                 raise ValueError(f"Invalid taxonomy sizes for {artifact_url}")
-            compressed_path = self.cache_dir / filename
-            content = compressed_path.read_bytes() if compressed_path.exists() else b""
-            if (
-                len(content) != compressed_size
-                or hashlib.sha256(content).hexdigest() != expected_hash
-            ):
-                artifact_response = httpx.get(
-                    artifact_url,
-                    timeout=httpx.Timeout(20.0, connect=3.0),
+            downloads.append(_ArtifactDownload(
+                logical=logical,
+                url=artifact_url,
+                filename=filename,
+                sha256=expected_hash,
+                compressed_bytes=compressed_size,
+                uncompressed_bytes=uncompressed_size,
+            ))
+
+        started = time.monotonic()
+        worker_count = min(8, len(downloads))
+        limits = httpx.Limits(
+            max_connections=worker_count,
+            max_keepalive_connections=worker_count,
+        )
+        with httpx.Client(
+            timeout=httpx.Timeout(30.0, connect=3.0),
+            limits=limits,
+            follow_redirects=True,
+        ) as client:
+            with ThreadPoolExecutor(
+                max_workers=worker_count,
+                thread_name_prefix="taxonomy-download",
+            ) as executor:
+                materialized = executor.map(
+                    lambda download: self._materialize_artifact(download, client),
+                    downloads,
                 )
-                artifact_response.raise_for_status()
-                content = artifact_response.content
-            if len(content) != compressed_size:
-                raise ValueError(f"Taxonomy compressed-size mismatch for {artifact_url}")
-            if hashlib.sha256(content).hexdigest() != expected_hash:
-                raise ValueError(f"Taxonomy hash mismatch for {artifact_url}")
-            raw = zstandard.ZstdDecompressor().decompress(
-                content,
-                max_output_size=uncompressed_size,
-            )
-            if len(raw) != uncompressed_size:
-                raise ValueError(f"Taxonomy uncompressed-size mismatch for {artifact_url}")
-            temporary_compressed = compressed_path.with_suffix(compressed_path.suffix + ".tmp")
-            temporary_compressed.write_bytes(content)
-            temporary_compressed.replace(compressed_path)
-            sqlite_path = compressed_path.with_suffix("")
-            temporary_sqlite = sqlite_path.with_suffix(sqlite_path.suffix + ".tmp")
-            temporary_sqlite.write_bytes(raw)
-            _validate_sqlite_artifact(temporary_sqlite, logical)
-            temporary_sqlite.replace(sqlite_path)
-            sqlite_paths[logical] = sqlite_path
+                sqlite_paths = dict(materialized)
+        logger.info(
+            "Taxonomy artifacts prepared revision=%s artifacts=%d workers=%d durationMs=%.3f",
+            snapshot_revision,
+            len(downloads),
+            worker_count,
+            (time.monotonic() - started) * 1000,
+        )
 
         candidate = SQLiteTaxonomySnapshot(snapshot_revision, sqlite_paths)
         temporary_manifest = self.cache_dir / "manifest.json.tmp"
@@ -616,6 +632,41 @@ class TaxonomyManager:
         if isinstance(previous, SQLiteTaxonomySnapshot):
             previous.close()
         return True
+
+    def _materialize_artifact(
+        self,
+        download: _ArtifactDownload,
+        client: httpx.Client,
+    ) -> tuple[tuple[str, ...], Path]:
+        compressed_path = self.cache_dir / download.filename
+        content = compressed_path.read_bytes() if compressed_path.exists() else b""
+        if (
+            len(content) != download.compressed_bytes
+            or hashlib.sha256(content).hexdigest() != download.sha256
+        ):
+            response = client.get(download.url)
+            response.raise_for_status()
+            content = response.content
+        if len(content) != download.compressed_bytes:
+            raise ValueError(f"Taxonomy compressed-size mismatch for {download.url}")
+        if hashlib.sha256(content).hexdigest() != download.sha256:
+            raise ValueError(f"Taxonomy hash mismatch for {download.url}")
+        raw = zstandard.ZstdDecompressor().decompress(
+            content,
+            max_output_size=download.uncompressed_bytes,
+        )
+        if len(raw) != download.uncompressed_bytes:
+            raise ValueError(f"Taxonomy uncompressed-size mismatch for {download.url}")
+
+        temporary_compressed = compressed_path.with_suffix(compressed_path.suffix + ".tmp")
+        temporary_compressed.write_bytes(content)
+        temporary_compressed.replace(compressed_path)
+        sqlite_path = compressed_path.with_suffix("")
+        temporary_sqlite = sqlite_path.with_suffix(sqlite_path.suffix + ".tmp")
+        temporary_sqlite.write_bytes(raw)
+        _validate_sqlite_artifact(temporary_sqlite, download.logical)
+        temporary_sqlite.replace(sqlite_path)
+        return download.logical, sqlite_path
 
     def load_directory(self, directory: Path) -> bool:
         """Activate a fully downloaded schema-v2 SQLite package."""
