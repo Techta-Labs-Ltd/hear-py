@@ -1,6 +1,7 @@
 """Per-user notification inbox and notification playback resolution."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -93,7 +94,8 @@ async def _put_inbox_item(item: dict) -> None:
         return
     table = _get_doc_client().Table(settings.NOTIFICATIONS_TABLE)
     try:
-        table.put_item(
+        await asyncio.to_thread(
+            table.put_item,
             Item=item,
             ConditionExpression=(
                 "attribute_not_exists(alexaUserId) AND "
@@ -109,9 +111,12 @@ async def _put_inbox_item(item: dict) -> None:
 
 def _inbox_item(payload: dict, user_id: str, now: int | None = None) -> dict:
     created_at = int(now or time.time())
+    notification_id = f"{payload['eventId']}:{user_id}"
     return {
         "alexaUserId": user_id,
-        "notificationId": f"{payload['eventId']}:{user_id}",
+        "notificationId": notification_id,
+        "activeUserId": user_id,
+        "activePublishedAt": f"{int(payload['publishedAt']):020d}#{notification_id}",
         "eventId": payload["eventId"],
         "notificationType": payload["notificationType"],
         "contentId": payload["contentId"],
@@ -130,24 +135,38 @@ def _inbox_item(payload: dict, user_id: str, now: int | None = None) -> dict:
 async def ingest_notification_payload(payload: dict) -> list[dict]:
     now = int(time.time())
     items = [_inbox_item(payload, user_id, now) for user_id in payload["alexaUserIds"]]
-    for item in items:
-        await _put_inbox_item(item)
+    semaphore = asyncio.Semaphore(10)
+
+    async def store(item: dict) -> None:
+        async with semaphore:
+            await _put_inbox_item(item)
+
+    await asyncio.gather(*(store(item) for item in items))
     return items
 
 
-def _enqueue_notification(payload: dict) -> int:
+async def _enqueue_notification(payload: dict) -> int:
     queue_url = settings.NOTIFICATION_INGEST_QUEUE_URL
     if not queue_url:
         return 0
     client = boto3.client("sqs", region_name=settings.ddb_region)
-    users = payload["alexaUserIds"]
-    chunks = [users[index:index + 100] for index in range(0, len(users), 100)]
-    for chunk in chunks:
-        client.send_message(
+    messages = [
+        json.dumps({**payload, "alexaUserIds": [user]}, separators=(",", ":"))
+        for user in payload["alexaUserIds"]
+    ]
+    batches = [messages[index:index + 10] for index in range(0, len(messages), 10)]
+    for batch_index, batch in enumerate(batches):
+        response = await asyncio.to_thread(
+            client.send_message_batch,
             QueueUrl=queue_url,
-            MessageBody=json.dumps({**payload, "alexaUserIds": chunk}, separators=(",", ":")),
+            Entries=[
+                {"Id": f"{batch_index}-{index}", "MessageBody": body}
+                for index, body in enumerate(batch)
+            ],
         )
-    return len(chunks)
+        if response.get("Failed"):
+            raise RuntimeError("Notification queue batch was partially rejected")
+    return len(messages)
 
 
 async def handle_notification_webhook(event: dict) -> dict:
@@ -158,13 +177,13 @@ async def handle_notification_webhook(event: dict) -> dict:
     assert payload is not None
     if len(payload["alexaUserIds"]) > 5000:
         return _response(400, {"error": "alexaUserIds cannot exceed 5000 recipients"})
-    queued = _enqueue_notification(payload)
+    queued = await _enqueue_notification(payload)
     if not queued:
         await ingest_notification_payload(payload)
     return _response(202 if queued else 200, {
         "status": "queued" if queued else "ok",
         "recipients": len(payload["alexaUserIds"]),
-        "batches": queued,
+        "messages": queued,
     })
 
 
@@ -178,7 +197,8 @@ async def update_notification_delivery_status(
         if key in _memory_inbox:
             _memory_inbox[key]["deliveryStatus"] = delivery_status
         return
-    _get_doc_client().Table(settings.NOTIFICATIONS_TABLE).update_item(
+    await asyncio.to_thread(
+        _get_doc_client().Table(settings.NOTIFICATIONS_TABLE).update_item,
         Key={"alexaUserId": user_id, "notificationId": notification_id},
         UpdateExpression="SET deliveryStatus = :deliveryStatus",
         ExpressionAttributeValues={":deliveryStatus": delivery_status},
@@ -197,8 +217,12 @@ async def check_notifications(user_id: str, limit: int = 20) -> list[dict]:
         ]
     else:
         try:
-            response = _get_doc_client().Table(settings.NOTIFICATIONS_TABLE).query(
-                KeyConditionExpression=Key("alexaUserId").eq(user_id),
+            response = await asyncio.to_thread(
+                _get_doc_client().Table(settings.NOTIFICATIONS_TABLE).query,
+                IndexName="ActiveByUser",
+                KeyConditionExpression=Key("activeUserId").eq(user_id),
+                ScanIndexForward=False,
+                Limit=max(1, min(int(limit or 20), 20)),
             )
             items = [
                 item for item in response.get("Items", [])
@@ -225,11 +249,20 @@ async def update_notification_status(
             _memory_inbox[key]["status"] = status
         return
     try:
-        _get_doc_client().Table(settings.NOTIFICATIONS_TABLE).update_item(
+        terminal = status in TERMINAL_STATUSES
+        await asyncio.to_thread(
+            _get_doc_client().Table(settings.NOTIFICATIONS_TABLE).update_item,
             Key={"alexaUserId": user_id, "notificationId": notification_id},
-            UpdateExpression="SET #status = :status",
+            UpdateExpression=(
+                "SET #status = :status REMOVE activeUserId, activePublishedAt"
+                if terminal else
+                "SET #status = :status, activeUserId = :userId"
+            ),
             ExpressionAttributeNames={"#status": "status"},
-            ExpressionAttributeValues={":status": status},
+            ExpressionAttributeValues=(
+                {":status": status} if terminal
+                else {":status": status, ":userId": user_id}
+            ),
         )
     except Exception:
         logger.exception("Notification status update failed status=%s", status)

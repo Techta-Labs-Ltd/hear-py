@@ -105,6 +105,8 @@ Resources:
         Command: [ "src.resolver.lambda_handler.handler" ]
       MemorySize: 3008
       Timeout: 8
+      EphemeralStorage:
+        Size: 2048
       Environment:
         Variables:
           HEAR_SEMANTIC_ROUTER_ENABLED: !Ref ResolverSemanticRouterEnabled
@@ -272,6 +274,7 @@ Resources:
       # package and activate the candidate resolver version.
       Timeout: 900
       MemorySize: 3008
+      ReservedConcurrentExecutions: 1
       EphemeralStorage:
         Size: 1024
       Environment:
@@ -311,11 +314,24 @@ Resources:
           AttributeType: S
         - AttributeName: notificationId
           AttributeType: S
+        - AttributeName: activeUserId
+          AttributeType: S
+        - AttributeName: activePublishedAt
+          AttributeType: S
       KeySchema:
         - AttributeName: alexaUserId
           KeyType: HASH
         - AttributeName: notificationId
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: ActiveByUser
+          KeySchema:
+            - AttributeName: activeUserId
+              KeyType: HASH
+            - AttributeName: activePublishedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -348,6 +364,8 @@ Resources:
           Properties:
             Queue: !GetAtt NotificationIngestQueue.Arn
             BatchSize: 1
+            ScalingConfig:
+              MaximumConcurrency: 10
             FunctionResponseTypes: [ReportBatchItemFailures]
 
   OutboundQueue:
@@ -382,6 +400,8 @@ Resources:
           Properties:
             Queue: !GetAtt OutboundQueue.Arn
             BatchSize: 10
+            ScalingConfig:
+              MaximumConcurrency: 20
             FunctionResponseTypes:
               - ReportBatchItemFailures
 

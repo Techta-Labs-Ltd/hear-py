@@ -13,7 +13,10 @@ async def test_user_state_reads_are_strongly_consistent():
     adapter.attributes_name = "attributes"
     adapter._client = MagicMock()
     adapter._client.get_item.return_value = {
-        "Item": {"attributes": {"M": {"pendingAmbiguity": {"M": {}}}}},
+        "Item": {
+            "attributes": {"M": {"pendingAmbiguity": {"M": {}}}},
+            "stateVersion": {"N": "4"},
+        },
     }
     envelope = {
         "context": {
@@ -23,7 +26,7 @@ async def test_user_state_reads_are_strongly_consistent():
 
     result = await adapter.get_attributes(envelope)
 
-    assert result == {"pendingAmbiguity": {}}
+    assert result == {"pendingAmbiguity": {}, "_persistenceVersion": 4}
     adapter._client.get_item.assert_called_once_with(
         TableName="hear-service",
         Key={"id": {"S": "alexa-user"}},

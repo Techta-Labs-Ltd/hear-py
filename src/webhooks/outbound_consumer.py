@@ -12,65 +12,61 @@ from src.utils.webhook_signing import signed_webhook_headers
 logger = logging.getLogger(__name__)
 
 
-async def _forward_to_backend(url: str, secret: str, envelope: dict):
-    """Forward an event envelope to a backend HTTP endpoint with HMAC signing."""
+async def _forward_to_backend(
+    client: httpx.AsyncClient,
+    url: str,
+    secret: str,
+    envelope: dict,
+) -> httpx.Response:
+    """Forward one event through a caller-owned pooled HTTP client."""
     body = json.dumps(envelope)
-    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-        resp = await client.post(
-            url,
-            content=body,
-            headers=signed_webhook_headers(
-                body, secret, settings.api_key or "",
-            ),
-        )
-        resp.raise_for_status()
-    return resp
+    response = await client.post(
+        url,
+        content=body,
+        headers=signed_webhook_headers(body, secret, settings.api_key or ""),
+    )
+    response.raise_for_status()
+    return response
 
 
-def handler(event: dict, context=None):
-    """AWS Lambda handler for consuming SQS outbound events and forwarding them via HTTP.
-
-    Uses SQS partial-batch responses: only messages that fail to forward are
-    returned in ``batchItemFailures`` so they alone are retried (and, after the
-    queue's maxReceiveCount, land in the DLQ). Successful and unparseable
-    messages are acknowledged (deleted) so a poison message can't loop forever.
-    """
+def handler(event: dict, context=None) -> dict:
+    """Forward an SQS batch and report only retryable record failures."""
+    del context
     url = settings.WEBHOOK_OUTBOUND_URL or ""
     secret = settings.WEBHOOK_OUTBOUND_SECRET or ""
-
+    records = event.get("Records") or []
     if not url:
         logger.error("Hear outbound webhook URL is not configured")
         return {
             "batchItemFailures": [
                 {"itemIdentifier": record.get("messageId")}
-                for record in (event.get("Records") or [])
-                if record.get("messageId")
+                for record in records if record.get("messageId")
             ],
         }
 
-    async def _run():
-        records = event.get("Records") or []
+    async def run() -> dict:
         failures = []
-        for record in records:
-            try:
-                envelope = json.loads(record.get("body") or "{}")
-            except (json.JSONDecodeError, TypeError):
-                continue  # unparseable — acknowledge (don't retry a poison message)
-            try:
-                response = await _forward_to_backend(url, secret, envelope)
-                logger.info(
-                    "Hear outbound webhook delivered event=%s messageId=%s status=%s",
-                    envelope.get("event"),
-                    record.get("messageId"),
-                    response.status_code,
-                )
-            except Exception:
-                logger.exception(
-                    "Hear outbound webhook failed event=%s messageId=%s",
-                    envelope.get("event"),
-                    record.get("messageId"),
-                )
-                failures.append({"itemIdentifier": record.get("messageId")})
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            for record in records:
+                try:
+                    envelope = json.loads(record.get("body") or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                try:
+                    response = await _forward_to_backend(
+                        client, url, secret, envelope,
+                    )
+                    logger.info(
+                        "Hear outbound webhook delivered event=%s messageId=%s status=%s",
+                        envelope.get("event"), record.get("messageId"),
+                        response.status_code,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Hear outbound webhook failed event=%s messageId=%s",
+                        envelope.get("event"), record.get("messageId"),
+                    )
+                    failures.append({"itemIdentifier": record.get("messageId")})
         return {"batchItemFailures": failures}
 
-    return asyncio.run(_run())
+    return asyncio.run(run())

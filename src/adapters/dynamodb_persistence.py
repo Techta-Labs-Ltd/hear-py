@@ -6,6 +6,8 @@ from botocore.exceptions import ClientError
 from .persistence_user_id import resolve_persistence_user_id
 from config import settings
 
+_VERSION_FIELD = "_persistenceVersion"
+
 
 def _to_attr(value):
     if value is None:
@@ -79,7 +81,11 @@ class DynamoDbPersistenceAdapter:
             item = resp.get("Item")
             if not item or self.attributes_name not in item:
                 return {}
-            return _from_attr(item[self.attributes_name]) or {}
+            attributes = _from_attr(item[self.attributes_name]) or {}
+            attributes[_VERSION_FIELD] = int(
+                _from_attr(item.get("stateVersion")) or 0
+            )
+            return attributes
         except ClientError as e:
             if e.response["Error"]["Code"] == "ResourceNotFoundException":
                 return {}
@@ -87,15 +93,27 @@ class DynamoDbPersistenceAdapter:
 
     async def save_attributes(self, request_envelope: dict, attributes: dict) -> None:
         expires_at = int(time.time()) + (self.ttl_days or 180) * 86400
-        item = {
-            **self._key(request_envelope),
-            self.attributes_name: _to_attr(attributes or {}),
-            self.ttl_attribute: {"N": str(expires_at)},
-        }
+        document = dict(attributes or {})
+        expected_version = int(document.pop(_VERSION_FIELD, 0) or 0)
         await asyncio.to_thread(
-            self._client.put_item,
+            self._client.update_item,
             TableName=self.table_name,
-            Item=item,
+            Key=self._key(request_envelope),
+            UpdateExpression="SET #attributes = :attributes, #ttl = :ttl, #version = :next",
+            ConditionExpression=(
+                "attribute_not_exists(#version) OR #version = :expected"
+            ),
+            ExpressionAttributeNames={
+                "#attributes": self.attributes_name,
+                "#ttl": self.ttl_attribute,
+                "#version": "stateVersion",
+            },
+            ExpressionAttributeValues={
+                ":attributes": _to_attr(document),
+                ":ttl": {"N": str(expires_at)},
+                ":expected": {"N": str(expected_version)},
+                ":next": {"N": str(expected_version + 1)},
+            },
         )
 
     async def delete_attributes(self, request_envelope: dict) -> None:

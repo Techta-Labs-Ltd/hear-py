@@ -13,7 +13,7 @@ _token_expires_at = 0.0
 _token_lock = asyncio.Lock()
 
 
-async def _access_token() -> str | None:
+async def _access_token(client: httpx.AsyncClient | None = None) -> str | None:
     global _token, _token_expires_at
     if not settings.ALEXA_PROACTIVE_CLIENT_ID or not settings.ALEXA_PROACTIVE_CLIENT_SECRET:
         return None
@@ -22,7 +22,9 @@ async def _access_token() -> str | None:
     async with _token_lock:
         if _token and time.time() < _token_expires_at - 60:
             return _token
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        owns_client = client is None
+        client = client or httpx.AsyncClient(timeout=10.0)
+        try:
             response = await client.post(
                 "https://api.amazon.com/auth/o2/token",
                 data={
@@ -35,6 +37,9 @@ async def _access_token() -> str | None:
             )
             response.raise_for_status()
             payload = response.json()
+        finally:
+            if owns_client:
+                await client.aclose()
         _token = str(payload.get("access_token") or "") or None
         _token_expires_at = time.time() + int(payload.get("expires_in") or 3600)
         return _token
@@ -46,8 +51,11 @@ def _endpoint() -> str:
     return f"{base}/stages/{stage}" if stage else f"{base}/"
 
 
-async def send_proactive_notification(item: dict) -> bool:
-    token = await _access_token()
+async def send_proactive_notification(
+    item: dict,
+    client: httpx.AsyncClient | None = None,
+) -> bool:
+    token = await _access_token(client)
     if not token:
         return False
     now = datetime.now(timezone.utc)
@@ -72,12 +80,17 @@ async def send_proactive_notification(item: dict) -> bool:
             "payload": {"user": item["alexaUserId"]},
         },
     }
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    owns_client = client is None
+    client = client or httpx.AsyncClient(timeout=10.0)
+    try:
         response = await client.post(
             _endpoint(),
             json=body,
             headers={"Authorization": f"Bearer {token}"},
         )
+    finally:
+        if owns_client:
+            await client.aclose()
     if response.status_code == 202:
         return True
     response.raise_for_status()

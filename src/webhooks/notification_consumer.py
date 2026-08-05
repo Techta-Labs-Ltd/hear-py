@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 
+import httpx
+
 from src.services.notifications import (
     ingest_notification_payload,
     update_notification_delivery_status,
@@ -19,16 +21,17 @@ def handler(event: dict, context=None) -> dict:
                 items = await ingest_notification_payload(payload)
                 semaphore = asyncio.Semaphore(10)
 
-                async def deliver(item: dict) -> None:
+                async def deliver(item: dict, client: httpx.AsyncClient) -> None:
                     async with semaphore:
-                        delivered = await send_proactive_notification(item)
+                        delivered = await send_proactive_notification(item, client)
                         await update_notification_delivery_status(
                             item["alexaUserId"],
                             item["notificationId"],
                             "sent" if delivered else "not_configured",
                         )
 
-                await asyncio.gather(*(deliver(item) for item in items))
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await asyncio.gather(*(deliver(item, client) for item in items))
             except Exception:
                 failures.append({"itemIdentifier": record.get("messageId")})
         return {"batchItemFailures": failures}

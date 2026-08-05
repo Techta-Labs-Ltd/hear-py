@@ -22,6 +22,9 @@ class _Client:
     async def __aexit__(self, *args):
         return None
 
+    async def aclose(self):
+        return None
+
     async def post(self, url, **kwargs):
         _Client.request = {"url": url, **kwargs}
         return _Response()
@@ -29,7 +32,7 @@ class _Client:
 
 @pytest.mark.asyncio
 async def test_proactive_event_is_unicast_and_idempotent(monkeypatch):
-    async def token():
+    async def token(_client=None):
         return "lwa-token"
 
     monkeypatch.setattr(proactive_notifications, "_access_token", token)

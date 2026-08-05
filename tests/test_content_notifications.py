@@ -51,7 +51,11 @@ async def test_webhook_is_idempotent_per_recipient_and_requires_one_identifier()
 @pytest.mark.asyncio
 async def test_webhook_batches_large_recipient_lists_to_sqs(monkeypatch):
     sent = []
-    client = type("Client", (), {"send_message": lambda self, **kwargs: sent.append(kwargs)})()
+    def send_message_batch(_self, **kwargs):
+        sent.append(kwargs)
+        return {"Successful": kwargs["Entries"], "Failed": []}
+
+    client = type("Client", (), {"send_message_batch": send_message_batch})()
     monkeypatch.setattr(notifications.settings, "NOTIFICATION_INGEST_QUEUE_URL", "queue-url")
     monkeypatch.setattr(notifications.boto3, "client", lambda *args, **kwargs: client)
 
@@ -65,8 +69,13 @@ async def test_webhook_batches_large_recipient_lists_to_sqs(monkeypatch):
     })
 
     assert response["statusCode"] == 202
-    assert len(sent) == 3
-    assert [len(json.loads(message["MessageBody"])["alexaUserIds"]) for message in sent] == [100, 100, 5]
+    assert len(sent) == 21
+    messages = [entry for batch in sent for entry in batch["Entries"]]
+    assert len(messages) == 205
+    assert all(
+        len(json.loads(message["MessageBody"])["alexaUserIds"]) == 1
+        for message in messages
+    )
 
 
 @pytest.mark.asyncio

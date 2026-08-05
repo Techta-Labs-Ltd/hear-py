@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import boto3
 
 from config import settings
@@ -39,7 +40,9 @@ class PlaybackStateRepository:
         if not self._resolved_table_name():
             return self._memory.get(user_id)
         try:
-            response = self._table().get_item(Key={"alexaUserId": user_id})
+            response = await asyncio.to_thread(
+                self._table().get_item, Key={"alexaUserId": user_id}
+            )
             return response.get("Item")
         except Exception:
             return None
@@ -47,14 +50,25 @@ class PlaybackStateRepository:
     async def set(self, user_id: str, fields: dict) -> dict | None:
         if not user_id or not isinstance(fields, dict):
             return None
-        existing = await self.get(user_id) or {}
-        state = {"alexaUserId": user_id, **existing, **fields}
         if not self._resolved_table_name():
+            existing = await self.get(user_id) or {}
+            state = {"alexaUserId": user_id, **existing, **fields}
             self._memory[user_id] = state
             return state
         try:
-            self._table().put_item(Item=state)
-            return state
+            names = {f"#f{index}": key for index, key in enumerate(fields)}
+            values = {f":v{index}": value for index, value in enumerate(fields.values())}
+            response = await asyncio.to_thread(
+                self._table().update_item,
+                Key={"alexaUserId": user_id},
+                UpdateExpression="SET " + ", ".join(
+                    f"#f{index} = :v{index}" for index in range(len(fields))
+                ),
+                ExpressionAttributeNames=names,
+                ExpressionAttributeValues=values,
+                ReturnValues="ALL_NEW",
+            )
+            return response.get("Attributes")
         except Exception:
             return None
 
@@ -65,7 +79,9 @@ class PlaybackStateRepository:
             self._memory.pop(user_id, None)
             return
         try:
-            self._table().delete_item(Key={"alexaUserId": user_id})
+            await asyncio.to_thread(
+                self._table().delete_item, Key={"alexaUserId": user_id}
+            )
         except Exception:
             return
 

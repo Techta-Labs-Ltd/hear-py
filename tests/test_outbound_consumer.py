@@ -39,7 +39,7 @@ def test_outbound_consumer_forwards_playback_and_feedback(monkeypatch):
     result = handler(event)
 
     assert result == {"batchItemFailures": []}
-    assert [call.args[2]["event"] for call in forward.await_args_list] == [
+    assert [call.args[3]["event"] for call in forward.await_args_list] == [
         "playback.started",
         "feedback.given",
     ]

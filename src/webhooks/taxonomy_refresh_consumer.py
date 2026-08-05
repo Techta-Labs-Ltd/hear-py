@@ -109,6 +109,16 @@ def _activate(revision: int, manifest_url: str, manifest_sha256: str, key: str, 
     )
 
 
+def _active_revision() -> int:
+    table = boto3.resource("dynamodb", region_name=settings.ddb_region).Table(
+        settings.HEAR_TAXONOMY_REVISION_TABLE
+    )
+    item = table.get_item(
+        Key={"pk": "taxonomy#current"}, ConsistentRead=True,
+    ).get("Item") or {}
+    return int(item.get("revision") or 0)
+
+
 def handler(event: dict, context=None) -> dict:
     failures = []
     for record in event.get("Records") or []:
@@ -119,6 +129,8 @@ def handler(event: dict, context=None) -> dict:
             manifest_sha256 = str(payload.get("manifestSha256") or "").strip().lower()
             if revision <= 0 or not manifest_url or len(manifest_sha256) != 64:
                 raise ValueError("revision, manifestUrl and manifestSha256 are required")
+            if revision <= _active_revision():
+                continue
             _set_status(str(revision), "downloading", manifestUrl=manifest_url)
             key = _build_artifact(revision, manifest_url, manifest_sha256)
             _set_status(str(revision), "warming", manifestUrl=manifest_url, snapshotKey=key)
