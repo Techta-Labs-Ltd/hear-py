@@ -74,6 +74,22 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         } == slots
 
 
+def test_location_dialogs_elicit_bare_town_replies():
+    dialog_intents = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["dialog"]["intents"]
+    }
+
+    assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
+        "name": "townName",
+        "type": "AMAZON.SearchQuery",
+        "confirmationRequired": False,
+        "elicitationRequired": True,
+        "prompts": {"elicitation": "Elicit.TownCaptureIntent.townName"},
+    }
+    assert dialog_intents["SetLocationIntent"]["slots"][0]["elicitationRequired"] is True
+
+
 def test_content_discovery_intents_accept_date_constraints():
     intents = {
         item["name"]: item

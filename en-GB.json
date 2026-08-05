@@ -1188,6 +1188,38 @@
       "delegationStrategy": "SKILL_RESPONSE",
       "intents": [
         {
+          "name": "TownCaptureIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "townName",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.TownCaptureIntent.townName"
+              }
+            }
+          ]
+        },
+        {
+          "name": "SetLocationIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "location",
+              "type": "AMAZON.GB_CITY",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.SetLocationIntent.location"
+              }
+            }
+          ]
+        },
+        {
           "name": "PlayByOrganizationIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1206,6 +1238,24 @@
       ]
     },
     "prompts": [
+      {
+        "id": "Elicit.TownCaptureIntent.townName",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which town or city are you in?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.SetLocationIntent.location",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which town or city are you in?"
+          }
+        ]
+      },
       {
         "id": "Elicit.PlayByOrganizationIntent.organizationQuery",
         "variations": [

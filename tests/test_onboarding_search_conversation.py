@@ -90,8 +90,13 @@ async def test_town_resolver_failure_retries_once_without_closing_session(
     store = get_store(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
     assert "say your town once more, or say skip" in speech
-    handler_input.response_builder.speak.return_value.reprompt.return_value \
-        .set_should_end_session.assert_called_once_with(False)
+    retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
+    retry_builder.add_directive.assert_called_once_with({
+        "type": "Dialog.ElicitSlot",
+        "slotToElicit": "townName",
+    })
+    retry_builder.add_directive.return_value.set_should_end_session \
+        .assert_called_once_with(False)
     assert store["onboardingStage"] == "ask_town"
     assert store["onboardingTownResolverFailures"] == 1
 

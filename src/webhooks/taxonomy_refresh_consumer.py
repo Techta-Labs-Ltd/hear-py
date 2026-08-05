@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 import tarfile
 from pathlib import Path
@@ -9,6 +10,8 @@ import boto3
 
 from config import settings
 from src.resolver.taxonomy import TaxonomyManager
+
+logger = logging.getLogger(__name__)
 
 
 def _set_status(revision: str, status: str, **values) -> None:
@@ -122,6 +125,8 @@ def _active_revision() -> int:
 def handler(event: dict, context=None) -> dict:
     failures = []
     for record in event.get("Records") or []:
+        revision = 0
+        stage = "validating"
         try:
             payload = json.loads(record.get("body") or "{}")
             revision = int(payload.get("revision") or 0)
@@ -131,11 +136,40 @@ def handler(event: dict, context=None) -> dict:
                 raise ValueError("revision, manifestUrl and manifestSha256 are required")
             if revision <= _active_revision():
                 continue
+            stage = "downloading"
             _set_status(str(revision), "downloading", manifestUrl=manifest_url)
             key = _build_artifact(revision, manifest_url, manifest_sha256)
+            stage = "publishing"
             _set_status(str(revision), "warming", manifestUrl=manifest_url, snapshotKey=key)
             version = _publish_resolver(revision, key, manifest_url, manifest_sha256)
+            stage = "activating"
             _activate(revision, manifest_url, manifest_sha256, key, version)
-        except Exception:
+            logger.info(
+                "Taxonomy refresh activated revision=%s resolverVersion=%s",
+                revision,
+                version,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Taxonomy refresh failed messageId=%s revision=%s stage=%s errorType=%s",
+                record.get("messageId"),
+                revision,
+                stage,
+                type(exc).__name__,
+            )
+            if revision > 0:
+                try:
+                    _set_status(
+                        str(revision),
+                        "failed",
+                        failedStage=stage,
+                        errorType=type(exc).__name__,
+                        errorMessage=str(exc)[:500],
+                    )
+                except Exception:
+                    logger.exception(
+                        "Could not persist taxonomy refresh failure revision=%s",
+                        revision,
+                    )
             failures.append({"itemIdentifier": record.get("messageId")})
     return {"batchItemFailures": failures}

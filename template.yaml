@@ -219,10 +219,13 @@ Resources:
 
   TaxonomyRevisionSeed:
     Type: Custom::TaxonomyRevisionSeed
-    DependsOn: TaxonomyRevisionTable
+    DependsOn:
+      - TaxonomyRevisionTable
+      - ResolverFunction
+      - TaxonomyRefreshFunction
     Properties:
       ServiceToken: !GetAtt TaxonomyRevisionSeedFunction.Arn
-      BootstrapVersion: manifest-v2
+      BootstrapVersion: !Ref ImageUri
       ManifestUrl: https://cdn.hear.media/runtime/taxonomy/manifest.json
 
   TaxonomySnapshotBucket:

@@ -15,7 +15,7 @@ from src.services.dialog_state import activate_dialog
 from src.services.alexa.locality import detect_device_location
 from src.services.resolver_client import ResolverUnavailable, resolve_utterance
 from src.nlp.patterns import BROWSE_HINTS, FEEDBACK_SKIP_HINTS, LOCAL_HINTS, TRENDING_HINTS
-from src.utils.skill_request import get_request_type
+from src.utils.skill_request import get_intent_name, get_request_type
 from src.utils.normalize_content_item import pick_content_source
 from src.utils.speech import (
     ssml, ONBOARDING_ASK_PERMISSION, ONBOARDING_CONSENT_CARD_SENT,
@@ -49,6 +49,21 @@ CONTENT_REQUEST_PHRASES = frozenset(
     _normalize_control_phrase(value)
     for value in BROWSE_HINTS | LOCAL_HINTS | TRENDING_HINTS
 )
+
+
+def _town_retry_response(handler_input: HandlerInput, speech: str, reprompt: str):
+    """Keep Alexa's active location intent open so a bare town fills its slot."""
+    builder = handler_input.response_builder.speak(ssml(speech)).reprompt(ssml(reprompt))
+    slot_name = {
+        "TownCaptureIntent": "townName",
+        "SetLocationIntent": "location",
+    }.get(get_intent_name(handler_input))
+    if slot_name:
+        builder = builder.add_directive({
+            "type": "Dialog.ElicitSlot",
+            "slotToElicit": slot_name,
+        })
+    return builder.set_should_end_session(False).response
 
 def onboarding_pending_redirect(handler_input: HandlerInput, store: Dict[str, Any]):
     stage = store.get("onboardingStage")
@@ -173,11 +188,9 @@ def resume_town_capture(handler_input: HandlerInput, store: Dict[str, Any]):
     if attempts >= MAX_TOWN_ATTEMPTS:
         return finalize_town_skipped(handler_input, store)
     update_store(handler_input, {"onboardingTownAttempts": attempts + 1})
-    return handler_input.response_builder \
-        .speak(ssml(TOWN_NOT_UNDERSTOOD)) \
-        .reprompt(ssml(REPROMPT_ASK_TOWN)) \
-        .set_should_end_session(False) \
-        .response
+    return _town_retry_response(
+        handler_input, TOWN_NOT_UNDERSTOOD, REPROMPT_ASK_TOWN,
+    )
 
 
 def handle_town_resolver_unavailable(handler_input: HandlerInput, store: Dict[str, Any]):
@@ -188,11 +201,9 @@ def handle_town_resolver_unavailable(handler_input: HandlerInput, store: Dict[st
             "onboardingStage": ONBOARDING_ASK_TOWN,
             "onboardingTownResolverFailures": failures,
         })
-        return handler_input.response_builder \
-            .speak(ssml(TOWN_LOOKUP_UNAVAILABLE_RETRY)) \
-            .reprompt(ssml(REPROMPT_ASK_TOWN)) \
-            .set_should_end_session(False) \
-            .response
+        return _town_retry_response(
+            handler_input, TOWN_LOOKUP_UNAVAILABLE_RETRY, REPROMPT_ASK_TOWN,
+        )
 
     update_store(handler_input, {
         "onboardingStage": None,
@@ -211,6 +222,11 @@ def handle_town_resolver_unavailable(handler_input: HandlerInput, store: Dict[st
 
 async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, Any], phrase: str):
     """Resolve a manual town in location scope and ask for confirmation."""
+    logger.info(
+        "Hear: resolving town intent=%s phrase=%r",
+        get_intent_name(handler_input),
+        phrase,
+    )
     try:
         response = await resolve_utterance(
             "resolve_location",
@@ -230,11 +246,11 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
             update_store(handler_input, {
                 "onboardingTownAttempts": store.get("onboardingTownAttempts", 0) + 1,
             })
-            return handler_input.response_builder \
-                .speak(ssml(f"Did you mean {spoken}? Please say the full town name.")) \
-                .reprompt(ssml(REPROMPT_ASK_TOWN)) \
-                .set_should_end_session(False) \
-                .response
+            return _town_retry_response(
+                handler_input,
+                f"Did you mean {spoken}? Please say the full town name.",
+                REPROMPT_ASK_TOWN,
+            )
         normalized_phrase = _normalize_control_phrase(phrase)
         if normalized_phrase in TOWN_SKIP_PHRASES:
             return finalize_town_skipped(handler_input, store)

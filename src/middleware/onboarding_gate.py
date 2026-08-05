@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
@@ -18,6 +19,8 @@ from src.handlers.intents.onboarding import (
     ask_for_permission, handle_permission_yes, handle_permission_no,
     auto_detect_location_or_manual, resume_town_capture,
 )
+
+logger = logging.getLogger(__name__)
 
 # Intents that own the current onboarding stage. The gate must NOT claim
 # these so their handlers keep resolving the in-flight flow.
@@ -118,6 +121,10 @@ class OnboardingGateHandler(AbstractRequestHandler):
         store = get_store(handler_input)
 
         if stage == ONBOARDING_ASK_TOWN:
+            logger.info(
+                "Hear: town reply was not captured intent=%s; asking again",
+                intent,
+            )
             return resume_town_capture(handler_input, store)
         if stage == ONBOARDING_AWAIT_CONFIRM:
             redirect = _confirm_echo(handler_input, store)

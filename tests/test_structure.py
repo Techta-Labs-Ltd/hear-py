@@ -95,6 +95,19 @@ def test_resolver_has_a_dedicated_lambda_entry_point():
     assert "def handler(" in source
 
 
+def test_taxonomy_seed_waits_for_refresh_components_and_retries_each_image():
+    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(
+        encoding="utf-8"
+    )
+    seed = template.split("  TaxonomyRevisionSeed:\n", 1)[1].split(
+        "  TaxonomySnapshotBucket:\n", 1
+    )[0]
+
+    assert "- ResolverFunction" in seed
+    assert "- TaxonomyRefreshFunction" in seed
+    assert "BootstrapVersion: !Ref ImageUri" in seed
+
+
 def test_runtime_and_container_do_not_install_or_import_spacy():
     root = Path(__file__).resolve().parents[1]
     runtime_sources = [
