@@ -168,7 +168,6 @@ class Settings(BaseSettings):
     WEBHOOK_SECRET: str = ""
     HEAR_WEBHOOK_API_KEY: str = ""
     HEAR_WEBHOOK_HMAC_SECRET: str = ""
-    SETTINGS_TABLE: str = "hear_settings"
     NOTIFICATIONS_TABLE: str = "hear_notifications"
     WEBHOOK_OUTBOUND_URL: str = ""
     WEBHOOK_OUTBOUND_SECRET: str = ""

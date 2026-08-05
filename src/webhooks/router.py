@@ -11,14 +11,12 @@ import boto3
 
 from config import settings
 from src.services.notifications import handle_notification_webhook
-from src.services.settings import handle_settings_webhook
 from src.services.taxonomy_updates import handle_taxonomy_webhook
 from src.utils.webhook_signing import verify_signature
 
 logger = logging.getLogger(__name__)
 
 _ROUTES = {
-    "/webhook/settings": handle_settings_webhook,
     "/webhook/notification": handle_notification_webhook,
     "/webhook/taxonomy": handle_taxonomy_webhook,
 }

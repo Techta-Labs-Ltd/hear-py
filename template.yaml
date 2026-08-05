@@ -59,7 +59,6 @@ Globals:
         HEAR_CLIENT_VERSION: alexa-skill
         HEAR_DDB_REGION: eu-west-1
         HEAR_DDB_TABLE: hear-service
-        SETTINGS_TABLE: hear_settings
         NOTIFICATIONS_TABLE: !Ref NotificationInboxTable
         NOTIFICATION_INGEST_QUEUE_URL: !Ref NotificationIngestQueue
         HEAR_PERSISTENCE_DRIVER: dynamodb
@@ -141,7 +140,6 @@ Resources:
           HEAR_RESOLVER_TIMEOUT_MS: "7000"
       Policies:
         - DynamoDBCrudPolicy: { TableName: hear-service }
-        - DynamoDBCrudPolicy: { TableName: hear_settings }
         - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
         - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
         - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
@@ -160,7 +158,6 @@ Resources:
         Command: [ "src.webhooks.lambda_handler.handler" ]
       Policies:
         - DynamoDBCrudPolicy: { TableName: hear-service }
-        - DynamoDBCrudPolicy: { TableName: hear_settings }
         - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
         - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
         - DynamoDBCrudPolicy: { TableName: !Ref WebhookReplayTable }

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import time
 import boto3
 from botocore.exceptions import ClientError
@@ -65,14 +66,14 @@ class DynamoDbPersistenceAdapter:
 
     async def get_attributes(self, request_envelope: dict) -> dict:
         try:
-            resp = self._client.get_item(
+            resp = await asyncio.to_thread(
+                self._client.get_item,
                 TableName=self.table_name,
                 Key=self._key(request_envelope),
                 # Foreground dialogs span separate Alexa requests. An
                 # eventually consistent read can miss the ambiguity written
                 # by the immediately preceding response and route a reply as
-                # an unrelated intent (for example, WTN -> Wakefield becoming
-                # a location change). Always read the user's canonical state.
+                # an unrelated intent. Always read the canonical user state.
                 ConsistentRead=True,
             )
             item = resp.get("Item")
@@ -91,10 +92,15 @@ class DynamoDbPersistenceAdapter:
             self.attributes_name: _to_attr(attributes or {}),
             self.ttl_attribute: {"N": str(expires_at)},
         }
-        self._client.put_item(TableName=self.table_name, Item=item)
+        await asyncio.to_thread(
+            self._client.put_item,
+            TableName=self.table_name,
+            Item=item,
+        )
 
     async def delete_attributes(self, request_envelope: dict) -> None:
-        self._client.delete_item(
+        await asyncio.to_thread(
+            self._client.delete_item,
             TableName=self.table_name,
             Key=self._key(request_envelope),
         )

@@ -30,7 +30,7 @@ def test_skill_factory_registers_the_complete_pipeline():
 def test_normalizes_api_gateway_v2_event():
     body = base64.b64encode(b'{"ok":true}').decode("ascii")
     event = {
-        "requestContext": {"http": {"method": "POST", "path": "/webhook/settings"}},
+        "requestContext": {"http": {"method": "POST", "path": "/webhook/taxonomy"}},
         "headers": {"x-test": "yes"},
         "body": body,
         "isBase64Encoded": True,
@@ -39,7 +39,7 @@ def test_normalizes_api_gateway_v2_event():
     assert is_http_event(event)
     assert normalize_http_event(event) == {
         "httpMethod": "POST",
-        "path": "/webhook/settings",
+        "path": "/webhook/taxonomy",
         "headers": {"x-test": "yes"},
         "body": '{"ok":true}',
     }
