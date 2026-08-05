@@ -254,6 +254,9 @@ Resources:
   TaxonomyRefreshQueue:
     Type: AWS::SQS::Queue
     Properties:
+      QueueName: !Sub hear-taxonomy-refresh-${Stage}.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: false
       VisibilityTimeout: 900
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt TaxonomyRefreshDLQ.Arn
@@ -261,6 +264,9 @@ Resources:
 
   TaxonomyRefreshDLQ:
     Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-taxonomy-refresh-${Stage}-dlq.fifo
+      FifoQueue: true
 
   TaxonomyRefreshFunction:
     Type: AWS::Serverless::Function
@@ -274,7 +280,6 @@ Resources:
       # package and activate the candidate resolver version.
       Timeout: 900
       MemorySize: 3008
-      ReservedConcurrentExecutions: 1
       EphemeralStorage:
         Size: 1024
       Environment:

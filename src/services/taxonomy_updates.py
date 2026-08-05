@@ -46,6 +46,8 @@ def _enqueue_refresh(revision: int, manifest_url: str, manifest_sha256: str) -> 
             "manifestUrl": manifest_url,
             "manifestSha256": manifest_sha256,
         }, separators=(",", ":")),
+        MessageGroupId="taxonomy-refresh",
+        MessageDeduplicationId=f"{revision}:{manifest_sha256}",
     )
 
 
