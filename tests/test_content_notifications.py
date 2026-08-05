@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.resolver.location import resolve_location_phrase
+from src.resolver.taxonomy import TaxonomyRecord, TaxonomySnapshot
 from src.services import notifications
 
 
@@ -118,7 +119,17 @@ async def test_content_batch_uses_one_search_and_consumes_only_after_start(
 
 
 def test_manual_location_scope_resolves_burnley_with_coordinates():
-    result = resolve_location_phrase("burnly")
+    taxonomy = TaxonomySnapshot("test", [TaxonomyRecord(
+        "location",
+        "Burnley",
+        entity_id="location-burnley",
+        aliases=("burnley",),
+        metadata={
+            "city": "Burnley", "countryCode": "gb",
+            "lat": 53.789, "lng": -2.248,
+        },
+    )])
+    result = resolve_location_phrase("burnly", taxonomy)
     match = result["match"]
     assert match["city"] == "Burnley"
     assert match["countryCode"] == "gb"

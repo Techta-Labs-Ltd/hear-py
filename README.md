@@ -19,7 +19,11 @@ Alexa skill and webhook service deployed to AWS Lambda as a container image.
 - `src/utils/` — pure parsing, normalization, formatting, and calculations
 - `src/webhooks/` — separately deployed HTTP Lambda and webhook routing
 - `src/runtime/` — async Alexa dispatch runtime
-- `src/resolver/` — in-process taxonomy, temporal, context, fuzzy, and payload resolver
+- `src/resolver/search.py` — deterministic utterance-to-search-plan resolver
+- `src/resolver/alexa.py` — class-owned Alexa resolution and Hear payload construction
+- `src/resolver/lambda_handler.py` — resolver Lambda transport contract
+- `src/resolver/normalization.py`, `temporal.py`, `correction.py`, and `clarification.py` — pure language rules
+- `src/resolver/taxonomy/` — schema-v2 SQLite activation, queries, overlays, and synchronization
 - `deploy/` and `template.yaml` — deployment policies and infrastructure
 
 Handler and middleware order is behaviorally significant. Add handlers through
@@ -31,8 +35,8 @@ contract, and preserves that contract through browse pagination and queue refill
 The deployed `/webhook/taxonomy` endpoint queues background runtime refreshes.
 A worker validates and stores an immutable snapshot, warms a candidate resolver
 Lambda version using the existing image, and atomically promotes its alias.
-Alexa requests never fetch the CDN manifest. Bundled `src/data/locations.json`
-remains the static location source.
+Every entity type, including locations, uses the same manifest-selected
+schema-v2 SQLite taxonomy. There is no bundled JSON taxonomy fallback.
 
 ## Local checks
 

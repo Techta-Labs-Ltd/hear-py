@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from src.resolver.engine import Resolver
-from src.resolver.payload import build_hear_payload
+from src.resolver.search import Resolver
+from src.resolver.alexa import alexa_resolver
 from src.resolver.taxonomy import TaxonomyManager, TaxonomyRecord, TaxonomySnapshot
 from src.resolver.temporal import parse_temporal
 
@@ -77,7 +77,7 @@ def test_builds_exact_structured_payload(resolver):
         "find me the latest sport track from david about arsenal",
         "USER_ID",
     )
-    assert build_hear_payload(plan) == {
+    assert alexa_resolver.build_payload(plan) == {
         "alexaUserId": "USER_ID",
         "isLocal": False,
         "isRecommended": False,
@@ -99,7 +99,7 @@ def test_builds_exact_structured_payload(resolver):
 def test_non_local_relevance_sort_is_omitted(resolver, utterance):
     plan = resolver.resolve(utterance)
     assert plan.sort == "relevance"
-    payload = build_hear_payload(plan)
+    payload = alexa_resolver.build_payload(plan)
     assert "sort" not in payload
     assert payload["isLocal"] is False
 
@@ -108,7 +108,7 @@ def test_local_relevance_sort_becomes_nearest(resolver):
     plan = resolver.resolve("play something from my community")
     assert plan.is_local is True
     assert plan.sort == "relevance"
-    assert build_hear_payload(plan)["sort"] == "nearest"
+    assert alexa_resolver.build_payload(plan)["sort"] == "nearest"
 
 
 def test_publication_request_uses_publication_filter_and_trending_sort(resolver):
@@ -116,7 +116,7 @@ def test_publication_request_uses_publication_filter_and_trending_sort(resolver)
 
     assert plan.is_publication is True
     assert plan.query == ""
-    assert build_hear_payload(plan) == {
+    assert alexa_resolver.build_payload(plan) == {
         "isLocal": False,
         "isRecommended": False,
         "limit": 20,
@@ -148,7 +148,7 @@ def test_publication_request_combines_creator_or_organization_source(
     source_key,
     source_ids,
 ):
-    payload = build_hear_payload(resolver.resolve(utterance))
+    payload = alexa_resolver.build_payload(resolver.resolve(utterance))
 
     assert payload["filter"] == {
         "isPublication": True,
@@ -216,7 +216,7 @@ def test_longer_fuzzy_tag_replaces_shorter_exact_facet_fragments():
     assert plan.organization_ids == ["org-ytn"]
     assert plan.query == ""
     assert plan.sort == "latest"
-    assert build_hear_payload(plan)["filter"] == {
+    assert alexa_resolver.build_payload(plan)["filter"] == {
         "tags": ["community-services"],
         "organizationIds": ["org-ytn"],
     }
@@ -283,7 +283,7 @@ def test_named_city_payload_preserves_coordinates(resolver):
     plan.latitude = 53.789
     plan.longitude = -2.248
 
-    payload = build_hear_payload(plan)
+    payload = alexa_resolver.build_payload(plan)
 
     assert payload["filter"]["city"] == "Burnley"
     assert payload["filter"]["latitude"] == 53.789

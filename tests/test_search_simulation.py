@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,14 +10,14 @@ import pytest
 from src.handlers.registry import REQUEST_HANDLERS
 from src.nlp.classifier import classify_utterance
 from src.nlp.patterns import ALEXA_TO_NLP
-from src.resolver.engine import Resolver
-from src.resolver.payload import build_hear_payload
+from src.resolver.search import Resolver
+from src.resolver.alexa import alexa_resolver
 from src.resolver.taxonomy import TaxonomyManager
 from src.services.api.client import ALLOWED_SORT_VALUES
 
 ROOT = Path(__file__).parents[1]
 MODEL_PATH = ROOT / "en-GB.json"
-FIXTURES = Path(__file__).parent / "fixtures" / "taxonomy"
+FIXTURES = Path(os.environ.get("HEAR_TEST_TAXONOMY_DIR", ""))
 REPORT_PATH = Path(__file__).parent / "search_simulation_report.md"
 
 TOPICS = ["news", "sport", "politics", "technology", "business", "health"]
@@ -116,6 +117,8 @@ def _intent_map():
 
 @pytest.fixture(scope="module")
 def resolver():
+    if not FIXTURES.is_dir() or not (FIXTURES / "manifest.json").is_file():
+        pytest.skip("HEAR_TEST_TAXONOMY_DIR does not contain a schema-v2 package")
     manager = TaxonomyManager()
     manager.load_directory(FIXTURES)
     return Resolver(manager)
@@ -139,6 +142,7 @@ def _expand(samples: list[str], slot_values: dict[str, list[str]]):
 def _plan_signature(plan) -> dict:
     return {
         "category": plan.category_slugs,
+        "tags": plan.tags,
         "query": plan.query,
         "city": plan.city,
         "local": plan.is_local,
@@ -152,7 +156,7 @@ def _plan_signature(plan) -> dict:
 
 
 def _status(sig: dict) -> str:
-    if sig["category"]:
+    if sig["category"] or sig["tags"]:
         return "category"
     if sig["creators"]:
         return "creator"
@@ -180,7 +184,7 @@ def _run_simulation(resolver: Resolver):
     def add(intent_name, sample, utterance, expectation=""):
         plan = resolver.resolve(utterance)
         sig = _plan_signature(plan)
-        payload = build_hear_payload(plan)
+        payload = alexa_resolver.build_payload(plan)
         records.append({
             "intent": intent_name,
             "sample": sample,
@@ -395,6 +399,7 @@ def test_clarification_selection_never_crashes_and_resolves_something(resolver):
             sig["orgs"]
             or sig["city"]
             or sig["category"]
+            or sig["tags"]
             or sig["ambiguous"]
             or sig["query"]
         ), record["utterance"]
@@ -440,7 +445,7 @@ def test_simulation_report_is_written(resolver):
         "",
         f"Generated: {datetime.now(timezone.utc).isoformat()}",
         f"Corpus: {len(records)} simulated utterances from `en-GB.json`",
-        f"Fixture taxonomy: `{FIXTURES.relative_to(ROOT)}`",
+        f"Fixture taxonomy: `{FIXTURES}`",
         "",
         "## Status counts",
         "",

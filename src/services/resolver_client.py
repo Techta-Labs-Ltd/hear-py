@@ -62,6 +62,7 @@ async def resolve_utterance(
     timezone: str = "Europe/London",
     request_id: str = "",
     context: dict | None = None,
+    taxonomy_revision: int | None = None,
 ) -> dict:
     payload = {
         "version": 1,
@@ -75,6 +76,8 @@ async def resolve_utterance(
         payload["alexaUserId"] = alexa_user_id
     if context:
         payload["context"] = context
+    if taxonomy_revision is not None:
+        payload["taxonomyRevision"] = int(taxonomy_revision)
     try:
         return await asyncio.to_thread(_invoke, payload)
     except ResolverUnavailable:

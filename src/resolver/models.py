@@ -1,4 +1,3 @@
-"""Value objects produced by the local Hear search resolver."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -76,5 +75,5 @@ class SearchPlan:
     unresolved_references: list[UnresolvedReference] = field(default_factory=list)
     ambiguous_references: list[AmbiguousReference] = field(default_factory=list)
     normalized_text: str = ""
-    taxonomy_revision: str = "bundled"
+    taxonomy_revision: str = "0"
     timing_ms: dict[str, float] = field(default_factory=dict)

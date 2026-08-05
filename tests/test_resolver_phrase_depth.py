@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.resolver.engine import Resolver
+from src.resolver.search import Resolver
 from src.resolver.taxonomy import TaxonomyManager, TaxonomyRecord, TaxonomySnapshot
 
 

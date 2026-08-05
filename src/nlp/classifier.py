@@ -11,8 +11,8 @@ from src.nlp.patterns import (
     MORE_HINTS,
     TRENDING_HINTS,
 )
-from src.resolver.engine import resolver
-from src.resolver.normalize import normalize_utterance
+from src.resolver.search import resolver
+from src.resolver.normalization import normalize_utterance
 from src.services.semantic_routing import semantic_intent_router
 
 

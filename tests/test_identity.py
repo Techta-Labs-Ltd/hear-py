@@ -4,7 +4,7 @@ import pytest
 
 from src.middleware.identity import IdentityInterceptor
 from src.resolver.models import SearchPlan
-from src.resolver.payload import build_hear_payload
+from src.resolver.alexa import alexa_resolver
 from src.runtime import AttrDict
 from src.services.alexa.client import send_playback_events
 from src.services.storage.store import DEFAULT_STORE
@@ -82,5 +82,5 @@ async def test_backend_playback_dispatch_rejects_blank_identity(monkeypatch):
 
 
 def test_resolver_backend_payload_omits_blank_identity():
-    payload = build_hear_payload(SearchPlan(alexa_user_id="", query="news"))
+    payload = alexa_resolver.build_payload(SearchPlan(alexa_user_id="", query="news"))
     assert "alexaUserId" not in payload

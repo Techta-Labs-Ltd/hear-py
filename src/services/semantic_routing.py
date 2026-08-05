@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from config import settings
-from src.resolver.normalize import normalize_utterance
+from src.resolver.normalization import normalize_utterance
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from dataclasses import replace
 from rapidfuzz.distance import DamerauLevenshtein
 
 from src.resolver.models import ResolvedEntity, SearchPlan, UnresolvedReference
-from src.resolver.normalize import (
+from src.resolver.normalization import (
     CONTENT_NOUNS,
     is_reserved_content_noun,
     normalize_utterance,
@@ -20,15 +20,16 @@ from src.resolver.temporal import parse_temporal
 logger = logging.getLogger(__name__)
 CONTEXT_TYPES = {
     "by": ("creator", "organization"),
-    "from": ("creator", "organization", "publication"),
+    "from": ("creator", "organization", "publication", "location"),
     "in": ("location",),
     "near": ("location",),
     "around": ("location",),
 }
 
-FUZZY_CONTEXT_TYPES = {
+FUZZY_CONTEXT_TYPES = dict(CONTEXT_TYPES)
+UNRESOLVED_CONTEXT_TYPES = {
     **CONTEXT_TYPES,
-    "from": (*CONTEXT_TYPES["from"], "location"),
+    "from": ("creator", "organization", "publication"),
 }
 
 
@@ -119,7 +120,7 @@ def _prune_facets_overlapping_named_entities(
     ]
 
 
-def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], manager: TaxonomyManager):
+def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], snapshot):
     found: list[ResolvedEntity] = []
     for match in CONTEXT_PATTERN.finditer(text):
         word_matches = list(re.finditer(r"[a-z0-9][a-z0-9'-]*", match.group(2)))
@@ -132,7 +133,7 @@ def _contextual_fuzzy(text: str, claimed: list[tuple[int, int]], manager: Taxono
                 continue
             phrase = text[start:end]
             for entity_type in _context_types(match, fuzzy=True):
-                entity = manager.snapshot.fuzzy_match(phrase, entity_type)
+                entity = snapshot.fuzzy_match(phrase, entity_type)
                 if entity:
                     candidates.append((entity, start, end))
         by_identity: dict[str, tuple[ResolvedEntity, int, int]] = {}
@@ -197,7 +198,7 @@ def _unresolved_contextual_references(
         unresolved.append(UnresolvedReference(
             relation=match.group(1),
             phrase=match.group(2).strip(),
-            expected_types=_context_types(match),
+            expected_types=UNRESOLVED_CONTEXT_TYPES[match.group(1)],
             start=match.start(2),
             end=match.end(2),
         ))
@@ -231,7 +232,7 @@ def _location_qualifier_spans(
 def _facet_fuzzy(
     text: str,
     claimed: list[tuple[int, int]],
-    manager: TaxonomyManager,
+    snapshot,
 ) -> list[ResolvedEntity]:
     """Resolve one-edit category/tag ASR variants from taxonomy data."""
     proposals: list[ResolvedEntity] = []
@@ -240,11 +241,13 @@ def _facet_fuzzy(
         "on", "regarding", "since", "the", "to",
     }
     words = list(re.finditer(r"\b[a-z][a-z-]*\b", text))
-    aliases = [
-        (entity_type, alias, record)
-        for entity_type in ("category", "tag")
-        for alias, record in manager.snapshot.fuzzy.get(entity_type, {}).items()
-    ]
+    legacy_aliases = None
+    if not hasattr(snapshot, "facet_aliases"):
+        legacy_aliases = [
+            (entity_type, alias, record)
+            for entity_type in ("category", "tag")
+            for alias, record in snapshot.fuzzy.get(entity_type, {}).items()
+        ]
     for start_index, first in enumerate(words):
         for word_count in range(1, min(4, len(words) - start_index) + 1):
             last = words[start_index + word_count - 1]
@@ -263,6 +266,11 @@ def _facet_fuzzy(
                 continue
             normalized_phrase = phrase.replace("-", " ")
             candidates: dict[tuple[str, str], tuple[str, str, object, int]] = {}
+            aliases = (
+                snapshot.facet_aliases(normalized_phrase, limit=30)
+                if legacy_aliases is None
+                else legacy_aliases
+            )
             for entity_type, alias, record in aliases:
                 normalized_alias = alias.replace("-", " ")
                 if len(normalized_alias.split()) != word_count:
@@ -354,10 +362,12 @@ class Resolver:
         alexa_user_id: str = "",
         timezone: str = "Europe/London",
         *,
+        taxonomy_view=None,
         page: int = 0,
         limit: int = 20,
     ) -> SearchPlan:
         started = time.perf_counter()
+        snapshot = taxonomy_view or self.taxonomy.snapshot
         normalized = normalize_utterance(utterance)
         normalized_at = time.perf_counter()
         commands = parse_command_modifiers(normalized)
@@ -367,11 +377,11 @@ class Resolver:
         if temporal:
             claimed.append((temporal.start, temporal.end))
         protected_claimed = list(claimed)
-        entities = self.taxonomy.snapshot.exact(normalized, claimed)
+        entities = snapshot.exact(normalized, claimed)
         entities = _apply_context_type_constraints(normalized, entities)
         entities = _prune_unjoined_categories(normalized, entities)
         claimed.extend((item.start, item.end) for item in entities)
-        fuzzy = _contextual_fuzzy(normalized, protected_claimed, self.taxonomy)
+        fuzzy = _contextual_fuzzy(normalized, protected_claimed, snapshot)
         # A fuzzy place must not override an exact creator/publisher occupying
         # the same spoken span. Other fuzzy candidates may extend a partial
         # exact name, such as "David Beerd".
@@ -407,7 +417,7 @@ class Resolver:
         # phrase ("community service" -> tag "community-services") can
         # replace shorter exact facet fragments ("community" + "service").
         facet_fuzzy = _facet_fuzzy(
-            normalized, protected_claimed, self.taxonomy,
+            normalized, protected_claimed, snapshot,
         )
         exact_categories = [
             item for item in entities
@@ -442,7 +452,7 @@ class Resolver:
             for item in facet_fuzzy
             if item in entities
         )
-        ambiguous_references = self.taxonomy.snapshot.ambiguous(normalized, claimed)
+        ambiguous_references = snapshot.ambiguous(normalized, claimed)
         claimed.extend((item.start, item.end) for item in ambiguous_references)
         unresolved_references = _unresolved_contextual_references(normalized, claimed)
         claimed.extend(
@@ -463,7 +473,7 @@ class Resolver:
             unresolved_references=unresolved_references,
             ambiguous_references=ambiguous_references,
             normalized_text=normalized,
-            taxonomy_revision=self.taxonomy.snapshot.revision,
+            taxonomy_revision=snapshot.revision,
         )
         for entity in entities:
             value = entity.entity_id or entity.canonical_value

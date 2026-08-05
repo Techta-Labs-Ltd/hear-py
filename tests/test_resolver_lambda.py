@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import io
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
-from src.resolver.engine import resolver
+from src.resolver.search import resolver
 from src.resolver.correction import command_corrector
 from src.resolver.lambda_handler import handler
 from src.resolver.taxonomy import TaxonomyRecord, TaxonomySnapshot, taxonomy_manager
@@ -28,11 +27,27 @@ class _InvokeClient:
 
 @pytest.fixture(autouse=True)
 def resolver_fixture_taxonomy(monkeypatch):
-    from src.resolver.taxonomy import TaxonomyManager
-
-    manager = TaxonomyManager(bundle_dir=Path(__file__).parent / "fixtures" / "taxonomy")
-    monkeypatch.setattr(taxonomy_manager, "_snapshot", manager.snapshot)
-    monkeypatch.setattr(resolver.taxonomy, "_snapshot", manager.snapshot)
+    records = [
+        TaxonomyRecord("category", "sport", slug="sport"),
+        TaxonomyRecord("category", "music", slug="music"),
+        TaxonomyRecord("category", "news", slug="news"),
+        TaxonomyRecord("category", "sound-recording", slug="sound-recording", aliases=("sound recording",)),
+        TaxonomyRecord("creator", "Adeshina Ayomide", entity_id="ec8267de-6331-42de-a14d-4a44a221a93c", aliases=("adeshina",)),
+        TaxonomyRecord("creator", "Adeshina Ayomide", entity_id="4cd2cb60-1314-4f66-841d-e49ed4820a3b", aliases=("adeshina",)),
+        TaxonomyRecord("organization", "York Talking News", entity_id="63915f39-db54-4001-9877-7d2b3fc36639", aliases=("ytn",)),
+        TaxonomyRecord("organization", "Walsall Talking Newspaper", entity_id="ddce8ea4-d9a4-4b7b-b5c8-30ed5b89174e", aliases=("wtn",)),
+        TaxonomyRecord("organization", "Sussex Coast Talking News", entity_id="60bfdbda-ab55-48d4-94a6-c8998435678b", aliases=("wtn", "sussex")),
+        TaxonomyRecord("organization", "Sussex Living", entity_id="org-sussex-living", aliases=("sussex",)),
+        TaxonomyRecord("organization", "WTN Sussex Life", entity_id="org-sussex-life", aliases=("sussex",)),
+        TaxonomyRecord("organization", "Wellington Talking News", entity_id="org-wellington", aliases=("wtn",)),
+        TaxonomyRecord("organization", "Barking and Dagenham Talking Newspaper", entity_id="012e0329-f6ad-48d9-8713-13ecee671f64"),
+        TaxonomyRecord("location", "London", aliases=("london",), metadata={"city": "London", "country_code": "gb", "lat": "51.5072", "lng": "-0.1275"}),
+        TaxonomyRecord("location", "Manchester", aliases=("manchester",), metadata={"city": "Manchester", "country_code": "gb", "lat": "53.4790", "lng": "-2.2452"}),
+        TaxonomyRecord("location", "Burnley", aliases=("burnley",), metadata={"city": "Burnley", "country_code": "gb", "lat": "53.7890", "lng": "-2.2480"}),
+    ]
+    snapshot = TaxonomySnapshot("resolver-test-base", records)
+    monkeypatch.setattr(taxonomy_manager, "_snapshot", snapshot)
+    monkeypatch.setattr(resolver.taxonomy, "_snapshot", snapshot)
 
 
 @pytest.fixture
@@ -386,7 +401,7 @@ def test_ambiguity_follow_up_stays_with_offered_candidates():
         "candidates": candidates,
     }
 
-    still_ambiguous = handler({
+    coast_selected = handler({
         "version": 1,
         "operation": "resolve_ambiguity_follow_up",
         "utterance": "sussex coast",
@@ -399,8 +414,10 @@ def test_ambiguity_follow_up_stays_with_offered_candidates():
         "context": context,
     })
 
-    assert still_ambiguous["status"] == "ambiguous"
-    assert len(still_ambiguous["ambiguities"][0]["candidates"]) == 3
+    assert coast_selected["status"] == "resolved"
+    assert coast_selected["confirmationLabel"] == (
+        "content from Sussex Coast Talking News"
+    )
     assert resolved["status"] == "resolved"
     assert resolved["confirmationLabel"] == (
         "content from Sussex Coast Talking News"

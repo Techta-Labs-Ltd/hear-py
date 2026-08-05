@@ -51,16 +51,19 @@ class Settings(BaseSettings):
         return self.HEAR_API_REQUEST_LOG
 
     HEAR_TAXONOMY_MANIFEST_URL: str = (
-        "https://cdn.hear.media/runtime/taxonomy/v3/manifest.json"
+        "https://cdn.hear.media/runtime/taxonomy/manifest.json"
     )
     HEAR_TAXONOMY_REVISION_TABLE: str = ""
     HEAR_TAXONOMY_REFRESH_SECONDS: int = 300
     HEAR_TAXONOMY_AUTO_REFRESH: bool = _is_lambda()
-    HEAR_TAXONOMY_BUNDLE_DIR: str = ""
     HEAR_TAXONOMY_REFRESH_QUEUE_URL: str = ""
     HEAR_TAXONOMY_SNAPSHOT_BUCKET: str = ""
     HEAR_TAXONOMY_SNAPSHOT_KEY: str = ""
     HEAR_TAXONOMY_ACTIVE_REVISION: str = ""
+    HEAR_TAXONOMY_MANIFEST_SHA256: str = ""
+    HEAR_TAXONOMY_RUNTIME_URL: str = ""
+    HEAR_TAXONOMY_STRICT_SYNC: bool = False
+    HEAR_TAXONOMY_MAX_INLINE_CHANGES: int = 500
     HEAR_RESOLVER_FUNCTION_NAME: str = ""
     HEAR_RESOLVER_LIVE_ALIAS: str = "live"
     HEAR_RESOLVER_CANDIDATE_ALIAS: str = "candidate"
@@ -163,6 +166,8 @@ class Settings(BaseSettings):
     HEAR_LAMBDA_MEMORY_MB: int = 512
 
     WEBHOOK_SECRET: str = ""
+    HEAR_WEBHOOK_API_KEY: str = ""
+    HEAR_WEBHOOK_HMAC_SECRET: str = ""
     SETTINGS_TABLE: str = "hear_settings"
     NOTIFICATIONS_TABLE: str = "hear_notifications"
     WEBHOOK_OUTBOUND_URL: str = ""

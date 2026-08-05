@@ -1,4 +1,4 @@
-"""Utterance normalization and command/modifier rules."""
+"""Pure normalization and command/modifier rules for spoken search."""
 from __future__ import annotations
 
 import re
@@ -15,6 +15,8 @@ COMMAND_PATTERNS = (
     r"\blet me hear\b", r"\bi want to hear\b", r"\bi would like to hear\b",
     r"\bi'd like to hear\b", r"\bsearch for\b", r"\bput on\b",
     r"\brecommend(?: me)?\b",
+    r"\bi(?:'m| am| live)\b(?=\s+(?:in|near|from)\b)",
+    r"\bset my location to\b",
 )
 LATEST_PATTERNS = (r"\bmost recent\b", r"\blatest\b", r"\bnewest\b", r"\brecent\b")
 RECOMMENDED_PATTERNS = (

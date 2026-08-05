@@ -4,12 +4,9 @@ from src.utils.browse_catalog import (
     build_catalog_from_search_result,
     catalog_search_context,
 )
-from src.resolver.engine import Resolver
-from src.resolver.ambiguity import resolve_ambiguity_follow_up
-from src.resolver.integration import (
-    resolve_for_alexa,
-    resolve_organization_follow_up,
-)
+from src.resolver.search import Resolver
+from src.resolver.alexa import resolve_ambiguity_follow_up
+from src.resolver.alexa import alexa_resolver
 from src.resolver.taxonomy import TaxonomyManager, TaxonomySnapshot
 
 
@@ -67,9 +64,9 @@ def test_unresolved_explicit_reference_is_exposed_to_alexa(monkeypatch):
     manager = TaxonomyManager()
     manager._snapshot = TaxonomySnapshot("empty", [])
     local_resolver = Resolver(manager)
-    monkeypatch.setattr("src.resolver.integration.resolver", local_resolver)
+    monkeypatch.setattr("src.resolver.alexa.resolver", local_resolver)
 
-    result = resolve_for_alexa("play latest sport from david")
+    result = alexa_resolver.resolve("play latest sport from david")
 
     assert result["slots"]["unresolvedReferences"] == [{
         "relation": "from",
@@ -90,9 +87,9 @@ def test_ambiguous_alias_candidates_are_exposed_to_alexa(monkeypatch):
             "organization", "Burnley Publisher", "org-2", aliases=("badtn",),
         ),
     ])
-    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+    monkeypatch.setattr("src.resolver.alexa.resolver", Resolver(manager))
 
-    result = resolve_for_alexa("play badtn")
+    result = alexa_resolver.resolve("play badtn")
 
     assert result["slots"]["ambiguousReferences"] == [{
         "phrase": "badtn",
@@ -115,9 +112,9 @@ def test_publication_ambiguity_preserves_format_sort_and_date(monkeypatch):
             "organization", "South Press", "org-south", aliases=("press",),
         ),
     ])
-    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+    monkeypatch.setattr("src.resolver.alexa.resolver", Resolver(manager))
 
-    initial = resolve_for_alexa(
+    initial = alexa_resolver.resolve(
         "play 2026-07-28 latest publication from press",
         alexa_intent="PlayPublicationIntent",
     )
@@ -160,9 +157,9 @@ def test_resolved_organization_keeps_a_spoken_display_name(monkeypatch):
             aliases=("tnf",),
         ),
     ])
-    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+    monkeypatch.setattr("src.resolver.alexa.resolver", Resolver(manager))
 
-    result = resolve_for_alexa("play me latest sport from tnf")
+    result = alexa_resolver.resolve("play me latest sport from tnf")
 
     assert result["slots"]["category"] == "sport"
     assert result["slots"]["organizationIds"] == ["org-tnf"]
@@ -181,9 +178,9 @@ def test_resolved_city_routes_as_local_even_without_near_me_language(monkeypatch
             metadata={"city": "Birmingham", "countryCode": "gb"},
         ),
     ])
-    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+    monkeypatch.setattr("src.resolver.alexa.resolver", Resolver(manager))
 
-    result = resolve_for_alexa("birmingham city")
+    result = alexa_resolver.resolve("birmingham city")
 
     assert result["intent"] == "local"
     assert result["slots"]["city"] == "Birmingham"
@@ -202,9 +199,9 @@ def test_prompted_short_organization_typo_uses_unique_taxonomy_alias(monkeypatch
             aliases=("ytn",),
         ),
     ])
-    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+    monkeypatch.setattr("src.resolver.alexa.resolver", Resolver(manager))
 
-    result = resolve_organization_follow_up("ynt")
+    result = alexa_resolver.resolve_organization_follow_up("ynt")
 
     assert result["intent"] == "organization"
     assert result["slots"]["organizationIds"] == ["org-ytn"]
@@ -224,9 +221,9 @@ def test_prompted_spoken_organization_initialism_is_compacted(monkeypatch):
             aliases=("ytn",),
         ),
     ])
-    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+    monkeypatch.setattr("src.resolver.alexa.resolver", Resolver(manager))
 
-    result = resolve_organization_follow_up("Y. T. N.")
+    result = alexa_resolver.resolve_organization_follow_up("Y. T. N.")
 
     assert result["slots"]["organizationIds"] == ["org-ytn"]
     assert result["slots"]["organizationName"] == "York Talking News"

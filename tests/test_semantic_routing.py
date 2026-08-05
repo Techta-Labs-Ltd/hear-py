@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 
 from src.nlp.classifier import classify_utterance
-from src.resolver.engine import Resolver
-from src.resolver.integration import resolve_for_alexa
+from src.resolver.search import Resolver
+from src.resolver.alexa import alexa_resolver
 from src.resolver.taxonomy import TaxonomyManager, TaxonomyRecord, TaxonomySnapshot
 from src.services.semantic_routing import (
     SemanticIntentRouter,
@@ -65,14 +65,14 @@ def test_deterministic_entity_route_does_not_call_semantic_backend(monkeypatch):
             metadata={"city": "Burnley", "countryCode": "gb"},
         ),
     ])
-    monkeypatch.setattr("src.resolver.integration.resolver", Resolver(manager))
+    monkeypatch.setattr("src.resolver.alexa.resolver", Resolver(manager))
     backend = FakeBackend("organization", 0.99)
     monkeypatch.setattr(
-        "src.resolver.integration.semantic_intent_router",
+        "src.resolver.alexa.semantic_intent_router",
         SemanticIntentRouter(enabled=True, backend=backend),
     )
 
-    result = resolve_for_alexa("play sport in burnley")
+    result = alexa_resolver.resolve("play sport in burnley")
 
     assert result["intent"] == "category"
     assert result["slots"]["category"] == "sport"
