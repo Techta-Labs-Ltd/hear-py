@@ -30,9 +30,7 @@ def _verify_secret(event: dict) -> dict | None:
     signature = headers.get("x-webhook-signature") or headers.get("X-Webhook-Signature") or ""
     api_key = headers.get("x-api-key") or headers.get("X-Api-Key") or ""
     body = event.get("body") or ""
-    configured_api_key = str(
-        settings.HEAR_WEBHOOK_API_KEY or settings.HEAR_API_KEY or ""
-    ).strip()
+    configured_api_key = str(settings.HEAR_API_KEY or "").strip()
     hmac_secret = settings.HEAR_WEBHOOK_HMAC_SECRET or settings.WEBHOOK_SECRET
     if api_key != configured_api_key or not verify_signature(body, signature, hmac_secret):
         return _response(401, {"error": "Unauthorised"})

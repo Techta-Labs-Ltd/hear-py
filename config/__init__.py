@@ -166,7 +166,6 @@ class Settings(BaseSettings):
     HEAR_LAMBDA_MEMORY_MB: int = 512
 
     WEBHOOK_SECRET: str = ""
-    HEAR_WEBHOOK_API_KEY: str = ""
     HEAR_WEBHOOK_HMAC_SECRET: str = ""
     NOTIFICATIONS_TABLE: str = "hear_notifications"
     WEBHOOK_OUTBOUND_URL: str = ""

@@ -7,7 +7,7 @@
       "Principal": { "Service": "lambda.amazonaws.com" },
       "Action": [ "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer" ],
       "Condition": {
-        "StringLike": { "aws:sourceArn": "arn:aws:lambda:eu-west-1:650790810013:function:*" }
+        "StringLike": { "aws:sourceArn": "arn:aws:lambda:eu-west-1:692859951746:function:*" }
       }
     }
   ]

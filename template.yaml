@@ -84,6 +84,7 @@ Globals:
         SQS_OUT_QUEUE_URL: !Ref OutboundQueue
         # --- secrets (from SSM via CI) ---
         HEAR_API_KEY: !Ref HearApiKey
+        HEAR_WEBHOOK_HMAC_SECRET: !Ref WebhookOutboundSecret
         WEBHOOK_SECRET: !Ref WebhookSecret
         WEBHOOK_OUTBOUND_SECRET: !Ref WebhookOutboundSecret
         ALEXA_PROACTIVE_CLIENT_ID: !Ref AlexaProactiveClientId
