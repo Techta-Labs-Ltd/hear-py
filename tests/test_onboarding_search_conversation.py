@@ -59,6 +59,38 @@ async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_han
 
 
 @pytest.mark.asyncio
+async def test_city_entity_resolution_sends_canonical_town_to_resolver(
+    monkeypatch, mock_handler_input,
+):
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "resolution": {"match": {"city": "Herne Bay"}, "candidates": []},
+    })
+    monkeypatch.setattr("src.handlers.intents.onboarding.resolve_utterance", resolve)
+    handler_input = _town_request(mock_handler_input, "arn bay")
+    slot = handler_input.request_envelope.request.intent.slots["townName"]
+    slot["resolutions"] = {
+        "resolutionsPerAuthority": [{
+            "status": {"code": "ER_SUCCESS_MATCH"},
+            "values": [{"value": {
+                "id": "location-1826454069",
+                "name": "Herne Bay",
+            }}],
+        }],
+    }
+
+    await NlpInterceptor().process(handler_input)
+    await TownCaptureHandler().handle(handler_input)
+
+    assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"] == {
+        "townName": "Herne Bay",
+        "placeName": "Herne Bay",
+    }
+    resolve.assert_awaited_once()
+    assert resolve.await_args.args[:2] == ("resolve_location", "Herne Bay")
+
+
+@pytest.mark.asyncio
 async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_handler_input):
     monkeypatch.setattr(
         "src.handlers.intents.onboarding.resolve_utterance",

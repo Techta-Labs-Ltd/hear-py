@@ -48,7 +48,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
-        "TownCaptureIntent": {"townName": "AMAZON.SearchQuery"},
+        "TownCaptureIntent": {"townName": "AMAZON.City"},
         "PlayContentIntent": {
             "topic": "AMAZON.SearchQuery",
             "format": "ContentFormat",
@@ -82,12 +82,27 @@ def test_location_dialogs_elicit_bare_town_replies():
 
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "townName",
-        "type": "AMAZON.SearchQuery",
+        "type": "AMAZON.City",
         "confirmationRequired": False,
         "elicitationRequired": True,
         "prompts": {"elicitation": "Elicit.TownCaptureIntent.townName"},
     }
     assert dialog_intents["SetLocationIntent"]["slots"][0]["elicitationRequired"] is True
+
+
+def test_town_intent_owns_bare_city_and_extends_alexa_city_aliases():
+    model = _model()["interactionModel"]["languageModel"]
+    intents = {item["name"]: item for item in model["intents"]}
+    city_type = next(item for item in model["types"] if item["name"] == "AMAZON.City")
+    herne_bay = next(
+        item for item in city_type["values"]
+        if item["name"]["value"] == "Herne Bay"
+    )
+
+    assert "{townName}" in intents["TownCaptureIntent"]["samples"]
+    assert "{location}" not in intents["SetLocationIntent"]["samples"]
+    assert herne_bay["id"] == "location-1826454069"
+    assert "arn bay" in herne_bay["name"]["synonyms"]
 
 
 def test_content_discovery_intents_accept_date_constraints():

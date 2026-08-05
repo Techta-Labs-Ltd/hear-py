@@ -14,7 +14,7 @@ from src.services.dialog_state import (
     clear_active_dialog,
 )
 from src.services.storage.persistence import update_store
-from src.utils.skill_request import get_user_id
+from src.utils.skill_request import get_resolved_slot_value, get_user_id
 
 logger = logging.getLogger(__name__)
 SEARCH_INTENTS = {
@@ -115,7 +115,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
 
             if alexa_intent == "SetLocationIntent" and not ambiguity_active:
                 slot = (intent_obj.slots or {}).get("location")
-                town = str(slot.value).strip() if slot and slot.value else None
+                town = get_resolved_slot_value(slot)
                 _set_nlp(handler_input, {
                     "intent": "location_set",
                     "alexaIntent": "location_set",
@@ -134,7 +134,7 @@ class NlpInterceptor(AbstractRequestInterceptor):
                 and (early_dialog or {}).get("type") != "ambiguity"
             ):
                 slot = (intent_obj.slots or {}).get("townName")
-                town = str(slot.value).strip() if slot and slot.value else None
+                town = get_resolved_slot_value(slot)
                 _set_nlp(handler_input, {
                     "intent": "town_capture",
                     "alexaIntent": "town_capture",

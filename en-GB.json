@@ -1057,10 +1057,11 @@
           "slots": [
             {
               "name": "townName",
-              "type": "AMAZON.SearchQuery"
+              "type": "AMAZON.City"
             }
           ],
           "samples": [
+            "{townName}",
             "I am in {townName}",
             "I live in {townName}",
             "my town is {townName}",
@@ -1072,18 +1073,10 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.GB_CITY"
+              "type": "AMAZON.City"
             }
           ],
           "samples": [
-            "{location}",
-            "it's {location}",
-            "I'm in {location}",
-            "I live in {location}",
-            "I'm from {location}",
-            "my town is {location}",
-            "my city is {location}",
-            "my location is {location}",
             "set my location to {location}",
             "set my town to {location}",
             "change my location to {location}",
@@ -1114,6 +1107,23 @@
         }
       ],
       "types": [
+        {
+          "name": "AMAZON.City",
+          "values": [
+            {
+              "id": "location-1826454069",
+              "name": {
+                "value": "Herne Bay",
+                "synonyms": [
+                  "arn bay",
+                  "earn bay",
+                  "herne bat",
+                  "herne bae"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "HEAR_PUBLICATION_SORT",
           "values": [
@@ -1194,7 +1204,7 @@
           "slots": [
             {
               "name": "townName",
-              "type": "AMAZON.SearchQuery",
+              "type": "AMAZON.City",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1210,7 +1220,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.GB_CITY",
+              "type": "AMAZON.City",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {

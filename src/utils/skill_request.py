@@ -32,6 +32,23 @@ def get_intent_name(handler_input) -> str | None:
     return intent.get("name") if intent else None
 
 
+def get_resolved_slot_value(slot) -> str | None:
+    """Prefer Alexa's canonical entity match, then fall back to spoken text."""
+    resolutions = _read(slot, "resolutions")
+    authorities = _read(
+        resolutions, "resolutionsPerAuthority", "resolutions_per_authority"
+    ) or []
+    for authority in authorities:
+        status = _read(_read(authority, "status"), "code")
+        if status and status != "ER_SUCCESS_MATCH":
+            continue
+        for item in _read(authority, "values") or []:
+            canonical = _non_empty_string(_read(_read(item, "value"), "name"))
+            if canonical:
+                return canonical
+    return _non_empty_string(_read(slot, "value"))
+
+
 def get_user_id(handler_input) -> str | None:
     """Extract the Alexa user ID from raw JSON or ASK SDK request models."""
     envelope = getattr(handler_input, "request_envelope", None)
