@@ -9,6 +9,7 @@ from config import settings
 from src.services.taxonomy_updates import queue_taxonomy_snapshot
 
 logger = logging.getLogger(__name__)
+MANIFEST_USER_AGENT = "Hear-Alexa-Taxonomy/1.0"
 
 
 def _send_cloudformation_response(
@@ -41,7 +42,11 @@ def _read_manifest(manifest_url: str) -> tuple[int, str]:
     """Fetch and validate the exact manifest bytes used for activation."""
     request = urllib.request.Request(
         manifest_url,
-        headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+        headers={
+            "Accept": "application/json",
+            "Cache-Control": "no-cache",
+            "User-Agent": MANIFEST_USER_AGENT,
+        },
     )
     with urllib.request.urlopen(request, timeout=15) as response:
         content = response.read(1024 * 1024 + 1)

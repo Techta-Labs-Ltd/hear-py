@@ -19,7 +19,13 @@ def test_bootstrap_queues_numeric_manifest_revision(monkeypatch):
     response.read.return_value = content
     response.__enter__.return_value = response
     queued = MagicMock()
-    monkeypatch.setattr(taxonomy_seed.urllib.request, "urlopen", lambda *args, **kwargs: response)
+    requests = []
+
+    def open_manifest(request, **kwargs):
+        requests.append(request)
+        return response
+
+    monkeypatch.setattr(taxonomy_seed.urllib.request, "urlopen", open_manifest)
     monkeypatch.setattr(taxonomy_seed, "queue_taxonomy_snapshot", queued)
 
     revision = taxonomy_seed.bootstrap_manifest(
@@ -27,6 +33,9 @@ def test_bootstrap_queues_numeric_manifest_revision(monkeypatch):
     )
 
     assert revision == 9
+    assert requests[0].get_header("User-agent") == "Hear-Alexa-Taxonomy/1.0"
+    assert requests[0].get_header("Accept") == "application/json"
+    assert requests[0].get_header("Cache-control") == "no-cache"
     queued.assert_called_once_with(
         9,
         "https://cdn.hear.media/runtime/taxonomy/manifest.json",
