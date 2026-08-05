@@ -64,7 +64,11 @@ class TaxonomySyncClient:
                 return active
             maximum = max(int(settings.HEAR_TAXONOMY_MAX_INLINE_CHANGES), 1)
             if target - available > maximum:
-                raise TaxonomySyncUnavailable(target, available, "taxonomy range exceeds inline limit")
+                if settings.HEAR_TAXONOMY_STRICT_SYNC:
+                    raise TaxonomySyncUnavailable(
+                        target, available, "taxonomy range exceeds inline limit"
+                    )
+                return active
             try:
                 response = self._client.get(
                     f"{base_url}/changes",
@@ -97,7 +101,11 @@ class TaxonomySyncClient:
             except TaxonomySyncUnavailable:
                 raise
             except Exception as exc:
-                raise TaxonomySyncUnavailable(target, available, "taxonomy change sync failed") from exc
+                if settings.HEAR_TAXONOMY_STRICT_SYNC:
+                    raise TaxonomySyncUnavailable(
+                        target, available, "taxonomy change sync failed"
+                    ) from exc
+                return active
 
 
 taxonomy_sync_client = TaxonomySyncClient()
