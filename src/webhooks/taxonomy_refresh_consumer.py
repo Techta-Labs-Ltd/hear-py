@@ -119,7 +119,15 @@ def _active_revision() -> int:
     item = table.get_item(
         Key={"pk": "taxonomy#current"}, ConsistentRead=True,
     ).get("Item") or {}
-    return int(item.get("revision") or 0)
+    value = item.get("revision")
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Ignoring legacy non-numeric active taxonomy revision value=%r",
+            value,
+        )
+        return 0
 
 
 def handler(event: dict, context=None) -> dict:
