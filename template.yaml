@@ -228,13 +228,14 @@ Resources:
         Command: [ "src.webhooks.taxonomy_seed.handler" ]
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt TaxonomyRefreshQueue.QueueName }
 
   TaxonomyRevisionSeed:
     Type: Custom::TaxonomyRevisionSeed
     DependsOn: TaxonomyRevisionTable
     Properties:
       ServiceToken: !GetAtt TaxonomyRevisionSeedFunction.Arn
-      Revision: v1
+      BootstrapVersion: manifest-v2
       ManifestUrl: https://cdn.hear.media/runtime/taxonomy/manifest.json
 
   TaxonomySnapshotBucket:

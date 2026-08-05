@@ -1,42 +1,50 @@
+import hashlib
+import json
 from unittest.mock import MagicMock
+
+import pytest
 
 from src.webhooks import taxonomy_seed
 
 
-def test_seed_creates_runtime_v1_when_revision_is_absent(monkeypatch):
-    table = MagicMock()
-    resource = MagicMock()
-    resource.Table.return_value = table
-    monkeypatch.setattr(taxonomy_seed.boto3, "resource", lambda *args, **kwargs: resource)
+def test_bootstrap_queues_numeric_manifest_revision(monkeypatch):
+    content = json.dumps({
+        "schemaVersion": 2,
+        "currentRevision": 9,
+        "snapshotRevision": 9,
+        "routing": {"exact": {}},
+        "shards": {"location": {}},
+    }, separators=(",", ":")).encode()
+    response = MagicMock()
+    response.read.return_value = content
+    response.__enter__.return_value = response
+    queued = MagicMock()
+    monkeypatch.setattr(taxonomy_seed.urllib.request, "urlopen", lambda *args, **kwargs: response)
+    monkeypatch.setattr(taxonomy_seed, "queue_taxonomy_snapshot", queued)
 
-    taxonomy_seed._seed_revision(
-        "v1",
-        "https://cdn.hear.media/runtime/taxonomy/v3/manifest.json",
+    revision = taxonomy_seed.bootstrap_manifest(
+        "https://cdn.hear.media/runtime/taxonomy/manifest.json"
     )
 
-    table.put_item.assert_called_once_with(
-        Item={
-            "pk": "taxonomy#current",
-            "revision": "v1",
-            "manifestUrl": "https://cdn.hear.media/runtime/taxonomy/v3/manifest.json",
-            "status": "active",
-        },
-        ConditionExpression="attribute_not_exists(pk)",
+    assert revision == 9
+    queued.assert_called_once_with(
+        9,
+        "https://cdn.hear.media/runtime/taxonomy/manifest.json",
+        hashlib.sha256(content).hexdigest(),
     )
 
 
-def test_seed_keeps_a_newer_existing_revision(monkeypatch):
-    error = Exception("already exists")
-    error.response = {"Error": {"Code": "ConditionalCheckFailedException"}}
-    table = MagicMock()
-    table.put_item.side_effect = error
-    resource = MagicMock()
-    resource.Table.return_value = table
-    monkeypatch.setattr(taxonomy_seed.boto3, "resource", lambda *args, **kwargs: resource)
+def test_bootstrap_rejects_incomplete_manifest(monkeypatch):
+    response = MagicMock()
+    response.read.return_value = json.dumps({
+        "schemaVersion": 2,
+        "currentRevision": 9,
+        "snapshotRevision": 8,
+        "routing": {},
+        "shards": {},
+    }).encode()
+    response.__enter__.return_value = response
+    monkeypatch.setattr(taxonomy_seed.urllib.request, "urlopen", lambda *args, **kwargs: response)
 
-    taxonomy_seed._seed_revision(
-        "v1",
-        "https://cdn.hear.media/runtime/taxonomy/v3/manifest.json",
-    )
-
-    table.put_item.assert_called_once()
+    with pytest.raises(ValueError, match="complete schema-v2"):
+        taxonomy_seed.bootstrap_manifest("https://example.test/manifest.json")

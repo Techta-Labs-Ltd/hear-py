@@ -51,6 +51,14 @@ def _enqueue_refresh(revision: int, manifest_url: str, manifest_sha256: str) -> 
     )
 
 
+def queue_taxonomy_snapshot(
+    revision: int, manifest_url: str, manifest_sha256: str,
+) -> None:
+    """Persist and enqueue one validated snapshot publication."""
+    _store_revision(revision, manifest_url, manifest_sha256)
+    _enqueue_refresh(revision, manifest_url, manifest_sha256)
+
+
 async def handle_taxonomy_webhook(event: dict) -> dict:
     try:
         payload = json.loads(event.get("body") or "{}")
@@ -74,8 +82,7 @@ async def handle_taxonomy_webhook(event: dict) -> dict:
     ):
         return _response(400, {"error": "revision, immutable manifestUrl and manifestSha256 are required"})
     try:
-        _store_revision(revision, manifest_url, manifest_sha256)
-        _enqueue_refresh(revision, manifest_url, manifest_sha256)
+        queue_taxonomy_snapshot(revision, manifest_url, manifest_sha256)
     except Exception:
         logger.exception("Could not persist taxonomy revision")
         return _response(503, {"error": "Taxonomy refresh unavailable"})
