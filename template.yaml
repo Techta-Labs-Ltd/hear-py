@@ -127,7 +127,7 @@ Resources:
       Environment:
         Variables:
           HEAR_RESOLVER_FUNCTION_ARN: !Sub "${ResolverFunction.Arn}:live"
-          HEAR_RESOLVER_TIMEOUT_MS: "7000"
+          HEAR_RESOLVER_TIMEOUT_MS: "2500"
       Policies:
         - DynamoDBCrudPolicy: { TableName: hear-service }
         - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }

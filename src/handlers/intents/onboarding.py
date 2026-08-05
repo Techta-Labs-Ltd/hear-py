@@ -21,6 +21,7 @@ from src.utils.speech import (
     ssml, ONBOARDING_ASK_PERMISSION, ONBOARDING_CONSENT_CARD_SENT,
     ONBOARDING_LOCATION_DENIED, WELCOME_FIRST_ASK_TOWN, REPROMPT_ASK_TOWN,
     TOWN_NOT_UNDERSTOOD, TOWN_GOT_IT, REPROMPT_CITY, TOWN_SKIPPED, REPROMPT_NO_CITY,
+    TOWN_LOOKUP_UNAVAILABLE_RETRY, TOWN_LOOKUP_UNAVAILABLE_CONTINUE,
     WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY, WELCOME_RETURN_GENERIC,
     ONBOARDING_TOWN_CONFIRM, ONBOARDING_FETCHING_LOCATION,
     ONBOARDING_DETECTED_TOWN, CONSENT_CARD_THANKS, LOCATION_DECLINED,
@@ -30,6 +31,7 @@ from src.utils.speech import (
 ONBOARDING_ASK_TOWN = "ask_town"
 ONBOARDING_AWAIT_CONFIRM = "await_location_confirm"
 MAX_TOWN_ATTEMPTS = 3
+MAX_TOWN_RESOLVER_FAILURES = 2
 PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ}
 logger = logging.getLogger(__name__)
 
@@ -153,6 +155,7 @@ def start_town_capture(handler_input: HandlerInput, store: Dict[str, Any], name:
     update_store(handler_input, {
         "onboardingStage": ONBOARDING_ASK_TOWN,
         "onboardingTownAttempts": 0,
+        "onboardingTownResolverFailures": 0,
     })
     handler_input.attributes_manager.set_session_attributes({
         "onboardingStage": ONBOARDING_ASK_TOWN,
@@ -177,6 +180,35 @@ def resume_town_capture(handler_input: HandlerInput, store: Dict[str, Any]):
         .response
 
 
+def handle_town_resolver_unavailable(handler_input: HandlerInput, store: Dict[str, Any]):
+    """Keep one retry in-session, then finish onboarding without location."""
+    failures = int(store.get("onboardingTownResolverFailures") or 0) + 1
+    if failures < MAX_TOWN_RESOLVER_FAILURES:
+        update_store(handler_input, {
+            "onboardingStage": ONBOARDING_ASK_TOWN,
+            "onboardingTownResolverFailures": failures,
+        })
+        return handler_input.response_builder \
+            .speak(ssml(TOWN_LOOKUP_UNAVAILABLE_RETRY)) \
+            .reprompt(ssml(REPROMPT_ASK_TOWN)) \
+            .set_should_end_session(False) \
+            .response
+
+    update_store(handler_input, {
+        "onboardingStage": None,
+        "onboardingTownAttempts": 0,
+        "onboardingTownResolverFailures": 0,
+        "onboardingComplete": True,
+        "awaitingLocationConfirm": False,
+        "pendingLocationConfirm": None,
+    })
+    return handler_input.response_builder \
+        .speak(ssml(TOWN_LOOKUP_UNAVAILABLE_CONTINUE)) \
+        .reprompt(ssml(REPROMPT_NO_CITY)) \
+        .set_should_end_session(False) \
+        .response
+
+
 async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, Any], phrase: str):
     """Resolve a manual town in location scope and ask for confirmation."""
     try:
@@ -187,11 +219,8 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
         )
         resolution = response.get("resolution") or {}
     except ResolverUnavailable:
-        return handler_input.response_builder \
-            .speak(ssml("I'm having trouble checking that town right now. Please say it again.")) \
-            .reprompt(ssml(REPROMPT_ASK_TOWN)) \
-            .set_should_end_session(False) \
-            .response
+        return handle_town_resolver_unavailable(handler_input, store)
+    update_store(handler_input, {"onboardingTownResolverFailures": 0})
     match = resolution.get("match")
     candidates = resolution.get("candidates") or []
     if not match:
@@ -249,10 +278,8 @@ async def finalize_town_captured(
         )
         resolution = response.get("resolution") or {}
     except ResolverUnavailable:
-        return handler_input.response_builder \
-            .speak(ssml("I'm having trouble checking that town right now. Please try again.")) \
-            .set_should_end_session(False) \
-            .response
+        return handle_town_resolver_unavailable(handler_input, store)
+    update_store(handler_input, {"onboardingTownResolverFailures": 0})
     match = resolution.get("match")
     if not match:
         return await stage_town_confirmation(handler_input, store, phrase)
@@ -265,6 +292,7 @@ async def finalize_town_captured(
         "onboardingComplete": True,
         "onboardingStage": None,
         "onboardingTownAttempts": 0,
+        "onboardingTownResolverFailures": 0,
         "locationSource": "manual",
         "localityResolvedAt": int(time.time() * 1000),
         "awaitingLocationConfirm": False,
@@ -282,6 +310,7 @@ def finalize_town_skipped(handler_input: HandlerInput, store: Dict[str, Any]):
     update_store(handler_input, {
         "onboardingStage": None,
         "onboardingTownAttempts": 0,
+        "onboardingTownResolverFailures": 0,
         "onboardingComplete": True,
     })
 
@@ -299,6 +328,7 @@ def handle_location_not_found(handler_input: HandlerInput, store: Dict[str, Any]
     update_store(handler_input, {
         "onboardingStage": ONBOARDING_ASK_TOWN,
         "onboardingRetries": 0,
+        "onboardingTownResolverFailures": 0,
         "_requiresReliableSave": True,
     })
     handler_input.attributes_manager.set_session_attributes({

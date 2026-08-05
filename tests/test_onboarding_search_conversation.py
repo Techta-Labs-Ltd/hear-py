@@ -10,6 +10,7 @@ from src.middleware.pipeline import REQUEST_INTERCEPTORS
 from src.nlp import NlpInterceptor
 from src.runtime import AttrDict
 from src.services.storage.persistence import DEFAULT_STORE, get_store
+from src.services.resolver_client import ResolverUnavailable
 from src.utils.speech import resolved_search_request_label
 
 
@@ -53,6 +54,8 @@ async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_han
     store = get_store(handler_input)
     assert store["pendingLocationConfirm"]["city"] == "Swindon"
     assert store["awaitingLocationConfirm"] is True
+    handler_input.response_builder.speak.return_value.reprompt.return_value \
+        .set_should_end_session.assert_called_once_with(False)
 
 
 @pytest.mark.asyncio
@@ -70,6 +73,51 @@ async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_h
     store = get_store(handler_input)
     assert store["pendingLocationConfirm"]["city"] == "Swindon"
     assert store["awaitingLocationConfirm"] is True
+
+
+@pytest.mark.asyncio
+async def test_town_resolver_failure_retries_once_without_closing_session(
+    monkeypatch, mock_handler_input,
+):
+    monkeypatch.setattr(
+        "src.handlers.intents.onboarding.resolve_utterance",
+        AsyncMock(side_effect=ResolverUnavailable("taxonomy_sync_unavailable")),
+    )
+    handler_input = _town_request(mock_handler_input, "york")
+
+    await TownCaptureHandler().handle(handler_input)
+
+    store = get_store(handler_input)
+    speech = handler_input.response_builder.speak.call_args.args[0]
+    assert "say your town once more, or say skip" in speech
+    handler_input.response_builder.speak.return_value.reprompt.return_value \
+        .set_should_end_session.assert_called_once_with(False)
+    assert store["onboardingStage"] == "ask_town"
+    assert store["onboardingTownResolverFailures"] == 1
+
+
+@pytest.mark.asyncio
+async def test_repeated_town_resolver_failure_continues_without_location(
+    monkeypatch, mock_handler_input,
+):
+    monkeypatch.setattr(
+        "src.handlers.intents.onboarding.resolve_utterance",
+        AsyncMock(side_effect=ResolverUnavailable("taxonomy_sync_unavailable")),
+    )
+    handler_input = _town_request(mock_handler_input, "herne bay")
+    handler_input.attributes_manager.request_attributes["_store"][
+        "onboardingTownResolverFailures"
+    ] = 1
+
+    await TownCaptureHandler().handle(handler_input)
+
+    store = get_store(handler_input)
+    speech = handler_input.response_builder.speak.call_args.args[0]
+    assert "continue without your location" in speech
+    handler_input.response_builder.speak.return_value.reprompt.return_value \
+        .set_should_end_session.assert_called_once_with(False)
+    assert store["onboardingComplete"] is True
+    assert store["onboardingStage"] is None
 
 
 def test_search_confirmation_runs_after_local_nlp_resolution():

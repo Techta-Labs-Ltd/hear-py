@@ -142,6 +142,8 @@ TOWN_GOT_IT = lambda city: f"{escape_ssml_lite(city) or 'your area'} it is. What
 TOWN_SKIPPED = "Okay. What would you like to listen to?"
 
 TOWN_NOT_UNDERSTOOD = "Just the town name please — like London or Manchester. Or say skip if you'd rather not."
+TOWN_LOOKUP_UNAVAILABLE_RETRY = "I can't check towns right now. Please say your town once more, or say skip."
+TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check towns, so I'll continue without your location. You can set it later. What would you like to listen to?"
 
 TOWN_HELP = "Just say your town name, like London or Manchester. Or say skip."
 

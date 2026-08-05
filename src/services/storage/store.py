@@ -97,6 +97,7 @@ DEFAULT_STORE: dict[str, object] = {
     "onboardingStage": None,
     "onboardingRetries": 0,
     "onboardingTownAttempts": 0,
+    "onboardingTownResolverFailures": 0,
     "pendingLocationConfirm": None,
     "awaitingLocationConfirm": False,
     "awaitingCommunityPlayback": False,
