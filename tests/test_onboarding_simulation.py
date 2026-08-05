@@ -40,19 +40,6 @@ AMBIGUOUS_TOWNS = {
 }
 
 
-class _FakeSemanticRouter:
-    """Deterministic stand-in for the Aurelio router during onboarding."""
-
-    def route(self, utterance, allowed_routes=None):
-        from src.services.semantic_routing import SemanticDecision
-        text = str(utterance or "").lower().strip()
-        if text == "skip":
-            return SemanticDecision("onboarding_skip", 0.93)
-        if "trending" in text:
-            return SemanticDecision("trending", 0.88)
-        return None
-
-
 def fake_resolver_invoke(payload: dict) -> dict:
     """Stand-in for the resolver Lambda: resolve_location + resolve_search."""
     operation = payload.get("operation")
@@ -622,8 +609,6 @@ def simulation():
                                           "failed": False})), \
             patch("src.handlers.intents.onboarding.detect_device_location",
                   AsyncMock(return_value=dict(DETECTED_MATCH))), \
-            patch("src.handlers.intents.onboarding.semantic_intent_router",
-                  _FakeSemanticRouter()), \
             patch("src.services.alexa.locality._fetch_profile_setting_with_status",
                   AsyncMock(return_value={"value": None, "status": 403})):
         scenario_permission_ask()

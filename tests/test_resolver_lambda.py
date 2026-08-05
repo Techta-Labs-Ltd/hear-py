@@ -139,17 +139,7 @@ def test_misspelled_initial_command_still_resolves_ambiguous_source():
     assert result["searchPayload"]["query"] == ""
 
 
-def test_command_correction_is_model_derived_and_semantically_checked(
-    monkeypatch,
-    resolver_snapshot,
-):
-    from src.services.semantic_routing import SemanticDecision
-
-    monkeypatch.setattr(
-        "src.resolver.correction.semantic_intent_router.route",
-        lambda *_args, **_kwargs: SemanticDecision("organization", 0.91),
-    )
-
+def test_command_correction_is_model_derived(resolver_snapshot):
     result = command_corrector.correct(
         "play the latrest sport form ytn",
         resolver_snapshot,
@@ -157,7 +147,7 @@ def test_command_correction_is_model_derived_and_semantically_checked(
 
     assert result.utterance == "play the latest sport from ytn"
     assert {item["replacement"] for item in result.corrections} == {"latest", "from"}
-    assert {item["type"] for item in result.corrections} == {"semantic_contextual"}
+    assert {item["type"] for item in result.corrections} == {"contextual"}
 
 
 def test_command_correction_does_not_rewrite_free_text_topic(resolver_snapshot):

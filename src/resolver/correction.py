@@ -10,7 +10,6 @@ from rapidfuzz import fuzz, process
 from rapidfuzz.distance import DamerauLevenshtein
 
 from src.resolver.taxonomy import TaxonomySnapshot, taxonomy_manager
-from src.services.semantic_routing import SEARCH_ROUTE_NAMES, semantic_intent_router
 
 _SLOT = re.compile(r"\{[^{}]+\}")
 _WORD = re.compile(r"[a-z0-9]+(?:['-][a-z0-9]+)?", re.I)
@@ -145,16 +144,10 @@ class ContextualCommandCorrector:
         for start, end, candidate, _ in reversed(replacements):
             corrected = corrected[:start] + candidate + corrected[end:]
 
-        original_route = semantic_intent_router.route(original, SEARCH_ROUTE_NAMES)
-        corrected_route = semantic_intent_router.route(corrected, SEARCH_ROUTE_NAMES)
-        if original_route and corrected_route and original_route.route != corrected_route.route:
-            return CorrectionResult(original, ())
-
-        correction_type = "semantic_contextual" if corrected_route else "contextual"
         corrections = tuple({
             "original": source,
             "replacement": candidate,
-            "type": correction_type,
+            "type": "contextual",
         } for _, _, candidate, source in replacements)
         return CorrectionResult(corrected, corrections)
 

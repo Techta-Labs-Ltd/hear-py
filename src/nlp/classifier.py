@@ -13,7 +13,6 @@ from src.nlp.patterns import (
 )
 from src.resolver.search import resolver
 from src.resolver.normalization import normalize_utterance
-from src.services.semantic_routing import semantic_intent_router
 
 
 def _normalized_hints(values: set[str]) -> set[str]:
@@ -59,27 +58,13 @@ def classify_utterance(raw: str | None) -> dict:
         "publication" if plan.is_publication else
         ""
     )
-    has_deterministic_evidence = bool(
-        plan.entities
-        or plan.unresolved_references
-        or plan.ambiguous_references
-    )
-    semantic = (
-        None
-        if intent or has_deterministic_evidence
-        else semantic_intent_router.route(normalized)
-    )
-    intent = intent or (semantic.route if semantic else "general")
+    intent = intent or "general"
     return {
         "intent": intent,
         "confidence": (
             "high"
             if plan.is_local or plan.category_slugs or plan.is_publication
-            else "high"
-            if semantic and semantic.score >= 0.82
             else "medium"
         ),
         "slots": slots,
-        "semanticRoute": semantic.route if semantic else None,
-        "semanticScore": semantic.score if semantic else None,
     }

@@ -36,8 +36,6 @@ jobs:
         run: cp .env.example .env || true
 
       - name: Run tests
-        env:
-          HEAR_SEMANTIC_ROUTER_ENABLED: "0"
         run: pytest tests/ -q
 
       - name: Import + build smoke test (catches import & registration bugs)
@@ -103,7 +101,6 @@ jobs:
               ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" \
               ResolverProvisionedConcurrency="0" \
-              ResolverSemanticRouterEnabled="0" \
               HearApiKey="$HEAR_API_KEY" \
               WebhookSecret="$WEBHOOK_SECRET" \
               WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \

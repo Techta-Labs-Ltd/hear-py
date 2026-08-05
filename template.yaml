@@ -23,12 +23,6 @@ Parameters:
     Default: 0
     MinValue: 0
     Description: Provisioned resolver instances; keep at zero until the account concurrency quota allows it.
-  ResolverSemanticRouterEnabled:
-    Type: String
-    Default: "0"
-    AllowedValues: ["0", "1"]
-    Description: Enable the embedding router only when resolver instances are kept warm.
-
   # --- Secrets (pulled from SSM SecureString by CI and passed in as NoEcho) ---
   HearApiKey:            { Type: String, NoEcho: true, Default: "" }
   WebhookSecret:         { Type: String, NoEcho: true, Default: "" }
@@ -74,12 +68,6 @@ Globals:
         # Snapshot activation validates CDN artifacts and packages them in S3.
         HEAR_TAXONOMY_AUTO_REFRESH: "0"
         HEAR_TAXONOMY_REFRESH_SECONDS: "300"
-        HEAR_SEMANTIC_ROUTER_ENABLED: "1"
-        HEAR_SEMANTIC_ROUTER_MODEL: BAAI/bge-small-en-v1.5
-        HEAR_SEMANTIC_ROUTER_CACHE_DIR: /opt/hear-semantic-models
-        HEAR_SEMANTIC_ROUTER_INDEX_PATH: /opt/hear-semantic-index.npz
-        HEAR_SEMANTIC_ROUTER_THRESHOLD: "0.72"
-        HEAR_SEMANTIC_ROUTER_THREADS: "2"
         WEBHOOK_OUTBOUND_URL: https://alexa.hear.media/api/v1/alexa/events
         SQS_OUT_QUEUE_URL: !Ref OutboundQueue
         # --- secrets (from SSM via CI) ---
@@ -109,7 +97,6 @@ Resources:
         Size: 2048
       Environment:
         Variables:
-          HEAR_SEMANTIC_ROUTER_ENABLED: !Ref ResolverSemanticRouterEnabled
           HEAR_TAXONOMY_RUNTIME_URL: https://alexa.hear.media/api/v1/alexa/taxonomy
           HEAR_TAXONOMY_STRICT_SYNC: "1"
       AutoPublishAlias: live

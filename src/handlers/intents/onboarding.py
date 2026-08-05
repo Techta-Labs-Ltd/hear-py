@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, Dict, Optional
 
@@ -13,6 +14,7 @@ from src.services.storage.persistence import get_store, update_store
 from src.services.dialog_state import activate_dialog
 from src.services.alexa.locality import detect_device_location
 from src.services.resolver_client import ResolverUnavailable, resolve_utterance
+from src.nlp.patterns import BROWSE_HINTS, FEEDBACK_SKIP_HINTS, LOCAL_HINTS, TRENDING_HINTS
 from src.utils.skill_request import get_request_type
 from src.utils.normalize_content_item import pick_content_source
 from src.utils.speech import (
@@ -25,11 +27,6 @@ from src.utils.speech import (
     ONBOARDING_DEFER_CONTENT, LOCATION_NOT_FOUND,
     LATEST_SOURCE_OFFER, LATEST_SOURCE_REPROMPT,
 )
-from src.services.semantic_routing import (
-    ONBOARDING_ROUTE_NAMES, ONBOARDING_ROUTE_SKIP, SEARCH_ROUTE_NAMES,
-    semantic_intent_router,
-)
-
 ONBOARDING_ASK_TOWN = "ask_town"
 ONBOARDING_AWAIT_CONFIRM = "await_location_confirm"
 MAX_TOWN_ATTEMPTS = 3
@@ -37,6 +34,19 @@ PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ
 logger = logging.getLogger(__name__)
 
 TOWN_CONFIRM_REPROMPT = "Say yes to confirm, or no to set a different town."
+
+
+def _normalize_control_phrase(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "").casefold()).strip()
+
+
+TOWN_SKIP_PHRASES = frozenset(
+    _normalize_control_phrase(value) for value in FEEDBACK_SKIP_HINTS
+)
+CONTENT_REQUEST_PHRASES = frozenset(
+    _normalize_control_phrase(value)
+    for value in BROWSE_HINTS | LOCAL_HINTS | TRENDING_HINTS
+)
 
 def onboarding_pending_redirect(handler_input: HandlerInput, store: Dict[str, Any]):
     stage = store.get("onboardingStage")
@@ -196,19 +206,18 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
                 .reprompt(ssml(REPROMPT_ASK_TOWN)) \
                 .set_should_end_session(False) \
                 .response
-        decision = semantic_intent_router.route(phrase, ONBOARDING_ROUTE_NAMES)
-        if decision:
-            if decision.route == ONBOARDING_ROUTE_SKIP:
-                return finalize_town_skipped(handler_input, store)
-            if decision.route in SEARCH_ROUTE_NAMES:
-                update_store(handler_input, {
-                    "onboardingTownAttempts": store.get("onboardingTownAttempts", 0) + 1,
-                })
-                return handler_input.response_builder \
-                    .speak(ssml(ONBOARDING_DEFER_CONTENT)) \
-                    .reprompt(ssml(REPROMPT_ASK_TOWN)) \
-                    .set_should_end_session(False) \
-                    .response
+        normalized_phrase = _normalize_control_phrase(phrase)
+        if normalized_phrase in TOWN_SKIP_PHRASES:
+            return finalize_town_skipped(handler_input, store)
+        if normalized_phrase in CONTENT_REQUEST_PHRASES:
+            update_store(handler_input, {
+                "onboardingTownAttempts": store.get("onboardingTownAttempts", 0) + 1,
+            })
+            return handler_input.response_builder \
+                .speak(ssml(ONBOARDING_DEFER_CONTENT)) \
+                .reprompt(ssml(REPROMPT_ASK_TOWN)) \
+                .set_should_end_session(False) \
+                .response
         return resume_town_capture(handler_input, store)
     update_store(handler_input, {
         "pendingLocationConfirm": match,

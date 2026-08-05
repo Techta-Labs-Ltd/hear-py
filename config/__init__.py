@@ -67,12 +67,6 @@ class Settings(BaseSettings):
     HEAR_RESOLVER_FUNCTION_NAME: str = ""
     HEAR_RESOLVER_LIVE_ALIAS: str = "live"
     HEAR_RESOLVER_CANDIDATE_ALIAS: str = "candidate"
-    HEAR_SEMANTIC_ROUTER_ENABLED: bool = _is_lambda()
-    HEAR_SEMANTIC_ROUTER_MODEL: str = "BAAI/bge-small-en-v1.5"
-    HEAR_SEMANTIC_ROUTER_CACHE_DIR: str = "/opt/hear-semantic-models"
-    HEAR_SEMANTIC_ROUTER_INDEX_PATH: str = "/opt/hear-semantic-index.npz"
-    HEAR_SEMANTIC_ROUTER_THRESHOLD: float = 0.72
-    HEAR_SEMANTIC_ROUTER_THREADS: int = 2
     HEAR_RESOLVER_FUNCTION_ARN: str = ""
     HEAR_RESOLVER_TIMEOUT_MS: int = 2500
     NOTIFICATION_INGEST_QUEUE_URL: str = ""

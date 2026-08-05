@@ -8,7 +8,6 @@ from rapidfuzz.distance import DamerauLevenshtein
 from src.resolver.search import resolver
 from src.resolver.normalization import normalize_utterance
 from src.resolver.models import SearchPlan
-from src.services.semantic_routing import SEARCH_ROUTE_NAMES, semantic_intent_router
 from src.utils.search_query import normalize_search_query
 from src.utils.speech import resolved_search_request_label
 
@@ -159,17 +158,7 @@ class AlexaResolverService:
             "organization" if plan.organization_ids else
             "publication" if plan.is_publication or plan.publication_ids else ""
         )
-        has_deterministic_evidence = bool(
-            plan.entities
-            or plan.unresolved_references
-            or plan.ambiguous_references
-        )
-        semantic = (
-            None
-            if deterministic_intent or has_deterministic_evidence
-            else semantic_intent_router.route(utterance, SEARCH_ROUTE_NAMES)
-        )
-        intent = deterministic_intent or (semantic.route if semantic else "general")
+        intent = deterministic_intent or "general"
         slots = {
             "residualQuery": plan.query,
             "latest": plan.sort == "latest",
@@ -199,8 +188,6 @@ class AlexaResolverService:
                 }
                 for item in plan.ambiguous_references
             ],
-            "semanticRoute": semantic.route if semantic else None,
-            "semanticScore": semantic.score if semantic else None,
         }
         if plan.temporal:
             slots["temporalOriginal"] = plan.temporal.original_text
@@ -249,8 +236,6 @@ class AlexaResolverService:
             "confidence": (
                 "high"
                 if deterministic_intent and plan.confidence >= 0.92
-                else "high"
-                if semantic and semantic.score >= 0.82
                 else "medium"
             ),
             "slots": slots,
