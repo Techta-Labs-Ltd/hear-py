@@ -92,6 +92,36 @@ def test_contextual_form_typo_resolves_complete_filter(resolver_snapshot):
     assert result["searchPayload"]["sort"] == "latest"
 
 
+def test_search_result_is_logged_without_alexa_account_id(
+    resolver_snapshot, capsys,
+):
+    result = handler({
+        "version": 1,
+        "requestId": "logged-request",
+        "operation": "resolve_search",
+        "utterance": "play sport from ytn",
+        "alexaIntent": "PlayContentIntent",
+        "alexaUserId": "amzn1.ask.account.SECRET",
+    })
+
+    records = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("{")
+    ]
+    search_log = next(
+        record for record in records
+        if record.get("type") == "resolver.search.result"
+    )
+    assert search_log["request"]["requestId"] == "logged-request"
+    assert search_log["request"]["utterance"] == "play sport from ytn"
+    assert search_log["response"]["status"] == result["status"]
+    expected_payload = dict(result["searchPayload"])
+    expected_payload.pop("alexaUserId", None)
+    assert search_log["response"]["searchPayload"] == expected_payload
+    assert "amzn1.ask.account.SECRET" not in json.dumps(search_log)
+
+
 def test_misspelled_initial_command_still_resolves_ambiguous_source():
     result = handler({
         "version": 1,

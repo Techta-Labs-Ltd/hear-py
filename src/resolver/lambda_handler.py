@@ -20,6 +20,46 @@ logger = logging.getLogger(__name__)
 
 class LambdaResolverHandler:
     CONTRACT_VERSION = 1
+    LOGGED_OPERATIONS = frozenset({
+        "resolve_search",
+        "resolve_organization_follow_up",
+        "resolve_ambiguity_follow_up",
+        "resolve_location",
+    })
+
+    @staticmethod
+    def _without_account_identifiers(value):
+        if isinstance(value, dict):
+            return {
+                key: LambdaResolverHandler._without_account_identifiers(item)
+                for key, item in value.items()
+                if key not in {"alexaUserId", "userId"}
+            }
+        if isinstance(value, list):
+            return [
+                LambdaResolverHandler._without_account_identifiers(item)
+                for item in value
+            ]
+        return value
+
+    @staticmethod
+    def _emit_resolution_log(operation: str, request: dict, response: dict) -> None:
+        if operation not in LambdaResolverHandler.LOGGED_OPERATIONS:
+            return
+        record = {
+            "type": "resolver.search.result",
+            "operation": operation,
+            "request": {
+                "requestId": request.get("requestId") or response.get("requestId"),
+                "utterance": str(request.get("utterance") or ""),
+                "alexaIntent": str(request.get("alexaIntent") or ""),
+                "requestedTaxonomyRevision": int(
+                    request.get("taxonomyRevision") or 0
+                ),
+            },
+            "response": LambdaResolverHandler._without_account_identifiers(response),
+        }
+        print(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
 
     @staticmethod
     def _emit_metrics(operation: str, duration_ms: float, failed: bool) -> None:
@@ -188,6 +228,7 @@ class LambdaResolverHandler:
             logger.exception("Resolver request failed operation=%s", operation)
             response = {"version": LambdaResolverHandler.CONTRACT_VERSION, "status": "error", "error": "resolver_failure"}
         response["resolverDurationMs"] = round((time.perf_counter() - started) * 1000, 3)
+        LambdaResolverHandler._emit_resolution_log(operation, request, response)
         LambdaResolverHandler._emit_metrics(operation, response["resolverDurationMs"], response.get("status") == "error")
         return response
 
