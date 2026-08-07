@@ -81,7 +81,7 @@ REQUEST_HANDLERS = (
 def register_handlers(builder, deps: Dependencies | None = None) -> None:
     """Register application handlers in dispatch order."""
     if deps is None:
-        deps = Dependencies.with_defaults()
+        deps = Dependencies()
     for handler_type in REQUEST_HANDLERS:
         try:
             builder.add_request_handler(handler_type(deps=deps))

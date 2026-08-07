@@ -72,7 +72,7 @@ def _listener_data_is_cached(store: Dict[str, Any]) -> bool:
 async def _handle_launch_request_body(handler_input: HandlerInput, *, deps: Dependencies | None = None):
     """Core launch request logic: resolves state and routes to appropriate flow."""
     store = get_store(handler_input)
-    d = deps or Dependencies.with_defaults()
+    d = deps or Dependencies()
     # A launch response replaces any unanswered discovery clarification. The
     # next explicit play request must be resolved as a new request, not as an
     # answer to an ambiguity left by an earlier session.
@@ -187,7 +187,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
     """Handles Alexa LaunchRequest — the skill entry point."""
 
     def __init__(self, *, deps: Dependencies | None = None):
-        self._deps = deps or Dependencies.with_defaults()
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return get_request_type(handler_input) == "LaunchRequest"

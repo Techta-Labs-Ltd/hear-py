@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from config import settings
 from src.clients.alexa import AlexaClient
 from src.clients.alexa_locality import AlexaLocalityClient
 from src.clients.hear import HearApiClient
@@ -21,18 +22,8 @@ class Dependencies:
         self.alexa = alexa or AlexaClient()
         self.heara = heara or HearApiClient()
         self.resolver = resolver or ResolverClient(
-            host="https://resolver.hear.media",
-            api_key="",
-        )
-
-    @classmethod
-    def with_defaults(cls) -> Dependencies:
-        from config import settings
-        return cls(
-            resolver=ResolverClient(
-                host=getattr(settings, "RESOLVER_HOST", None) or "https://resolver.hear.media",
-                api_key=settings.HEAR_API_KEY,
-                default_country=getattr(settings, "RESOLVER_DEFAULT_COUNTRY", None) or "gb",
-                timeout_ms=getattr(settings, "RESOLVER_TIMEOUT_MS", None) or 2000,
-            ),
+            host=getattr(settings, "RESOLVER_HOST", None) or "https://resolver.hear.media",
+            api_key=settings.HEAR_API_KEY,
+            default_country=getattr(settings, "RESOLVER_DEFAULT_COUNTRY", None) or "gb",
+            timeout_ms=getattr(settings, "RESOLVER_TIMEOUT_MS", None) or 2000,
         )
