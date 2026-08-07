@@ -4,6 +4,7 @@ logger = logging.getLogger(__name__)
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
+from src.dependencies import Dependencies
 from src.services.store import get_store, update_store
 from src.services.resolution import build_pending_resolution
 from src.utils.skill_request import (
@@ -50,7 +51,9 @@ from src.handlers.browse import (
 )
 
 class PlayContentHandler(AbstractRequestHandler):
-    """Handles the PlayContent intent — general content play."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         name = get_intent_name(handler_input)
@@ -81,7 +84,7 @@ class PlayContentHandler(AbstractRequestHandler):
 
             try:
                 if wants_play_from_followed_creators(handler_input, search_q or raw_phrase or ""):
-                    return await play_from_followed_creators(handler_input)
+                    return await play_from_followed_creators(handler_input, deps=self._deps)
             except Exception:
                 pass
 
@@ -107,9 +110,9 @@ class PlayContentHandler(AbstractRequestHandler):
                         .set_should_end_session(False) \
                         .response
 
-            search_result = await discover_content_via_search(handler_input, {"q": search_q or ""}) \
+            search_result = await discover_content_via_search(handler_input, {"q": search_q or ""}, deps=self._deps) \
                 if search_q \
-                else await _discover_content_avoiding_recent(handler_input, {"q": ""})
+                else await _discover_content_avoiding_recent(handler_input, {"q": ""}, deps=self._deps)
 
             logger.info(
                 "Hear: PlayContentHandler search done q=%s hitCount=%s",
@@ -129,6 +132,7 @@ class PlayContentHandler(AbstractRequestHandler):
                 if search_q and wants_latest_playback(raw_phrase or ""):
                     return await _play_first_search_result(
                         handler_input, search_result["results"], label=search_q,
+                        deps=self._deps,
                     )
             except Exception:
                 pass
@@ -144,7 +148,7 @@ class PlayContentHandler(AbstractRequestHandler):
                 "q": search_q,
                 "locality": active_store.get("locality"),
                 "introOverride": discover_intro,
-            })
+            }, deps=self._deps)
             return response or _build_no_content_response(handler_input)
 
         except Exception as err:
@@ -157,7 +161,9 @@ class PlayContentHandler(AbstractRequestHandler):
 
 
 class PlayByCreatorHandler(AbstractRequestHandler):
-    """Handles the PlayByCreator intent — plays content by a specific creator."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -200,16 +206,16 @@ class PlayByCreatorHandler(AbstractRequestHandler):
         search_result = await discover_content_via_search(handler_input, {
             "q": nlp_slots.get("residualQuery", "") if resolved_creator else creator_query,
             "intent": "creator",
-        })
+        }, deps=self._deps)
 
         if not search_result.get("results"):
-            fallback = await _discover_content_avoiding_recent(handler_input, {"q": ""})
+            fallback = await _discover_content_avoiding_recent(handler_input, {"q": ""}, deps=self._deps)
             if fallback.get("results"):
                 response = await auto_play_first_from_search(handler_input, fallback, {
                     "discoveryIntent": "PlayContentIntent", "q": "",
                     "locality": get_store(handler_input).get("locality"),
                     "introOverride": f"{SEARCH_NO_MATCH(creator_label)} Here are some other picks for you.",
-                })
+                }, deps=self._deps)
                 return response or _build_no_content_response(handler_input)
             return handler_input.response_builder \
                 .speak(ssml(SEARCH_NO_MATCH(creator_label))) \
@@ -221,6 +227,7 @@ class PlayByCreatorHandler(AbstractRequestHandler):
             if wants_latest_playback(raw_phrase or ""):
                 return await _play_first_search_result(
                     handler_input, search_result["results"], label=creator_label,
+                    deps=self._deps,
                 )
         except Exception:
             pass
@@ -232,12 +239,14 @@ class PlayByCreatorHandler(AbstractRequestHandler):
             "locality": get_store(handler_input).get("locality"),
             "introOverride": None if was_relaxed
             else f"Here is what I found for {escape_ssml_lite(creator_label)}.",
-        })
+        }, deps=self._deps)
         return response or _build_no_content_response(handler_input)
 
 
 class PlayByOrganizationHandler(AbstractRequestHandler):
-    """Handles the PlayByOrganization intent — plays content by an organization."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -275,7 +284,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             result = await discover_content_via_search(handler_input, {
                 "q": "",
                 "intent": "organization",
-            })
+            }, deps=self._deps)
             message = result.get("client_message") or TALKING_NEWSPAPER_NOT_RECOGNIZED(org_query)
             return handler_input.response_builder \
                 .speak(ssml(message)) \
@@ -338,16 +347,16 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
         search_result = await discover_content_via_search(handler_input, {
             "q": nlp_slots.get("residualQuery", "") if resolved_org else org_query,
             "intent": "organization",
-        })
+        }, deps=self._deps)
 
         if not search_result.get("results"):
-            fallback = await _discover_content_avoiding_recent(handler_input, {"q": ""})
+            fallback = await _discover_content_avoiding_recent(handler_input, {"q": ""}, deps=self._deps)
             if fallback.get("results"):
                 response = await auto_play_first_from_search(handler_input, fallback, {
                     "discoveryIntent": "PlayContentIntent", "q": "",
                     "locality": active_store.get("locality"),
                     "introOverride": f"{SEARCH_NO_MATCH(org_label)} Here are some other picks for you.",
-                })
+                }, deps=self._deps)
                 return response or _build_no_content_response(handler_input)
             return handler_input.response_builder \
                 .speak(ssml(SEARCH_NO_MATCH(org_label))) \
@@ -359,6 +368,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             if wants_latest_playback(raw_phrase or ""):
                 return await _play_first_search_result(
                     handler_input, search_result["results"], label=org_label,
+                    deps=self._deps,
                 )
         except Exception:
             pass
@@ -370,5 +380,5 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
             "locality": active_store.get("locality"),
             "introOverride": None if was_relaxed
             else f"Here is what I found from {escape_ssml_lite(org_label)}.",
-        })
+        }, deps=self._deps)
         return response or _build_no_content_response(handler_input)

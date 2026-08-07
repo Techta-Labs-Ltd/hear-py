@@ -71,30 +71,23 @@ class ErrorReporter:
         except Exception:
             return
 
+    @staticmethod
+    def last_resort_response() -> dict:
+        return {
+            "version": "1.0",
+            "response": {
+                "outputSpeech": {
+                    "type": "SSML",
+                    "ssml": f"<speak>{ERROR_GENERIC}</speak>",
+                },
+                "shouldEndSession": True,
+            },
+        }
+
 
 error_reporter = ErrorReporter()
 
-
-def init_sentry() -> None:
-    error_reporter.initialize()
-
-
-def capture_skill_exception(handler_input, error: Exception) -> None:
-    error_reporter.capture(handler_input, error)
-
-
-async def flush_sentry(max_ms: int = 2000) -> None:
-    await error_reporter.flush(max_ms)
-
-
-def last_resort_skill_response() -> dict:
-    return {
-        "version": "1.0",
-        "response": {
-            "outputSpeech": {
-                "type": "SSML",
-                "ssml": f"<speak>{ERROR_GENERIC}</speak>",
-            },
-            "shouldEndSession": True,
-        },
-    }
+init_sentry = error_reporter.initialize
+capture_skill_exception = error_reporter.capture
+flush_sentry = error_reporter.flush
+last_resort_skill_response = error_reporter.last_resort_response

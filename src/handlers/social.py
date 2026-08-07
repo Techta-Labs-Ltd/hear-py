@@ -2,7 +2,6 @@ from __future__ import annotations
 import logging
 logger = logging.getLogger(__name__)
 
-import time
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from src.services.feedback import clear_feedback
@@ -36,9 +35,6 @@ from src.utils.feedback_flow import idle_next_response
 from src.utils.playback_context import read_audio_player_context, is_audio_player_active
 from src.handlers.search import play_from_followed_creators
 from src.utils.search_filters import wants_play_from_followed_creators
-def _current_timestamp_ms() -> int:
-    """Return current UTC time in milliseconds."""
-    return int(time.time() * 1000)
 
 
 class WhoIsCreatorHandler(AbstractRequestHandler):

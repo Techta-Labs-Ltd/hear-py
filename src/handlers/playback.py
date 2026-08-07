@@ -3,7 +3,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_core.utils.request_util import get_slot_value
 from config import settings
-from src.clients.hear import search
+from src.dependencies import Dependencies
 from src.services.playback import read_playback_session, write_playback_session
 from src.services.playback import emit_listening_event
 from src.services.playback import resume_playback, start_playback
@@ -53,8 +53,9 @@ def _open_response(handler_input: HandlerInput, speech: str):
     )
 
 
-async def _find_content(content_id: str) -> dict | None:
-    result = await search({
+async def _find_content(content_id: str, *, deps: Dependencies | None = None) -> dict | None:
+    d = deps or Dependencies()
+    result = await d.heara.search({
         "query": "",
         "filter": {"contentIds": [content_id]},
         "page": 0,
@@ -83,14 +84,14 @@ async def _restart_active(
     return await resume_playback(handler_input, resume_state, speech)
 
 
-async def _play_queue_delta(handler_input: HandlerInput, delta: int, speech: str):
+async def _play_queue_delta(handler_input: HandlerInput, delta: int, speech: str, *, deps: Dependencies | None = None):
     content_id = move_queue(handler_input, delta)
     if not content_id:
         return _open_response(
             handler_input,
             NO_PREVIOUS if delta < 0 else NO_CONTENT_AVAILABLE,
         )
-    content = await _find_content(content_id)
+    content = await _find_content(content_id, deps=deps)
     if not content:
         # Restore the queue cursor when resolution fails.
         move_queue(handler_input, -delta)
@@ -116,6 +117,9 @@ async def _apply_speed(handler_input: HandlerInput, speed: float):
 
 
 class SetPlaybackSpeedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             get_request_type(handler_input) == "IntentRequest"
@@ -149,6 +153,9 @@ async def _step_speed(handler_input: HandlerInput, direction: str):
 
 
 class IncreaseSpeedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             get_request_type(handler_input) == "IntentRequest"
@@ -160,6 +167,9 @@ class IncreaseSpeedHandler(AbstractRequestHandler):
 
 
 class DecreaseSpeedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             get_request_type(handler_input) == "IntentRequest"
@@ -171,6 +181,9 @@ class DecreaseSpeedHandler(AbstractRequestHandler):
 
 
 class PauseIntentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = get_request_type(handler_input)
         return request_type == PLAYBACK_CONTROLLER["PAUSE"] or (
@@ -185,6 +198,9 @@ class PauseIntentHandler(AbstractRequestHandler):
 
 
 class ResumeIntentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = get_request_type(handler_input)
         return request_type == PLAYBACK_CONTROLLER["PLAY"] or (
@@ -197,6 +213,9 @@ class ResumeIntentHandler(AbstractRequestHandler):
 
 
 class NextIntentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = get_request_type(handler_input)
         return request_type == PLAYBACK_CONTROLLER["NEXT"] or (
@@ -205,10 +224,13 @@ class NextIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await _play_queue_delta(handler_input, 1, "Playing the next recording.")
+        return await _play_queue_delta(handler_input, 1, "Playing the next recording.", deps=self._deps)
 
 
 class PreviousIntentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = get_request_type(handler_input)
         return request_type == PLAYBACK_CONTROLLER["PREVIOUS"] or (
@@ -217,10 +239,13 @@ class PreviousIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await _play_queue_delta(handler_input, -1, PLAYING_PREVIOUS)
+        return await _play_queue_delta(handler_input, -1, PLAYING_PREVIOUS, deps=self._deps)
 
 
 class RepeatIntentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             get_request_type(handler_input) == "IntentRequest"
@@ -244,6 +269,9 @@ async def _seek(handler_input: HandlerInput, direction: int, speech: str):
 
 
 class RewindIntentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             get_request_type(handler_input) == "IntentRequest"
@@ -255,6 +283,9 @@ class RewindIntentHandler(AbstractRequestHandler):
 
 
 class FastForwardIntentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             get_request_type(handler_input) == "IntentRequest"

@@ -5,10 +5,10 @@ import time
 from typing import Any, Dict, List, Optional
 from ask_sdk_core.handler_input import HandlerInput
 from config import settings
+from src.dependencies import Dependencies
 from src.services.browse import set_browse_catalog
 from src.services.queue import init_queue, recent_exclude_filters
 from src.services.store import get_store, update_store
-from src.clients.hear import search
 from src.services.dialog_state import activate_dialog
 from src.utils.skill_request import get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
@@ -129,8 +129,9 @@ def _build_search_outcome_response(handler_input: HandlerInput, search_result: O
 
 async def discover_content_via_search(
     handler_input: HandlerInput, options: Optional[Dict[str, Any]] = None,
+    *, deps: Dependencies | None = None,
 ) -> Dict[str, Any]:
-    """Run a search against the Hear API and return normalized results."""
+    d = deps or Dependencies()
     opts = options or {}
     user_id = _get_user_id(handler_input)
     if not user_id:
@@ -293,7 +294,7 @@ async def discover_content_via_search(
         json.dumps(logged_payload, sort_keys=True, separators=(",", ":")),
     )
 
-    result = await search(payload, timeout_ms=timeout_ms)
+    result = await d.heara.search(payload, timeout_ms=timeout_ms)
     logger.info(
         "Hear: search response intent=%s failed=%s total=%s returned=%s",
         intent,
@@ -328,6 +329,7 @@ async def discover_content_via_search(
 
 async def _discover_content_avoiding_recent(
     handler_input: HandlerInput, search_options: Optional[Dict[str, Any]] = None,
+    *, deps: Dependencies | None = None,
 ) -> Dict[str, Any]:
     """Search across multiple pages, skipping empty pages, to find fresh content."""
     opts = search_options or {}
@@ -337,7 +339,7 @@ async def _discover_content_avoiding_recent(
     last_result = None
 
     for page in range(start_page, start_page + max_pages):
-        result = await discover_content_via_search(handler_input, {**opts, "page": page})
+        result = await discover_content_via_search(handler_input, {**opts, "page": page}, deps=deps)
         last_result = result
         if result.get("failed"):
             return result
@@ -353,8 +355,10 @@ async def _discover_content_avoiding_recent(
 async def auto_play_first_from_search(
     handler_input: HandlerInput, search_result: Dict[str, Any],
     options: Optional[Dict[str, Any]] = None,
+    *, deps: Dependencies | None = None,
 ):
     """Take a search result, cache it as a browse catalog, and start playback of the first item."""
+    del deps
     opts = options or {}
     if not search_result.get("results"):
         return _build_search_outcome_response(handler_input, search_result)
@@ -439,7 +443,7 @@ def _build_next_playable_response(
         .response
 
 
-async def play_from_followed_creators(handler_input: HandlerInput):
+async def play_from_followed_creators(handler_input: HandlerInput, *, deps: Dependencies | None = None):
     """Play content from creators the user is following."""
     store = get_store(handler_input)
     if store.get("awaitingFollow"):
@@ -453,7 +457,7 @@ async def play_from_followed_creators(handler_input: HandlerInput):
             .set_should_end_session(False) \
             .response
 
-    search_result = await _discover_content_avoiding_recent(handler_input, {"q": "", "intent": "following"})
+    search_result = await _discover_content_avoiding_recent(handler_input, {"q": "", "intent": "following"}, deps=deps)
     if not search_result.get("results"):
         return _build_search_outcome_response(handler_input, search_result)
 
@@ -461,12 +465,13 @@ async def play_from_followed_creators(handler_input: HandlerInput):
         "discoveryIntent": "PlayContentIntent",
         "q": "",
         "introOverride": "Here is something from creators you follow.",
-    })
+    }, deps=deps)
     return response or _build_no_content_response(handler_input)
 
 
-async def _play_first_search_result(handler_input: HandlerInput, items: List[Dict[str, Any]], label: Optional[str] = None):
+async def _play_first_search_result(handler_input: HandlerInput, items: List[Dict[str, Any]], label: Optional[str] = None, *, deps: Dependencies | None = None):
     """Play the first item from a list of search results directly."""
+    del deps
     content = _resolve_content_for_playback(items[0], handler_input)
     if not content:
         return _build_no_content_response(handler_input)

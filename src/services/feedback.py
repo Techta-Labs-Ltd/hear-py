@@ -11,6 +11,8 @@ from src.utils.speech import (
 import time
 from src.services.dialog_state import activate_dialog
 from src.clients.alexa import cancel_feedback_reminder
+
+
 class FeedbackService:
     rating_intents = {
         "FeedbackEnjoyedIntent",
@@ -66,17 +68,12 @@ class FeedbackService:
             return
         store = get_store(handler_input)
         intent_name = get_intent_name(handler_input)
-
         if store.get("awaitingFollow"):
             if intent_name not in self.follow_intents | {"AMAZON.NoIntent"}:
                 update_store(handler_input, {"awaitingFollow": False})
             return
-
         if store.get("awaitingReportDecision"):
-            allowed = self.report_intents | {
-                "SkipFeedbackIntent",
-                "AMAZON.NoIntent",
-            }
+            allowed = self.report_intents | {"SkipFeedbackIntent", "AMAZON.NoIntent"}
             if intent_name not in allowed:
                 update_store(handler_input, {"awaitingReportDecision": False})
 
@@ -105,141 +102,137 @@ class FeedbackService:
             .get_response()
         )
 
+    # ---------------------------------------------------------- static helpers
+
+    @staticmethod
+    def _feedback_key(state: dict) -> str | None:
+        return state.get("contentId")
+
+    @staticmethod
+    def record_candidate(handler_input, state: dict, *, completed: bool) -> dict | None:
+        if not completed:
+            return None
+        key = FeedbackService._feedback_key(state)
+        listened_ms = max(0, int(state.get("listenedMs") or 0))
+        if not key:
+            return None
+        store = get_store(handler_input)
+        if key in (store.get("answeredFeedbackKeys") or []):
+            return None
+        candidate = {
+            "feedbackKey": key,
+            "contentId": state.get("contentId"),
+            "publicationId": state.get("publicationId"),
+            "title": state.get("title") or state.get("publicationTitle"),
+            "publicationTitle": state.get("publicationTitle"),
+            "creatorId": state.get("creatorId"),
+            "creatorName": state.get("creatorName"),
+            "category": state.get("category"),
+            "listenedMs": listened_ms,
+            "completed": bool(completed),
+            "sessionId": state.get("sessionId"),
+            "createdAt": int(time.time() * 1000),
+        }
+        existing = [
+            value for value in (store.get("feedbackCandidates") or [])
+            if value.get("feedbackKey") != key
+        ]
+        update_store(handler_input, {"feedbackCandidates": (existing + [candidate])[-20:]})
+        return candidate
+
+    @staticmethod
+    def activate_best(handler_input) -> dict | None:
+        store = get_store(handler_input)
+        if store.get("awaitingFeedback"):
+            return store.get("pendingFeedback")
+        candidates = [
+            item for item in (store.get("feedbackCandidates") or [])
+            if item.get("completed") is True
+            if item.get("feedbackKey") not in (store.get("answeredFeedbackKeys") or [])
+        ]
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda item: (
+                bool(item.get("completed")),
+                int(item.get("listenedMs") or 0),
+                int(item.get("createdAt") or 0),
+            ),
+            reverse=True,
+        )
+        selected = candidates[0]
+        session_id = selected.get("sessionId")
+        remaining = [item for item in candidates if item.get("sessionId") != session_id]
+        update_store(handler_input, {
+            "pendingFeedback": selected,
+            "feedbackCandidates": remaining,
+            "awaitingFeedback": True,
+            "_requiresReliableSave": True,
+        })
+        activate_dialog(handler_input, "feedback", context=selected)
+        return selected
+
+    @staticmethod
+    def mark_answered(handler_input) -> dict:
+        store = get_store(handler_input)
+        pending = store.get("pendingFeedback") or {}
+        key = pending.get("feedbackKey")
+        answered = list(store.get("answeredFeedbackKeys") or [])
+        if key and key not in answered:
+            answered.append(key)
+        return update_store(handler_input, {
+            "answeredFeedbackKeys": answered[-100:],
+            "pendingFeedback": None,
+            "awaitingFeedback": False,
+            "activeDialog": None,
+            "_requiresReliableSave": False,
+        })
+
+    @staticmethod
+    async def submit(handler_input, value: str) -> dict:
+        del value
+        return FeedbackService.mark_answered(handler_input)
+
+    @staticmethod
+    async def clear(handler_input) -> dict:
+        try:
+            await cancel_feedback_reminder(handler_input)
+        except Exception:
+            pass
+        return update_store(handler_input, {
+            "activeDialog": None,
+            "awaitingFeedback": False,
+            "awaitingFollow": False,
+            "awaitingReportDecision": False,
+            "reportContext": None,
+            "pendingFeedback": None,
+            "feedbackContentId": None,
+            "feedbackPromptText": None,
+            "feedbackCategory": None,
+            "feedbackCreator": None,
+            "feedbackCreatorId": None,
+            "feedbackContentTitle": None,
+            "feedbackReminderAlertToken": None,
+            "feedbackAskedForToken": None,
+            "playbackDurationEstimateMs": None,
+        })
+
+    @staticmethod
+    def dismiss(handler_input) -> dict:
+        return update_store(handler_input, {
+            "awaitingFeedback": False,
+            "pendingFeedback": None,
+            "feedbackPromptText": None,
+            "feedbackAskedForToken": None,
+            "feedbackReminderAlertToken": None,
+        })
+
 
 feedback_service = FeedbackService()
 
-def _feedback_key(state: dict) -> str | None:
-    return state.get("contentId")
-
-
-def record_feedback_candidate(
-    handler_input,
-    state: dict,
-    *,
-    completed: bool,
-) -> dict | None:
-    """Record one meaningful, deduplicated feedback candidate."""
-    if not completed:
-        return None
-    key = _feedback_key(state)
-    listened_ms = max(0, int(state.get("listenedMs") or 0))
-    if not key:
-        return None
-    store = get_store(handler_input)
-    if key in (store.get("answeredFeedbackKeys") or []):
-        return None
-    candidate = {
-        "feedbackKey": key,
-        "contentId": state.get("contentId"),
-        "publicationId": state.get("publicationId"),
-        "title": state.get("title") or state.get("publicationTitle"),
-        "publicationTitle": state.get("publicationTitle"),
-        "creatorId": state.get("creatorId"),
-        "creatorName": state.get("creatorName"),
-        "category": state.get("category"),
-        "listenedMs": listened_ms,
-        "completed": bool(completed),
-        "sessionId": state.get("sessionId"),
-        "createdAt": int(time.time() * 1000),
-    }
-    existing = [
-        value for value in (store.get("feedbackCandidates") or [])
-        if value.get("feedbackKey") != key
-    ]
-    update_store(handler_input, {"feedbackCandidates": (existing + [candidate])[-20:]})
-    return candidate
-
-
-def activate_best_feedback_candidate(handler_input) -> dict | None:
-    """Activate at most one candidate and discard the rest from its session."""
-    store = get_store(handler_input)
-    if store.get("awaitingFeedback"):
-        return store.get("pendingFeedback")
-    candidates = [
-        item for item in (store.get("feedbackCandidates") or [])
-        if item.get("completed") is True
-        if item.get("feedbackKey") not in (store.get("answeredFeedbackKeys") or [])
-    ]
-    if not candidates:
-        return None
-    candidates.sort(
-        key=lambda item: (
-            bool(item.get("completed")),
-            int(item.get("listenedMs") or 0),
-            int(item.get("createdAt") or 0),
-        ),
-        reverse=True,
-    )
-    selected = candidates[0]
-    session_id = selected.get("sessionId")
-    remaining = [
-        item for item in candidates
-        if item.get("sessionId") != session_id
-    ]
-    update_store(handler_input, {
-        "pendingFeedback": selected,
-        "feedbackCandidates": remaining,
-        "awaitingFeedback": True,
-        "_requiresReliableSave": True,
-    })
-    activate_dialog(handler_input, "feedback", context=selected)
-    return selected
-
-
-def mark_pending_feedback_answered(handler_input) -> dict:
-    store = get_store(handler_input)
-    pending = store.get("pendingFeedback") or {}
-    key = pending.get("feedbackKey")
-    answered = list(store.get("answeredFeedbackKeys") or [])
-    if key and key not in answered:
-        answered.append(key)
-    return update_store(handler_input, {
-        "answeredFeedbackKeys": answered[-100:],
-        "pendingFeedback": None,
-        "awaitingFeedback": False,
-        "activeDialog": None,
-        "_requiresReliableSave": False,
-    })
-
-
-async def submit_feedback(handler_input, value: str) -> dict:
-    """Close the pending prompt after an explicit feedback response."""
-    del value
-    return mark_pending_feedback_answered(handler_input)
-
-async def clear_feedback(handler_input) -> dict:
-    """Clear all feedback-related state from the store and cancel any reminder."""
-    try:
-        await cancel_feedback_reminder(handler_input)
-    except Exception:
-        pass
-    return update_store(handler_input, {
-        "activeDialog": None,
-        "awaitingFeedback": False,
-        "awaitingFollow": False,
-        "awaitingReportDecision": False,
-        "reportContext": None,
-        "pendingFeedback": None,
-        "feedbackContentId": None,
-        "feedbackPromptText": None,
-        "feedbackCategory": None,
-        "feedbackCreator": None,
-        "feedbackCreatorId": None,
-        "feedbackContentTitle": None,
-        "feedbackReminderAlertToken": None,
-        "feedbackAskedForToken": None,
-        "playbackDurationEstimateMs": None,
-    })
-
-
-def dismiss_feedback_prompt(handler_input) -> dict:
-    """Dismiss the active feedback prompt without recording a rating."""
-    return update_store(handler_input, {
-        "awaitingFeedback": False,
-        "pendingFeedback": None,
-        "feedbackPromptText": None,
-        "feedbackAskedForToken": None,
-        "feedbackReminderAlertToken": None,
-    })
-
-
+record_feedback_candidate = feedback_service.record_candidate
+activate_best_feedback_candidate = feedback_service.activate_best
+mark_pending_feedback_answered = feedback_service.mark_answered
+submit_feedback = feedback_service.submit
+clear_feedback = feedback_service.clear
+dismiss_feedback_prompt = feedback_service.dismiss

@@ -3,7 +3,8 @@ import logging
 import time
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from src.models import ALEXA_TO_NLP
-from src.clients.resolver import ResolverUnavailable, resolve_utterance
+from src.clients.resolver import ResolverUnavailable
+from src.dependencies import Dependencies
 from src.services.dialog_state import (
     activate_dialog,
     active_dialog_from_store,
@@ -91,7 +92,9 @@ def _set_nlp(handler_input, payload: dict) -> None:
 
 
 class ResolverInterceptor(AbstractRequestInterceptor):
-    """Resolve search requests locally and classify only non-search controls."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     async def process(self, handler_input) -> None:
         try:
@@ -153,7 +156,7 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                     update_store(handler_input, {"pendingAmbiguity": None})
                     clear_active_dialog(handler_input, "ambiguity")
                 elif alexa_intent not in AMBIGUITY_CONTROL_INTENTS:
-                    result = await resolve_utterance(
+                    result = await self._deps.resolver.resolve_utterance(
                         raw,
                         alexa_user_id=get_user_id(handler_input),
                     )
@@ -217,7 +220,7 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 return
 
             if raw and store.get("awaitingOrganizationName"):
-                result = await resolve_utterance(
+                result = await self._deps.resolver.resolve_utterance(
                     raw,
                     alexa_user_id=get_user_id(handler_input),
                 )
@@ -255,7 +258,7 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 return
 
             if alexa_intent in SEARCH_INTENTS:
-                result = await resolve_utterance(
+                result = await self._deps.resolver.resolve_utterance(
                     raw,
                     alexa_user_id=get_user_id(handler_input),
                 )

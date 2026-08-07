@@ -13,7 +13,7 @@ from src.utils.skill_request import (
     get_audio_player_token,
     get_request_type,
 )
-from src.clients.hear import search
+from src.dependencies import Dependencies
 from src.services.queue import cached_queue_content
 from src.utils.audio import build_content_metadata, build_play_directive
 from src.utils.skill_request import (
@@ -28,6 +28,9 @@ from src.utils.normalize_content_item import pick_content_source
 import logging
 
 class PlaybackStartedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input) -> bool:
         return get_request_type(handler_input) == "AudioPlayer.PlaybackStarted"
 
@@ -66,6 +69,9 @@ class PlaybackStartedHandler(AbstractRequestHandler):
         return handler_input.response_builder.response
 
 class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input) -> bool:
         return get_request_type(handler_input) == "AudioPlayer.PlaybackNearlyFinished"
 
@@ -85,7 +91,7 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         next_id = queue["orderedContentIds"][next_index]
         content = cached_queue_content(store, next_id)
         if not content:
-            result = await search({
+            result = await self._deps.heara.search({
                 "query": "",
                 "filter": {"contentIds": [next_id]},
                 "page": 0,
@@ -111,6 +117,9 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         return handler_input.response_builder.add_directive(directive).response
 
 class PlaybackFinishedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input) -> bool:
         return get_request_type(handler_input) == "AudioPlayer.PlaybackFinished"
 
@@ -170,6 +179,9 @@ class PlaybackFinishedHandler(AbstractRequestHandler):
         return handler_input.response_builder.response
 
 class PlaybackStoppedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input) -> bool:
         return get_request_type(handler_input) == "AudioPlayer.PlaybackStopped"
 
@@ -191,6 +203,9 @@ logger = logging.getLogger(__name__)
 
 
 class PlaybackFailedHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input) -> bool:
         return get_request_type(handler_input) == "AudioPlayer.PlaybackFailed"
 
@@ -206,6 +221,9 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         return handler_input.response_builder.response
 
 class PlaybackProgressReportHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input) -> bool:
         return get_request_type(handler_input) in {
             "AudioPlayer.PlaybackProgressReportDelayPassed",

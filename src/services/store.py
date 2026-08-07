@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 DEFAULT_STORE: dict[str, object] = {
     "activeDialog": None,
     "locality": None,
@@ -88,17 +89,24 @@ DEFAULT_STORE: dict[str, object] = {
 }
 
 
-def get_store(handler_input) -> dict:
-    """Return a shallow copy of the current persistence store from request attributes."""
-    attrs = handler_input.attributes_manager.request_attributes
-    return dict(attrs.get("_store") or DEFAULT_STORE)
+class SessionStore:
+    __slots__ = ()
+
+    @staticmethod
+    def get(handler_input) -> dict:
+        attrs = handler_input.attributes_manager.request_attributes
+        return dict(attrs.get("_store") or DEFAULT_STORE)
+
+    @staticmethod
+    def update(handler_input, updates: dict) -> dict:
+        attrs = handler_input.attributes_manager.request_attributes
+        store = {**(attrs.get("_store") or DEFAULT_STORE), **updates}
+        attrs["_store"] = store
+        attrs["_dirty"] = True
+        handler_input.attributes_manager.request_attributes = attrs
+        return store
 
 
-def update_store(handler_input, updates: dict) -> dict:
-    """Merge *updates* into the persistence store, mark dirty, and return the new store."""
-    attrs = handler_input.attributes_manager.request_attributes
-    store = {**(attrs.get("_store") or DEFAULT_STORE), **updates}
-    attrs["_store"] = store
-    attrs["_dirty"] = True
-    handler_input.attributes_manager.request_attributes = attrs
-    return store
+_store = SessionStore()
+get_store = _store.get
+update_store = _store.update

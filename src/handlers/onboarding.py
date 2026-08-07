@@ -8,8 +8,8 @@ from ask_sdk_core.handler_input import HandlerInput
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 from src.services.store import get_store, update_store
 from src.services.dialog_state import activate_dialog
-from src.clients.alexa_locality import detect_device_location
-from src.clients.resolver import ResolverUnavailable, resolve_utterance
+from src.clients.resolver import ResolverUnavailable
+from src.dependencies import Dependencies
 from src.models import BROWSE_HINTS, FEEDBACK_SKIP_HINTS, LOCAL_HINTS, TRENDING_HINTS
 from src.utils.skill_request import get_intent_name, get_request_type
 from src.utils.normalize_content_item import pick_content_source
@@ -255,15 +255,15 @@ def handle_town_resolver_unavailable(handler_input: HandlerInput, store: Dict[st
         .response
 
 
-async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, Any], phrase: str):
-    """Resolve a manual town in location scope and ask for confirmation."""
+async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, Any], phrase: str, *, deps: Dependencies | None = None):
+    d = deps or Dependencies()
     logger.info(
         "Hear: resolving town intent=%s phrase=%r",
         get_intent_name(handler_input),
         phrase,
     )
     try:
-        response = await resolve_utterance(phrase)
+        response = await d.resolver.resolve_utterance(phrase)
         resolution = response.get("resolution") or {}
     except ResolverUnavailable:
         return handle_town_resolver_unavailable(handler_input, store)
@@ -317,14 +317,12 @@ async def finalize_town_captured(
     handler_input: HandlerInput,
     store: Dict[str, Any],
     phrase: str,
+    *,
+    deps: Dependencies | None = None,
 ):
-    """Persist a resolved manual town.
-
-    Kept as a small compatibility entry point for callers that already have an
-    explicit town confirmation. New voice flows stage and confirm first.
-    """
+    d = deps or Dependencies()
     try:
-        response = await resolve_utterance(phrase)
+        response = await d.resolver.resolve_utterance(phrase)
         resolution = response.get("resolution") or {}
     except ResolverUnavailable:
         return handle_town_resolver_unavailable(handler_input, store)
@@ -404,10 +402,17 @@ def handle_location_not_found(handler_input: HandlerInput, store: Dict[str, Any]
         .response
 
 
-async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dict[str, Any]):
-    """Try Amazon-API city detection; fall back to manual town capture."""
-    match = await detect_device_location(handler_input)
+async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dict[str, Any], *, deps: Dependencies | None = None):
+    d = deps or Dependencies()
+    match = await d.locality.detect_device_location(handler_input)
     if not match:
+        return handle_location_not_found(handler_input, store)
+    if not match.get("city"):
+        update_store(handler_input, {
+            "latitude": match.get("latitude"),
+            "longitude": match.get("longitude"),
+            "_requiresReliableSave": True,
+        })
         return handle_location_not_found(handler_input, store)
     update_store(handler_input, {
         "pendingLocationConfirm": match,
@@ -439,7 +444,9 @@ def _consent_status_code(handler_input) -> str:
 
 
 class ConnectionsResponseHandler(AbstractRequestHandler):
-    """Handles the in-session response to the AskForPermissionsConsent card."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return get_request_type(handler_input) == "Connections.Response"
@@ -453,5 +460,5 @@ class ConnectionsResponseHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
         if granted:
-            return await auto_detect_location_or_manual(handler_input, store)
+            return await auto_detect_location_or_manual(handler_input, store, deps=self._deps)
         return handle_permission_no(handler_input, store)

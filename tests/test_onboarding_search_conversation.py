@@ -13,7 +13,8 @@ from src.middleware.resolver import ResolverInterceptor
 from src.runtime import AttrDict
 from src.services.store import DEFAULT_STORE, get_store
 
-from src.clients.resolver import ResolverUnavailable
+from src.clients.resolver import ResolverUnavailable, ResolverClient
+from src.clients.hear import HearApiClient
 
 from src.utils.speech import resolved_search_request_label
 
@@ -43,7 +44,7 @@ def _town_request(mock_handler_input, value: str):
 @pytest.mark.asyncio
 async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_handler_input):
     monkeypatch.setattr(
-        "src.handlers.onboarding.resolve_utterance",
+        ResolverClient, "resolve_utterance",
         AsyncMock(return_value={
             "status": "resolved",
             "resolution": {"match": {"city": "Swindon"}, "candidates": []},
@@ -75,7 +76,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
         "status": "resolved",
         "resolution": {"match": {"city": "Herne Bay"}, "candidates": []},
     })
-    monkeypatch.setattr("src.handlers.onboarding.resolve_utterance", resolve)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     handler_input = _town_request(mock_handler_input, "arn bay")
     slot = handler_input.request_envelope.request.intent.slots["townName"]
     slot["resolutions"] = {
@@ -102,7 +103,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
 @pytest.mark.asyncio
 async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_handler_input):
     monkeypatch.setattr(
-        "src.handlers.onboarding.resolve_utterance",
+        ResolverClient, "resolve_utterance",
         AsyncMock(return_value={
             "status": "resolved",
             "resolution": {"match": {"city": "Swindon"}, "candidates": []},
@@ -121,7 +122,7 @@ async def test_town_resolver_failure_retries_once_without_closing_session(
     monkeypatch, mock_handler_input,
 ):
     monkeypatch.setattr(
-        "src.handlers.onboarding.resolve_utterance",
+        ResolverClient, "resolve_utterance",
         AsyncMock(side_effect=ResolverUnavailable("taxonomy_sync_unavailable")),
     )
     handler_input = _town_request(mock_handler_input, "york")
@@ -147,7 +148,7 @@ async def test_repeated_town_resolver_failure_continues_without_location(
     monkeypatch, mock_handler_input,
 ):
     monkeypatch.setattr(
-        "src.handlers.onboarding.resolve_utterance",
+        ResolverClient, "resolve_utterance",
         AsyncMock(side_effect=ResolverUnavailable("taxonomy_sync_unavailable")),
     )
     handler_input = _town_request(mock_handler_input, "herne bay")
@@ -269,7 +270,7 @@ async def test_publication_intent_reconstructs_sort_and_source_for_resolver(
             },
         },
     })
-    monkeypatch.setattr("src.middleware.resolver.resolve_utterance", resolve)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
     await ResolverInterceptor().process(mock_handler_input)
 
@@ -304,7 +305,7 @@ async def test_publication_intent_carries_alexa_date_with_source_to_resolver(
         "intent": "organization",
         "slots": {"searchPlan": {}},
     })
-    monkeypatch.setattr("src.middleware.resolver.resolve_utterance", resolve)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
     await ResolverInterceptor().process(mock_handler_input)
 
@@ -350,7 +351,7 @@ async def test_publication_discovery_sends_format_and_creator_filters(
         "results": [],
         "total_hits": 0,
     })
-    monkeypatch.setattr("src.handlers.search.search", search)
+    monkeypatch.setattr(HearApiClient, "search", search)
 
     await discover_content_via_search(mock_handler_input)
 
@@ -450,7 +451,7 @@ async def test_organization_slot_is_resolved_and_confirmed_before_search(
             "residualQuery": "",
         },
     }
-    monkeypatch.setattr("src.middleware.resolver.resolve_utterance", AsyncMock(return_value=resolution))
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", AsyncMock(return_value=resolution))
 
     await ResolverInterceptor().process(mock_handler_input)
     ConfirmationMiddleware().process(mock_handler_input)
@@ -742,7 +743,7 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
         },
     }
     monkeypatch.setattr(
-        "src.middleware.resolver.resolve_utterance",
+        ResolverClient, "resolve_utterance",
         AsyncMock(return_value={
             "version": 1,
             "status": "resolved",
@@ -879,7 +880,7 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
     }
     search = AsyncMock(return_value={"results": [{"contentId": "content-1"}]})
     play = AsyncMock(return_value={"shouldEndSession": True})
-    monkeypatch.setattr("src.handlers.yesno.search", search)
+    monkeypatch.setattr(HearApiClient, "search", search)
     monkeypatch.setattr("src.handlers.yesno.auto_play_first_from_search", play)
 
     response = await YesIntentHandler().handle(mock_handler_input)
@@ -954,7 +955,7 @@ async def test_explicit_search_replaces_pending_ambiguity(
         return resolved_search
 
     resolve = AsyncMock(side_effect=resolve)
-    monkeypatch.setattr("src.middleware.resolver.resolve_utterance", resolve)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
     await ResolverInterceptor().process(mock_handler_input)
 
@@ -1025,7 +1026,7 @@ async def test_candidate_in_topic_slot_resolves_before_new_search(
             "organizationName": "Ellesmere Port and Neston TN",
         },
     })
-    monkeypatch.setattr("src.middleware.resolver.resolve_utterance", resolve)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
     await ResolverInterceptor().process(mock_handler_input)
 
@@ -1074,7 +1075,7 @@ async def test_wakefield_reply_uses_legacy_ambiguity_before_onboarding(
         "activeDialog": None,
     }
     monkeypatch.setattr(
-        "src.middleware.resolver.resolve_utterance",
+        ResolverClient, "resolve_utterance",
         AsyncMock(return_value={
             "status": "resolved",
             "intent": "organization",
@@ -1238,7 +1239,7 @@ async def test_talking_newspaper_follow_up_forces_organization_resolution(
         },
     }
     monkeypatch.setattr(
-        "src.middleware.resolver.resolve_utterance",
+        ResolverClient, "resolve_utterance",
         AsyncMock(return_value={"version": 1, "status": "resolved", **resolved}),
     )
 
@@ -1379,7 +1380,7 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     })
     handler_input.attributes_manager.request_attributes["_store"] = store
     sync = AsyncMock(return_value={"ok": True})
-    monkeypatch.setattr("src.handlers.yesno.sync_listener", sync)
+    monkeypatch.setattr(HearApiClient, "sync_listener", sync)
 
     await YesIntentHandler()._confirm_location(handler_input, store)
 

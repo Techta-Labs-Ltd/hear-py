@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
+from src.dependencies import Dependencies
 from src.services.browse import set_browse_catalog, get_browse_catalog
 from src.services.store import get_store, update_store
 from src.services.dialog_state import activate_dialog
@@ -70,8 +71,7 @@ def _is_misrouted_browse_pagination(query: str) -> bool:
     )
 
 
-async def _fetch_next_catalog_page(handler_input: HandlerInput, catalog: Dict[str, Any]):
-    """Fetch the next page of catalog content from the API and merge it."""
+async def _fetch_next_catalog_page(handler_input: HandlerInput, catalog: Dict[str, Any], *, deps: Dependencies | None = None):
     next_page = (catalog.get("currentPage") or 0) + 1
     ctx = catalog_search_context(catalog)
     search_result = await discover_content_via_search(handler_input, {
@@ -79,7 +79,7 @@ async def _fetch_next_catalog_page(handler_input: HandlerInput, catalog: Dict[st
         "q": ctx.get("q"),
         "page": next_page,
         "limit": catalog.get("limit"),
-    })
+    }, deps=deps)
     if search_result.get("failed") or not search_result.get("results"):
         return {"catalog": catalog, "failed": True}
     merged = build_catalog_from_search_result(
@@ -99,7 +99,9 @@ async def _fetch_next_catalog_page(handler_input: HandlerInput, catalog: Dict[st
 
 
 class WhatsTrendingHandler(AbstractRequestHandler):
-    """Handles the What's Trending intent — plays trending content."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -121,7 +123,7 @@ class WhatsTrendingHandler(AbstractRequestHandler):
 
         active_store = get_store(handler_input)
 
-        search_result = await discover_content_via_search(handler_input)
+        search_result = await discover_content_via_search(handler_input, deps=self._deps)
         if not search_result.get("results"):
             return _build_search_outcome_response(handler_input, search_result)
 
@@ -140,12 +142,14 @@ class WhatsTrendingHandler(AbstractRequestHandler):
                 or first.get("creatorName")
                 or nested_creator_name,
             ),
-        })
+        }, deps=self._deps)
         return response or _build_no_content_response(handler_input)
 
 
 class BrowseContentHandler(AbstractRequestHandler):
-    """Handles BrowseContent and BrowseByCategory intents."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         name = get_intent_name(handler_input)
@@ -183,7 +187,7 @@ class BrowseContentHandler(AbstractRequestHandler):
                     .set_should_end_session(False) \
                     .response
 
-        search_result = await discover_content_via_search(handler_input, {"q": browse_q})
+        search_result = await discover_content_via_search(handler_input, {"q": browse_q}, deps=self._deps)
         if not search_result.get("results"):
             if browse_q:
                 return handler_input.response_builder \
@@ -203,12 +207,14 @@ class BrowseContentHandler(AbstractRequestHandler):
             "locality": resolved_locality,
             "introOverride": PLAY_COMMUNITY_INTRO(resolved_locality, search_result.get("total_hits", 0))
             if is_community and not was_relaxed else None,
-        })
+        }, deps=self._deps)
         return response or _build_no_content_response(handler_input)
 
 
 class ShowMoreBrowseHandler(AbstractRequestHandler):
-    """Handles the ShowMoreBrowse intent — paginates browse catalogs."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         if get_request_type(handler_input) != "IntentRequest":
@@ -252,7 +258,7 @@ class ShowMoreBrowseHandler(AbstractRequestHandler):
         offset = catalog.get("spokenOffset", 0)
         if offset >= len(catalog["items"]) and has_more_server_pages(catalog):
             prev_len = len(catalog["items"])
-            result = await _fetch_next_catalog_page(handler_input, catalog)
+            result = await _fetch_next_catalog_page(handler_input, catalog, deps=self._deps)
             catalog = result["catalog"]
             if result["failed"] or len(catalog["items"]) == prev_len:
                 return handler_input.response_builder \

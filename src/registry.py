@@ -1,4 +1,5 @@
 from __future__ import annotations
+from src.dependencies import Dependencies
 from src.handlers.audio import (
     PlaybackFailedHandler,
     PlaybackFinishedHandler,
@@ -77,7 +78,12 @@ REQUEST_HANDLERS = (
 )
 
 
-def register_handlers(builder) -> None:
+def register_handlers(builder, deps: Dependencies | None = None) -> None:
     """Register application handlers in dispatch order."""
+    if deps is None:
+        deps = Dependencies.with_defaults()
     for handler_type in REQUEST_HANDLERS:
-        builder.add_request_handler(handler_type())
+        try:
+            builder.add_request_handler(handler_type(deps=deps))
+        except TypeError:
+            builder.add_request_handler(handler_type())

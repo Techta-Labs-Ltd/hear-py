@@ -5,14 +5,10 @@ from typing import Any, Dict, Optional
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from src.services.store import get_store, update_store
-from src.clients.alexa_locality import (
-    attach_profile_permission_if_needed,
-    apply_listener_profile,
-)
+from src.dependencies import Dependencies
 from src.services.launch import record_launch
 from src.utils.skill_request import get_user_id as get_alexa_user_id
 from src.services.playback import flush_previous_track
-from src.clients.alexa import cancel_feedback_reminder
 from src.utils.skill_request import (
     get_request_type,
     get_intent_name,
@@ -73,9 +69,10 @@ def _listener_data_is_cached(store: Dict[str, Any]) -> bool:
     return (now - resolved_at) < PROFILE_TTL_MS
 
 
-async def _handle_launch_request_body(handler_input: HandlerInput):
+async def _handle_launch_request_body(handler_input: HandlerInput, *, deps: Dependencies | None = None):
     """Core launch request logic: resolves state and routes to appropriate flow."""
     store = get_store(handler_input)
+    d = deps or Dependencies.with_defaults()
     # A launch response replaces any unanswered discovery clarification. The
     # next explicit play request must be resolved as a new request, not as an
     # answer to an ambiguity left by an earlier session.
@@ -120,11 +117,11 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
         return feedback_service.pending_response(handler_input)
 
     if store.get("awaitingFeedback") and (store.get("feedbackContentTitle") or store.get("feedbackPromptText")):
-        await cancel_feedback_reminder(handler_input)
+        await d.alexa.cancel_feedback_reminder(handler_input)
         title_humanized = humanize_spoken_title(store.get("feedbackContentTitle")) or "that track"
         creator_escaped = escape_ssml_lite(store.get("feedbackCreator") or "the creator")
         fb_prompt = LAUNCH_PENDING_FEEDBACK(title_humanized, creator_escaped, user_name)
-        builder = attach_profile_permission_if_needed(
+        builder = d.locality.attach_profile_permission_if_needed(
             handler_input.response_builder
                 .speak(ssml(fb_prompt))
                 .reprompt(ssml(FEEDBACK_AWAITING_REPROMPT)),
@@ -173,7 +170,7 @@ async def _ensure_listener_data_for_launch(handler_input: HandlerInput, store: D
     enriched = store
     try:
         if not _listener_data_is_cached(store):
-            enriched = await apply_listener_profile(handler_input)
+            enriched = await d.locality.apply_listener_profile(handler_input)
             logger.info("Hear: launch enrichment done")
     except Exception as err:
         logger.warning("Hear: launch enrichment failed %s", err)
@@ -188,6 +185,9 @@ def _schedule_launch_background_work(handler_input: HandlerInput, store: Dict[st
 
 class LaunchRequestHandler(AbstractRequestHandler):
     """Handles Alexa LaunchRequest — the skill entry point."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies.with_defaults()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return get_request_type(handler_input) == "LaunchRequest"
@@ -207,7 +207,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
             logger.warning("Hear: launch flush failed error=%s", type(err).__name__)
 
         try:
-            return await _handle_launch_request_body(handler_input)
+            return await _handle_launch_request_body(handler_input, deps=self._deps)
         except Exception as err:
             logger.error("Hear: launch failed %s", err)
             return handler_input.response_builder \
@@ -218,7 +218,9 @@ class LaunchRequestHandler(AbstractRequestHandler):
 
 
 class TownCaptureHandler(AbstractRequestHandler):
-    """Captures a user's town name during onboarding via NLP or skip/cancel intents."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         if get_request_type(handler_input) != "IntentRequest":
@@ -265,12 +267,15 @@ class TownCaptureHandler(AbstractRequestHandler):
             )
 
         if nlp_town:
-            return await stage_town_confirmation(handler_input, store, nlp_town)
+            return await stage_town_confirmation(handler_input, store, nlp_town, deps=self._deps)
 
         return resume_town_capture(handler_input, store)
 
 
 class SetLocationHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
+
     def can_handle(self, handler_input: HandlerInput) -> bool:
         attrs = handler_input.attributes_manager.get_request_attributes()
         return bool(attrs) and attrs.get("_nlp", {}).get("intent") == "location_set"
@@ -281,7 +286,7 @@ class SetLocationHandler(AbstractRequestHandler):
         town = (nlp.get("slots", {}) or {}).get("townName")
 
         if town:
-            return await stage_town_confirmation(handler_input, get_store(handler_input), town)
+            return await stage_town_confirmation(handler_input, get_store(handler_input), town, deps=self._deps)
 
         update_store(handler_input, {
             "onboardingStage": ONBOARDING_ASK_TOWN,

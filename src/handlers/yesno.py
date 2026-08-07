@@ -29,11 +29,10 @@ from src.utils.speech import (
     ASK_TALKING_NEWSPAPER_REPROMPT,
     LATEST_SOURCE_DECLINED,
 )
-from src.clients.hear import sync_listener
+from src.dependencies import Dependencies
 from src.utils.audio import build_stop_directive
 from src.utils.feedback_flow import idle_next_response
 from src.services.playback import resume_playback, start_playback
-from src.clients.hear import search
 from src.services.playback import read_playback_session, write_playback_session
 from src.services.queue import move_queue, queue_content_id, read_playback_queue
 from src.handlers.play import PlayByCreatorHandler
@@ -69,6 +68,9 @@ class YesIntentHandler(AbstractRequestHandler):
     9. pendingNlpSuggestion        -> confirm NLP suggestion
     Fallback                       -> generic welcome reprompt
     """
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -192,7 +194,7 @@ class YesIntentHandler(AbstractRequestHandler):
         confirmed = get_store(handler_input)
         if user_id:
             try:
-                await sync_listener({
+                await self._deps.heara.sync_listener({
                     "alexaUserId": user_id,
                     "deviceId": confirmed.get("deviceId"),
                     "locale": getattr(handler_input.request_envelope.request, "locale", None),
@@ -233,7 +235,7 @@ class YesIntentHandler(AbstractRequestHandler):
         user_id = get_alexa_user_id(handler_input)
         if user_id:
             payload["alexaUserId"] = user_id
-        result = await search(payload)
+        result = await self._deps.heara.search(payload)
         previous_id = source.get("contentId")
         result["results"] = [item for item in result.get("results", []) if item.get("contentId") != previous_id]
         result["_search_payload"] = payload
@@ -330,7 +332,7 @@ class YesIntentHandler(AbstractRequestHandler):
                 "Hear: confirmed resolver search START id=%s label=%s",
                 resolution.get("requestId"), label,
             )
-            search_result = await search(payload)
+            search_result = await self._deps.heara.search(payload)
             search_result["_search_payload"] = payload
             if search_result.get("results"):
                 response = await auto_play_first_from_search(handler_input, search_result, {
@@ -446,7 +448,7 @@ class YesIntentHandler(AbstractRequestHandler):
 
         update_store(handler_input, {"listModeActive": False})
         await clear_feedback(handler_input)
-        result = await search({
+        result = await self._deps.heara.search({
             "query": "",
             "filter": {"contentIds": [content_id]},
             "page": 0,
@@ -486,7 +488,7 @@ class YesIntentHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        result = await search({
+        result = await self._deps.heara.search({
             "query": "",
             "filter": {"contentIds": [next_id]},
             "page": 0,
@@ -628,6 +630,9 @@ class NoIntentHandler(AbstractRequestHandler):
     10. pendingNlpSuggestion       -> reject NLP suggestion
     Fallback                       -> generic welcome reprompt
     """
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (

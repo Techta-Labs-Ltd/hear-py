@@ -5,7 +5,8 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.clients.resolver import ResolverUnavailable, resolve_utterance
+from src.clients.resolver import ResolverUnavailable
+from src.dependencies import Dependencies
 
 
 CONTENT_INTENTS = {
@@ -66,7 +67,9 @@ def _reply(can_fulfill: str, intent: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class CanFulfillIntentHandler(AbstractRequestHandler):
-    """Responds to Alexa CanFulfillIntentRequest for skill certification."""
+
+    def __init__(self, *, deps: Dependencies | None = None):
+        self._deps = deps or Dependencies()
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return handler_input.request_envelope.request.type == "CanFulfillIntentRequest"
@@ -85,7 +88,7 @@ class CanFulfillIntentHandler(AbstractRequestHandler):
             return _reply("YES" if intent_name in NO_UTTERANCE_OK else "MAYBE", intent)
 
         try:
-            result = await resolve_utterance(utterance)
+            result = await self._deps.resolver.resolve_utterance(utterance)
         except ResolverUnavailable:
             result = None
 

@@ -1,46 +1,22 @@
 from __future__ import annotations
-import asyncio
+
 import logging
-import threading
 from typing import Any
+
 import httpx
+
 from config import settings
-from src.models import ResolverResult, ResolvedEntity, ResolverUnavailable
+from src.clients.pool import HttpPool
+from src.models import ResolvedEntity, ResolverResult, ResolverUnavailable
+
 logger = logging.getLogger(__name__)
 
-
-RESOLVER_URL = "https://resolver.hear.media"
-
-
-DEFAULT_COUNTRY_CODE = "gb"
-
-
-DEFAULT_TIMEOUT_MS = 2000
-
-
-_client_pool: dict[int, httpx.AsyncClient] = {}
-
-
-_client_pool_lock = threading.Lock()
-
-
-def _pooled_client() -> httpx.AsyncClient:
-    loop = asyncio.get_running_loop()
-    key = id(loop)
-    client = _client_pool.get(key)
-    if client is None:
-        with _client_pool_lock:
-            client = _client_pool.get(key)
-            if client is None:
-                client = httpx.AsyncClient(
-                    timeout=httpx.Timeout(DEFAULT_TIMEOUT_MS / 1000.0),
-                    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-                )
-                _client_pool[key] = client
-    return client
+_RESOLVER_POOL = HttpPool(timeout_ms=2000)
 
 
 class ResolverClient:
+    __slots__ = ("_host", "_api_key", "_default_country", "_timeout", "_pool", "_transport")
+
     def __init__(
         self,
         *,
@@ -49,12 +25,14 @@ class ResolverClient:
         default_country: str = "gb",
         timeout_ms: int = 2000,
         transport: httpx.AsyncBaseTransport | None = None,
+        pool: HttpPool | None = None,
     ) -> None:
         self._host = host.rstrip("/")
         self._api_key = api_key
         self._default_country = default_country
         self._timeout = httpx.Timeout(max(timeout_ms, 1) / 1000.0)
         self._transport = transport
+        self._pool = pool or _RESOLVER_POOL
 
     async def resolve(
         self,
@@ -83,7 +61,7 @@ class ResolverClient:
                         headers={"x-api-key": self._api_key},
                     )
             else:
-                response = await _pooled_client().post(
+                response = await self._pool.get().post(
                     f"{self._host}/resolve",
                     json=body,
                     headers={"x-api-key": self._api_key},
@@ -101,31 +79,31 @@ class ResolverClient:
             logger.warning("Resolver request failed error=%s", type(exc).__name__)
             raise ResolverUnavailable("resolver request failed") from exc
 
+    async def resolve_utterance(
+        self,
+        utterance: str,
+        *,
+        alexa_user_id: str | None = None,
+        timezone: str = "Europe/London",
+        country_code: str | None = None,
+    ) -> dict[str, Any]:
+        result = await self.resolve(
+            utterance,
+            alexa_user_id=alexa_user_id,
+            timezone=timezone,
+            country_code=country_code,
+        )
+        return result.to_alexa_payload()
 
-def _configured_client() -> ResolverClient:
-    return ResolverClient(
-        host=RESOLVER_URL,
-        api_key=settings.HEAR_API_KEY,
-        default_country=DEFAULT_COUNTRY_CODE,
-        timeout_ms=DEFAULT_TIMEOUT_MS,
-    )
 
+client = ResolverClient(
+    host=getattr(settings, "RESOLVER_HOST", None) or "https://resolver.hear.media",
+    api_key=settings.HEAR_API_KEY,
+    default_country=getattr(settings, "RESOLVER_DEFAULT_COUNTRY", None) or "gb",
+    timeout_ms=getattr(settings, "RESOLVER_TIMEOUT_MS", None) or 2000,
+)
 
-async def resolve_utterance(
-    utterance: str,
-    *,
-    alexa_user_id: str | None = None,
-    timezone: str = "Europe/London",
-    country_code: str | None = None,
-) -> dict[str, Any]:
-    result = await _configured_client().resolve(
-        utterance,
-        alexa_user_id=alexa_user_id,
-        timezone=timezone,
-        country_code=country_code,
-    )
-    return result.to_alexa_payload()
-
+resolve_utterance = client.resolve_utterance
 
 __all__ = [
     "ResolverClient",

@@ -6,6 +6,7 @@ import pytest
 
 from src.adapters.memory_persistence import MemoryPersistenceAdapter
 from src.application import build_skill
+from src.clients.hear import HearApiClient
 
 
 USER_ID = "amzn1.ask.account.AUDIO_RUNTIME_TEST"
@@ -107,7 +108,7 @@ async def test_returning_user_latest_source_offer_searches_only_after_yes(monkey
         "results": [_queued_content(SECOND_CONTENT_ID, "York weekly news")],
         "total_hits": 1,
     })
-    monkeypatch.setattr("src.handlers.yesno.search", search)
+    monkeypatch.setattr(HearApiClient, "search", search)
     skill = build_skill(persistence)
 
     launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
@@ -178,7 +179,7 @@ async def test_independent_creator_latest_offer_uses_creator_name_and_id(monkeyp
         "results": [_queued_content(SECOND_CONTENT_ID, "David's latest")],
         "total_hits": 1,
     })
-    monkeypatch.setattr("src.handlers.yesno.search", search)
+    monkeypatch.setattr(HearApiClient, "search", search)
     skill = build_skill(persistence)
 
     launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
@@ -409,7 +410,7 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
         },
     }
     monkeypatch.setattr(
-        "src.handlers.audio.search",
+        HearApiClient, "search",
         _fake_search([second, third]),
     )
     monkeypatch.setattr(
@@ -476,7 +477,7 @@ async def test_queue_prefetch_falls_back_to_backend_search_when_no_cache_persist
     }
     search = _fake_search([second])
     monkeypatch.setattr(
-        "src.handlers.audio.search",
+        HearApiClient, "search",
         search,
     )
     monkeypatch.setattr(
