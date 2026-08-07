@@ -13,7 +13,6 @@ _LEGACY_FLAGS = {
     "feedback": "awaitingFeedback",
     "report_decision": "awaitingReportDecision",
     "resume": "awaitingResume",
-    "notification_choice": "awaitingNotificationChoice",
 }
 
 
@@ -42,8 +41,6 @@ def active_dialog_from_store(store: dict | None) -> dict | None:
         return {"type": "feedback", "context": deepcopy(state.get("pendingFeedback") or {})}
     if state.get("awaitingResume"):
         return {"type": "resume", "context": deepcopy(state.get("activePlayback") or {})}
-    if state.get("awaitingNotificationChoice"):
-        return {"type": "notification_choice", "context": {}}
     return None
 
 

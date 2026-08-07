@@ -476,11 +476,8 @@ def _build_next_playable_response(
 async def play_from_followed_creators(handler_input: HandlerInput):
     """Play content from creators the user is following."""
     store = get_store(handler_input)
-    if store.get("awaitingFollow") or store.get("awaitingNotificationOptIn"):
-        update_store(handler_input, {
-            "awaitingFollow": False,
-            "awaitingNotificationOptIn": False,
-        })
+    if store.get("awaitingFollow"):
+        update_store(handler_input, {"awaitingFollow": False})
 
     followed = store.get("followedCreators") or []
     if not followed:
@@ -1004,13 +1001,7 @@ class ShowMoreBrowseHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         if get_request_type(handler_input) != "IntentRequest":
             return False
-        intent_name = get_intent_name(handler_input)
-        if intent_name == "ShowMoreBrowseIntent":
-            return True
-        return (
-            intent_name == "HearNotificationsIntent"
-            and isinstance(get_store(handler_input).get("pendingAmbiguity"), dict)
-        )
+        return get_intent_name(handler_input) == "ShowMoreBrowseIntent"
 
     async def handle(self, handler_input: HandlerInput):
 

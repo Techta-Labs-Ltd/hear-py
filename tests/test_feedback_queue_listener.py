@@ -46,7 +46,6 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
     monkeypatch,
     mock_handler_input,
 ):
-    dispatched = []
     store = {
         **DEFAULT_STORE,
         "awaitingFeedback": True,
@@ -77,30 +76,12 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
         "type": "IntentRequest",
         "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
     })
-    monkeypatch.setattr(
-        "src.services.feedback.candidates.dispatch",
-        lambda event, data: dispatched.append((event, data)),
-    )
-
     await FeedbackEnjoyedHandler().handle(mock_handler_input)
 
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "feedback on TRACK115 by Tynedale Talking Magazine" in spoken
     assert "WhatsApp Ptt" not in spoken
-    assert dispatched == [("feedback.given", {
-        "alexaUserId": "amzn1.ask.account.TEST",
-        "feedbackKey": "track-115",
-        "contentId": "track-115",
-        "publicationId": "publication-tynedale-weekly",
-        "publicationTitle": "Tynedale weekly edition",
-        "creatorId": "creator-tynedale",
-        "creatorName": "Tynedale Talking Magazine",
-        "title": "TRACK115",
-        "category": "news",
-        "listenedMs": 120000,
-        "feedback": "enjoyed",
-        "timestamp": dispatched[0][1]["timestamp"],
-    })]
+    assert mock_handler_input.attributes_manager.request_attributes["_store"]["pendingFeedback"] is None
 
 
 def test_normalization_repairs_common_api_text_encoding():
@@ -225,12 +206,6 @@ async def test_negative_feedback_reports_then_resumes_deferred_play_request(
         "name": "ReportContentIntent",
         "slots": {},
     })
-    reports = []
-    monkeypatch.setattr(
-        "src.handlers.intents.social.dispatch",
-        lambda event, data, options=None: reports.append((event, data, options)),
-    )
-
     response = await ReportContentHandler().handle(mock_handler_input)
 
     mock_handler_input.redispatch.assert_awaited_once()
@@ -241,9 +216,6 @@ async def test_negative_feedback_reports_then_resumes_deferred_play_request(
         response["outputSpeech"]["ssml"]
     )
     assert response["directives"][0]["type"] == "AudioPlayer.Play"
-    assert reports[0][0] == "user.reported_content"
-    assert reports[0][1]["contentId"] == "old-content"
-    assert reports[0][1]["publicationId"] == "publication-old-weekly"
 
 
 @pytest.mark.asyncio

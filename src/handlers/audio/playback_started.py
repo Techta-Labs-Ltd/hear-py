@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
-from src.services.notifications import consume_notification_for_playback
 from src.services.playback.events import emit_listening_event
 from src.services.playback.session import (
     create_playback_session,
@@ -54,10 +53,5 @@ class PlaybackStartedHandler(AbstractRequestHandler):
                 "lastToken": token,
                 "lastOffsetMs": offset_ms,
             })
-            await consume_notification_for_playback(
-                get_user_id(handler_input),
-                token,
-                state.get("publicationId"),
-            )
             await emit_listening_event(handler_input, "started", state)
         return handler_input.response_builder.response

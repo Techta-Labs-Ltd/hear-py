@@ -1,6 +1,6 @@
 import pytest
 from config import settings
-from config.permission_scopes import DEVICE_ADDRESS, NOTIFICATIONS_WRITE, REMINDERS_READWRITE
+from config.permission_scopes import DEVICE_ADDRESS, REMINDERS_READWRITE
 
 
 def test_settings_loads_defaults():
@@ -13,7 +13,6 @@ def test_settings_loads_defaults():
 
 def test_permission_scopes():
     assert DEVICE_ADDRESS.startswith("alexa::")
-    assert NOTIFICATIONS_WRITE.startswith("alexa::")
     assert REMINDERS_READWRITE.startswith("alexa::")
 
 

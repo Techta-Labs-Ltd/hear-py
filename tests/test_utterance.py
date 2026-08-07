@@ -112,9 +112,3 @@ run(
         "creatorQuery": {"name": "creatorQuery", "value": "David"},
     }),
 )
-
-# Also check what the NLP classifier returns for this utterance
-from src.nlp.classifier import classify_utterance
-print("--- NLP classification ---")
-result = classify_utterance("play me the latest sport from David")
-print(f"  Result: {result}")

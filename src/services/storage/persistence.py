@@ -44,7 +44,6 @@ async def clear_feedback(handler_input) -> dict:
         "activeDialog": None,
         "awaitingFeedback": False,
         "awaitingFollow": False,
-        "awaitingNotificationOptIn": False,
         "awaitingReportDecision": False,
         "reportContext": None,
         "pendingFeedback": None,
@@ -64,7 +63,6 @@ def dismiss_feedback_prompt(handler_input) -> dict:
     """Dismiss the active feedback prompt without recording a rating."""
     return update_store(handler_input, {
         "awaitingFeedback": False,
-        "awaitingNotificationOptIn": False,
         "pendingFeedback": None,
         "feedbackPromptText": None,
         "feedbackAskedForToken": None,

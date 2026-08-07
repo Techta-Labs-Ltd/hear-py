@@ -1,8 +1,3 @@
-"""
-LaunchRequestHandler - Handles skill launch, onboarding flow, and town capture.
-TownCaptureHandler - Captures town name during onboarding.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -25,11 +20,6 @@ from src.services.listeners import sync_listener_for_launch
 from src.utils.skill_request import get_user_id as get_alexa_user_id
 from src.services.playback import flush_previous_track
 from src.services.alexa.reminders import cancel_feedback_reminder
-from src.services.notifications import (
-    group_notifications_by_creator,
-    build_notification_speech,
-    update_notification_status,
-)
 from src.utils.skill_request import get_request_type, get_intent_name, get_user_id as _get_user_id
 from src.utils.speech import (
     ssml, escape_ssml_lite, humanize_spoken_title, WELCOME_FIRST, WELCOME_FIRST_HAS_CITY,
@@ -37,13 +27,10 @@ from src.utils.speech import (
     LAUNCH_PENDING_FEEDBACK, FEEDBACK_AWAITING_REPROMPT,
     STILL_LISTENING_PROMPT, STILL_LISTENING_REPROMPT,
     LAUNCH_RESUME_FLAGGED_PROMPT, FLAGGED_CONTINUE_REPROMPT,
-    NOTIFICATIONS_SHOW_MORE, ONBOARDING_TOWN_CONFIRM,
+    ONBOARDING_TOWN_CONFIRM,
 )
 from src.utils.lambda_deadline import (
     get_lambda_remaining_ms, launch_background_work_budget_ms, should_block_on_launch_flush,
-)
-from src.handlers.notifications import (
-    ensure_subscription, has_notification_permission, complete_notification_opt_in,
 )
 from src.handlers.intents.onboarding import (
     ONBOARDING_ASK_TOWN, handle_returning_user, start_town_capture,
@@ -65,7 +52,6 @@ PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ
 def _read_cached_locality(store: Dict[str, Any]) -> Optional[str]:
     """Read cached locality from persistence store."""
     return store.get("locality")
-
 
 def _listener_data_is_cached(store: Dict[str, Any]) -> bool:
     """Check whether listener profile data is still within its TTL cache window."""
@@ -108,13 +94,7 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
     except Exception as err:
         logger.warning("Hear: listener launch sync failed error=%s", type(err).__name__)
 
-    attrs = handler_input.attributes_manager.get_request_attributes()
-    pending_notifications = attrs.get("_pendingNotifications") if attrs else None
-
-    if store.get("awaitingNotificationOptIn"):
-        update_store(handler_input, {"awaitingNotificationOptIn": False})
-
-    # Foreground interaction priority: onboarding, resume, feedback, notifications.
+    # Foreground interaction priority: onboarding, resume, then feedback.
     if store.get("onboardingStage") == "confirm_town_for_community":
         return start_town_capture(handler_input, store, user_name)
 
@@ -151,29 +131,6 @@ async def _handle_launch_request_body(handler_input: HandlerInput):
             handler_input, store,
         )
         return builder.set_should_end_session(False).response
-
-    if pending_notifications and pending_notifications.get("items"):
-        items = pending_notifications["items"]
-        groups = group_notifications_by_creator(items)
-        speech_text = build_notification_speech(groups) or "You have some new updates."
-        update_store(handler_input, {
-            "pendingNotificationQueue": items,
-            "awaitingNotificationChoice": True,
-        })
-        for item in items:
-            await update_notification_status(
-                user_id,
-                item.get("notificationId"),
-                "offered",
-            )
-        if attrs:
-            attrs.pop("_pendingNotifications", None)
-            handler_input.attributes_manager.set_request_attributes(attrs)
-        return handler_input.response_builder \
-            .speak(ssml(speech_text)) \
-            .reprompt(ssml("Would you like to listen to them?")) \
-            .set_should_end_session(False) \
-            .response
 
     try:
         store = await _ensure_listener_data_for_launch(handler_input, store)
@@ -225,15 +182,8 @@ async def _ensure_listener_data_for_launch(handler_input: HandlerInput, store: D
 
 
 def _schedule_launch_background_work(handler_input: HandlerInput, store: Dict[str, Any]):
-    """Schedule async background tasks for launch (subscription)."""
-    if not launch_background_work_budget_ms(handler_input):
-        logger.info("Hear: launch background work skipped")
-        return
-
-    run_background(ensure_subscription(handler_input, store), "ensure_subscription")
-
-    if store.get("awaitingNotificationOptIn") and has_notification_permission(handler_input):
-        run_background(complete_notification_opt_in(handler_input), "notification_opt_in")
+    """Retain the launch scheduling seam for callers."""
+    del handler_input, store
 
 
 class LaunchRequestHandler(AbstractRequestHandler):
@@ -325,13 +275,6 @@ class TownCaptureHandler(AbstractRequestHandler):
 
 
 class SetLocationHandler(AbstractRequestHandler):
-    """Sets or changes the user's saved town/city.
-
-    Dispatched by IntentDispatchHandler when the NLP layer classifies a
-    SetLocationIntent as "location_set". Works both during onboarding and
-    later, when a returning user wants to change where they are.
-    """
-
     def can_handle(self, handler_input: HandlerInput) -> bool:
         attrs = handler_input.attributes_manager.get_request_attributes()
         return bool(attrs) and attrs.get("_nlp", {}).get("intent") == "location_set"

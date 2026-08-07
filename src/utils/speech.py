@@ -618,21 +618,13 @@ SKIP_FEEDBACK = FEEDBACK_SKIP_INTRO
 
 # ── Follow / Unfollow ───────────────────────────────────────────────
 
-FOLLOW_CREATOR = lambda creator_name: f"Done! You're now following {escape_ssml_lite(creator_name)}, and you'll be notified when they publish something new. If you'd like to hear something else, just say next."
-
-FOLLOW_CREATOR_ASK_NOTIFICATIONS = lambda creator_name: f"Done! You're now following {escape_ssml_lite(creator_name)}. To get alerts when they publish something new, you'll need to enable notifications. Would you like to enable them now?"
-
-FOLLOW_CREATOR_NOTIFICATION_REPROMPT = "Say yes to enable notifications, or no thanks to continue without alerts."
-
-FOLLOW_CREATOR_NOTIFICATION_DECLINED = lambda creator_name: f"No problem. You're still following {escape_ssml_lite(creator_name)}, but you won't get alerts until you say enable notifications."
-
-FOLLOW_NOTIFICATION_DECLINED_GENERIC = "No problem. You can say enable notifications any time to turn on alerts."
+FOLLOW_CREATOR = lambda creator_name: f"Done! You're now following {escape_ssml_lite(creator_name)}. If you'd like to hear something else, just say next."
 
 FOLLOW_CREATOR_REPROMPT = "Say next to hear something else, or unfollow this creator to stop following."
 
 ALREADY_FOLLOWING = lambda creator_name: f"You are already following {escape_ssml_lite(creator_name)}."
 
-UNFOLLOW_CREATOR = lambda creator_name: f"Done. You've unfollowed {escape_ssml_lite(creator_name)} and notifications for them are off. What would you like to do next?"
+UNFOLLOW_CREATOR = lambda creator_name: f"Done. You've unfollowed {escape_ssml_lite(creator_name)}. What would you like to do next?"
 
 NOT_FOLLOWING = lambda creator_name: f"You are not following {creator_name}."
 
@@ -655,11 +647,6 @@ REPORT_NOTHING_PLAYING = "There is nothing playing right now to report. Play som
 ADDRESS_PERMISSION_REQUEST = "To provide you with local audio, Hear needs your permission to access your device address. I have sent a card to your Alexa app. Please open it to grant permission and try again."
 LOCAL_GEO_PERMISSION_REQUEST = "To hear recordings from your community, enable location for Hear in the Alexa app. I have sent a card to your Alexa app."
 LOCAL_GEO_REQUIRED = "To hear recordings from your community, enable location and device address for Hear in the Alexa app, then say play community again."
-NOTIFICATION_PERMISSION_REQUEST = "To notify you when new content arrives from your area or favourite categories, please enable the Hear notification permission in your Alexa app, then open Hear again."
-
-NOTIFICATIONS_ENABLED = lambda: "Notifications are now on. You'll be alerted when creators you follow publish something new. Say turn off notifications at any time to stop."
-NOTIFICATIONS_ENABLE_FAILED = "Sorry, I couldn't turn on notifications just now. Please try again in a moment."
-NOTIFICATIONS_DISABLED = "Notifications are now off. You can say turn on notifications at any time to start them again."
 
 # ── Playback / Error ────────────────────────────────────────────────
 
@@ -685,7 +672,6 @@ PLAY_LIST_REPROMPT = "Which one would you like? Say the first one, the second on
 PLAY_NO_PENDING_LIST = "Say what's trending first, then pick the first one or say play number one."
 PLAY_CREATOR_PROMPT = "Which creator would you like to hear?"
 PLAY_PICK_FROM_LIST_INTRO = "Here's what I found. Say the first one, the second one, or play number one."
-BROWSE_ACTIVE_NOT_NOTIFICATIONS = "You've got some results already. Say show me more, or play number one."
 
 # ── Fallback / Help / Generic ───────────────────────────────────────
 
@@ -703,28 +689,6 @@ LOOP_SHUFFLE_UNAVAILABLE = "Looping and shuffle are not available on Hear yet. S
 
 # ── Notifications Summary ───────────────────────────────────────────
 
-NEW_TRACK_SINGLE = lambda title, creator: f"Before we start, there is a new track available: {escape_ssml_lite(title)} by {escape_ssml_lite(creator)}. I have added it to your queue."
-NEW_TRACK_MULTIPLE = lambda count: f"Before we start, there are {count} new tracks from your followed creators. I have added them to your queue."
-NO_NOTIFICATIONS_ENABLED = "You do not have notifications enabled. Say enable notifications to turn them on so I can tell you when your followed creators publish new tracks."
-NO_PENDING_NOTIFICATIONS = "You have no new tracks from your followed creators right now. Check back later."
-
-NOTIFICATIONS_SUMMARY = lambda tracks: _build_notifications_summary(tracks)
-
-
-def _build_notifications_summary(tracks) -> str:
-    if not tracks or not len(tracks):
-        return NO_PENDING_NOTIFICATIONS
-    if len(tracks) == 1:
-        return f"You have 1 new track from followed creators. {escape_ssml_lite(tracks[0]['title'])} by {escape_ssml_lite(tracks[0]['creator'])}."
-    listed = [f"{escape_ssml_lite(t['title'])} by {escape_ssml_lite(t['creator'])}" for t in tracks[:3]]
-    text = f"You have {len(tracks)} new tracks from followed creators. {', '.join(listed)}"
-    if len(tracks) > 3:
-        text += f" and {len(tracks) - 3} more"
-    return text + "."
-
-
-NOTIFICATIONS_QUEUE_PROMPT = "Would you like me to queue them for you?"
-NOTIFICATIONS_DECLINED = "OK. What would you like to listen to?"
 
 WELCOME_AUTOPLAY = lambda title, creator: f"Welcome to Hear. Playing {escape_ssml_lite(title)} by {escape_ssml_lite(creator)}."
 WELCOME_RESUME = lambda title: f"Welcome back. Resuming {escape_ssml_lite(title)} where you left off."
@@ -776,40 +740,7 @@ CONFIRM_SINGLE = lambda name: f"Did you say {escape_ssml_lite(name)}?"
 CONFIRM_NO = "Sorry, say it again."
 CONFIRM_NO_MATCH = "Sorry, I didn\u2019t catch that. Say a category, a creator, or a town."
 
+# End of speech catalog.
+
 # ── Notification Detail ─────────────────────────────────────────────
 
-NOTIFICATIONS_SINGLE_TRACK = lambda title, creator: f"You have 1 new track from {escape_ssml_lite(creator)}: {escape_ssml_lite(title)}. Would you like to listen to it?"
-
-NOTIFICATIONS_SINGLE_CREATOR = lambda creator_name, tracks: _build_single_creator(creator_name, tracks)
-
-
-def _build_single_creator(creator_name, tracks) -> str:
-    count = len(tracks)
-    listed = [escape_ssml_lite(t["title"]) for t in tracks[:5]]
-    text = f"You have {count} new tracks from {escape_ssml_lite(creator_name)}: {', '.join(listed)}"
-    if count > 5:
-        text += f" and {count - 5} more"
-    return text + ". Would you like me to queue them for you?"
-
-
-NOTIFICATIONS_MULTI_CREATOR = lambda total_tracks, groups: _build_multi_creator(total_tracks, groups)
-
-
-def _build_multi_creator(total_tracks, groups) -> str:
-    total_creators = len(groups)
-    show_groups = groups[:5]
-    text = f"You have {total_tracks} new tracks from {total_creators} followed creators. "
-    parts: list[str] = []
-    for g in show_groups:
-        titles = ", ".join(escape_ssml_lite(t["title"]) for t in g["tracks"][:3])
-        part = f"{escape_ssml_lite(g['creatorName'])} has {len(g['tracks'])}: {titles}"
-        if len(g["tracks"]) > 3:
-            part += f" and {len(g['tracks']) - 3} more"
-        parts.append(part)
-    text += ". ".join(parts)
-    if total_creators > 5:
-        text += f". And {total_creators - 5} more creators"
-    return text + ". Would you like me to queue them for you?"
-
-
-NOTIFICATIONS_SHOW_MORE = "Say show more to hear the rest of the creators."

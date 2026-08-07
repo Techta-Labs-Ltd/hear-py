@@ -274,10 +274,6 @@ async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
         "activePlayback": _playback_state(status="starting", offset_ms=0),
     }
     monkeypatch.setattr(
-        "src.handlers.audio.playback_started.consume_notification_for_playback",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(
         "src.handlers.audio.playback_started.emit_listening_event",
         AsyncMock(),
     )
@@ -403,10 +399,6 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
     }
     monkeypatch.setattr(
         "src.handlers.audio.playback_nearly_finished.emit_listening_event",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(
-        "src.handlers.audio.playback_started.consume_notification_for_playback",
         AsyncMock(),
     )
     monkeypatch.setattr(

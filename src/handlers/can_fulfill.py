@@ -87,9 +87,7 @@ class CanFulfillIntentHandler(AbstractRequestHandler):
             return _reply("YES" if intent_name in NO_UTTERANCE_OK else "MAYBE", intent)
 
         try:
-            result = await resolve_utterance(
-                "resolve_search", utterance, alexa_intent=intent_name,
-            )
+            result = await resolve_utterance(utterance)
         except ResolverUnavailable:
             result = None
 

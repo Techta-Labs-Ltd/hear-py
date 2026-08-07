@@ -20,10 +20,6 @@ class FeedbackService:
     }
     replay_intents = {"AMAZON.RepeatIntent", "AMAZON.StartOverIntent"}
     follow_intents = {"FollowCreatorIntent", "UnfollowCreatorIntent"}
-    notification_intents = {
-        "EnableNotificationsIntent",
-        "DisableNotificationsIntent",
-    }
     report_intents = {"ReportCreatorIntent", "ReportContentIntent"}
 
     def should_evaluate(self, handler_input) -> bool:
@@ -74,15 +70,6 @@ class FeedbackService:
         if store.get("awaitingFollow"):
             if intent_name not in self.follow_intents | {"AMAZON.NoIntent"}:
                 update_store(handler_input, {"awaitingFollow": False})
-            return
-
-        if store.get("awaitingNotificationOptIn"):
-            allowed = self.notification_intents | {
-                "AMAZON.YesIntent",
-                "AMAZON.NoIntent",
-            }
-            if intent_name not in allowed:
-                update_store(handler_input, {"awaitingNotificationOptIn": False})
             return
 
         if store.get("awaitingReportDecision"):

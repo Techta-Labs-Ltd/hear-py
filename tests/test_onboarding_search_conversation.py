@@ -87,7 +87,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
         "placeName": "Herne Bay",
     }
     resolve.assert_awaited_once()
-    assert resolve.await_args.args[:2] == ("resolve_location", "Herne Bay")
+    assert resolve.await_args.args == ("Herne Bay",)
 
 
 @pytest.mark.asyncio
@@ -264,11 +264,7 @@ async def test_publication_intent_reconstructs_sort_and_source_for_resolver(
 
     await NlpInterceptor().process(mock_handler_input)
 
-    assert resolve.await_args.args == (
-        "resolve_search",
-        "play latest publication from tnf",
-    )
-    assert resolve.await_args.kwargs["alexa_intent"] == "PlayPublicationIntent"
+    assert resolve.await_args.args == ("play latest publication from tnf",)
 
 
 @pytest.mark.asyncio
@@ -303,10 +299,7 @@ async def test_publication_intent_carries_alexa_date_with_source_to_resolver(
 
     await NlpInterceptor().process(mock_handler_input)
 
-    assert resolve.await_args.args == (
-        "resolve_search",
-        "play 2026-08-02 publication from wtn",
-    )
+    assert resolve.await_args.args == ("play 2026-08-02 publication from wtn",)
 
 
 @pytest.mark.asyncio
@@ -660,52 +653,6 @@ def test_fallback_during_ambiguity_repeats_candidates_not_welcome(
 
 
 @pytest.mark.asyncio
-async def test_show_more_pages_pending_ambiguity_before_notifications(
-    mock_handler_input,
-):
-    from src.handlers.intents.play import ShowMoreBrowseHandler
-    from src.handlers.notifications import HearNotificationsHandler
-
-    names = ["Alpha TN", "Bravo TN", "Charlie TN", "Delta TN", "Echo TN"]
-    candidates = [
-        {"type": "organization", "id": f"org-{index}", "name": name}
-        for index, name in enumerate(names, 1)
-    ]
-    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
-    mock_handler_input.request_envelope.request = AttrDict({
-        "type": "IntentRequest",
-        "locale": "en-GB",
-        "intent": {"name": "HearNotificationsIntent", "slots": {}},
-    })
-    mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
-        "pendingAmbiguity": {
-            "candidates": candidates,
-            "expiresAt": 4102444800,
-        },
-    }
-
-    handler = ShowMoreBrowseHandler()
-    assert handler.can_handle(mock_handler_input)
-    assert HearNotificationsHandler().can_handle(mock_handler_input)
-
-    await handler.handle(mock_handler_input)
-
-    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "Delta TN" in spoken
-    assert "Echo TN" in spoken
-    assert "notifications enabled" not in spoken
-    assert get_store(mock_handler_input)["pendingAmbiguity"]["spokenCandidateOffset"] == 5
-
-    await handler.handle(mock_handler_input)
-
-    exhausted = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "Those are all the matches" in exhausted
-    assert "Delta TN" in exhausted
-    assert "Echo TN" in exhausted
-
-
-@pytest.mark.asyncio
 async def test_fallback_without_raw_speech_is_not_reclassified_as_search(
     mock_handler_input,
 ):
@@ -984,18 +931,7 @@ async def test_explicit_search_replaces_pending_ambiguity(
         },
     }
 
-    async def resolve(operation, utterance, **kwargs):
-        if operation == "resolve_ambiguity_follow_up":
-            return {
-                "status": "ambiguous",
-                "intent": "organization",
-                "followUpMatched": False,
-                "ambiguities": [{"phrase": utterance, "candidates": pending["candidates"]}],
-                "slots": {"ambiguousReferences": [{
-                    "phrase": utterance,
-                    "candidates": pending["candidates"],
-                }]},
-            }
+    async def resolve(utterance, **kwargs):
         return resolved_search
 
     resolve = AsyncMock(side_effect=resolve)
@@ -1003,10 +939,7 @@ async def test_explicit_search_replaces_pending_ambiguity(
 
     await NlpInterceptor().process(mock_handler_input)
 
-    assert [call.args[:2] for call in resolve.await_args_list] == [
-        ("resolve_ambiguity_follow_up", "tnf"),
-        ("resolve_search", "tnf"),
-    ]
+    assert [call.args for call in resolve.await_args_list] == [("tnf",)]
     store = get_store(mock_handler_input)
     assert store["pendingAmbiguity"] is None
     assert store["activeDialog"] is None
@@ -1078,7 +1011,7 @@ async def test_candidate_in_topic_slot_resolves_before_new_search(
     await NlpInterceptor().process(mock_handler_input)
 
     resolve.assert_awaited_once()
-    assert resolve.await_args.args[:2] == ("resolve_ambiguity_follow_up", "neston")
+    assert resolve.await_args.args == ("neston",)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["ambiguityResolution"] is True
     assert nlp["searchPayload"]["filter"] == {

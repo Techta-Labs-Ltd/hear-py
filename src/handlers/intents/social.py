@@ -14,21 +14,18 @@ from src.utils.skill_request import get_request_type, get_intent_name, get_user_
 from src.utils.speech import (
     ssml, escape_ssml_lite, is_bad_credit, CREATOR_CREDIT, CREATOR_CREDIT_UNKNOWN,
     NO_CREATOR_TO_FOLLOW, ALREADY_FOLLOWING, IDLE_NEXT_REPROMPT, FOLLOW_CREATOR,
-    FOLLOW_CREATOR_REPROMPT, FOLLOW_CREATOR_ASK_NOTIFICATIONS,
-    FOLLOW_CREATOR_NOTIFICATION_REPROMPT, NOT_FOLLOWING, UNFOLLOW_CREATOR,
+    FOLLOW_CREATOR_REPROMPT, NOT_FOLLOWING, UNFOLLOW_CREATOR,
     IDLE_DO_NEXT_REPROMPT, REPORT_NOTHING_PLAYING, REPORT_CONTENT_THEN_ASK_CONTINUE,
     FLAGGED_CONTINUE_REPROMPT, REPORT_CREATOR_CONFIRM, CONTENT_ABOUT_PHRASE,
-    ERROR_GENERIC, WELCOME_REPROMPT, NOTIFICATIONS_ENABLE_FAILED,
+    ERROR_GENERIC, WELCOME_REPROMPT,
 )
 from src.utils.feedback_flow import idle_next_response
 from src.utils.playback_context import (
     read_audio_player_context, is_audio_player_active,
     build_report_context,
 )
-from src.handlers.notifications import has_notification_permission, complete_notification_opt_in
 from src.handlers.intents.play import play_from_followed_creators
 from src.utils.search_filters import wants_play_from_followed_creators
-from src.services.outbound_dispatch import dispatch
 from src.services.deferred_intent import has_deferred_intent, resume_deferred_intent
 from src.services.dialog_state import clear_active_dialog
 
@@ -72,7 +69,7 @@ class WhoIsCreatorHandler(AbstractRequestHandler):
 
 
 class FollowCreatorHandler(AbstractRequestHandler):
-    """Follows the currently playing creator and optionally enables notifications."""
+    """Follows the currently playing creator."""
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -112,38 +109,15 @@ class FollowCreatorHandler(AbstractRequestHandler):
 
         user_id = _get_user_id(handler_input)
         try:
-            dispatch("user.followed_creator", {
-                "userId": user_id, "listenerId": store.get("listenerId"),
-                "creatorId": creator_id, "creatorName": creator_name,
-                "timestamp": _current_timestamp_ms(),
-            }, {"awaitQueue": True})
-
             add_followed_creator(handler_input, creator_id, creator_name)
             if store.get("awaitingFollow"):
                 await clear_feedback(handler_input)
 
-            has_perm = has_notification_permission(handler_input)
-
-            if has_perm:
-                result = await complete_notification_opt_in(handler_input)
-                if result.get("ok"):
-                    return idle_next_response(
-                        handler_input,
-                        FOLLOW_CREATOR(creator_name),
-                        FOLLOW_CREATOR_REPROMPT,
-                    )
-                return idle_next_response(
-                    handler_input,
-                    f"Done! You're now following {escape_ssml_lite(creator_name)}. {NOTIFICATIONS_ENABLE_FAILED}",
-                    FOLLOW_CREATOR_REPROMPT,
-                )
-
-            update_store(handler_input, {"awaitingNotificationOptIn": True})
-            return handler_input.response_builder \
-                .speak(ssml(FOLLOW_CREATOR_ASK_NOTIFICATIONS(creator_name))) \
-                .reprompt(ssml(FOLLOW_CREATOR_NOTIFICATION_REPROMPT)) \
-                .set_should_end_session(False) \
-                .response
+            return idle_next_response(
+                handler_input,
+                FOLLOW_CREATOR(creator_name),
+                FOLLOW_CREATOR_REPROMPT,
+            )
         except Exception as err:
             logger.warning("Follow creator error: %s", err)
             return handler_input.response_builder \
@@ -180,10 +154,6 @@ class UnfollowCreatorHandler(AbstractRequestHandler):
 
         user_id = _get_user_id(handler_input)
         try:
-            dispatch("user.unfollowed_creator", {
-                "userId": user_id, "listenerId": store.get("listenerId"),
-                "creatorId": creator_id, "timestamp": _current_timestamp_ms(),
-            }, {"awaitQueue": True})
             remove_followed_creator(handler_input, creator_id)
             return handler_input.response_builder \
                 .speak(ssml(UNFOLLOW_CREATOR(creator_name))) \
@@ -238,15 +208,6 @@ class ReportContentHandler(AbstractRequestHandler):
             pass
 
         try:
-            dispatch("user.reported_content", {
-                "userId": user_id, "listenerId": store.get("listenerId"),
-                "contentId": content_id,
-                "publicationId": report.get("publicationId"),
-                "reason": "reported_via_alexa", "title": title,
-                "creatorId": creator_id, "locale": locale, "deviceId": device_id,
-                "clientEventId": f"alexa-report:{user_id}:{content_id}",
-                "timestamp": _current_timestamp_ms(),
-            }, {"awaitQueue": True})
             update_store(handler_input, {
                 "awaitingReportDecision": False,
                 "reportContext": None,
@@ -291,11 +252,6 @@ class ReportCreatorHandler(AbstractRequestHandler):
 
         user_id = _get_user_id(handler_input)
         try:
-            dispatch("user.reported_creator", {
-                "userId": user_id, "listenerId": store.get("listenerId"),
-                "creatorId": creator_id, "reason": "reported_via_alexa",
-                "timestamp": _current_timestamp_ms(),
-            }, {"awaitQueue": True})
             await clear_feedback(handler_input)
 
             confirm = REPORT_CREATOR_CONFIRM(creator_name) \

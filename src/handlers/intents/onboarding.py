@@ -228,11 +228,7 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
         phrase,
     )
     try:
-        response = await resolve_utterance(
-            "resolve_location",
-            phrase,
-            alexa_intent="TownCaptureIntent",
-        )
+        response = await resolve_utterance(phrase)
         resolution = response.get("resolution") or {}
     except ResolverUnavailable:
         return handle_town_resolver_unavailable(handler_input, store)
@@ -287,11 +283,7 @@ async def finalize_town_captured(
     explicit town confirmation. New voice flows stage and confirm first.
     """
     try:
-        response = await resolve_utterance(
-            "resolve_location",
-            phrase,
-            alexa_intent="TownCaptureIntent",
-        )
+        response = await resolve_utterance(phrase)
         resolution = response.get("resolution") or {}
     except ResolverUnavailable:
         return handle_town_resolver_unavailable(handler_input, store)

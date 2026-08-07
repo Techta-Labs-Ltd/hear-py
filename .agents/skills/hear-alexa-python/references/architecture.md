@@ -15,8 +15,7 @@
 | Alexa APIs/locality | `src/services/alexa/` |
 | Persistent state | `src/services/storage/`, `src/adapters/` |
 | Pure helpers | `src/utils/` |
-| NLP | `src/nlp/` |
-| HTTP/SQS webhooks | `src/webhooks/` |
+| NLP and resolver adaptation | `src/nlp/`, `src/services/resolver_client.py` |
 | Settings/permissions | `config/` |
 | Interaction model | `en-GB.json` |
 

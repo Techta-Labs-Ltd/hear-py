@@ -23,9 +23,6 @@ from src.handlers.intents import (
     UnsupportedIntentHandler, WhatsThisAboutHandler, WhatsTrendingHandler,
     WhoIsCreatorHandler, YesIntentHandler,
 )
-from src.handlers.notifications import (
-    DisableNotificationsHandler, EnableNotificationsHandler, HearNotificationsHandler,
-)
 
 REQUEST_HANDLERS = (
     LaunchRequestHandler, ConnectionsResponseHandler, WhatsTrendingHandler,
@@ -36,13 +33,12 @@ REQUEST_HANDLERS = (
     NextIntentHandler, PreviousIntentHandler, RepeatIntentHandler,
     RewindIntentHandler, FastForwardIntentHandler, WhoIsCreatorHandler,
     FollowCreatorHandler, UnfollowCreatorHandler, ReportContentHandler,
-    ReportCreatorHandler, WhatsThisAboutHandler, HearNotificationsHandler,
+    ReportCreatorHandler, WhatsThisAboutHandler,
     PlaybackStartedHandler, PlaybackProgressReportHandler,
     PlaybackNearlyFinishedHandler, PlaybackFinishedHandler,
     PlaybackStoppedHandler, PlaybackFailedHandler, FeedbackEnjoyedHandler,
     FeedbackSomewhatHandler, FeedbackNotEnjoyedHandler, SkipFeedbackHandler,
-    EnableNotificationsHandler, DisableNotificationsHandler, YesIntentHandler,
-    NoIntentHandler, NavigateHomeHandler, UnsupportedIntentHandler,
+    YesIntentHandler, NoIntentHandler, NavigateHomeHandler, UnsupportedIntentHandler,
     HelpIntentHandler, CancelIntentHandler, SessionEndedHandler, FallbackHandler,
     UnmatchedIntentHandler, UnknownRequestHandler,
 )

@@ -826,69 +826,6 @@
           ]
         },
         {
-          "name": "EnableNotificationsIntent",
-          "slots": [],
-          "samples": [
-            "turn on notifications",
-            "enable notifications",
-            "notify me",
-            "send me alerts",
-            "alert me when there is new content",
-            "let me know when new content is available",
-            "set notifications",
-            "set notification",
-            "notification",
-            "I want to get a notification",
-            "set a notification",
-            "subscribe to notifications",
-            "sign me up for alerts",
-            "keep me updated",
-            "tell me when there is new stuff",
-            "send me updates",
-            "I want alerts",
-            "let me know when something new comes out",
-            "alert me to new episodes",
-            "new content alerts",
-            "ping me when there's new content",
-            "update me",
-            "keep me in the loop",
-            "I want to know when new stuff drops",
-            "set up notifications for me",
-            "notify me about new content",
-            "alert me when creators post",
-            "I want push notifications",
-            "remind me when there's something new"
-          ]
-        },
-        {
-          "name": "DisableNotificationsIntent",
-          "slots": [],
-          "samples": [
-            "turn off notifications",
-            "disable notifications",
-            "stop notifying me",
-            "stop alerts",
-            "no more notifications",
-            "cancel notification",
-            "cancel notifications",
-            "stop notification",
-            "stop notifications",
-            "delete notification",
-            "delete notifications",
-            "remove notifications",
-            "I don't want notifications",
-            "stop sending me alerts",
-            "no more alerts",
-            "switch off notifications",
-            "turn notifications off",
-            "remove alerts",
-            "mute notifications",
-            "silence notifications",
-            "no updates",
-            "stop the updates"
-          ]
-        },
-        {
           "name": "WhoIsCreatorIntent",
           "slots": [],
           "samples": [
@@ -1021,21 +958,6 @@
             "flag this author",
             "this creator is offensive",
             "report the producer"
-          ]
-        },
-        {
-          "name": "HearNotificationsIntent",
-          "slots": [],
-          "samples": [
-            "do I have any notifications",
-            "check my notifications",
-            "what are my notifications",
-            "any notifications",
-            "what's in my notifications",
-            "tell me about my notifications",
-            "show me my notifications",
-            "anything new from my creators",
-            "what's new from people I follow"
           ]
         },
         {

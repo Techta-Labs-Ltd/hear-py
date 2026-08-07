@@ -27,9 +27,8 @@ from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import (
     ssml, escape_ssml_lite, is_bad_credit, HELP, GOODBYE, IDLE_DO_NEXT_REPROMPT,
     WELCOME_REPROMPT, ERROR_GENERIC, FALLBACK_SPEECH, LOOP_SHUFFLE_UNAVAILABLE,
-    FLAGGED_CONTINUE_YES_ACK, NO_CONTENT_AVAILABLE, NOTIFICATIONS_ENABLE_FAILED, NOTIFICATIONS_ENABLED, NOTIFICATIONS_DECLINED,
-    FEEDBACK_FOLLOW_DECLINED, FOLLOW_CREATOR_NOTIFICATION_DECLINED,
-    FOLLOW_NOTIFICATION_DECLINED_GENERIC, ASK_LISTEN_FIRST, ASK_LISTEN_NEXT,
+    FLAGGED_CONTINUE_YES_ACK, NO_CONTENT_AVAILABLE,
+    FEEDBACK_FOLLOW_DECLINED, ASK_LISTEN_FIRST, ASK_LISTEN_NEXT,
     END_OF_LIST, NO_TRACKS_AVAILABLE, QUEUE_FINISHED, QUEUE_NEXT_ANNOUNCE,
     LOCATION_CONFIRMED, LOCATION_DECLINED, LOCATION_RETRY,
     COMMUNITY_PLAYBACK_OFFER,
@@ -42,15 +41,7 @@ from src.utils.audio import build_stop_directive
 from src.services.playback.events import emit_user_playback_event, USER_PLAYBACK_EVENT_TYPES
 from src.utils.feedback_flow import idle_next_response
 from src.handlers.intents.onboarding import onboarding_pending_redirect
-from src.handlers.notifications import (
-    has_notification_permission, complete_notification_opt_in,
-    build_notification_permission_response,
-)
 from src.services.playback.start import resume_playback, start_playback
-from src.services.notifications import (
-    resolve_notification_queue,
-    update_notification_status,
-)
 from src.services.api import search
 from src.services.playback.session import (
     read_playback_session,
@@ -147,12 +138,10 @@ class YesIntentHandler(AbstractRequestHandler):
     Routes the Yes intent based on the current store/session state:
     1. awaitingSearchConfirmation  -> execute confirmed search
     2. listModeActive              -> play current list item
-    3. awaitingNotificationChoice  -> queue pending notifications
     4. awaitingStillListening      -> advance queue
     5. awaitingContinueAfterFlag   -> acknowledge continue
     6. awaitingFeedback            -> delegate to FeedbackEnjoyed
     7. awaitingFollow              -> delegate to FollowCreator
-    8. awaitingNotificationOptIn   -> complete opt-in
     9. pendingNlpSuggestion        -> confirm NLP suggestion
     Fallback                       -> generic welcome reprompt
     """
@@ -203,10 +192,6 @@ class YesIntentHandler(AbstractRequestHandler):
         if store.get("listModeActive"):
             return await self._handle_list_mode_yes(handler_input, store)
 
-        # 3. Notification choice pending
-        if store.get("awaitingNotificationChoice"):
-            return await self._handle_notification_choice(handler_input, store)
-
         # 4. Still listening prompt
         if store.get("awaitingStillListening"):
             return await self._handle_still_listening_yes(handler_input, store)
@@ -227,10 +212,6 @@ class YesIntentHandler(AbstractRequestHandler):
         # 7. Awaiting follow
         if store.get("awaitingFollow"):
             return await FollowCreatorHandler().handle(handler_input)
-
-        # 8. Awaiting notification opt-in
-        if store.get("awaitingNotificationOptIn"):
-            return await self._handle_notification_opt_in(handler_input)
 
         # 9. Pending NLP suggestion confirmation
         if store.get("pendingNlpSuggestion") and store["pendingNlpSuggestion"]:
@@ -542,26 +523,6 @@ class YesIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
         return await start_playback(handler_input, result["results"][0], "")
 
-    async def _handle_notification_choice(self, handler_input, store):
-        """Resolve pending references through search and start the first result."""
-        notifications = store.get("pendingNotificationQueue") or []
-        update_store(handler_input, {
-            "awaitingNotificationChoice": False,
-            "pendingNotificationQueue": None,
-        })
-        result = await resolve_notification_queue(handler_input, notifications)
-        if result.get("results"):
-            return await start_playback(
-                handler_input,
-                result["results"][0],
-                "Here are your new updates.",
-            )
-        return handler_input.response_builder \
-            .speak(ssml(NO_CONTENT_AVAILABLE)) \
-            .reprompt(ssml(WELCOME_REPROMPT)) \
-            .set_should_end_session(False) \
-            .response
-
     async def _handle_resume_yes(self, handler_input, store):
         state = read_playback_session(store)
         update_store(handler_input, {"awaitingResume": False})
@@ -616,25 +577,6 @@ class YesIntentHandler(AbstractRequestHandler):
             total,
         )
         return await start_playback(handler_input, content, intro)
-
-    async def _handle_notification_opt_in(self, handler_input):
-        """Complete the notification opt-in flow."""
-        if not has_notification_permission(handler_input):
-            return build_notification_permission_response(handler_input)
-
-        result = await complete_notification_opt_in(handler_input)
-        if not result.get("ok"):
-            return handler_input.response_builder \
-                .speak(ssml(NOTIFICATIONS_ENABLE_FAILED)) \
-                .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
-                .set_should_end_session(False) \
-                .response
-
-        return handler_input.response_builder \
-            .speak(ssml(NOTIFICATIONS_ENABLED())) \
-            .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
-            .set_should_end_session(False) \
-            .response
 
     async def _confirm_nlp_suggestion(self, handler_input, store):
         """Confirm and execute a pending NLP suggestion."""
@@ -750,12 +692,10 @@ class NoIntentHandler(AbstractRequestHandler):
     Routes No based on state:
     1. awaitingSearchConfirmation  -> cycle to next suggestion or give up
     2. listModeActive              -> advance list position
-    3. awaitingNotificationChoice  -> clear pending notifications
     4. awaitingStillListening      -> stop and goodbye
     5. awaitingContinueAfterFlag   -> skip to next
     6. awaitingFeedback            -> delegate to FeedbackNotEnjoyed
     7. awaitingFollow              -> clear feedback
-    8. awaitingNotificationOptIn   -> decline opt-in
     9. awaitingReportDecision      -> delegate to SkipFeedback
     10. pendingNlpSuggestion       -> reject NLP suggestion
     Fallback                       -> generic welcome reprompt
@@ -840,10 +780,6 @@ class NoIntentHandler(AbstractRequestHandler):
         if store.get("listModeActive"):
             return self._handle_list_mode_no(handler_input, store)
 
-        # 3. Notification choice
-        if store.get("awaitingNotificationChoice"):
-            return await self._handle_notification_no(handler_input, store)
-
         # 4. Still listening
         if store.get("awaitingStillListening"):
             return self._handle_still_listening_no(handler_input)
@@ -861,10 +797,6 @@ class NoIntentHandler(AbstractRequestHandler):
         if store.get("awaitingFollow"):
             await clear_feedback(handler_input)
             return idle_next_response(handler_input, FEEDBACK_FOLLOW_DECLINED)
-
-        # 8. Awaiting notification opt-in
-        if store.get("awaitingNotificationOptIn"):
-            return self._handle_notification_opt_in_no(handler_input, store)
 
         # 9. Awaiting report decision
         if store.get("awaitingReportDecision"):
@@ -965,25 +897,6 @@ class NoIntentHandler(AbstractRequestHandler):
             .set_should_end_session(False) \
             .response
 
-    async def _handle_notification_no(self, handler_input, store):
-        """Dismiss the notifications explicitly declined by the user."""
-        notifications = store.get("pendingNotificationQueue") or []
-        update_store(handler_input, {
-            "awaitingNotificationChoice": False,
-            "pendingNotificationQueue": None,
-        })
-        for item in notifications:
-            await update_notification_status(
-                get_alexa_user_id(handler_input),
-                item.get("notificationId"),
-                "dismissed",
-            )
-        return handler_input.response_builder \
-            .speak(ssml(NOTIFICATIONS_DECLINED)) \
-            .reprompt(ssml("What would you like to listen to?")) \
-            .set_should_end_session(False) \
-            .response
-
     def _handle_resume_no(self, handler_input, store):
         state = read_playback_session(store)
         if state:
@@ -1007,16 +920,6 @@ class NoIntentHandler(AbstractRequestHandler):
             .speak(GOODBYE) \
             .add_directive(build_stop_directive()) \
             .response
-
-    def _handle_notification_opt_in_no(self, handler_input, store):
-        """Decline notification opt-in."""
-        update_store(handler_input, {"awaitingNotificationOptIn": False})
-        creator_name = store.get("currentCreator") or store.get("feedbackCreator")
-        if creator_name and not is_bad_credit(creator_name):
-            msg = FOLLOW_CREATOR_NOTIFICATION_DECLINED(creator_name)
-        else:
-            msg = FOLLOW_NOTIFICATION_DECLINED_GENERIC
-        return idle_next_response(handler_input, msg)
 
     def _reject_nlp_suggestion(self, handler_input, store):
         """Reject the current NLP suggestion; offer the next if available."""

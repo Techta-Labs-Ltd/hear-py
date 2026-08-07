@@ -3,8 +3,6 @@ from types import SimpleNamespace
 import pytest
 
 from src.middleware.identity import IdentityInterceptor
-from src.resolver.models import SearchPlan
-from src.resolver.alexa import alexa_resolver
 from src.runtime import AttrDict
 from src.services.alexa.client import send_playback_events
 from src.services.storage.store import DEFAULT_STORE
@@ -65,22 +63,10 @@ async def test_identity_interceptor_persists_real_id_without_storing_token(mock_
 
 
 @pytest.mark.asyncio
-async def test_backend_playback_dispatch_rejects_blank_identity(monkeypatch):
-    dispatched = []
-    monkeypatch.setattr(
-        "src.services.alexa.client.dispatch",
-        lambda *args, **kwargs: dispatched.append(args),
-    )
-
+async def test_backend_playback_dispatch_rejects_blank_identity():
     result = await send_playback_events(
         alexa_user_id="   ",
         events=[{"contentId": "content-1", "sessionId": "session-1"}],
     )
 
     assert result == {"status": None}
-    assert dispatched == []
-
-
-def test_resolver_backend_payload_omits_blank_identity():
-    payload = alexa_resolver.build_payload(SearchPlan(alexa_user_id="", query="news"))
-    assert "alexaUserId" not in payload

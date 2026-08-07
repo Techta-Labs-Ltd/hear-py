@@ -58,7 +58,6 @@ def build_listener_sync_profile(handler_input, store: dict) -> dict | None:
         "listeningPattern": store.get("listeningPattern"),
         "followedCreatorIds": list(store.get("followedCreators") or []),
         "playbackSpeed": store.get("playbackSpeed"),
-        "notificationsEnabled": bool(store.get("notificationsEnabled")),
         "playCount": int(store.get("playCount") or 0),
         "lastPlayedAt": store.get("lastPlayedAt"),
         "recentPlayedIds": list(dict.fromkeys(recent))[-20:],

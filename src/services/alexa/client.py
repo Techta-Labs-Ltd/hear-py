@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 from src.services.storage.persistence import get_store
 from src.utils.playback_event_builder import normalize_playback_event
-from src.services.outbound_dispatch import dispatch
 from src.utils.skill_request import get_user_id
 
 
@@ -12,7 +10,7 @@ async def send_playback_events(
     events: list,
     handler_input=None,
 ) -> dict:
-    """Dispatch canonical content listening events to the outbound pipeline."""
+    """Accept canonical listening events without external delivery."""
     resolved_user_id = str(alexa_user_id or "").strip()
     if not resolved_user_id and handler_input is not None:
         resolved_user_id = get_user_id(handler_input) or ""
@@ -21,27 +19,16 @@ async def send_playback_events(
     listener_id = None
     if handler_input is not None:
         listener_id = get_store(handler_input).get("listenerId")
-    dispatched = 0
-    failed = 0
+    accepted = 0
     for event in events:
         normalized = normalize_playback_event(event)
         content_id = normalized.get("contentId")
         if not content_id:
             continue
-        payload = {
-            **normalized,
-            "alexaUserId": resolved_user_id,
-            "listenerId": listener_id,
-        }
-        if dispatch(
-            f"playback.{str(normalized.get('eventType') or 'event').lower()}",
-            payload,
-        ):
-            dispatched += 1
-        else:
-            failed += 1
+        accepted += 1
     return {
-        "status": "dispatched" if dispatched and not failed else "failed",
-        "dispatched": dispatched,
-        "failed": failed,
+        "status": "disabled",
+        "dispatched": 0,
+        "failed": 0,
+        "accepted": accepted,
     }

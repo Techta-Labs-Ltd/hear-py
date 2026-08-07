@@ -1,4 +1,4 @@
-"""Alexa request interception backed by the dedicated resolver Lambda."""
+"""Alexa request interception backed by the external resolver API."""
 from __future__ import annotations
 
 import logging
@@ -26,7 +26,7 @@ SEARCH_INTENTS = {
 AMBIGUITY_CONTROL_INTENTS = {
     "AMAZON.YesIntent", "AMAZON.NoIntent", "AMAZON.CancelIntent",
     "AMAZON.StopIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
-    "ShowMoreBrowseIntent", "HearNotificationsIntent",
+    "ShowMoreBrowseIntent",
 }
 
 
@@ -155,12 +155,8 @@ class NlpInterceptor(AbstractRequestInterceptor):
                     clear_active_dialog(handler_input, "ambiguity")
                 elif alexa_intent not in AMBIGUITY_CONTROL_INTENTS:
                     result = await resolve_utterance(
-                        "resolve_ambiguity_follow_up",
                         raw,
-                        alexa_intent=alexa_intent,
                         alexa_user_id=get_user_id(handler_input),
-                        request_id=str(getattr(request, "request_id", "") or ""),
-                        context=pending_ambiguity,
                     )
                     replace_ambiguity = (
                         alexa_intent in SEARCH_INTENTS
@@ -223,11 +219,8 @@ class NlpInterceptor(AbstractRequestInterceptor):
 
             if raw and store.get("awaitingOrganizationName"):
                 result = await resolve_utterance(
-                    "resolve_organization_follow_up",
                     raw,
-                    alexa_intent=alexa_intent,
                     alexa_user_id=get_user_id(handler_input),
-                    request_id=str(getattr(request, "request_id", "") or ""),
                 )
                 result["intent"] = "organization"
                 result.setdefault("slots", {})["organizationQuery"] = raw
@@ -264,11 +257,8 @@ class NlpInterceptor(AbstractRequestInterceptor):
 
             if alexa_intent in SEARCH_INTENTS:
                 result = await resolve_utterance(
-                    "resolve_search",
                     raw,
-                    alexa_intent=alexa_intent,
                     alexa_user_id=get_user_id(handler_input),
-                    request_id=str(getattr(request, "request_id", "") or ""),
                 )
             else:
                 known = ALEXA_TO_NLP.get(alexa_intent)

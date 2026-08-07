@@ -74,20 +74,10 @@ jobs:
           IMAGE: ${{ steps.build.outputs.image }}
         run: |
           get() { aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text --region "$AWS_REGION"; }
-          get_optional() { get "$1" 2>/dev/null || true; }
           HEAR_API_KEY=$(get "/hear/$STAGE/HEAR_API_KEY")
-          WEBHOOK_SECRET=$(get "/hear/$STAGE/WEBHOOK_SECRET")
-          WEBHOOK_OUTBOUND_SECRET=$(get "/hear/$STAGE/WEBHOOK_OUTBOUND_SECRET")
           SENTRY_DSN=$(get "/hear/$STAGE/SENTRY_DSN")
-          ALEXA_PROACTIVE_CLIENT_ID=$(get_optional "/hear/$STAGE/ALEXA_PROACTIVE_CLIENT_ID")
-          ALEXA_PROACTIVE_CLIENT_SECRET=$(get_optional "/hear/$STAGE/ALEXA_PROACTIVE_CLIENT_SECRET")
-          for v in "$HEAR_API_KEY" "$WEBHOOK_SECRET" "$WEBHOOK_OUTBOUND_SECRET" "$SENTRY_DSN"; do
+          for v in "$HEAR_API_KEY" "$SENTRY_DSN"; do
             echo "::add-mask::$v"
-          done
-          for v in "$ALEXA_PROACTIVE_CLIENT_ID" "$ALEXA_PROACTIVE_CLIENT_SECRET"; do
-            if [ -n "$v" ]; then
-              echo "::add-mask::$v"
-            fi
           done
 
           aws cloudformation deploy \
@@ -100,12 +90,7 @@ jobs:
               Stage="$STAGE" \
               ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" \
-              ResolverProvisionedConcurrency="0" \
               HearApiKey="$HEAR_API_KEY" \
-              WebhookSecret="$WEBHOOK_SECRET" \
-              WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
-              AlexaProactiveClientId="$ALEXA_PROACTIVE_CLIENT_ID" \
-              AlexaProactiveClientSecret="$ALEXA_PROACTIVE_CLIENT_SECRET" \
               SentryDsn="$SENTRY_DSN"
 
       - name: Stack outputs

@@ -55,7 +55,6 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
 
         update_store(handler_input, {
             "awaitingFollow": False,
-            "awaitingNotificationOptIn": False,
         })
         if has_deferred_intent(handler_input):
             await clear_feedback(handler_input)

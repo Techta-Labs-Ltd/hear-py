@@ -26,7 +26,6 @@ DISPATCHABLE_INTENTS: list[str] = [
 NON_DISPATCHABLE_INTENTS: list[str] = [
     "ReportContentIntent", "ReportCreatorIntent",
     "FollowCreatorIntent", "UnfollowCreatorIntent", "WhoIsCreatorIntent", "WhatsThisAboutIntent",
-    "EnableNotificationsIntent", "DisableNotificationsIntent",
     "AMAZON.YesIntent", "AMAZON.NoIntent",
     "NavigateHomeIntent",
     "SetPlaybackSpeedIntent", "IncreaseSpeedIntent", "DecreaseSpeedIntent",

@@ -50,33 +50,6 @@ class Settings(BaseSettings):
     def api_request_log(self) -> bool:
         return self.HEAR_API_REQUEST_LOG
 
-    HEAR_TAXONOMY_MANIFEST_URL: str = (
-        "https://cdn.hear.media/runtime/taxonomy/manifest.json"
-    )
-    HEAR_TAXONOMY_REVISION_TABLE: str = ""
-    HEAR_TAXONOMY_REFRESH_SECONDS: int = 300
-    HEAR_TAXONOMY_AUTO_REFRESH: bool = _is_lambda()
-    HEAR_TAXONOMY_REFRESH_QUEUE_URL: str = ""
-    HEAR_TAXONOMY_SNAPSHOT_BUCKET: str = ""
-    HEAR_TAXONOMY_SNAPSHOT_KEY: str = ""
-    HEAR_TAXONOMY_ACTIVE_REVISION: str = ""
-    HEAR_TAXONOMY_MANIFEST_SHA256: str = ""
-    HEAR_TAXONOMY_RUNTIME_URL: str = ""
-    HEAR_TAXONOMY_STRICT_SYNC: bool = False
-    HEAR_TAXONOMY_MAX_INLINE_CHANGES: int = 500
-    HEAR_RESOLVER_FUNCTION_NAME: str = ""
-    HEAR_RESOLVER_LIVE_ALIAS: str = "live"
-    HEAR_RESOLVER_CANDIDATE_ALIAS: str = "candidate"
-    HEAR_RESOLVER_FUNCTION_ARN: str = ""
-    HEAR_RESOLVER_TIMEOUT_MS: int = 2500
-    NOTIFICATION_INGEST_QUEUE_URL: str = ""
-    ALEXA_PROACTIVE_CLIENT_ID: str = ""
-    ALEXA_PROACTIVE_CLIENT_SECRET: str = ""
-    ALEXA_PROACTIVE_STAGE: str = "development"
-    WEBHOOK_ALLOW_LEGACY_SECRET: bool = not _is_lambda()
-    WEBHOOK_SIGNATURE_TOLERANCE_SECONDS: int = 300
-    WEBHOOK_REPLAY_TABLE: str = ""
-
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "development"
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
@@ -158,15 +131,6 @@ class Settings(BaseSettings):
 
     HEAR_LAMBDA_TIMEOUT_SEC: int = 8
     HEAR_LAMBDA_MEMORY_MB: int = 512
-
-    WEBHOOK_SECRET: str = ""
-    HEAR_WEBHOOK_HMAC_SECRET: str = ""
-    NOTIFICATIONS_TABLE: str = "hear_notifications"
-    WEBHOOK_OUTBOUND_URL: str = ""
-    WEBHOOK_OUTBOUND_SECRET: str = ""
-    SQS_OUT_QUEUE_URL: str = ""
-    WEBHOOK_API_GATEWAY_URL: str = ""
-    WEBHOOK_SIGNATURE_TOLERANCE_SECONDS: int = 300
 
     ALEXA_SKILL_ID: str = ""
 

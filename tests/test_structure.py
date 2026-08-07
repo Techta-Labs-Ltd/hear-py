@@ -1,4 +1,3 @@
-import base64
 from pathlib import Path
 
 import pytest
@@ -14,9 +13,9 @@ from src.services.feedback import FeedbackService
 from src.services.playback import PlaybackService
 from src.services.storage.playback_state import PlaybackStateRepository
 from src.services.tasks import BackgroundTaskManager
+from src.services.resolver_client import ResolverClient
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
-from src.webhooks.router import is_http_event, normalize_http_event
 
 
 def test_skill_factory_registers_the_complete_pipeline():
@@ -27,45 +26,10 @@ def test_skill_factory_registers_the_complete_pipeline():
     assert len(skill._response_interceptors) == len(RESPONSE_INTERCEPTORS)
 
 
-def test_normalizes_api_gateway_v2_event():
-    body = base64.b64encode(b'{"ok":true}').decode("ascii")
-    event = {
-        "requestContext": {"http": {"method": "POST", "path": "/webhook/taxonomy"}},
-        "headers": {"x-test": "yes"},
-        "body": body,
-        "isBase64Encoded": True,
-    }
-
-    assert is_http_event(event)
-    assert normalize_http_event(event) == {
-        "httpMethod": "POST",
-        "path": "/webhook/taxonomy",
-        "headers": {"x-test": "yes"},
-        "body": '{"ok":true}',
-    }
-
-
-def test_normalizes_api_gateway_v1_event():
-    event = {
-        "httpMethod": "POST",
-        "path": "/webhook/notification",
-        "headers": {},
-        "body": "{}",
-    }
-
-    assert is_http_event(event)
-    assert normalize_http_event(event)["path"] == "/webhook/notification"
-
-
-def test_alexa_and_webhook_lambda_entry_points_are_separate():
+def test_obsolete_resolver_and_webhook_packages_are_absent():
     root = Path(__file__).resolve().parents[1]
-    alexa_entry = (root / "main.py").read_text(encoding="utf-8")
-    webhook_entry = (
-        root / "src" / "webhooks" / "lambda_handler.py"
-    ).read_text(encoding="utf-8")
-
-    assert "src.webhooks.router" not in alexa_entry
-    assert "src.resolver" not in webhook_entry
+    assert not (root / "src" / "resolver").exists()
+    assert not (root / "src" / "webhooks").exists()
 
 
 def test_alexa_entry_graph_does_not_import_resolver_implementation():
@@ -86,26 +50,15 @@ def test_alexa_entry_graph_does_not_import_resolver_implementation():
     assert "import spacy" not in combined
 
 
-def test_resolver_has_a_dedicated_lambda_entry_point():
-    root = Path(__file__).resolve().parents[1]
-    source = (root / "src" / "resolver" / "lambda_handler.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "def handler(" in source
-
-
-def test_taxonomy_seed_waits_for_refresh_components_and_retries_each_image():
+def test_template_has_no_dedicated_resolver_configuration():
     template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(
         encoding="utf-8"
     )
-    seed = template.split("  TaxonomyRevisionSeed:\n", 1)[1].split(
-        "  TaxonomySnapshotBucket:\n", 1
-    )[0]
-
-    assert "- ResolverFunction" in seed
-    assert "- TaxonomyRefreshFunction" in seed
-    assert "BootstrapVersion: !Ref ImageUri" in seed
+    assert "RESOLVER_" not in template
+    assert "ResolverApiKey" not in template
+    assert "ResolverFunction:" not in template
+    assert "WebhookFunction:" not in template
+    assert "Taxonomy" not in template
 
 
 def test_runtime_and_container_do_not_install_or_import_spacy():
@@ -131,6 +84,10 @@ def test_stateful_services_have_explicit_owners():
     assert isinstance(PlaybackService(), PlaybackService)
     assert isinstance(BackgroundTaskManager(), BackgroundTaskManager)
     assert isinstance(FeedbackService(), FeedbackService)
+    assert isinstance(
+        ResolverClient(host="https://resolver.test", api_key="test"),
+        ResolverClient,
+    )
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Hear Alexa skill (Python) — container image, Alexa trigger, webhook API, and outbound SQS pipeline.
+Description: Hear Alexa skill (Python container image).
 
 Parameters:
   Stage:
@@ -10,35 +10,27 @@ Parameters:
   ShortStage:
     Type: String
     Default: dev
-    Description: Short suffix used in function names (keeps existing Hear-Python-dev name).
   ImageUri:
     Type: String
-    Description: ECR image URI the CI pushed (account.dkr.ecr.region.amazonaws.com/hear-python:sha)
+    Description: ECR image URI deployed by CI.
   AlexaSkillId:
     Type: String
     Default: ""
-    Description: Alexa Skill ID; when set, the Alexa trigger is wired to this skill.
-  ResolverProvisionedConcurrency:
-    Type: Number
-    Default: 0
-    MinValue: 0
-    Description: Provisioned resolver instances; keep at zero until the account concurrency quota allows it.
-  # --- Secrets (pulled from SSM SecureString by CI and passed in as NoEcho) ---
-  HearApiKey:            { Type: String, NoEcho: true, Default: "" }
-  WebhookSecret:         { Type: String, NoEcho: true, Default: "" }
-  WebhookOutboundSecret: { Type: String, NoEcho: true, Default: "" }
-  AlexaProactiveClientId: { Type: String, NoEcho: true, Default: "" }
-  AlexaProactiveClientSecret: { Type: String, NoEcho: true, Default: "" }
-  SentryDsn:             { Type: String, NoEcho: true, Default: "" }
+  HearApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+  SentryDsn:
+    Type: String
+    NoEcho: true
+    Default: ""
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
-  HasResolverProvisionedConcurrency: !Not [!Equals [!Ref ResolverProvisionedConcurrency, 0]]
-  IsProduction: !Equals [!Ref Stage, production]
 
 Globals:
   Function:
-    MemorySize: 1024
+    MemorySize: 2048
     Timeout: 30
     Architectures: [x86_64]
     Tracing: Active
@@ -47,122 +39,30 @@ Globals:
         STAGE: !Ref Stage
         NODE_ENV: !Ref Stage
         SENTRY_ENVIRONMENT: !Ref Stage
-        # --- non-secret config ---
         HEAR_API_URL: https://alexa.hear.media/api/v1
         HEAR_API_PATH_PREFIX: alexa
+        HEAR_API_KEY: !Ref HearApiKey
         HEAR_CLIENT_VERSION: alexa-skill
         HEAR_DDB_REGION: eu-west-1
         HEAR_DDB_TABLE: hear-service
-        NOTIFICATIONS_TABLE: !Ref NotificationInboxTable
-        NOTIFICATION_INGEST_QUEUE_URL: !Ref NotificationIngestQueue
         HEAR_PERSISTENCE_DRIVER: dynamodb
         HEAR_PERSISTENCE_CONDITIONAL: "0"
         HEAR_PERSISTENCE_TTL_DAYS: "180"
         HEAR_AUDIO_SPEED_PARAM: speed
-        HEAR_TAXONOMY_MANIFEST_URL: https://cdn.hear.media/runtime/taxonomy/manifest.json
-        HEAR_TAXONOMY_REVISION_TABLE: !Ref TaxonomyRevisionTable
-        HEAR_TAXONOMY_REFRESH_QUEUE_URL: !Ref TaxonomyRefreshQueue
-        HEAR_TAXONOMY_SNAPSHOT_BUCKET: !Ref TaxonomySnapshotBucket
-        WEBHOOK_REPLAY_TABLE: !Ref WebhookReplayTable
-        WEBHOOK_ALLOW_LEGACY_SECRET: "0"
-        # Snapshot activation validates CDN artifacts and packages them in S3.
-        HEAR_TAXONOMY_AUTO_REFRESH: "0"
-        HEAR_TAXONOMY_REFRESH_SECONDS: "300"
-        WEBHOOK_OUTBOUND_URL: https://alexa.hear.media/api/v1/alexa/events
-        SQS_OUT_QUEUE_URL: !Ref OutboundQueue
-        # --- secrets (from SSM via CI) ---
-        HEAR_API_KEY: !Ref HearApiKey
-        HEAR_WEBHOOK_HMAC_SECRET: !Ref WebhookOutboundSecret
-        WEBHOOK_SECRET: !Ref WebhookSecret
-        WEBHOOK_OUTBOUND_SECRET: !Ref WebhookOutboundSecret
-        ALEXA_PROACTIVE_CLIENT_ID: !Ref AlexaProactiveClientId
-        ALEXA_PROACTIVE_CLIENT_SECRET: !Ref AlexaProactiveClientSecret
-        ALEXA_PROACTIVE_STAGE: !If [IsProduction, production, development]
         SENTRY_DSN: !Ref SentryDsn
         POWERTOOLS_SERVICE_NAME: hear-alexa-skill
         POWERTOOLS_LOG_LEVEL: INFO
 
 Resources:
-  ResolverFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub Hear-Resolver-Python-${ShortStage}
-      PackageType: Image
-      ImageUri: !Ref ImageUri
-      ImageConfig:
-        Command: [ "src.resolver.lambda_handler.handler" ]
-      MemorySize: 3008
-      Timeout: 8
-      EphemeralStorage:
-        Size: 2048
-      Environment:
-        Variables:
-          HEAR_TAXONOMY_RUNTIME_URL: https://alexa.hear.media/api/v1/alexa/taxonomy
-          HEAR_TAXONOMY_STRICT_SYNC: "1"
-      AutoPublishAlias: live
-      ProvisionedConcurrencyConfig: !If
-        - HasResolverProvisionedConcurrency
-        - ProvisionedConcurrentExecutions: !Ref ResolverProvisionedConcurrency
-        - !Ref AWS::NoValue
-      Policies:
-        - S3ReadPolicy: { BucketName: !Ref TaxonomySnapshotBucket }
-
-  ResolverFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub /aws/lambda/Hear-Resolver-Python-${ShortStage}
-      RetentionInDays: 14
-
   HearSkillFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub Hear-Python-${ShortStage}
       PackageType: Image
       ImageUri: !Ref ImageUri
-      # The resolver builds a large immutable taxonomy index during cold
-      # initialization.  Two GB supplies a full vCPU and materially reduces
-      # Alexa's first-turn latency; the outbound worker remains at the global
-      # one-GB default.
-      MemorySize: 2048
-      Environment:
-        Variables:
-          HEAR_RESOLVER_FUNCTION_ARN: !Sub "${ResolverFunction.Arn}:live"
-          HEAR_RESOLVER_TIMEOUT_MS: "2500"
       Policies:
         - DynamoDBCrudPolicy: { TableName: hear-service }
-        - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
-        - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
-        - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
-        - Statement:
-            - Effect: Allow
-              Action: lambda:InvokeFunction
-              Resource: !Sub "${ResolverFunction.Arn}:live"
 
-  WebhookFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub Hear-Webhook-Python-${ShortStage}
-      PackageType: Image
-      ImageUri: !Ref ImageUri
-      ImageConfig:
-        Command: [ "src.webhooks.lambda_handler.handler" ]
-      Policies:
-        - DynamoDBCrudPolicy: { TableName: hear-service }
-        - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
-        - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
-        - DynamoDBCrudPolicy: { TableName: !Ref WebhookReplayTable }
-        - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
-        - SQSSendMessagePolicy: { QueueName: !GetAtt TaxonomyRefreshQueue.QueueName }
-        - SQSSendMessagePolicy: { QueueName: !GetAtt NotificationIngestQueue.QueueName }
-      Events:
-        ApiGatewayWebhook:
-          Type: Api
-          Properties:
-            Path: /webhook/{proxy+}
-            Method: POST
-            RestApiId: !Ref WebhookApi
-
-  # Alexa Skills Kit invoke permission (only when a Skill ID is provided)
   AlexaInvokePermission:
     Type: AWS::Lambda::Permission
     Condition: HasAlexaSkillId
@@ -172,250 +72,7 @@ Resources:
       Principal: alexa-appkit.amazon.com
       EventSourceToken: !Ref AlexaSkillId
 
-  WebhookApi:
-    Type: AWS::Serverless::Api
-    Properties:
-      StageName: !Ref Stage
-      Name: !Sub hear-webhook-${Stage}
-
-  TaxonomyRevisionTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub hear-taxonomy-revision-${Stage}
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: pk
-          AttributeType: S
-      KeySchema:
-        - AttributeName: pk
-          KeyType: HASH
-
-  WebhookReplayTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub hear-webhook-replay-${Stage}
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: pk
-          AttributeType: S
-      KeySchema:
-        - AttributeName: pk
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
-
-  TaxonomyRevisionSeedFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub Hear-Taxonomy-Seed-Python-${ShortStage}
-      PackageType: Image
-      ImageUri: !Ref ImageUri
-      ImageConfig:
-        Command: [ "src.webhooks.taxonomy_seed.handler" ]
-      Policies:
-        - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
-        - SQSSendMessagePolicy: { QueueName: !GetAtt TaxonomyRefreshQueue.QueueName }
-
-  TaxonomyRevisionSeed:
-    Type: Custom::TaxonomyRevisionSeed
-    DependsOn:
-      - TaxonomyRevisionTable
-      - ResolverFunction
-      - TaxonomyRefreshFunction
-    Properties:
-      ServiceToken: !GetAtt TaxonomyRevisionSeedFunction.Arn
-      BootstrapVersion: !Ref ImageUri
-      ManifestUrl: https://cdn.hear.media/runtime/taxonomy/manifest.json
-
-  TaxonomySnapshotBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub hear-taxonomy-snapshots-${AWS::AccountId}-${Stage}
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      VersioningConfiguration: { Status: Enabled }
-
-  TaxonomyRefreshQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub hear-taxonomy-refresh-${Stage}.fifo
-      FifoQueue: true
-      ContentBasedDeduplication: false
-      VisibilityTimeout: 900
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt TaxonomyRefreshDLQ.Arn
-        maxReceiveCount: 3
-
-  TaxonomyRefreshDLQ:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub hear-taxonomy-refresh-${Stage}-dlq.fifo
-      FifoQueue: true
-
-  TaxonomyRefreshFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub Hear-Taxonomy-Refresh-Python-${ShortStage}
-      PackageType: Image
-      ImageUri: !Ref ImageUri
-      ImageConfig:
-        Command: [ "src.webhooks.taxonomy_refresh_consumer.handler" ]
-      # A cold refresh validates every manifest-listed artifact before it can
-      # package and activate the candidate resolver version.
-      Timeout: 900
-      MemorySize: 3008
-      EphemeralStorage:
-        Size: 1024
-      Environment:
-        Variables:
-          HEAR_RESOLVER_FUNCTION_NAME: !Ref ResolverFunction
-      Policies:
-        - SQSPollerPolicy: { QueueName: !GetAtt TaxonomyRefreshQueue.QueueName }
-        - S3CrudPolicy: { BucketName: !Ref TaxonomySnapshotBucket }
-        - DynamoDBCrudPolicy: { TableName: !Ref TaxonomyRevisionTable }
-        - Statement:
-            - Effect: Allow
-              Action:
-                - lambda:GetFunctionConfiguration
-                - lambda:UpdateFunctionConfiguration
-                - lambda:PublishVersion
-                - lambda:CreateAlias
-                - lambda:UpdateAlias
-                - lambda:InvokeFunction
-              Resource:
-                - !GetAtt ResolverFunction.Arn
-                - !Sub "${ResolverFunction.Arn}:*"
-      Events:
-        TaxonomyRefresh:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt TaxonomyRefreshQueue.Arn
-            BatchSize: 1
-            FunctionResponseTypes: [ReportBatchItemFailures]
-
-  NotificationInboxTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub hear-notification-inbox-${Stage}
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: alexaUserId
-          AttributeType: S
-        - AttributeName: notificationId
-          AttributeType: S
-        - AttributeName: activeUserId
-          AttributeType: S
-        - AttributeName: activePublishedAt
-          AttributeType: S
-      KeySchema:
-        - AttributeName: alexaUserId
-          KeyType: HASH
-        - AttributeName: notificationId
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: ActiveByUser
-          KeySchema:
-            - AttributeName: activeUserId
-              KeyType: HASH
-            - AttributeName: activePublishedAt
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
-
-  NotificationIngestQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      VisibilityTimeout: 180
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt NotificationIngestDLQ.Arn
-        maxReceiveCount: 5
-
-  NotificationIngestDLQ:
-    Type: AWS::SQS::Queue
-
-  NotificationConsumerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub Hear-Notification-Python-${ShortStage}
-      PackageType: Image
-      ImageUri: !Ref ImageUri
-      ImageConfig:
-        Command: [ "src.webhooks.notification_consumer.handler" ]
-      Policies:
-        - SQSPollerPolicy: { QueueName: !GetAtt NotificationIngestQueue.QueueName }
-        - DynamoDBCrudPolicy: { TableName: !Ref NotificationInboxTable }
-      Events:
-        NotificationIngest:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt NotificationIngestQueue.Arn
-            BatchSize: 1
-            ScalingConfig:
-              MaximumConcurrency: 10
-            FunctionResponseTypes: [ReportBatchItemFailures]
-
-  OutboundQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub hear-webhook-out-python-${Stage}
-      VisibilityTimeout: 180          # >= 6x the function timeout
-      MessageRetentionPeriod: 1209600
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt OutboundDLQ.Arn
-        maxReceiveCount: 5            # after 5 failed attempts -> DLQ
-
-  OutboundDLQ:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub hear-webhook-out-python-${Stage}-dlq
-      MessageRetentionPeriod: 1209600
-
-  OutboundConsumerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub Hear-Outbound-Python-${ShortStage}
-      PackageType: Image
-      ImageUri: !Ref ImageUri
-      ImageConfig:
-        Command: [ "src.webhooks.outbound_consumer.handler" ]
-      Policies:
-        - SQSPollerPolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
-      Events:
-        SQSTrigger:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt OutboundQueue.Arn
-            BatchSize: 10
-            ScalingConfig:
-              MaximumConcurrency: 20
-            FunctionResponseTypes:
-              - ReportBatchItemFailures
-
 Outputs:
   SkillFunctionArn:
-    Description: Set this as the skill's Default Endpoint in the Alexa console
+    Description: Set this as the skill's Default Endpoint in the Alexa console.
     Value: !GetAtt HearSkillFunction.Arn
-  ResolverFunctionArn:
-    Description: Provisioned resolver alias invoked by the Alexa Lambda
-    Value: !Sub "${ResolverFunction.Arn}:live"
-  WebhookEndpoint:
-    Description: Inbound webhook base URL
-    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook
-  NotificationWebhookEndpoint:
-    Description: Hear backend posts new track and publication notifications here
-    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook/notification
-  TaxonomyWebhookEndpoint:
-    Description: Hear backend posts runtime taxonomy revisions here
-    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/webhook/taxonomy
-  OutboundQueueUrl:
-    Value: !Ref OutboundQueue

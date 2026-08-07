@@ -3,8 +3,6 @@ from __future__ import annotations
 import time
 
 from src.services.storage.persistence import get_store, update_store
-from src.utils.skill_request import get_user_id
-from src.services.outbound_dispatch import dispatch
 from src.services.dialog_state import activate_dialog
 
 
@@ -103,23 +101,6 @@ def mark_pending_feedback_answered(handler_input) -> dict:
 
 
 async def submit_feedback(handler_input, value: str) -> dict:
-    """Dispatch one explicit feedback response and close the pending prompt."""
-    store = get_store(handler_input)
-    pending = store.get("pendingFeedback") or {}
-    user_id = get_user_id(handler_input)
-    if pending.get("feedbackKey") and user_id:
-        dispatch("feedback.given", {
-            "alexaUserId": user_id,
-            "feedbackKey": pending.get("feedbackKey"),
-            "contentId": pending.get("contentId"),
-            "publicationId": pending.get("publicationId"),
-            "publicationTitle": pending.get("publicationTitle"),
-            "creatorId": pending.get("creatorId"),
-            "creatorName": pending.get("creatorName"),
-            "title": pending.get("title"),
-            "category": pending.get("category"),
-            "listenedMs": pending.get("listenedMs"),
-            "feedback": value,
-            "timestamp": int(time.time() * 1000),
-        })
+    """Close the pending prompt after an explicit feedback response."""
+    del value
     return mark_pending_feedback_answered(handler_input)
