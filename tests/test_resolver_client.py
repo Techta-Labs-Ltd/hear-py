@@ -3,12 +3,13 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from src.services.resolver_client import (
+from src.clients.resolver import (
     ResolvedEntity,
     ResolverClient,
     ResolverResult,
     ResolverUnavailable,
 )
+
 
 
 def _response(**overrides):

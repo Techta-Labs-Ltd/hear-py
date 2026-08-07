@@ -32,19 +32,6 @@ def clone_browse_menu_item(item) -> dict | None:
     }
 
 
-def clone_queue_item(item) -> dict | None:
-    if not isinstance(item, dict):
-        return item
-    base = clone_browse_menu_item(item) or {}
-    return {
-        **base,
-        "categories": item.get("categories"),
-        "tracks": item.get("tracks"),
-        "audioUrl": item.get("audioUrl"),
-        "playback_speed": item.get("playback_speed"),
-    }
-
-
 def _score_category_match(item: dict, preferred_lower: list) -> int:
     """Score an item based on how well its category matches preferred categories."""
     if not preferred_lower:
@@ -115,10 +102,3 @@ def is_same_browse_session(prev: dict | None, catalog: dict | None, intent: str 
     return True
 
 
-async def resolve_queue_item_for_playback(item, options: dict | None = None) -> dict | None:
-    """Resolve full content for a queue item."""
-    if not isinstance(item, dict):
-        return None
-    if item.get("audioUrl") or (isinstance(item.get("tracks"), list) and item["tracks"]):
-        return item
-    return None

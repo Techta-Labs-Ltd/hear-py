@@ -6,44 +6,6 @@ from src.utils.skill_request import get_intent_name, get_user_id
 from src.utils.search_query import normalize_search_query
 
 
-def to_slug(value) -> str | None:
-    """Normalize a string into a URL-safe slug."""
-    if not value:
-        return None
-    slug = str(value).strip().lower()
-    slug = re.sub(r"['']", "", slug)
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = re.sub(r"^-+|-+$", "", slug)
-    return slug or None
-
-
-def build_user_field(handler_input, store: dict | None = None) -> dict:
-    """Build the user metadata object for search API payloads."""
-    env = getattr(handler_input, "request_envelope", {}) or {}
-    sys = (env.get("context") or {}).get("System") or {}
-    store_val = store or {}
-    return {
-        "alexaUserId": get_user_id(handler_input),
-        "deviceId": (sys.get("device") or {}).get("deviceId") or None,
-        "apiEndpoint": sys.get("apiEndpoint") or None,
-        "locale": (env.get("request") or {}).get("locale") or None,
-        "userName": store_val.get("userName") or None,
-        "fullName": store_val.get("fullName") or None,
-        "givenName": store_val.get("givenName") or None,
-        "userEmail": store_val.get("userEmail") or None,
-        "address": store_val.get("userAddress") or None,
-        "city": store_val.get("userCity") or None,
-        "state": store_val.get("userState") or None,
-        "country": store_val.get("userCountry") or None,
-        "countryCode": store_val.get("deviceCountryCode") or None,
-        "postalCode": store_val.get("devicePostalCode") or None,
-        "latitude": store_val.get("latitude") if store_val.get("latitude") is not None else None,
-        "longitude": store_val.get("longitude") if store_val.get("longitude") is not None else None,
-        "locality": store_val.get("locality") or None,
-        "clientVersion": "1.0.0",
-    }
-
-
 class SearchPayload:
     _FILTER_KEYS = (
         "contentIds", "creatorIds", "organizationIds", "publicationIds",
@@ -125,14 +87,6 @@ class SearchPayload:
     def build(cls, handler_input, store: dict | None = None, **kwargs) -> dict:
         """Construct and serialize in one call."""
         return cls(handler_input, store, **kwargs).to_dict()
-
-
-def build_search_filters(handler_input, store: dict | None = None, *, q: str = "", limit: int = 5, page: int = 0, sort: str | None = None, nlp_filter: dict | None = None) -> dict:
-    """Thin wrapper around :class:`SearchPayload`; prefer the class in new code."""
-    return SearchPayload(
-        handler_input, store, q=q,
-        limit=limit, page=page, sort=sort, nlp_filter=nlp_filter,
-    ).to_dict()
 
 
 def extract_slot_value(handler_input, slot_name: str) -> str:

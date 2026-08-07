@@ -4,8 +4,10 @@ import pytest
 
 from src.middleware.identity import IdentityInterceptor
 from src.runtime import AttrDict
-from src.services.alexa.client import send_playback_events
-from src.services.storage.store import DEFAULT_STORE
+from src.clients.alexa import send_playback_events
+
+from src.services.store import DEFAULT_STORE
+
 from src.utils.skill_request import get_user_id
 
 
@@ -44,7 +46,7 @@ def test_identity_extracts_ask_sdk_style_snake_case_models(mock_handler_input):
 
 
 @pytest.mark.asyncio
-async def test_identity_interceptor_persists_real_id_without_storing_token(mock_handler_input):
+async def test_identity_interceptor_keeps_identity_out_of_persisted_store(mock_handler_input):
     mock_handler_input.attributes_manager.request_attributes["_store"] = dict(DEFAULT_STORE)
     mock_handler_input.request_envelope = AttrDict({
         "context": {"System": {"user": {
@@ -56,10 +58,11 @@ async def test_identity_interceptor_persists_real_id_without_storing_token(mock_
     await IdentityInterceptor().process(mock_handler_input)
 
     attrs = mock_handler_input.attributes_manager.request_attributes
-    assert attrs["_store"]["alexaUserId"] == "amzn1.ask.account.REAL"
-    assert attrs["_identity"] == {
-        "alexaUserId": "amzn1.ask.account.REAL",
-    }
+    identity = attrs["_identity"]
+    assert identity.alexa_user_id == "amzn1.ask.account.REAL"
+    assert identity.principal_type == "anonymous_installation"
+    assert "_store" in attrs
+    assert attrs["_store"].get("alexaUserId") is None
 
 
 @pytest.mark.asyncio

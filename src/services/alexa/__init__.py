@@ -1,1 +1,0 @@
-"""Alexa platform integrations."""

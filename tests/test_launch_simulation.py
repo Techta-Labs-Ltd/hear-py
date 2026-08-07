@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from src.middleware.onboarding_gate import _is_new_user
-from src.handlers.intents.launch import _handle_launch_request_body, _get_user_id
-from src.handlers.intents.onboarding import ask_for_permission
-from src.services.storage.persistence import get_store, DEFAULT_STORE
+from src.handlers.launch import _handle_launch_request_body, _get_user_id
+
+
+from src.services.store import get_store, DEFAULT_STORE
+
 from src.utils.speech import (
     ONBOARDING_ASK_PERMISSION, WELCOME_RETURN_NAMED, WELCOME_RETURN_CITY,
     WELCOME_RETURN_GENERIC, ERROR_GENERIC,
@@ -157,19 +158,15 @@ class TestLaunchSimulation:
             },
         })
         monkeypatch.setattr(
-            "src.handlers.intents.launch.record_launch",
+            "src.services.launch.record_launch",
             lambda *_args: {"save": {}},
         )
         monkeypatch.setattr(
-            "src.handlers.intents.launch.sync_listener_for_launch",
-            AsyncMock(return_value=None),
-        )
-        monkeypatch.setattr(
-            "src.handlers.intents.launch._ensure_listener_data_for_launch",
+            "src.handlers.launch._ensure_listener_data_for_launch",
             AsyncMock(side_effect=lambda _handler_input, store: store),
         )
         monkeypatch.setattr(
-            "src.handlers.intents.launch._schedule_launch_background_work",
+            "src.handlers.launch._schedule_launch_background_work",
             lambda *_args: None,
         )
 
@@ -180,22 +177,22 @@ class TestLaunchSimulation:
         assert store["awaitingOrganizationName"] is False
         assert store["activeDialog"] is None
 
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def test_new_user_empty_store(self, mock_record):
         hi = _build_handler_input()
         mock_record.return_value = {"save": {}}
 
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
 
         store = get_store(hi)
         speech = _speak_text(hi)
-        print(f"\n=== FIRST LAUNCH (empty store) ===")
+        print("\n=== FIRST LAUNCH (empty store) ===")
         print(f"  playCount: {store.get('playCount', 0)}")
         print(f"  lastToken: {store.get('lastToken')}")
         print(f"  has_location: {bool(store.get('userCity') or store.get('locality'))}")
         print(f"  Speech: {speech}")
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def test_new_user_with_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "userCity": "London",
@@ -204,15 +201,15 @@ class TestLaunchSimulation:
         mock_record.return_value = {"save": {}}
 
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
 
         store = get_store(hi)
         speech = _speak_text(hi)
-        print(f"\n=== FIRST LAUNCH (city: London) ===")
+        print("\n=== FIRST LAUNCH (city: London) ===")
         print(f"  playCount: {store.get('playCount', 0)}")
         print(f"  has_location: {bool(store.get('userCity'))}")
         print(f"  Speech: {speech}")
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def test_returning_with_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
@@ -224,15 +221,15 @@ class TestLaunchSimulation:
         mock_record.return_value = {"save": {}}
 
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
 
         speech = _speak_text(hi)
         store = get_store(hi)
-        print(f"\n=== RETURNING (city: London) ===")
+        print("\n=== RETURNING (city: London) ===")
         print(f"  playCount: {store['playCount']}")
         print(f"  is_new: {_is_new_user(store)}")
         print(f"  Speech: {speech}")
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def test_returning_with_name_and_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
@@ -245,13 +242,13 @@ class TestLaunchSimulation:
         mock_record.return_value = {"save": {}}
 
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
 
         speech = _speak_text(hi)
-        store = get_store(hi)
-        print(f"\n=== RETURNING (name: John, city: London) ===")
+        get_store(hi)
+        print("\n=== RETURNING (name: John, city: London) ===")
         print(f"  Speech: {speech}")
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def test_returning_no_city(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 3,
@@ -261,15 +258,15 @@ class TestLaunchSimulation:
         mock_record.return_value = {"save": {}}
 
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
 
         speech = _speak_text(hi)
         store = get_store(hi)
-        print(f"\n=== RETURNING (no city) ===")
+        print("\n=== RETURNING (no city) ===")
         print(f"  is_new: {_is_new_user(store)}")
         print(f"  has_location: {bool(store.get('userCity') or store.get('locality'))}")
         print(f"  Speech: {speech}")
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def test_returning_awaiting_feedback(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
@@ -284,12 +281,12 @@ class TestLaunchSimulation:
         mock_record.return_value = {"save": {}}
 
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
 
         speech = _speak_text(hi)
-        print(f"\n=== RETURNING (pending feedback) ===")
+        print("\n=== RETURNING (pending feedback) ===")
         print(f"  Speech: {speech}")
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def test_returning_awaiting_still_listening(self, mock_record):
         hi = _build_handler_input(store_override={
             "playCount": 5,
@@ -302,10 +299,10 @@ class TestLaunchSimulation:
         mock_record.return_value = {"save": {}}
 
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
 
         speech = _speak_text(hi)
-        print(f"\n=== RETURNING (still listening?) ===")
+        print("\n=== RETURNING (still listening?) ===")
         print(f"  Speech: {speech}")
 
 
@@ -320,7 +317,7 @@ def run_full_trace():
             print(f"  [{label}] {speech[:120]}...")
         else:
             print(f"  [{label}] (no speech produced)")
-    @patch("src.handlers.intents.launch.record_launch")
+    @patch("src.services.launch.record_launch")
     def trace(mock_record):
 
         print("--- FIRST LAUNCH (empty store) ---")
@@ -337,7 +334,7 @@ def run_full_trace():
         hi = _build_handler_input(store_override={"userCity": "London", "locality": "London"})
         mock_record.return_value = {"save": {}}
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
         speaker("SPEECH", _speak_text(hi))
 
         print()
@@ -348,7 +345,7 @@ def run_full_trace():
         })
         mock_record.return_value = {"save": {}}
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
         speaker("SPEECH", _speak_text(hi))
 
         print()
@@ -359,7 +356,7 @@ def run_full_trace():
         })
         mock_record.return_value = {"save": {}}
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
         speaker("SPEECH", _speak_text(hi))
 
         print()
@@ -369,7 +366,7 @@ def run_full_trace():
         })
         mock_record.return_value = {"save": {}}
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
         speaker("SPEECH", _speak_text(hi))
 
         print()
@@ -382,7 +379,7 @@ def run_full_trace():
         })
         mock_record.return_value = {"save": {}}
         result = _handle_launch_request_body(hi)
-        response = asyncio.run(result)
+        asyncio.run(result)
         speaker("SPEECH", _speak_text(hi))
 
         print()
@@ -392,7 +389,7 @@ def run_full_trace():
         user_id = _get_user_id(hi)
         print(f"  _get_user_id() = {user_id}")
         if user_id is None:
-            print(f"  LaunchRequestHandler.handle() would return:")
+            print("  LaunchRequestHandler.handle() would return:")
             print(f"  -> ERROR_GENERIC: {ERROR_GENERIC[:100]}...")
 
         print()

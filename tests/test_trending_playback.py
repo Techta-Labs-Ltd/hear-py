@@ -4,10 +4,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.handlers.intents.play import WhatsTrendingHandler
+from src.handlers.browse import WhatsTrendingHandler
+
 from src.runtime import AttrDict
-from src.services.playback.session import has_unfinished_playback
-from src.services.storage.persistence import DEFAULT_STORE
+from src.services.playback import has_unfinished_playback
+
+from src.services.store import DEFAULT_STORE
+
 
 
 def test_resume_offer_requires_a_playable_https_url():
@@ -59,10 +62,10 @@ async def test_recommendation_intent_uses_trending_handler_and_announces_count(
     discover = AsyncMock(return_value=result)
     autoplay = AsyncMock(return_value={"directives": [{"type": "AudioPlayer.Play"}]})
     monkeypatch.setattr(
-        "src.handlers.intents.play.discover_content_via_search", discover,
+        "src.handlers.browse.discover_content_via_search", discover,
     )
     monkeypatch.setattr(
-        "src.handlers.intents.play.auto_play_first_from_search", autoplay,
+        "src.handlers.browse.auto_play_first_from_search", autoplay,
     )
 
     handler = WhatsTrendingHandler()

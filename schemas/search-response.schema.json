@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/search-response.schema.json",
+  "title": "Hear search response",
+  "description": "Normalized search response returned by src/services/api/client.py search().",
+  "type": "object",
+  "required": ["results", "total_hits", "total_pages", "page"],
+  "properties": {
+    "results": { "type": "array", "items": { "type": "object" } },
+    "total_hits": { "type": ["integer", "number"] },
+    "total_pages": { "type": ["integer", "null"] },
+    "page": { "type": "integer" },
+    "client_message": { "type": ["string", "null"] },
+    "search_relaxation": { "type": ["object", "null"] },
+    "session_key": { "type": ["string", "null"] },
+    "failed": { "type": "boolean" }
+  }
+}

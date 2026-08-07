@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse, parse_qs
 
 from config import settings
-from src.services.storage.persistence import update_store
+from src.services.store import update_store
+
 from src.utils.feedback_timing import feedback_progress_report_options
 from src.utils.normalize_content_item import is_id_like_label
 
@@ -111,21 +111,6 @@ def normalise_speed(requested) -> float | None:
     return best
 
 
-def apply_speed_to_url(url: str | None, speed) -> str | None:
-    """Inject or replace the speed query parameter on an audio URL."""
-    if not url or not isinstance(url, str):
-        return url
-    numeric_speed = float(speed) if speed is not None else None
-    if numeric_speed is None or numeric_speed != numeric_speed or numeric_speed == settings.default_speed:
-        return url
-    param = settings.HEAR_AUDIO_SPEED_PARAM or "speed"
-    pattern = re.compile(rf"([?&]){re.escape(param)}=[^&]*")
-    if pattern.search(url):
-        return pattern.sub(rf"\1{param}={numeric_speed}", url)
-    sep = "&" if "?" in url else "?"
-    return f"{url}{sep}{param}={numeric_speed}"
-
-
 def find_speed_url(speeds: list | None, target_speed: float) -> str | None:
     """Find the best-matching speed-variant audio URL within tolerance."""
     if not isinstance(speeds, list) or not speeds:
@@ -153,23 +138,6 @@ def get_next_speed(speeds: list | None, current_speed: float, direction: str) ->
     for i in range(len(sorted_speeds) - 1, -1, -1):
         if sorted_speeds[i]["speed"] < current_speed - 0.01:
             return sorted_speeds[i]
-    return None
-
-
-def get_next_configured_speed(current_speed: float, direction: str, speeds: list | None = None) -> float | None:
-    """Find the next higher or lower speed from the configured speed list."""
-    lst = list(speeds) if speeds else settings.speeds
-    if not lst:
-        return None
-    sorted_lst = sorted(lst)
-    if direction == "up":
-        for s in sorted_lst:
-            if s > current_speed + 0.01:
-                return s
-        return None
-    for i in range(len(sorted_lst) - 1, -1, -1):
-        if sorted_lst[i] < current_speed - 0.01:
-            return sorted_lst[i]
     return None
 
 
@@ -204,38 +172,6 @@ def resolve_audio_url_for_speed(base_url: str | None, speed, playback_speeds: li
         return strip_speed_from_url(base_url)
     variant = find_speed_url(playback_speeds, effective)
     return variant or strip_speed_from_url(base_url)
-
-
-def _parse_playback_speed_from_filename(url: str) -> float | None:
-    """Extract a playback speed from a filename suffix like _1.5x."""
-    if not url or not isinstance(url, str):
-        return None
-    m = re.search(r"_([\d.]+)x(?:[.?]|$)", url, re.I)
-    return normalise_speed(float(m.group(1))) if m else None
-
-
-def parse_playback_speed_from_url(url: str | None, fallback_speed=None) -> float:
-    """Parse the playback speed from a URL query parameter or filename."""
-    fallback = float(fallback_speed) if (fallback_speed is not None and isinstance(fallback_speed, (int, float))) else settings.default_speed
-    if not url or not isinstance(url, str):
-        return fallback
-    param = settings.HEAR_AUDIO_SPEED_PARAM or "speed"
-    try:
-        parsed = urlparse(url)
-        qs = parse_qs(parsed.query)
-        from_query = qs.get(param, [None])[0]
-        if from_query is not None:
-            spd = normalise_speed(from_query)
-            if spd:
-                return spd
-    except Exception:
-        m = re.search(rf"[?&]{re.escape(param)}=([^&]+)", url)
-        if m:
-            spd = normalise_speed(m.group(1))
-            if spd:
-                return spd
-    from_filename = _parse_playback_speed_from_filename(url)
-    return from_filename or fallback
 
 
 def parse_duration_to_ms(duration: str | None) -> int | None:

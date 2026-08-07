@@ -4,7 +4,8 @@ from __future__ import annotations
 import time
 from copy import deepcopy
 
-from src.services.storage.store import get_store, update_store
+from src.services.store import get_store, update_store
+
 
 DIALOG_TTL_SECONDS = 10 * 60
 

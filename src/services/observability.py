@@ -75,10 +75,6 @@ class ErrorReporter:
 error_reporter = ErrorReporter()
 
 
-def sentry_enabled() -> bool:
-    return error_reporter.enabled
-
-
 def init_sentry() -> None:
     error_reporter.initialize()
 

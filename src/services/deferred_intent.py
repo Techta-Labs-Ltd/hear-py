@@ -3,7 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 
 from src.runtime import AttrDict
-from src.services.storage.persistence import get_store, update_store
+from src.services.store import get_store, update_store
+
 from src.services.dialog_state import clear_active_dialog
 from src.services.dialog_state import activate_dialog
 from src.utils.skill_request import get_intent_name, get_request_type

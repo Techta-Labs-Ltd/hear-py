@@ -78,6 +78,18 @@ def _queued_content(content_id: str, title: str) -> dict:
     }
 
 
+def _fake_search(catalog: list[dict]) -> AsyncMock:
+    async def _search(payload):
+        wanted = (payload.get("filter") or {}).get("contentIds") or []
+        wanted = [str(value) for value in wanted]
+        return {
+            "results": [item for item in catalog if item["contentId"] in wanted],
+            "total_hits": 1,
+        }
+
+    return AsyncMock(side_effect=_search)
+
+
 @pytest.mark.asyncio
 async def test_returning_user_latest_source_offer_searches_only_after_yes(monkeypatch):
     persistence = MemoryPersistenceAdapter()
@@ -95,7 +107,7 @@ async def test_returning_user_latest_source_offer_searches_only_after_yes(monkey
         "results": [_queued_content(SECOND_CONTENT_ID, "York weekly news")],
         "total_hits": 1,
     })
-    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    monkeypatch.setattr("src.handlers.yesno.search", search)
     skill = build_skill(persistence)
 
     launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
@@ -130,7 +142,7 @@ async def test_latest_source_offer_is_once_per_completed_item_and_no_clears_it(m
         },
     }
     search = AsyncMock()
-    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    monkeypatch.setattr("src.clients.hear.search", search)
     skill = build_skill(persistence)
     await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
 
@@ -166,7 +178,7 @@ async def test_independent_creator_latest_offer_uses_creator_name_and_id(monkeyp
         "results": [_queued_content(SECOND_CONTENT_ID, "David's latest")],
         "total_hits": 1,
     })
-    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    monkeypatch.setattr("src.handlers.yesno.search", search)
     skill = build_skill(persistence)
 
     launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
@@ -189,7 +201,7 @@ async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypat
         "activePlayback": _playback_state(),
     }
     search = AsyncMock()
-    monkeypatch.setattr("src.handlers.intents.system.search", search)
+    monkeypatch.setattr("src.clients.hear.search", search)
 
     result = await build_skill(persistence).invoke(
         _event({
@@ -274,7 +286,7 @@ async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
         "activePlayback": _playback_state(status="starting", offset_ms=0),
     }
     monkeypatch.setattr(
-        "src.handlers.audio.playback_started.emit_listening_event",
+        "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
 
@@ -309,7 +321,7 @@ async def test_playback_progress_events_persist_and_sync(
     }
     emit = AsyncMock()
     monkeypatch.setattr(
-        "src.handlers.audio.playback_progress_report.emit_listening_event",
+        "src.handlers.audio.emit_listening_event",
         emit,
     )
 
@@ -337,7 +349,7 @@ async def test_playback_stopped_never_creates_feedback_candidate(monkeypatch):
         "activePlayback": _playback_state(status="playing", offset_ms=120_000),
     }
     monkeypatch.setattr(
-        "src.handlers.audio.playback_stopped.emit_listening_event",
+        "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
 
@@ -364,7 +376,7 @@ async def test_playback_nearly_finished_syncs_without_a_queue(monkeypatch):
     }
     emit = AsyncMock()
     monkeypatch.setattr(
-        "src.handlers.audio.playback_nearly_finished.emit_listening_event",
+        "src.handlers.audio.emit_listening_event",
         emit,
     )
 
@@ -395,14 +407,17 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
             "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID, THIRD_CONTENT_ID],
             "currentIndex": 0,
         },
-        "browseCatalog": {"items": [second, third]},
     }
     monkeypatch.setattr(
-        "src.handlers.audio.playback_nearly_finished.emit_listening_event",
+        "src.handlers.audio.search",
+        _fake_search([second, third]),
+    )
+    monkeypatch.setattr(
+        "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "src.handlers.audio.playback_started.emit_listening_event",
+        "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
 
@@ -446,7 +461,7 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_queue_prefetch_uses_persisted_content_id_cache_without_search(monkeypatch):
+async def test_queue_prefetch_falls_back_to_backend_search_when_no_cache_persisted(monkeypatch):
     persistence = MemoryPersistenceAdapter()
     second = _queued_content(SECOND_CONTENT_ID, "Second bulletin")
     persistence._store[USER_ID] = {
@@ -458,12 +473,14 @@ async def test_queue_prefetch_uses_persisted_content_id_cache_without_search(mon
             "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID],
             "currentIndex": 0,
         },
-        "browseQueueItems": [second],
     }
-    search = AsyncMock()
-    monkeypatch.setattr("src.handlers.audio.playback_nearly_finished.search", search)
+    search = _fake_search([second])
     monkeypatch.setattr(
-        "src.handlers.audio.playback_nearly_finished.emit_listening_event",
+        "src.handlers.audio.search",
+        search,
+    )
+    monkeypatch.setattr(
+        "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
 
@@ -476,7 +493,8 @@ async def test_queue_prefetch_uses_persisted_content_id_cache_without_search(mon
         None,
     )
 
-    search.assert_not_awaited()
+    search.assert_awaited_once()
+    assert search.await_args.args[0]["filter"] == {"contentIds": [SECOND_CONTENT_ID]}
     directive = result["response"]["directives"][0]
     assert directive["playBehavior"] == "ENQUEUE"
     assert directive["audioItem"]["stream"]["token"] == SECOND_CONTENT_ID
@@ -498,13 +516,13 @@ async def test_playback_finished_starts_next_when_prefetch_was_missed(monkeypatc
         "preparedNextContent": None,
     }
     monkeypatch.setattr(
-        "src.handlers.audio.playback_finished.emit_listening_event",
+        "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
     fallback_response = {"directives": [{"type": "AudioPlayer.Play"}]}
     advance = AsyncMock(return_value=fallback_response)
     monkeypatch.setattr(
-        "src.handlers.audio.playback_finished.play_next_queued_item",
+        "src.handlers.audio.play_next_queued_item",
         advance,
     )
 
@@ -530,7 +548,7 @@ async def test_playback_finished_accepts_raw_camel_case_offset(monkeypatch):
         "activePlayback": _playback_state(status="playing", offset_ms=12_345),
     }
     monkeypatch.setattr(
-        "src.handlers.audio.playback_finished.emit_listening_event",
+        "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
 

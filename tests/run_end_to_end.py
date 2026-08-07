@@ -64,10 +64,14 @@ persistence._store[USER_ID] = {
     "onboardingComplete": True, "userName": "John",
 }
 
-from src.handlers.intents.launch import LaunchRequestHandler
-from src.handlers.intents.play import PlayContentHandler
-from src.handlers.intents.social import WhatsThisAboutHandler
-from src.handlers.intents.system import HelpIntentHandler, CancelIntentHandler
+from src.handlers.launch import LaunchRequestHandler
+
+from src.handlers.play import PlayContentHandler
+
+from src.handlers.report import WhatsThisAboutHandler
+
+from src.handlers.system import HelpIntentHandler, CancelIntentHandler
+
 
 builder = AsyncSkill(persistence_adapter=persistence)
 register_middleware(builder)
@@ -103,7 +107,8 @@ print()
 
 # --- error edge case ---
 print("--- Edge: missing userId ---")
-from src.handlers.intents.system import UnmatchedIntentHandler
+from src.handlers.fallback import UnmatchedIntentHandler
+
 builder3 = AsyncSkill(persistence_adapter=MemoryPersistenceAdapter())
 register_middleware(builder3)
 builder3.add_request_handler(UnmatchedIntentHandler())

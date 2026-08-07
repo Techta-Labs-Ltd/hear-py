@@ -4,21 +4,24 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.handlers.intents.play import auto_play_first_from_search
+from src.handlers.search import auto_play_first_from_search
+
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.services.api.client import (
+from src.clients.hear import (
     ALLOWED_SORT_VALUES,
     _build_alexa_relative_path,
     _build_alexa_search_path,
     _build_api_path,
     search,
 )
-from src.services.playback.start import start_playback
+
+from src.services.playback import start_playback
+
 
 
 def test_search_path_applies_configured_prefix_once(monkeypatch):
     monkeypatch.setattr(
-        "src.services.api.client.settings.HEAR_API_PATH_PREFIX",
+        "src.clients.hear.settings.HEAR_API_PATH_PREFIX",
         "alexa",
     )
 
@@ -27,7 +30,7 @@ def test_search_path_applies_configured_prefix_once(monkeypatch):
 
 def test_search_path_uses_legacy_alexa_route_without_prefix(monkeypatch):
     monkeypatch.setattr(
-        "src.services.api.client.settings.HEAR_API_PATH_PREFIX",
+        "src.clients.hear.settings.HEAR_API_PATH_PREFIX",
         "",
     )
 
@@ -36,7 +39,7 @@ def test_search_path_uses_legacy_alexa_route_without_prefix(monkeypatch):
 
 def test_location_path_applies_configured_prefix_once(monkeypatch):
     monkeypatch.setattr(
-        "src.services.api.client.settings.HEAR_API_PATH_PREFIX",
+        "src.clients.hear.settings.HEAR_API_PATH_PREFIX",
         "alexa",
     )
 
@@ -51,7 +54,7 @@ async def test_search_omits_sort_values_the_api_rejects(monkeypatch):
         sent.update(body)
         return 200, {"results": [], "total": 0}
 
-    monkeypatch.setattr("src.services.api.client._request", fake_request)
+    monkeypatch.setattr("src.clients.hear._request", fake_request)
 
     await search({"query": "news", "sort": "relevance"})
     assert "sort" not in sent
@@ -68,7 +71,7 @@ async def test_search_serializes_an_absent_query_as_an_empty_string(monkeypatch)
         sent.update(body)
         return 200, {"results": [], "total": 0}
 
-    monkeypatch.setattr("src.services.api.client._request", fake_request)
+    monkeypatch.setattr("src.clients.hear._request", fake_request)
 
     await search({"query": None})
     assert sent["query"] == ""
@@ -85,7 +88,7 @@ async def test_search_normalizes_legacy_top_level_dates_into_filter(monkeypatch)
         sent.update(body)
         return 200, {"results": [], "total": 0}
 
-    monkeypatch.setattr("src.services.api.client._request", fake_request)
+    monkeypatch.setattr("src.clients.hear._request", fake_request)
 
     await search({
         "query": "",
@@ -115,7 +118,7 @@ async def test_real_search_shape_reaches_playback_without_catalog_call_error(
 ):
     expected = {"response": "play"}
     start = AsyncMock(return_value=expected)
-    monkeypatch.setattr("src.handlers.intents.play.start_playback", start)
+    monkeypatch.setattr("src.handlers.search.start_playback", start)
     result = await auto_play_first_from_search(
         mock_handler_input,
         {
@@ -163,7 +166,7 @@ async def test_start_playback_awaits_cleanup_and_builds_audio_directive(
     )
     cancel = AsyncMock()
     monkeypatch.setattr(
-        "src.services.playback.start.cancel_feedback_reminder",
+        "src.services.playback.cancel_feedback_reminder",
         cancel,
     )
 

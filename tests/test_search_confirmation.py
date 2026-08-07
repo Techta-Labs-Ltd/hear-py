@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from src.middleware.confirmation import ConfirmationMiddleware
-from src.nlp.dispatch_handler import IntentDispatchHandler
+from src.handlers.dispatch import IntentDispatchHandler
+
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.services.storage.persistence import DEFAULT_STORE, get_store
+from src.services.store import DEFAULT_STORE, get_store
+
 
 
 def test_full_resolved_search_is_spoken_before_backend_search():

@@ -71,9 +71,9 @@ def audit_module(path: Path, root: Path) -> list[str]:
 
 
 def audit_registry(root: Path) -> list[str]:
-    path = root / "src/handlers/registry.py"
+    path = root / "src/registry.py"
     if not path.exists():
-        return ["src/handlers/registry.py: missing"]
+        return ["src/registry.py: missing"]
     tree = ast.parse(path.read_text(encoding="utf-8"))
     out = []
     for node in tree.body:

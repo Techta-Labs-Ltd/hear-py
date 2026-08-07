@@ -70,10 +70,16 @@ persistence._store[USER_ID] = {
     "userName": "John",
 }
 
-from src.handlers.intents.launch import LaunchRequestHandler
-from src.handlers.intents.play import PlayContentHandler, PlayByCreatorHandler, WhatsTrendingHandler, BrowseContentHandler
-from src.handlers.intents.system import HelpIntentHandler, CancelIntentHandler, YesIntentHandler, NoIntentHandler
-from src.handlers.intents.social import FollowCreatorHandler
+from src.handlers.launch import LaunchRequestHandler
+
+from src.handlers.browse import WhatsTrendingHandler, BrowseContentHandler
+from src.handlers.play import PlayContentHandler, PlayByCreatorHandler
+
+from src.handlers.system import HelpIntentHandler, CancelIntentHandler
+from src.handlers.yesno import YesIntentHandler, NoIntentHandler
+
+from src.handlers.social import FollowCreatorHandler
+
 
 skill = AsyncSkill(persistence_adapter=persistence)
 register_middleware(skill)

@@ -4,22 +4,6 @@ import time
 
 
 
-def get_device_id(handler_input) -> str | None:
-    """Extract the Alexa device ID from the request envelope."""
-    try:
-        return handler_input.request_envelope.context.System.device.deviceId or None
-    except Exception:
-        return None
-
-
-def get_locale(handler_input) -> str | None:
-    """Extract the locale from the request."""
-    try:
-        return handler_input.request_envelope.request.locale or None
-    except Exception:
-        return None
-
-
 def read_audio_player_context(handler_input) -> dict | None:
     """Read and normalize the Alexa AudioPlayer context."""
     try:
@@ -43,14 +27,6 @@ def is_audio_player_active(context: dict | None) -> bool:
     if not context.get("playerActivity"):
         return bool(context.get("token"))
     return context["playerActivity"] in ("PLAYING", "PAUSED", "BUFFER_UNDERRUN")
-
-
-def resolve_active_playback_token(store: dict) -> str | None:
-    """Resolve the active playback token from the session store."""
-    if not isinstance(store, dict):
-        return None
-    active = store.get("activePlayback") or {}
-    return active.get("contentId") or store.get("lastToken") or None
 
 
 def resolve_report_track_context(store: dict, *, audio_token: str | None = None) -> dict:

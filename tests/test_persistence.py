@@ -1,10 +1,10 @@
-import pytest
-from unittest.mock import MagicMock
-from src.services.storage.persistence import (
-    DEFAULT_STORE, merge_initial_store, get_store, update_store,
-    add_to_history, add_followed_creator, is_following,
-    recent_content_ids, clear_queue, init_queue, set_browse_catalog,
-)
+from src.services.browse import set_browse_catalog
+from src.services.following import add_followed_creator, is_following
+from src.services.persistence import merge_initial_store
+from src.services.playback import add_to_history
+from src.services.queue import recent_content_ids, clear_queue, init_queue
+from src.services.store import DEFAULT_STORE, get_store, update_store
+
 
 
 class TestPersistence:

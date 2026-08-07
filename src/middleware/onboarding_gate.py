@@ -8,17 +8,25 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
-from src.services.alexa.locality import has_permission
-from src.services.storage.persistence import get_store
+from src.clients.alexa_locality import has_permission
+
+from src.services.store import get_store
+
 from src.utils.skill_request import get_request_type, get_intent_name
 from src.utils.speech import (
-    ssml, REPROMPT_ASK_TOWN, ONBOARDING_TOWN_CONFIRM,
+    ssml, ONBOARDING_TOWN_CONFIRM,
 )
-from src.handlers.intents.onboarding import (
-    ONBOARDING_ASK_TOWN, ONBOARDING_AWAIT_CONFIRM, TOWN_CONFIRM_REPROMPT,
-    ask_for_permission, handle_permission_yes, handle_permission_no,
-    auto_detect_location_or_manual, resume_town_capture,
+from src.handlers.onboarding import (
+    ONBOARDING_ASK_TOWN,
+    ONBOARDING_AWAIT_CONFIRM,
+    TOWN_CONFIRM_REPROMPT,
+    ask_for_permission,
+    handle_permission_yes,
+    handle_permission_no,
+    auto_detect_location_or_manual,
+    resume_town_capture,
 )
+
 
 logger = logging.getLogger(__name__)
 

@@ -93,10 +93,6 @@ def prefer_readable(*candidates) -> str | None:
     return first_non_id or first_any
 
 
-def derive_locality_string(item: dict) -> str | None:
-    return nullable_string(item.get("locality"))
-
-
 def _first_search_phrase(item: dict) -> str | None:
     """Get the first search phrase from a content item."""
     phrases = item.get("searchPhrases")
@@ -221,15 +217,6 @@ def _is_organization_publisher(item: dict) -> bool:
     )
 
 
-def pick_attribution_kind(item: dict) -> str:
-    if _is_organization_publisher(item):
-        return "organization"
-    creator = _extract_creator_name(item)
-    if creator and not is_bad_credit_name(creator):
-        return "creator"
-    return "creator"
-
-
 def pick_attribution_credit(item: dict) -> str | None:
     creator = _extract_creator_name(item)
     org = _pick_organization_name(item)
@@ -267,15 +254,6 @@ def pick_content_source(item: dict) -> dict | None:
     if creator_id and creator_name and not is_bad_credit_name(creator_name):
         return {"kind": "creator", "id": creator_id, "name": creator_name}
     return None
-
-
-def pick_menu_credit(item: dict) -> str | None:
-    """Pick the menu credit for browse listing display."""
-    return pick_attribution_credit(item)
-
-
-def pick_main_topic(item: dict) -> str | None:
-    return nullable_string(item.get("mainTopic"))
 
 
 def pick_summary(item: dict) -> str | None:

@@ -4,16 +4,24 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.handlers.feedback.not_enjoyed import FeedbackNotEnjoyedHandler
-from src.handlers.feedback.enjoyed import FeedbackEnjoyedHandler
-from src.handlers.feedback.skip import SkipFeedbackHandler
-from src.handlers.intents.social import ReportContentHandler
-from src.handlers.intents.system import NoIntentHandler
+from src.handlers.feedback import FeedbackNotEnjoyedHandler
+
+from src.handlers.feedback import FeedbackEnjoyedHandler
+
+from src.handlers.feedback import SkipFeedbackHandler
+
+from src.handlers.report import ReportContentHandler
+
+from src.handlers.yesno import NoIntentHandler
+
 from src.middleware.feedback_gate import FeedbackGateHandler
 from src.runtime import AttrDict
-from src.services.listeners import sync_listener_for_launch
-from src.services.queue.advance import _resolve_content
-from src.services.storage.persistence import DEFAULT_STORE
+from src.clients.hear import sync_listener_for_launch
+
+from src.services.playback import _resolve_content
+
+from src.services.store import DEFAULT_STORE
+
 from src.utils.normalize_content_item import (
     content_title_for_speech,
     normalize_content_item,
@@ -125,7 +133,7 @@ async def test_queue_resolves_next_item_from_cached_catalog_without_api(
         "browseCatalog": {"items": [cached]},
     }
     api_search = AsyncMock()
-    monkeypatch.setattr("src.services.queue.advance.search", api_search)
+    monkeypatch.setattr("src.clients.hear.search", api_search)
 
     result = await _resolve_content(mock_handler_input, "content-2")
 
@@ -190,7 +198,7 @@ async def test_negative_feedback_reports_then_resumes_deferred_play_request(
         "directives": [{"type": "AudioPlayer.Play"}],
     })
     monkeypatch.setattr(
-        "src.handlers.feedback.not_enjoyed.submit_feedback",
+        "src.handlers.feedback",
         AsyncMock(),
     )
 
@@ -277,7 +285,7 @@ async def test_skip_feedback_restores_exact_pending_search_confirmation(
             "ssml": "<speak>Did you want me to play the latest sport update from York Talking News?</speak>",
         },
     })
-    monkeypatch.setattr("src.handlers.feedback.skip.submit_feedback", AsyncMock())
+    monkeypatch.setattr("src.handlers.feedback", AsyncMock())
 
     await SkipFeedbackHandler().handle(mock_handler_input)
 
@@ -308,7 +316,7 @@ async def test_plain_no_skips_feedback_instead_of_recording_dislike(
         },
     }
     submit = AsyncMock()
-    monkeypatch.setattr("src.handlers.feedback.skip.submit_feedback", submit)
+    monkeypatch.setattr("src.handlers.feedback.submit_feedback", submit)
 
     await NoIntentHandler().handle(mock_handler_input)
 
@@ -330,7 +338,7 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
         "playCount": 3,
     }
     sync = AsyncMock(return_value={"listenerId": "listener-1"})
-    monkeypatch.setattr("src.services.listeners.sync_listener", sync)
+    monkeypatch.setattr("src.clients.hear.sync_listener", sync)
 
     assert await sync_listener_for_launch(mock_handler_input)
 

@@ -6,7 +6,8 @@ import logging
 from config import settings
 from src.adapters.dynamodb_persistence import build_dynamo_adapter
 from src.adapters.memory_persistence import MemoryPersistenceAdapter
-from src.handlers.registry import register_handlers
+from src.registry import register_handlers
+
 from src.middleware import register_middleware
 from src.runtime import AsyncSkill
 
@@ -24,7 +25,8 @@ def build_persistence_adapter():
         logger.warning("Unknown persistence driver %r; selecting from environment", driver)
     if table_name:
         return build_dynamo_adapter(table_name=table_name)
-
+    if settings.STAGE in ("staging", "production"):
+        raise RuntimeError("HEAR_DDB_TABLE is required in staging/production")
     logger.warning("HEAR_DDB_TABLE is unset; using non-durable memory persistence")
     return MemoryPersistenceAdapter()
 

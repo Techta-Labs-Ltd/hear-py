@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
-from src.services.resolution_state import build_pending_resolution
+from src.services.resolution import build_pending_resolution
+
 from src.utils.speech import resolved_search_request_label
 
 _CONFIRMABLE: set[str] = {
@@ -163,7 +164,6 @@ def _build_search_params(nlp: dict | None) -> dict | None:
     if slots.get("residualQuery"):
         parts.append(slots.get("residualQuery"))
     query = " ".join(parts) if parts else (slots.get("topic") or "")
-    payload = nlp.get("searchPayload") or slots.get("searchPlan") or {}
     return {
         "intent": nlp["intent"],
         "query": query,

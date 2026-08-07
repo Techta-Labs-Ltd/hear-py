@@ -1,46 +1,34 @@
 from __future__ import annotations
-import asyncio
+
+import logging
 import time
-import boto3
-from botocore.exceptions import ClientError
-from .persistence_user_id import resolve_persistence_user_id
+
+from src.adapters.dynamodb import (
+    DynamoTable,
+    encode_value,
+    eq,
+    item_bytes,
+    not_exists,
+)
+from src.adapters.persistence_user_id import resolve_persistence_user_id
 from config import settings
 
+logger = logging.getLogger(__name__)
+
 _VERSION_FIELD = "_persistenceVersion"
+_SIZE_WARN_BYTES = 65536
 
 
-def _to_attr(value):
-    if value is None:
-        return {"NULL": True}
-    if isinstance(value, str):
-        return {"NULL": True} if value == "" else {"S": value}
-    if isinstance(value, bool):
-        return {"BOOL": value}
-    if isinstance(value, (int, float)):
-        return {"N": str(value)} if value == value else {"NULL": True}
-    if isinstance(value, list):
-        return {"L": [_to_attr(v) for v in value]}
-    if isinstance(value, dict):
-        return {"M": {k: _to_attr(v) for k, v in value.items()}}
-    return {"S": str(value)}
+class InvalidPersistenceKey(ValueError):
+    pass
 
 
-def _from_attr(attr):
-    if not attr or not isinstance(attr, dict):
-        return None
-    if "NULL" in attr:
-        return None
-    if "S" in attr:
-        return attr["S"]
-    if "N" in attr:
-        return float(attr["N"]) if "." in str(attr["N"]) else int(attr["N"])
-    if "BOOL" in attr:
-        return attr["BOOL"]
-    if "L" in attr:
-        return [_from_attr(v) for v in attr["L"]]
-    if "M" in attr:
-        return {k: _from_attr(v) for k, v in attr["M"].items()}
-    return None
+def _is_invalid_key(user_id: str) -> bool:
+    if not user_id or not user_id.strip():
+        return True
+    if user_id.startswith("__"):
+        return True
+    return user_id.startswith("session:")
 
 
 class DynamoDbPersistenceAdapter:
@@ -60,71 +48,66 @@ class DynamoDbPersistenceAdapter:
         self.attributes_name = attributes_name
         self.ttl_attribute = ttl_attribute
         self.ttl_days = ttl_days or settings.HEAR_PERSISTENCE_TTL_DAYS
-        self._client = boto3.client("dynamodb", region_name=region or settings.ddb_region)
+        self._table = DynamoTable(
+            table_name=table_name,
+            partition_key=partition_key_name,
+            region=region or settings.ddb_region,
+        )
 
-    def _key(self, request_envelope: dict) -> dict:
+    def _user_id(self, request_envelope: dict) -> str:
         user_id = resolve_persistence_user_id(request_envelope)
-        return {self.partition_key_name: {"S": user_id}}
+        if _is_invalid_key(user_id):
+            raise InvalidPersistenceKey(f"invalid persistence key {user_id!r}")
+        return user_id
 
     async def get_attributes(self, request_envelope: dict) -> dict:
-        try:
-            resp = await asyncio.to_thread(
-                self._client.get_item,
-                TableName=self.table_name,
-                Key=self._key(request_envelope),
-                # Foreground dialogs span separate Alexa requests. An
-                # eventually consistent read can miss the ambiguity written
-                # by the immediately preceding response and route a reply as
-                # an unrelated intent. Always read the canonical user state.
-                ConsistentRead=True,
-            )
-            item = resp.get("Item")
-            if not item or self.attributes_name not in item:
-                return {}
-            attributes = _from_attr(item[self.attributes_name]) or {}
-            attributes[_VERSION_FIELD] = int(
-                _from_attr(item.get("stateVersion")) or 0
-            )
-            return attributes
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "ResourceNotFoundException":
-                return {}
-            raise
+        user_id = self._user_id(request_envelope)
+        item = await self._table.get_item(user_id)
+        if not item or self.attributes_name not in item:
+            return {}
+        attributes = item[self.attributes_name] or {}
+        attributes[_VERSION_FIELD] = int(item.get("stateVersion") or 0)
+        return attributes
 
     async def save_attributes(self, request_envelope: dict, attributes: dict) -> None:
+        user_id = self._user_id(request_envelope)
         expires_at = int(time.time()) + (self.ttl_days or 180) * 86400
         document = dict(attributes or {})
         expected_version = int(document.pop(_VERSION_FIELD, 0) or 0)
-        await asyncio.to_thread(
-            self._client.update_item,
-            TableName=self.table_name,
-            Key=self._key(request_envelope),
-            UpdateExpression="SET #attributes = :attributes, #ttl = :ttl, #version = :next",
-            ConditionExpression=(
-                "attribute_not_exists(#version) OR #version = :expected"
-            ),
-            ExpressionAttributeNames={
-                "#attributes": self.attributes_name,
-                "#ttl": self.ttl_attribute,
-                "#version": "stateVersion",
+        size = item_bytes(encode_value(document))
+        if size > _SIZE_WARN_BYTES:
+            logger.warning(
+                "DynamoDB state item oversized bytes=%s table=%s",
+                size,
+                self.table_name,
+            )
+        await self._table.update_item(
+            user_id,
+            updates={
+                self.attributes_name: document,
+                self.ttl_attribute: expires_at,
+                "stateVersion": expected_version + 1,
             },
-            ExpressionAttributeValues={
-                ":attributes": _to_attr(document),
-                ":ttl": {"N": str(expires_at)},
-                ":expected": {"N": str(expected_version)},
-                ":next": {"N": str(expected_version + 1)},
-            },
+            condition=[
+                {
+                    "op": "or",
+                    "rules": [
+                        not_exists("stateVersion"),
+                        eq("stateVersion", expected_version),
+                    ],
+                }
+            ],
         )
 
     async def delete_attributes(self, request_envelope: dict) -> None:
-        await asyncio.to_thread(
-            self._client.delete_item,
-            TableName=self.table_name,
-            Key=self._key(request_envelope),
-        )
+        user_id = self._user_id(request_envelope)
+        await self._table.delete_item(user_id)
 
 
-def build_dynamo_adapter(table_name: str | None = None, region: str | None = None) -> DynamoDbPersistenceAdapter:
+def build_dynamo_adapter(
+    table_name: str | None = None,
+    region: str | None = None,
+) -> DynamoDbPersistenceAdapter:
     return DynamoDbPersistenceAdapter(
         table_name=table_name or settings.dynamo_table,
         region=region or settings.ddb_region,

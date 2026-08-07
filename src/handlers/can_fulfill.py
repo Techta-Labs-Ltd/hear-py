@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.services.resolver_client import ResolverUnavailable, resolve_utterance
+from src.clients.resolver import ResolverUnavailable, resolve_utterance
 
-logger = logging.getLogger(__name__)
 
 CONTENT_INTENTS = {
     "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",

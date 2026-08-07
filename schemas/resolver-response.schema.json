@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/resolver-response.schema.json",
+  "title": "Resolver response",
+  "description": "Response contract of POST /resolve parsed by src/models.py (ResolverResult).",
+  "type": "object",
+  "required": ["status", "intent", "entities", "slots", "ambiguities", "timingMs"],
+  "properties": {
+    "status": { "type": "string" },
+    "intent": { "type": "string" },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["entityType", "entityId", "canonicalValue", "originalText", "confidence", "method", "start", "end"],
+        "properties": {
+          "entityType": { "type": "string" },
+          "entityId": { "type": "string" },
+          "canonicalValue": { "type": "string" },
+          "originalText": { "type": "string" },
+          "confidence": { "type": "number" },
+          "method": { "type": "string" },
+          "start": { "type": "integer" },
+          "end": { "type": "integer" },
+          "latitude": { "type": ["number", "null"] },
+          "longitude": { "type": ["number", "null"] },
+          "countryCode": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "slots": { "type": "object" },
+    "ambiguities": { "type": "array", "items": { "type": "object" } },
+    "timingMs": { "type": "number" }
+  }
+}

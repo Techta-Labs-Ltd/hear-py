@@ -4,16 +4,20 @@ import pytest
 
 from src.adapters.memory_persistence import MemoryPersistenceAdapter
 from src.application import build_skill
-from src.handlers.registry import REQUEST_HANDLERS
+from src.registry import REQUEST_HANDLERS
+
 from src.middleware import GATE_HANDLERS, REQUEST_INTERCEPTORS, RESPONSE_INTERCEPTORS
-from src.services.api.client import HearApiClient
-from src.services.api.request import ApiRequester
+from src.clients.hear import HearApiClient
+
+
 from src.services.observability import ErrorReporter
 from src.services.feedback import FeedbackService
 from src.services.playback import PlaybackService
-from src.services.storage.playback_state import PlaybackStateRepository
+from src.services.persistence import PlaybackStateRepository
+
 from src.services.tasks import BackgroundTaskManager
-from src.services.resolver_client import ResolverClient
+from src.clients.resolver import ResolverClient
+
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
@@ -38,10 +42,10 @@ def test_alexa_entry_graph_does_not_import_resolver_implementation():
         root / "main.py",
         root / "src" / "application.py",
         root / "src" / "middleware" / "pipeline.py",
-        root / "src" / "nlp" / "__init__.py",
+        root / "src" / "middleware" / "resolver.py",
         root / "src" / "handlers" / "can_fulfill.py",
-        root / "src" / "handlers" / "intents" / "play.py",
-        root / "src" / "handlers" / "intents" / "onboarding.py",
+        root / "src" / "handlers" / "play.py",
+        root / "src" / "handlers" / "onboarding.py",
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in alexa_modules)
 
@@ -79,7 +83,6 @@ def test_runtime_and_container_do_not_install_or_import_spacy():
 
 def test_stateful_services_have_explicit_owners():
     assert isinstance(HearApiClient(), HearApiClient)
-    assert isinstance(ApiRequester(), ApiRequester)
     assert isinstance(ErrorReporter(), ErrorReporter)
     assert isinstance(PlaybackService(), PlaybackService)
     assert isinstance(BackgroundTaskManager(), BackgroundTaskManager)

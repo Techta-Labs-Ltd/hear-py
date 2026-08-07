@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/listener-sync.schema.json",
+  "title": "Listener sync payload",
+  "description": "Profile payload sent to the listener sync endpoint (src/services/listeners.py).",
+  "type": "object",
+  "required": ["alexaUserId", "clientVersion"],
+  "properties": {
+    "alexaUserId": { "type": "string" },
+    "deviceId": { "type": ["string", "null"] },
+    "apiEndpoint": { "type": ["string", "null"] },
+    "locale": { "type": ["string", "null"] },
+    "userName": { "type": ["string", "null"] },
+    "userEmail": { "type": ["string", "null"] },
+    "address": { "type": ["string", "null"] },
+    "city": { "type": ["string", "null"] },
+    "state": { "type": ["string", "null"] },
+    "country": { "type": ["string", "null"] },
+    "countryCode": { "type": ["string", "null"] },
+    "postalCode": { "type": ["string", "null"] },
+    "latitude": { "type": ["number", "null"] },
+    "longitude": { "type": ["number", "null"] },
+    "clientVersion": { "type": "string" },
+    "locality": { "type": ["string", "null"] },
+    "listeningPattern": { "type": "object" },
+    "followedCreatorIds": { "type": "array", "items": { "type": "string" } },
+    "playbackSpeed": { "type": ["number", "null"] },
+    "playCount": { "type": ["integer", "null"] },
+    "lastPlayedAt": { "type": ["number", "null"] },
+    "recentPlayedIds": { "type": "array", "items": { "type": "string" } },
+    "recentPlays": { "type": "array", "items": { "type": "object" } }
+  }
+}

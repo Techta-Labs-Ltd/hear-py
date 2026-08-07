@@ -137,11 +137,6 @@ class ResponseBuilder:
             )
         return self
 
-    def set_card(self, card: Any) -> "ResponseBuilder":
-        if card:
-            self._response["card"] = card
-        return self
-
     @property
     def response(self) -> dict:
         return self._response

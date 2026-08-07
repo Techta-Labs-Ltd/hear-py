@@ -1,4 +1,3 @@
-import pytest
 from config import settings
 from config.permission_scopes import DEVICE_ADDRESS, REMINDERS_READWRITE
 

@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 from src.handlers.can_fulfill import CanFulfillIntentHandler
-from src.handlers.intents import ErrorHandler, TownCaptureHandler
+from src.handlers.launch import TownCaptureHandler
+from src.handlers.system import ErrorHandler
+
 from src.middleware.deadline import LambdaDeadlineInterceptor
 from src.middleware.identity import IdentityInterceptor
 from src.middleware.feedback_gate import FeedbackGateHandler
 from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.onboarding_gate import OnboardingGateHandler
-from src.nlp import NlpInterceptor
-from src.nlp.dispatch_handler import IntentDispatchHandler
-from src.services.storage.persistence import (
+from src.middleware.resolver import ResolverInterceptor
+
+from src.handlers.dispatch import IntentDispatchHandler
+
+from src.services.persistence import (
     LoadPersistenceInterceptor,
     SavePersistenceInterceptor,
 )
+
 
 GATE_HANDLERS = (
     CanFulfillIntentHandler,
@@ -26,7 +31,7 @@ REQUEST_INTERCEPTORS = (
     LambdaDeadlineInterceptor,
     LoadPersistenceInterceptor,
     IdentityInterceptor,
-    NlpInterceptor,
+    ResolverInterceptor,
     ConfirmationMiddleware,
 )
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 
-from config import settings
 from src.utils.skill_request import get_request_type
 
 
@@ -33,23 +32,6 @@ def compute_search_timeout_ms(handler_input, reserve_ms: int = 700) -> int:
         return 8000
     cap = min(max(remaining - reserve_ms - 500, 1000), 10000)
     return max(cap, 2000)
-
-
-def compute_bounded_api_timeout_ms(handler_input, reserve_ms: int = 400) -> int:
-    """Compute a bounded API timeout for general requests."""
-    remaining = get_lambda_remaining_ms(handler_input)
-    if remaining <= 0:
-        return 6000
-    return max(min(remaining - reserve_ms - 500, 6000), 1000)
-
-
-def api_options(handler_input) -> int:
-    """Bounded per-call API timeout (ms) derived from the remaining Lambda budget.
-
-    Passed as the ``timeout_ms`` argument to API helpers so look-ups stay
-    within the invocation deadline.
-    """
-    return compute_bounded_api_timeout_ms(handler_input)
 
 
 def persistence_load_budget_ms(handler_input) -> int:
@@ -98,25 +80,3 @@ def requires_reliable_persistence_save(handler_input) -> bool:
         return False
 
 
-def has_budget_for_api(handler_input, reserve_ms: int = 1000) -> bool:
-    """Check whether there is enough remaining time to make an API call."""
-    return get_lambda_remaining_ms(handler_input) > reserve_ms + 2000
-
-
-def should_refresh_browse_on_launch(handler_input) -> bool:
-    """Check whether browse data should be refreshed on launch."""
-    return settings.HEAR_REFRESH_BROWSE_ON_LAUNCH
-
-
-def should_block_on_launch_flush(handler_input) -> bool:
-    """Check whether we should block waiting for a launch playback flush."""
-    remaining = get_lambda_remaining_ms(handler_input)
-    return remaining > 5000
-
-
-def launch_background_work_budget_ms(handler_input) -> int:
-    """Get the budget in ms for background work during launch."""
-    remaining = get_lambda_remaining_ms(handler_input)
-    if remaining <= 4500:
-        return 0
-    return remaining - 4000

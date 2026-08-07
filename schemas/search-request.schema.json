@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/search-request.schema.json",
+  "title": "Hear search request",
+  "description": "Search body POSTed to the Hear backend by src/services/api/client.py.",
+  "type": "object",
+  "required": ["query", "limit", "page"],
+  "properties": {
+    "query": { "type": "string" },
+    "limit": { "type": "integer" },
+    "page": { "type": "integer" },
+    "alexaUserId": { "type": "string" },
+    "filter": { "type": "object" },
+    "isLocal": { "type": "boolean" },
+    "isRecommended": { "type": "boolean" },
+    "sort": { "type": "string" }
+  }
+}

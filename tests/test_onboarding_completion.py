@@ -1,8 +1,10 @@
 from __future__ import annotations
 import pytest
-from src.handlers.intents.onboarding import finalize_town_captured
+from src.handlers.onboarding import finalize_town_captured
+
 from src.runtime import AttrDict
-from src.services.storage.persistence import get_store
+from src.services.store import get_store
+
 
 @pytest.mark.asyncio
 async def test_manual_town_capture_completes_onboarding(monkeypatch, mock_handler_input):
@@ -22,7 +24,7 @@ async def test_manual_town_capture_completes_onboarding(monkeypatch, mock_handle
             },
         }
 
-    monkeypatch.setattr("src.handlers.intents.onboarding.resolve_utterance", resolve)
+    monkeypatch.setattr("src.handlers.onboarding.resolve_utterance", resolve)
     mock_handler_input.request_envelope = AttrDict(
         mock_handler_input.request_envelope
     )
