@@ -38,6 +38,15 @@ logger = logging.getLogger(__name__)
 TOWN_CONFIRM_REPROMPT = "Say yes to confirm, or no to set a different town."
 
 
+def _update_onboarding_session(handler_input: HandlerInput, **updates: Any) -> None:
+    """Mirror turn-critical onboarding state into the active Alexa session."""
+    attributes = dict(
+        handler_input.attributes_manager.get_session_attributes() or {}
+    )
+    attributes.update(updates)
+    handler_input.attributes_manager.set_session_attributes(attributes)
+
+
 def _normalize_control_phrase(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "").casefold()).strip()
 
@@ -264,7 +273,13 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
         "pendingLocationConfirm": match,
         "awaitingLocationConfirm": True,
         "onboardingStage": ONBOARDING_AWAIT_CONFIRM,
+        "_requiresReliableSave": True,
     })
+    _update_onboarding_session(
+        handler_input,
+        onboardingStage=ONBOARDING_AWAIT_CONFIRM,
+        awaitingLocationConfirm=True,
+    )
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_TOWN_CONFIRM(match["city"]))) \
         .reprompt(ssml(TOWN_CONFIRM_REPROMPT)) \
@@ -305,7 +320,13 @@ async def finalize_town_captured(
         "localityResolvedAt": int(time.time() * 1000),
         "awaitingLocationConfirm": False,
         "pendingLocationConfirm": None,
+        "_requiresReliableSave": True,
     })
+    _update_onboarding_session(
+        handler_input,
+        onboardingStage=None,
+        awaitingLocationConfirm=False,
+    )
     return handler_input.response_builder \
         .speak(ssml(TOWN_GOT_IT(match["city"]))) \
         .reprompt(ssml(REPROMPT_CITY)) \
@@ -320,7 +341,15 @@ def finalize_town_skipped(handler_input: HandlerInput, store: Dict[str, Any]):
         "onboardingTownAttempts": 0,
         "onboardingTownResolverFailures": 0,
         "onboardingComplete": True,
+        "awaitingLocationConfirm": False,
+        "pendingLocationConfirm": None,
+        "_requiresReliableSave": True,
     })
+    _update_onboarding_session(
+        handler_input,
+        onboardingStage=None,
+        awaitingLocationConfirm=False,
+    )
 
     logger.info("Hear: onboarding town skipped")
 
@@ -359,7 +388,13 @@ async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dic
         "awaitingLocationConfirm": True,
         "onboardingStage": ONBOARDING_AWAIT_CONFIRM,
         "onboardingTownAttempts": 0,
+        "_requiresReliableSave": True,
     })
+    _update_onboarding_session(
+        handler_input,
+        onboardingStage=ONBOARDING_AWAIT_CONFIRM,
+        awaitingLocationConfirm=True,
+    )
     return handler_input.response_builder \
         .speak(ssml(
             f"{ONBOARDING_FETCHING_LOCATION} {ONBOARDING_DETECTED_TOWN(match['city'])}"

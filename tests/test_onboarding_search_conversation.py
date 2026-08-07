@@ -54,6 +54,11 @@ async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_han
     store = get_store(handler_input)
     assert store["pendingLocationConfirm"]["city"] == "Swindon"
     assert store["awaitingLocationConfirm"] is True
+    assert store["onboardingStage"] == "await_location_confirm"
+    assert store["_requiresReliableSave"] is True
+    session = handler_input.attributes_manager.set_session_attributes.call_args.args[0]
+    assert session["onboardingStage"] == "await_location_confirm"
+    assert session["awaitingLocationConfirm"] is True
     handler_input.response_builder.speak.return_value.reprompt.return_value \
         .set_should_end_session.assert_called_once_with(False)
 
@@ -1364,6 +1369,10 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     assert updated["userCity"] == "Swindon"
     assert updated["locationSource"] == "manual"
     assert updated["awaitingCommunityPlayback"] is True
+    assert updated["_requiresReliableSave"] is True
+    session = handler_input.attributes_manager.set_session_attributes.call_args.args[0]
+    assert session["onboardingStage"] is None
+    assert session["awaitingLocationConfirm"] is False
     spoken = handler_input.response_builder.speak.call_args.args[0]
     assert "I've set your location to Swindon" in spoken
     assert "What would you like to hear?" in spoken

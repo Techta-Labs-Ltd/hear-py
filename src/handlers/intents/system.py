@@ -255,7 +255,16 @@ class YesIntentHandler(AbstractRequestHandler):
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
             "awaitingCommunityPlayback": True,
+            "_requiresReliableSave": True,
         })
+        session_attrs = dict(
+            handler_input.attributes_manager.get_session_attributes() or {}
+        )
+        session_attrs.update({
+            "onboardingStage": None,
+            "awaitingLocationConfirm": False,
+        })
+        handler_input.attributes_manager.set_session_attributes(session_attrs)
         confirmed = get_store(handler_input)
         if user_id:
             try:
