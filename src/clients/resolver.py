@@ -11,7 +11,11 @@ from src.models import ResolvedEntity, ResolverResult, ResolverUnavailable
 
 logger = logging.getLogger(__name__)
 
-_RESOLVER_POOL = HttpPool(timeout_ms=2000)
+RESOLVER_HOST = "https://resolver.hear.media"
+RESOLVER_TIMEOUT_MS = 5000
+RESOLVER_DEFAULT_COUNTRY = "gb"
+
+_RESOLVER_POOL = HttpPool(timeout_ms=RESOLVER_TIMEOUT_MS)
 
 
 class ResolverClient:
@@ -20,10 +24,10 @@ class ResolverClient:
     def __init__(
         self,
         *,
-        host: str,
+        host: str = RESOLVER_HOST,
         api_key: str,
-        default_country: str = "gb",
-        timeout_ms: int = 2000,
+        default_country: str = RESOLVER_DEFAULT_COUNTRY,
+        timeout_ms: int = RESOLVER_TIMEOUT_MS,
         transport: httpx.AsyncBaseTransport | None = None,
         pool: HttpPool | None = None,
     ) -> None:
@@ -73,7 +77,8 @@ class ResolverClient:
             if not isinstance(payload, dict):
                 raise ResolverUnavailable("resolver response must be an object")
             return ResolverResult.from_payload(payload)
-        except ResolverUnavailable:
+        except ResolverUnavailable as exc:
+            logger.warning("Resolver response rejected reason=%s", exc)
             raise
         except (httpx.HTTPError, ValueError, TypeError) as exc:
             logger.warning("Resolver request failed error=%s", type(exc).__name__)
@@ -97,10 +102,7 @@ class ResolverClient:
 
 
 client = ResolverClient(
-    host=getattr(settings, "RESOLVER_HOST", None) or "https://resolver.hear.media",
     api_key=settings.HEAR_API_KEY,
-    default_country=getattr(settings, "RESOLVER_DEFAULT_COUNTRY", None) or "gb",
-    timeout_ms=getattr(settings, "RESOLVER_TIMEOUT_MS", None) or 2000,
 )
 
 resolve_utterance = client.resolve_utterance

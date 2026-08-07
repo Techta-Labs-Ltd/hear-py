@@ -96,6 +96,14 @@ def test_canonical_entities_drive_all_discovered_facets_without_fake_ambiguity()
     assert result["ambiguities"] == []
 
 
+def test_client_defaults_use_fixed_service_contract_without_resolver_settings():
+    client = ResolverClient(api_key="secret")
+
+    assert client._host == "https://resolver.hear.media"
+    assert client._default_country == "gb"
+    assert client._timeout.connect == 5.0
+
+
 def test_multiple_entities_of_one_type_remain_distinct_discoveries():
     payload = _response(intent="creator")
     payload["entities"] = [payload["entities"][0], {

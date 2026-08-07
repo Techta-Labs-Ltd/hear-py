@@ -265,7 +265,8 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
     try:
         response = await d.resolver.resolve_utterance(phrase)
         resolution = response.get("resolution") or {}
-    except ResolverUnavailable:
+    except ResolverUnavailable as exc:
+        logger.warning("Hear: town resolver unavailable reason=%s", exc)
         return handle_town_resolver_unavailable(handler_input, store)
     update_store(handler_input, {"onboardingTownResolverFailures": 0})
     match = resolution.get("match")
@@ -324,7 +325,8 @@ async def finalize_town_captured(
     try:
         response = await d.resolver.resolve_utterance(phrase)
         resolution = response.get("resolution") or {}
-    except ResolverUnavailable:
+    except ResolverUnavailable as exc:
+        logger.warning("Hear: town resolver unavailable reason=%s", exc)
         return handle_town_resolver_unavailable(handler_input, store)
     update_store(handler_input, {"onboardingTownResolverFailures": 0})
     match = resolution.get("match")

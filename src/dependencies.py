@@ -22,8 +22,5 @@ class Dependencies:
         self.alexa = alexa or AlexaClient()
         self.heara = heara or HearApiClient()
         self.resolver = resolver or ResolverClient(
-            host=getattr(settings, "RESOLVER_HOST", None) or "https://resolver.hear.media",
             api_key=settings.HEAR_API_KEY,
-            default_country=getattr(settings, "RESOLVER_DEFAULT_COUNTRY", None) or "gb",
-            timeout_ms=getattr(settings, "RESOLVER_TIMEOUT_MS", None) or 2000,
         )
