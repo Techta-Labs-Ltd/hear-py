@@ -104,8 +104,8 @@ class YesIntentHandler(AbstractRequestHandler):
         ):
             return await self._handle_search_confirmation(handler_input, store, session_attrs)
 
-        if store.get("awaitingLocationConfirm"):
-            return await self._confirm_location(handler_input, store)
+        if store.get("awaitingLocationConfirm") or session_attrs.get("awaitingLocationConfirm"):
+            return await self._confirm_location(handler_input, store, session_attrs)
 
         if store.get("awaitingCommunityPlayback"):
             return await self._handle_community_play_yes(handler_input, store)
@@ -150,9 +150,9 @@ class YesIntentHandler(AbstractRequestHandler):
             .set_should_end_session(False) \
             .response
 
-    async def _confirm_location(self, handler_input, store):
+    async def _confirm_location(self, handler_input, store, session_attrs=None):
         """Confirm and persist the pending location, calling the backend to save it."""
-        pending = store.get("pendingLocationConfirm") or {}
+        pending = store.get("pendingLocationConfirm") or (session_attrs or {}).get("pendingLocationConfirm") or {}
         city = pending.get("city")
         if not city:
             update_store(handler_input, {

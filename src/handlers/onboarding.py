@@ -306,6 +306,7 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
         handler_input,
         onboardingStage=ONBOARDING_AWAIT_CONFIRM,
         awaitingLocationConfirm=True,
+        pendingLocationConfirm=match,
     )
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_TOWN_CONFIRM(match["city"]))) \
