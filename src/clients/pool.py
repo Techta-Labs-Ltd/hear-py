@@ -30,18 +30,20 @@ class HttpPool:
         )
 
     def get(self, *, base_url: str = "", headers: dict | None = None) -> httpx.AsyncClient:
-        """Return or lazily create a pooled client for the current event loop."""
         key = id(asyncio.get_running_loop())
         client = self._pool.get(key)
         if client is None:
             with self._lock:
                 client = self._pool.get(key)
                 if client is None:
-                    client = httpx.AsyncClient(
-                        base_url=base_url or None,
-                        timeout=self._timeout,
-                        limits=self._limits,
-                        headers=dict(headers or {}),
-                    )
+                    kwargs: dict = {
+                        "timeout": self._timeout,
+                        "limits": self._limits,
+                    }
+                    if base_url:
+                        kwargs["base_url"] = base_url
+                    if headers:
+                        kwargs["headers"] = headers
+                    client = httpx.AsyncClient(**kwargs)
                     self._pool[key] = client
         return client

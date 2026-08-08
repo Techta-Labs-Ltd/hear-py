@@ -263,6 +263,7 @@ class TownCaptureHandler(AbstractRequestHandler):
         if not nlp_town:
             nlp_town = (
                 _extract_slot_value(handler_input, "townName")
+                or _extract_slot_value(handler_input, "city")
                 or _extract_slot_value(handler_input, "location")
             )
 

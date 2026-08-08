@@ -99,6 +99,23 @@ jobs:
           aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" --query "Stacks[0].Outputs" --output table
 
+      - name: Verify resolver from deployed Lambda
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          FUNCTION_ARN=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='SkillFunctionArn'].OutputValue | [0]" \
+            --output text)
+          aws lambda invoke \
+            --function-name "$FUNCTION_ARN" \
+            --region "$AWS_REGION" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{"diagnostic":"resolver"}' \
+            "$RUNNER_TEMP/resolver-health.json"
+          jq -e '.ok == true and .canonicalValue == "Herne Bay"' \
+            "$RUNNER_TEMP/resolver-health.json"
+
       - name: CloudFormation failure details
         if: steps.cloudformation.outcome == 'failure'
         run: |

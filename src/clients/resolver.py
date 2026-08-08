@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import traceback
 from typing import Any
 
 import httpx
@@ -81,7 +82,7 @@ class ResolverClient:
             logger.warning("Resolver response rejected reason=%s", exc)
             raise
         except (httpx.HTTPError, ValueError, TypeError) as exc:
-            logger.warning("Resolver request failed error=%s", type(exc).__name__)
+            logger.warning("Resolver request failed error=%s traceback=%s", type(exc).__name__, traceback.format_exc())
             raise ResolverUnavailable("resolver request failed") from exc
 
     async def resolve_utterance(
