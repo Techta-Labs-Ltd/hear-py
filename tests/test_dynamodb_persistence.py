@@ -22,6 +22,13 @@ def _adapter_with_mocked_table():
     return adapter
 
 
+def test_adapter_uses_hear_service_partition_key_by_default():
+    adapter = DynamoDbPersistenceAdapter(table_name="hear-service")
+
+    assert adapter.partition_key_name == "alexaUserId"
+    assert adapter._table.partition_key == "alexaUserId"
+
+
 def _envelope(user_id: str = "alexa-user") -> dict:
     return {
         "context": {

@@ -24,7 +24,10 @@ def build_persistence_adapter():
     if driver != "dynamodb":
         logger.warning("Unknown persistence driver %r; selecting from environment", driver)
     if table_name:
-        return build_dynamo_adapter(table_name=table_name)
+        return build_dynamo_adapter(
+            table_name=table_name,
+            partition_key_name=settings.HEAR_DDB_PARTITION_KEY,
+        )
     if settings.STAGE in ("staging", "production"):
         raise RuntimeError("HEAR_DDB_TABLE is required in staging/production")
     logger.warning("HEAR_DDB_TABLE is unset; using non-durable memory persistence")

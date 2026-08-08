@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     NODE_ENV: str = "development"
 
     HEAR_DDB_TABLE: str = ""
+    HEAR_DDB_PARTITION_KEY: str = "alexaUserId"
     HEAR_PERSISTENCE_DRIVER: str = "dynamodb"
     HEAR_PERSISTENCE_TTL_DAYS: int = 180
     HEAR_DDB_REGION: str = "eu-west-1"
