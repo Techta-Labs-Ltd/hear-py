@@ -897,6 +897,7 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
     search.assert_awaited_once_with({
         "query": "",
         "filter": {"organizationIds": ["org-neston"]},
+        "alexaUserId": "amzn1.ask.account.TEST",
     })
     play.assert_awaited_once()
     assert response == {"shouldEndSession": True}

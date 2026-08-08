@@ -178,11 +178,13 @@ class HearApiClient:
         path = self._build_alexa_search_path()
         query_text = body.get("query") or ""
         logger.info(
-            "Hear API search request path=%s queryHash=%s queryChars=%s filterKeys=%s",
+            "Hear API search request path=%s queryHash=%s queryChars=%s "
+            "filterKeys=%s alexaUserIdPresent=%s",
             path,
             _hash_text(str(query_text)),
             len(str(query_text)),
             sorted((body.get("filter") or {}).keys()),
+            bool(body.get("alexaUserId")),
         )
         for attempt in range(self._retry_count + 1):
             status, data = await _request("POST", path, body, timeout_ms)

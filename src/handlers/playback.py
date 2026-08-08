@@ -16,7 +16,7 @@ from src.utils.audio import (
     normalise_speed,
     resolve_seek_ms,
 )
-from src.utils.skill_request import get_intent_name, get_request_type
+from src.utils.skill_request import get_intent_name, get_request_type, get_user_id
 from src.utils.speech import (
     CANNOT_SEEK,
     FAST_FORWARDED,
@@ -53,13 +53,19 @@ def _open_response(handler_input: HandlerInput, speech: str):
     )
 
 
-async def _find_content(content_id: str, *, deps: Dependencies | None = None) -> dict | None:
+async def _find_content(
+    handler_input: HandlerInput,
+    content_id: str,
+    *,
+    deps: Dependencies | None = None,
+) -> dict | None:
     d = deps or Dependencies()
     result = await d.heara.search({
         "query": "",
         "filter": {"contentIds": [content_id]},
         "page": 0,
         "limit": 1,
+        "alexaUserId": get_user_id(handler_input),
     })
     return next(
         (item for item in result.get("results", []) if item.get("contentId") == content_id),
@@ -91,7 +97,7 @@ async def _play_queue_delta(handler_input: HandlerInput, delta: int, speech: str
             handler_input,
             NO_PREVIOUS if delta < 0 else NO_CONTENT_AVAILABLE,
         )
-    content = await _find_content(content_id, deps=deps)
+    content = await _find_content(handler_input, content_id, deps=deps)
     if not content:
         # Restore the queue cursor when resolution fails.
         move_queue(handler_input, -delta)

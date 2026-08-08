@@ -340,6 +340,9 @@ class YesIntentHandler(AbstractRequestHandler):
             # Pending confirmations can outlive a deployment in DynamoDB.
             # Repair legacy resolver payloads again at the execution boundary.
             payload = normalize_search_payload(resolution["searchPayload"])
+            user_id = get_alexa_user_id(handler_input)
+            if user_id:
+                payload["alexaUserId"] = user_id
             label = str(resolution.get("confirmationLabel") or "that request")
             update_store(handler_input, {
                 "awaitingSearchConfirmation": False,
@@ -481,12 +484,16 @@ class YesIntentHandler(AbstractRequestHandler):
 
         update_store(handler_input, {"listModeActive": False})
         await clear_feedback(handler_input)
-        result = await self._deps.heara.search({
+        payload = {
             "query": "",
             "filter": {"contentIds": [content_id]},
             "page": 0,
             "limit": 1,
-        })
+        }
+        user_id = get_alexa_user_id(handler_input)
+        if user_id:
+            payload["alexaUserId"] = user_id
+        result = await self._deps.heara.search(payload)
         if not result.get("results"):
             return handler_input.response_builder.speak(ssml(NO_CONTENT_AVAILABLE)).response
         return await start_playback(handler_input, result["results"][0], "")
@@ -521,12 +528,16 @@ class YesIntentHandler(AbstractRequestHandler):
                 .set_should_end_session(False) \
                 .response
 
-        result = await self._deps.heara.search({
+        payload = {
             "query": "",
             "filter": {"contentIds": [next_id]},
             "page": 0,
             "limit": 1,
-        })
+        }
+        user_id = get_alexa_user_id(handler_input)
+        if user_id:
+            payload["alexaUserId"] = user_id
+        result = await self._deps.heara.search(payload)
         if not result.get("results"):
             clear_queue(handler_input)
             return handler_input.response_builder \
