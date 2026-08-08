@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 DISPATCHABLE_INTENTS: list[str] = [
     "trending", "local", "creator", "organization", "publication", "category",
-    "browse", "show_more", "following", "general",
+    "browse", "show_more", "following", "general", "search",
     "feedback_enjoyed", "feedback_not_enjoyed", "feedback_somewhat", "feedback_skip",
     "town_capture", "location_set", "unclear",
     "resolver_unavailable",
@@ -108,6 +108,7 @@ class IntentDispatchHandler(AbstractRequestHandler):
             "show_more": ShowMoreBrowseHandler,
             "following": PlayContentHandler,
             "general": PlayContentHandler,
+            "search": PlayContentHandler,
             "town_capture": TownCaptureHandler,
             "location_set": SetLocationHandler,
             "feedback_enjoyed": FeedbackEnjoyedHandler,

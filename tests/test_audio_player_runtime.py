@@ -280,6 +280,82 @@ async def test_resume_no_does_not_activate_incomplete_feedback_candidate():
 
 
 @pytest.mark.asyncio
+async def test_increase_speed_after_resume_decline_does_not_restart_abandoned_track():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "awaitingResume": True,
+        "playbackSpeed": 1.0,
+        "currentPlaybackSpeeds": [
+            {"speed": 1.0, "audioUrl": "https://cdn.hear.media/normal.mp3"},
+            {"speed": 1.5, "audioUrl": "https://cdn.hear.media/faster.mp3"},
+        ],
+        "activePlayback": _playback_state(),
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": "search",
+            "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID],
+            "currentIndex": 0,
+        },
+    }
+    skill = build_skill(persistence)
+
+    await skill.invoke(
+        _event({
+            "type": "IntentRequest",
+            "intent": {"name": "AMAZON.NoIntent", "slots": {}},
+        }),
+        None,
+    )
+    result = await skill.invoke(
+        _event({
+            "type": "IntentRequest",
+            "intent": {"name": "IncreaseSpeedIntent", "slots": {}},
+        }),
+        None,
+    )
+
+    state = persistence._store[USER_ID]
+    response = result["response"]
+    assert state["playbackSpeed"] == 1.5
+    assert state["activePlayback"]["status"] == "abandoned"
+    assert state["playbackQueue"]["currentIndex"] == 0
+    assert response.get("directives") is None
+    assert "What would you like to listen to next?" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
+
+
+@pytest.mark.asyncio
+async def test_increase_speed_restarts_paused_track_at_saved_offset():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playbackSpeed": 1.0,
+        "currentPlaybackSpeeds": [
+            {"speed": 1.0, "audioUrl": "https://cdn.hear.media/normal.mp3"},
+            {"speed": 1.5, "audioUrl": "https://cdn.hear.media/faster.mp3"},
+        ],
+        "activePlayback": _playback_state(status="paused", offset_ms=42_000),
+    }
+
+    result = await build_skill(persistence).invoke(
+        _event({
+            "type": "IntentRequest",
+            "intent": {"name": "IncreaseSpeedIntent", "slots": {}},
+        }),
+        None,
+    )
+
+    response = result["response"]
+    directive = response["directives"][0]
+    assert persistence._store[USER_ID]["playbackSpeed"] == 1.5
+    assert directive["type"] == "AudioPlayer.Play"
+    assert directive["audioItem"]["stream"]["offsetInMilliseconds"] == 42_000
+    assert directive["audioItem"]["stream"]["url"] == "https://cdn.hear.media/faster.mp3"
+    assert response["shouldEndSession"] is True
+
+
+@pytest.mark.asyncio
 async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {

@@ -21,6 +21,10 @@ from src.utils.discovery_request import is_reserved_discovery_phrase
     "give me something to listen to",
     "start listening",
     "let me listen",
+    "find",
+    "find me",
+    "search",
+    "search for something",
 ])
 def test_generic_discovery_phrases_are_reserved(phrase):
     assert is_reserved_discovery_phrase(phrase)
@@ -96,4 +100,49 @@ async def test_meaningful_news_still_calls_resolver(monkeypatch, mock_handler_in
     resolve.assert_awaited_once_with(
         "news",
         alexa_user_id="amzn1.ask.account.TEST",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("intent_name", "canonical"), [
+    ("BrowseContentIntent", "what's new"),
+    ("WhatsTrendingIntent", "what's trending"),
+    ("PlayLocalIntent", "play local content"),
+    ("PlayRecommendationIntent", "recommend something"),
+])
+async def test_zero_slot_discovery_uses_canonical_resolver_utterance(
+    monkeypatch,
+    mock_handler_input,
+    intent_name,
+    canonical,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {"name": intent_name, "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "intent": "search",
+        "confirmationLabel": canonical,
+        "searchPayload": {"query": canonical, "filter": {}},
+        "slots": {"residualQuery": canonical},
+        "ambiguities": [],
+    })
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        canonical,
+        alexa_user_id="amzn1.ask.account.TEST",
+    )
+    assert mock_handler_input.attributes_manager.request_attributes.get(
+        "_pendingConfirmation"
     )

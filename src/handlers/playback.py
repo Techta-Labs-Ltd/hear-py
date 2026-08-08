@@ -3,7 +3,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from config import settings
 from src.dependencies import Dependencies
-from src.services.playback import read_playback_session, write_playback_session
+from src.services.playback import ACTIVE_STATUSES, read_playback_session, write_playback_session
 from src.services.playback import emit_listening_event
 from src.services.playback import resume_playback, start_playback
 from src.services.queue import move_queue
@@ -32,6 +32,7 @@ from src.utils.speech import (
     PLAYBACK_SPEED_MIN,
     PLAYBACK_SPEED_NOT_SUPPORTED,
     PLAYBACK_SPEED_SET,
+    PLAYBACK_SPEED_SET_IDLE,
     PLAYBACK_SPEED_UNAVAILABLE,
     PLAYING_PREVIOUS,
     REPLAYING,
@@ -117,8 +118,8 @@ async def _apply_speed(handler_input: HandlerInput, speed: float):
         available = ", ".join(f"{value.get('speed')}x" for value in variants)
         return _open_response(handler_input, PLAYBACK_SPEED_UNAVAILABLE(speed, available))
     update_store(handler_input, {"playbackSpeed": speed})
-    if not state:
-        return _open_response(handler_input, PLAYBACK_SPEED_SET(speed))
+    if not state or state.get("status") not in ACTIVE_STATUSES:
+        return _open_response(handler_input, PLAYBACK_SPEED_SET_IDLE(speed))
     return await _restart_active(
         handler_input,
         offset_ms=state.get("offsetMs", 0),

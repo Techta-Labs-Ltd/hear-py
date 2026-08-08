@@ -7,7 +7,7 @@ from src.handlers.system import ErrorHandler
 from src.middleware.deadline import LambdaDeadlineInterceptor
 from src.middleware.identity import IdentityInterceptor
 from src.middleware.feedback_gate import FeedbackGateHandler
-from src.middleware.confirmation import ConfirmationMiddleware
+from src.middleware.confirmation import ConfirmationMiddleware, SearchConfirmationGateHandler
 from src.middleware.onboarding_gate import OnboardingGateHandler
 from src.middleware.resolver import ResolverInterceptor
 from src.middleware.dialog_validation import (
@@ -29,6 +29,7 @@ GATE_HANDLERS = (
     FeedbackGateHandler,
     OnboardingGateHandler,
     TownCaptureHandler,
+    SearchConfirmationGateHandler,
     IntentDispatchHandler,
 )
 

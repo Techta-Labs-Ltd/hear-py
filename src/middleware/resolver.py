@@ -35,6 +35,18 @@ AMBIGUITY_CONTROL_INTENTS = {
     "ShowMoreBrowseIntent",
 }
 
+CANONICAL_ZERO_SLOT_DISCOVERY = {
+    "PlayContentIntent": "play",
+    "PlayByCreatorIntent": "play",
+    "PlayByOrganizationIntent": "play",
+    "PlayPublicationIntent": "play publication",
+    "BrowseByCategoryIntent": "play",
+    "BrowseContentIntent": "what's new",
+    "WhatsTrendingIntent": "what's trending",
+    "PlayLocalIntent": "play local content",
+    "PlayRecommendationIntent": "recommend something",
+}
+
 _ORDINAL_INDEX = {
     "first": 0, "one": 0, "1": 0, "number one": 0,
     "second": 1, "two": 1, "2": 1, "number two": 1,
@@ -266,6 +278,8 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 return
 
             raw = _extract_raw_utterance(handler_input, alexa_intent)
+            if not raw and alexa_intent in SEARCH_INTENTS:
+                raw = CANONICAL_ZERO_SLOT_DISCOVERY.get(alexa_intent)
             store = handler_input.attributes_manager.request_attributes.get("_store") or {}
             pending_ambiguity = store.get("pendingAmbiguity")
             if raw and isinstance(pending_ambiguity, dict):
@@ -439,4 +453,9 @@ class ResolverInterceptor(AbstractRequestInterceptor):
             })
             logger.warning("Hear resolver unavailable")
         except Exception:
+            _set_nlp(handler_input, {
+                "intent": "resolver_unavailable",
+                "confidence": "low",
+                "slots": {},
+            })
             logger.warning("Hear: ResolverInterceptor error", exc_info=True)

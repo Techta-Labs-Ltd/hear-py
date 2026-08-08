@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
-from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
+from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractRequestInterceptor
 from src.services.resolution import build_pending_resolution
 
-from src.utils.speech import resolved_search_request_label
+from src.utils.speech import resolved_search_request_label, ssml
 from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
 from src.utils.discovery_request import (
     is_reserved_discovery_phrase,
@@ -13,7 +13,13 @@ from src.utils.discovery_request import (
 
 _RESOLVED_DISCOVERY_INTENTS: set[str] = {
     "local", "creator", "organization", "publication", "category", "general",
-    "trending", "browse", "following",
+    "trending", "browse", "following", "search",
+}
+
+_ALEXA_DISCOVERY_INTENTS: set[str] = {
+    "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
+    "PlayPublicationIntent", "BrowseContentIntent", "BrowseByCategoryIntent",
+    "WhatsTrendingIntent", "PlayLocalIntent", "PlayRecommendationIntent",
 }
 
 def _has_meaningful_general_request(nlp: dict, raw: str | None) -> bool:
@@ -284,3 +290,38 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
 
         attrs["_pendingConfirmation"] = search_params
         handler_input.attributes_manager.request_attributes = attrs
+
+
+class SearchConfirmationGateHandler(AbstractRequestHandler):
+    """Prevent discovery handlers from bypassing resolver confirmation."""
+
+    def can_handle(self, handler_input) -> bool:
+        try:
+            request = handler_input.request_envelope.request
+            alexa_intent = request.intent.name
+        except Exception:
+            return False
+        if request.type != "IntentRequest" or alexa_intent not in _ALEXA_DISCOVERY_INTENTS:
+            return False
+        attrs = handler_input.attributes_manager.request_attributes
+        if attrs.get(DIALOG_VALIDATION_FAILURE):
+            return False
+        nlp = attrs.get("_nlp")
+        if not isinstance(nlp, dict) or not nlp.get("intent"):
+            return True
+        if nlp.get("intent") in {"unclear", "resolver_unavailable"}:
+            return False
+        if nlp.get("status") and nlp.get("status") != "resolved":
+            return False
+        return (
+            nlp.get("intent") in _RESOLVED_DISCOVERY_INTENTS
+            and not attrs.get("_pendingConfirmation")
+            and not attrs.get("_resolverClarification")
+        )
+
+    def handle(self, handler_input):
+        return handler_input.response_builder \
+            .speak(ssml("I couldn't safely confirm that search. Please say what you'd like to hear again.")) \
+            .reprompt(ssml("Name a topic, creator, publication, or talking newspaper.")) \
+            .set_should_end_session(False) \
+            .response

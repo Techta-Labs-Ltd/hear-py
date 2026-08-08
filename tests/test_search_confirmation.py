@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.middleware.confirmation import ConfirmationMiddleware
+from src.middleware.confirmation import ConfirmationMiddleware, SearchConfirmationGateHandler
 from src.handlers.dispatch import IntentDispatchHandler
 
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
@@ -290,3 +290,61 @@ def test_resolved_trending_request_is_always_confirmed():
         response["outputSpeech"]["ssml"]
     )
     assert get_store(handler_input)["activeDialog"]["type"] == "search_confirmation"
+
+
+def test_resolved_search_alias_is_always_confirmed():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayContentIntent",
+                "slots": {"topic": {"name": "topic", "value": "Wakefield news"}},
+            },
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "search",
+            "confirmationLabel": "Wakefield news",
+            "searchPayload": {"query": "Wakefield news", "filter": {}},
+            "slots": {"residualQuery": "Wakefield news"},
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "Did you want me to play Wakefield news?" in response["outputSpeech"]["ssml"]
+    assert get_store(handler_input)["awaitingSearchConfirmation"] is True
+
+
+def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "PlayContentIntent", "slots": {}},
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    gate = SearchConfirmationGateHandler()
+
+    assert gate.can_handle(handler_input) is True
+    response = gate.handle(handler_input)
+    assert "couldn't safely confirm that search" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
