@@ -126,6 +126,52 @@ def test_resolver_search_plan_normalizes_null_query_and_unsupported_sort():
     assert result["slots"]["searchPlan"] == result["searchPayload"]
 
 
+def test_overlapping_source_and_location_does_not_overconstrain_search():
+    payload = _response(intent="creator")
+    payload["entities"] = [{
+        "entityType": "creator",
+        "entityId": "creator-wakefield",
+        "canonicalValue": "Wakefield Talking Newspaper",
+        "originalText": "Wakefield",
+        "confidence": 1,
+        "method": "bare_match",
+        "start": 0,
+        "end": 9,
+        "latitude": None,
+        "longitude": None,
+        "countryCode": None,
+    }, {
+        "entityType": "location",
+        "entityId": "wakefield",
+        "canonicalValue": "Wakefield",
+        "originalText": "Wakefield",
+        "confidence": 1,
+        "method": "exact",
+        "start": 0,
+        "end": 9,
+        "latitude": 53.6825,
+        "longitude": -1.4975,
+        "countryCode": "gb",
+    }]
+    payload["slots"].update({
+        "city": "Wakefield",
+        "placeName": "Wakefield",
+        "countryCode": "gb",
+        "latitude": 53.6825,
+        "longitude": -1.4975,
+        "isLocal": True,
+    })
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["searchPayload"]["filter"] == {
+        "creatorIds": ["creator-wakefield"],
+    }
+    assert result["resolution"]["match"] is None
+    assert "city" not in result["slots"]
+    assert "isLocal" not in result["slots"]
+
+
 def test_client_defaults_use_fixed_service_contract_without_resolver_settings():
     client = ResolverClient(api_key="secret")
 

@@ -217,7 +217,19 @@ class ResolverResult:
             slots["tagNames"] = [entity.canonical_value for entity in tags]
             filters["tags"] = list(slots["tags"])
 
-        locations = self.entities_of_type("location")
+        source_entities = tuple(
+            entity
+            for entity_type in facet_slots
+            for entity in self.entities_of_type(entity_type)
+        )
+        locations = tuple(
+            location
+            for location in self.entities_of_type("location")
+            if not any(
+                max(location.start, source.start) < min(location.end, source.end)
+                for source in source_entities
+            )
+        )
         resolution = {"match": None, "candidates": []}
         if locations:
             location = locations[0]
@@ -247,6 +259,16 @@ class ResolverResult:
                     "longitude": location.longitude,
                 }.items() if value is not None
             })
+        elif self.entities_of_type("location") and source_entities:
+            # A place name can also be the identifying part of a source name
+            # (for example "Wakefield Talking Newspaper"). When both resolver
+            # entities cover the same words, applying source AND city filters
+            # incorrectly removes every catalogue result.
+            for key in (
+                "city", "placeName", "countryCode", "latitude", "longitude",
+                "isLocal",
+            ):
+                slots.pop(key, None)
 
         for key in ("publishedFrom", "publishedTo"):
             if slots.get(key) is not None:
