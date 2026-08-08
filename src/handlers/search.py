@@ -35,6 +35,7 @@ from src.utils.normalize_content_item import is_playable_content_item
 from src.utils.browse_catalog import build_catalog_from_search_result
 from src.utils.search_filters import SearchPayload
 from src.utils.search_query import normalize_search_query
+from src.utils.dynamic_entities import build_ambiguity_dynamic_entities_directive
 from src.utils.lambda_deadline import compute_search_timeout_ms, get_lambda_remaining_ms
 from src.utils.search_filters import wants_latest_playback
 from src.services.playback import start_playback
@@ -190,6 +191,9 @@ async def discover_content_via_search(
         message_candidates = list(
             pending_ambiguity.get("displayedCandidates") or candidates[:3]
         )
+        directive = build_ambiguity_dynamic_entities_directive(candidates)
+        if directive:
+            handler_input.response_builder.add_directive(directive)
         return {
             "results": [],
             "total_hits": 0,

@@ -586,6 +586,9 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "more than one match" in spoken
     assert "couldn't match" not in spoken
+    directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
+    assert directive["type"] == "Dialog.UpdateDynamicEntities"
+    assert directive["types"][0]["name"] == "HEAR_CLARIFICATION"
 
 
 @pytest.mark.asyncio

@@ -172,6 +172,44 @@ def test_overlapping_source_and_location_does_not_overconstrain_search():
     assert "isLocal" not in result["slots"]
 
 
+def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
+    payload = _response(intent="search")
+    payload["entities"] = []
+    payload["ambiguities"] = [{
+        "phrase": "pendle voice",
+        "candidates": [{
+            "entityType": "creator",
+            "entityId": "creator-leader",
+            "canonicalValue": "Pendle Voice Leader and Times",
+        }, {
+            "entityType": "creator",
+            "entityId": "creator-dalesman",
+            "canonicalValue": "Pendle Voice Dalesman",
+        }, {
+            "entityType": "organization",
+            "entityId": "org-leader",
+            "canonicalValue": "Pendle Voice Leader and Times",
+        }],
+    }]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    expected = [{
+        "phrase": "pendle voice",
+        "candidates": [{
+            "type": "creator",
+            "id": "creator-leader",
+            "name": "Pendle Voice Leader and Times",
+        }, {
+            "type": "creator",
+            "id": "creator-dalesman",
+            "name": "Pendle Voice Dalesman",
+        }],
+    }]
+    assert result["ambiguities"] == expected
+    assert result["slots"]["ambiguousReferences"] == expected
+
+
 def test_client_defaults_use_fixed_service_contract_without_resolver_settings():
     client = ResolverClient(api_key="secret")
 

@@ -193,6 +193,31 @@ class ResolverResult:
 
     def to_alexa_payload(self) -> dict[str, Any]:
         slots = dict(self.slots)
+        ambiguities = []
+        for ambiguity in self.ambiguities:
+            candidates = []
+            candidate_names: set[str] = set()
+            for candidate in ambiguity.get("candidates") or []:
+                name = str(
+                    candidate.get("name")
+                    or candidate.get("canonicalValue")
+                    or ""
+                ).strip()
+                entity_id = candidate.get("id") or candidate.get("entityId")
+                entity_type = candidate.get("type") or candidate.get("entityType")
+                name_key = name.casefold()
+                if name and entity_id and entity_type and name_key not in candidate_names:
+                    candidate_names.add(name_key)
+                    candidates.append({
+                        "type": str(entity_type),
+                        "id": str(entity_id),
+                        "name": name,
+                    })
+            if candidates:
+                ambiguities.append({
+                    "phrase": str(ambiguity.get("phrase") or ""),
+                    "candidates": candidates,
+                })
         filters: dict[str, Any] = {}
         facet_slots = {
             "creator": ("creatorIds", "creatorName"),
@@ -282,7 +307,7 @@ class ResolverResult:
         slots.setdefault("latest", slots.get("sort") == "latest")
         slots.setdefault("isRecommended", False)
         slots.setdefault("unresolvedReferences", [])
-        slots["ambiguousReferences"] = []
+        slots["ambiguousReferences"] = list(ambiguities)
         search_plan = normalize_search_payload({
             "query": slots["residualQuery"],
             "sort": slots.get("sort"),
@@ -294,7 +319,7 @@ class ResolverResult:
             "intent": self.intent,
             "entities": [entity.to_payload() for entity in self.entities],
             "slots": slots,
-            "ambiguities": list(self.ambiguities),
+            "ambiguities": list(ambiguities),
             "timingMs": self.timing_ms,
             "resolution": resolution,
             "confidence": "high",
