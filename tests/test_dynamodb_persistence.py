@@ -28,6 +28,7 @@ def test_adapter_uses_hear_service_partition_key_by_default():
 
     assert adapter.partition_key_name == "id"
     assert adapter._table.partition_key == "id"
+    assert adapter.conditional_writes is False
 
 
 def _envelope(user_id: str = "alexa-user") -> dict:

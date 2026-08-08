@@ -40,7 +40,7 @@ class DynamoDbPersistenceAdapter:
         region: str | None = None,
         ttl_attribute: str = "expiresAt",
         ttl_days: int | None = None,
-        conditional_writes: bool = True,
+        conditional_writes: bool = False,
     ) -> None:
         if not table_name:
             raise ValueError("DynamoDbPersistenceAdapter: table_name is required")

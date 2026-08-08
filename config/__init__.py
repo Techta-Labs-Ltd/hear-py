@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     HEAR_DDB_TABLE: str = ""
     HEAR_DDB_PARTITION_KEY: str = "id"
     HEAR_PERSISTENCE_DRIVER: str = "dynamodb"
-    HEAR_PERSISTENCE_CONDITIONAL: bool = True
+    HEAR_PERSISTENCE_CONDITIONAL: bool = False
     HEAR_PERSISTENCE_TTL_DAYS: int = 180
     HEAR_DDB_REGION: str = "eu-west-1"
     AWS_REGION: str = "eu-west-1"
