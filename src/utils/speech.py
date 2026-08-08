@@ -402,7 +402,14 @@ def resolved_search_request_label(slots: dict, source_name: str | None = None) -
         or ""
     ).strip()
     if publication:
-        subject = f"{subject} within {publication}"
+        if not facets and subject in (
+            "content", "the latest content", "publication", "the latest publication",
+        ):
+            subject = (
+                f"the latest {publication}" if slots.get("latest") else publication
+            )
+        else:
+            subject = f"{subject} from {publication}"
     city = str(slots.get("city") or slots.get("placeName") or "").strip()
     if city:
         subject = f"{subject} in {city}"
@@ -556,4 +563,3 @@ LATEST_SOURCE_DECLINED = "No problem. You can ask for news or sport, play from a
 # End of speech catalog.
 
 # ── Notification Detail ─────────────────────────────────────────────
-

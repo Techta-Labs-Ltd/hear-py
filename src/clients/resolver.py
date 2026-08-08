@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import traceback
 from typing import Any
 
@@ -54,6 +55,14 @@ class ResolverClient:
         }
         if alexa_user_id:
             body["alexaUserId"] = alexa_user_id
+        logged_body = {
+            **body,
+            **({"alexaUserId": "<present>"} if alexa_user_id else {}),
+        }
+        logger.info(
+            "Hear: resolver request payload=%s",
+            json.dumps(logged_body, sort_keys=True, separators=(",", ":")),
+        )
         try:
             if self._transport is not None:
                 async with httpx.AsyncClient(
@@ -99,7 +108,14 @@ class ResolverClient:
             timezone=timezone,
             country_code=country_code,
         )
-        return result.to_alexa_payload()
+        payload = result.to_alexa_payload()
+        logger.info(
+            "Hear: resolver normalized response status=%s intent=%s slots=%s",
+            payload.get("status"),
+            payload.get("intent"),
+            json.dumps(payload.get("slots") or {}, sort_keys=True, separators=(",", ":")),
+        )
+        return payload
 
 
 client = ResolverClient(

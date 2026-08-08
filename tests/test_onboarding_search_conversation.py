@@ -191,7 +191,7 @@ def test_confirmation_never_uses_from_without_source_filter():
     }, "sport from adeshina") == "sport adeshina"
 
 
-def test_publication_is_spoken_as_collection_not_source():
+def test_publication_filter_uses_natural_source_wording():
     assert resolved_search_request_label({
         "latest": True,
         "category": "sport",
@@ -199,8 +199,17 @@ def test_publication_is_spoken_as_collection_not_source():
         "publicationName": "London Weekly Review",
         "city": "London",
     }, "London Weekly Review") == (
-        "the latest sport within London Weekly Review in London"
+        "the latest sport from London Weekly Review in London"
     )
+
+
+def test_bare_publication_confirmation_speaks_its_name_directly():
+    assert resolved_search_request_label({
+        "publicationIds": ["publication-1"],
+        "publicationName": "Weekend product podcast",
+        "residualQuery": "",
+        "isPublication": False,
+    }) == "Weekend product podcast"
 
 
 def test_publication_format_is_spoken_with_creator_source():

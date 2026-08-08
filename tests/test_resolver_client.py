@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import httpx
 import pytest
 
@@ -55,7 +56,7 @@ def _response(**overrides):
 
 
 @pytest.mark.asyncio
-async def test_client_sends_documented_request_and_api_key():
+async def test_client_sends_documented_request_and_api_key(caplog):
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -67,9 +68,10 @@ async def test_client_sends_documented_request_and_api_key():
         default_country="gb", timeout_ms=1500,
         transport=httpx.MockTransport(handler),
     )
-    result = await client.resolve(
-        "latest sport by adeshina", alexa_user_id="amzn-user", timezone="Europe/London",
-    )
+    with caplog.at_level(logging.INFO, logger="src.clients.resolver"):
+        result = await client.resolve(
+            "latest sport by adeshina", alexa_user_id="amzn-user", timezone="Europe/London",
+        )
 
     request = captured["request"]
     assert str(request.url) == "https://resolver.hear.media/resolve"
@@ -79,6 +81,10 @@ async def test_client_sends_documented_request_and_api_key():
         b'"country_code":"gb","alexaUserId":"amzn-user"}'
     )
     assert isinstance(result, ResolverResult)
+    assert '"utterance":"latest sport by adeshina"' in caplog.text
+    assert '"alexaUserId":"<present>"' in caplog.text
+    assert "amzn-user" not in caplog.text
+    assert "secret" not in caplog.text
 
 
 def test_canonical_entities_drive_all_discovered_facets_without_fake_ambiguity():
@@ -94,6 +100,19 @@ def test_canonical_entities_drive_all_discovered_facets_without_fake_ambiguity()
     assert result["slots"]["tagNames"] == ["#sport"]
     assert result["slots"]["ambiguousReferences"] == []
     assert result["ambiguities"] == []
+
+
+def test_explicit_publication_uses_id_without_generic_publication_filter():
+    payload = _response()
+    payload["entities"] = [payload["entities"][1]]
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["slots"]["publicationIds"] == ["publication-1"]
+    assert result["slots"]["publicationName"] == "Buxton Talking Sport"
+    assert result["slots"]["isPublication"] is False
+    assert result["slots"]["searchPlan"]["filter"] == {
+        "publicationIds": ["publication-1"],
+    }
 
 
 def test_client_defaults_use_fixed_service_contract_without_resolver_settings():

@@ -249,7 +249,9 @@ class ResolverResult:
         for key in ("publishedFrom", "publishedTo"):
             if slots.get(key) is not None:
                 filters[key] = slots[key]
-        if slots.get("isPublication") or self.intent == "publication":
+        if slots.get("isPublication") or (
+            self.intent == "publication" and not slots.get("publicationIds")
+        ):
             slots["isPublication"] = True
             filters["isPublication"] = True
         slots.setdefault("residualQuery", "")
@@ -340,5 +342,4 @@ ALEXA_TO_NLP = {
     "ClarifySelectionIntent": "general",
     "AMAZON.FallbackIntent": "general",
 }
-
 
