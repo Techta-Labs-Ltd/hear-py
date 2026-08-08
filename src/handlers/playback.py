@@ -239,7 +239,7 @@ class PreviousIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await _play_queue_delta(handler_input, -1, "Playing the previous recording.", deps=self._deps)
+        return await _play_queue_delta(handler_input, -1, PLAYING_PREVIOUS, deps=self._deps)
 
 
 class RepeatIntentHandler(AbstractRequestHandler):

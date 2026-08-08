@@ -434,7 +434,7 @@ NOTHING_TO_RESUME = "Nothing to resume. Say what's trending, or play something t
 REWOUND = lambda seconds: f"Rewound {seconds} seconds."
 FAST_FORWARDED = lambda seconds: f"Skipped forward {seconds} seconds."
 REPLAYING = "Playing again from the start."
-PLAYING_PREVIOUS = lambda title: f"Playing previous: {humanize_spoken_title(title)}." if humanize_spoken_title(title) else "Playing the previous recording."
+PLAYING_PREVIOUS = "Playing the previous recording."
 NO_PREVIOUS = "There is no previous content to play."
 CANNOT_SEEK = "Nothing is playing right now. Say play to start listening."
 
