@@ -39,6 +39,7 @@ from src.utils.dynamic_entities import build_ambiguity_dynamic_entities_directiv
 from src.utils.lambda_deadline import compute_search_timeout_ms, get_lambda_remaining_ms
 from src.utils.search_filters import wants_latest_playback
 from src.services.playback import start_playback
+from src.services.search_queue import prefetch_search_queue_items
 _DEFAULT_SEARCH_PAGE_LIMIT = settings.search_page_limit
 logger = logging.getLogger(__name__)
 
@@ -376,7 +377,7 @@ async def auto_play_first_from_search(
     *, deps: Dependencies | None = None,
 ):
     """Take a search result, cache it as a browse catalog, and start playback of the first item."""
-    del deps
+    d = deps or Dependencies()
     opts = options or {}
     if not search_result.get("results"):
         return _build_search_outcome_response(handler_input, search_result)
@@ -418,9 +419,14 @@ async def auto_play_first_from_search(
     else:
         intro = f"I found {total} stories. Now playing the first one."
 
+    queue_items = await prefetch_search_queue_items(
+        search_result,
+        d.heara,
+        timeout_ms=compute_search_timeout_ms(handler_input),
+    )
     init_queue(
         handler_input,
-        search_result["results"],
+        queue_items,
         source=intent or "search",
         locality=store.get("locality"),
         start_index=0,

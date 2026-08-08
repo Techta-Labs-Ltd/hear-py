@@ -16,6 +16,7 @@ from src.clients.hear import (
 )
 
 from src.services.playback import start_playback
+from src.dependencies import Dependencies
 
 
 
@@ -138,6 +139,63 @@ async def test_real_search_shape_reaches_playback_without_catalog_call_error(
 
     assert result == expected
     start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_search_prefetches_all_pages_into_playback_queue(
+    monkeypatch,
+    mock_handler_input,
+):
+    start = AsyncMock(return_value={"response": "play"})
+    monkeypatch.setattr("src.handlers.search.start_playback", start)
+    hear_client = AsyncMock()
+    hear_client.search.side_effect = [
+        {
+            "results": [{"contentId": "content-3"}],
+            "total_hits": 4,
+            "total_pages": 3,
+            "page": 1,
+            "failed": False,
+        },
+        {
+            "results": [
+                {"contentId": "content-3"},
+                {"contentId": "content-4"},
+            ],
+            "total_hits": 4,
+            "total_pages": 3,
+            "page": 2,
+            "failed": False,
+        },
+    ]
+
+    await auto_play_first_from_search(
+        mock_handler_input,
+        {
+            "results": [
+                {
+                    "contentId": "content-1",
+                    "title": "First story",
+                    "audioUrl": "https://cdn.hear.media/audio/content-1.mp3",
+                },
+                {"contentId": "content-2"},
+            ],
+            "total_hits": 4,
+            "total_pages": 3,
+            "page": 0,
+            "_search_payload": {"query": "wakefield", "page": 0, "limit": 2},
+        },
+        deps=Dependencies(heara=hear_client),
+    )
+
+    store = mock_handler_input.attributes_manager.request_attributes["_store"]
+    assert store["playbackQueue"]["orderedContentIds"] == [
+        "content-1",
+        "content-2",
+        "content-3",
+        "content-4",
+    ]
+    assert [call.args[0]["page"] for call in hear_client.search.await_args_list] == [1, 2]
 
 
 @pytest.mark.asyncio
