@@ -196,7 +196,7 @@ PLAYBACK_SPEED_MAX = "This is the maximum speed."
 PLAYBACK_SPEED_MIN = "This is the minimum speed."
 
 PLAYBACK_SPEED_SET = lambda speed: f"Playback speed set to {speed}x."
-PLAYBACK_SPEED_INVALID = "Supported speeds are 0.5, 0.75, 1, 1.25, 1.5, and 2. Which would you like?"
+PLAYBACK_SPEED_INVALID = "Say first through sixth speed, normal speed, faster, or slower."
 
 # ── Queue / Browse ──────────────────────────────────────────────────
 

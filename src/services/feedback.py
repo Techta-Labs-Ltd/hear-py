@@ -203,6 +203,7 @@ class FeedbackService:
             "awaitingFeedback": False,
             "activeDialog": None,
             "_requiresReliableSave": False,
+            "deferredIntent": None,
         })
 
     @staticmethod
@@ -232,6 +233,7 @@ class FeedbackService:
             "feedbackReminderAlertToken": None,
             "feedbackAskedForToken": None,
             "playbackDurationEstimateMs": None,
+            "deferredIntent": None,
         })
 
     @staticmethod
@@ -242,6 +244,7 @@ class FeedbackService:
             "feedbackPromptText": None,
             "feedbackAskedForToken": None,
             "feedbackReminderAlertToken": None,
+            "deferredIntent": None,
         })
 
 

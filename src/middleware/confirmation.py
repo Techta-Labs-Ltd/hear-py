@@ -5,6 +5,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from src.services.resolution import build_pending_resolution
 
 from src.utils.speech import resolved_search_request_label
+from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
 
 _CONFIRMABLE: set[str] = {
     "local", "creator", "organization", "publication", "category", "general",
@@ -177,6 +178,10 @@ def _build_search_params(nlp: dict | None) -> dict | None:
 
 class ConfirmationMiddleware(AbstractRequestInterceptor):
     def process(self, handler_input) -> None:
+        if handler_input.attributes_manager.request_attributes.get(
+            DIALOG_VALIDATION_FAILURE
+        ):
+            return
         try:
             request_type = handler_input.request_envelope.request.type
         except Exception:

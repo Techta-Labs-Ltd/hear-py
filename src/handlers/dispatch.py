@@ -124,7 +124,10 @@ class IntentDispatchHandler(AbstractRequestHandler):
         activate_dialog(
             handler_input,
             "search_confirmation",
-            context=resolution,
+            context={
+                **resolution,
+                "confirmationLabel": confirm_text,
+            },
         )
         logger.info("Hear: search confirmation asked intent=%s text=%s",
                     pending.get("intent"), confirm_text)

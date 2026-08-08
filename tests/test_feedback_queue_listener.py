@@ -196,7 +196,7 @@ async def test_queue_resolves_next_item_from_cached_catalog_without_api(
 
 
 @pytest.mark.asyncio
-async def test_negative_feedback_reports_then_resumes_deferred_play_request(
+async def test_negative_feedback_reports_without_resuming_rejected_play_request(
     monkeypatch,
     mock_handler_input,
 ):
@@ -270,18 +270,14 @@ async def test_negative_feedback_reports_then_resumes_deferred_play_request(
     })
     response = await ReportContentHandler().handle(mock_handler_input)
 
-    mock_handler_input.redispatch.assert_awaited_once()
-    assert mock_handler_input.request_envelope.request.intent.name == (
-        "PlayByOrganizationIntent"
-    )
-    assert "Thanks for the feedback. I found 4 stories" in (
-        response["outputSpeech"]["ssml"]
-    )
-    assert response["directives"][0]["type"] == "AudioPlayer.Play"
+    mock_handler_input.redispatch.assert_not_awaited()
+    assert mock_handler_input.attributes_manager.request_attributes["_store"].get(
+        "deferredIntent"
+    ) is None
 
 
 @pytest.mark.asyncio
-async def test_skip_feedback_restores_exact_pending_search_confirmation(
+async def test_skip_feedback_does_not_restore_rejected_search_confirmation(
     monkeypatch,
     mock_handler_input,
 ):
@@ -343,15 +339,14 @@ async def test_skip_feedback_restores_exact_pending_search_confirmation(
 
     await SkipFeedbackHandler().handle(mock_handler_input)
 
-    restored = mock_handler_input.attributes_manager.request_attributes[
-        "_pendingConfirmation"
-    ]
-    assert restored["resolution"]["searchPayload"] == payload
-    mock_handler_input.redispatch.assert_awaited_once()
+    mock_handler_input.redispatch.assert_not_awaited()
+    assert mock_handler_input.attributes_manager.request_attributes["_store"].get(
+        "deferredIntent"
+    ) is None
 
 
 @pytest.mark.asyncio
-async def test_plain_no_skips_feedback_instead_of_recording_dislike(
+async def test_plain_no_records_not_enjoyed_feedback(
     monkeypatch,
     mock_handler_input,
 ):
@@ -374,7 +369,7 @@ async def test_plain_no_skips_feedback_instead_of_recording_dislike(
 
     await NoIntentHandler().handle(mock_handler_input)
 
-    submit.assert_awaited_once_with(mock_handler_input, "skipped")
+    submit.assert_awaited_once_with(mock_handler_input, "not_enjoyed")
     assert mock_handler_input.attributes_manager.request_attributes["_store"][
         "awaitingFeedback"
     ] is False

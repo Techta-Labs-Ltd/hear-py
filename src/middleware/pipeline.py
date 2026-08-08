@@ -10,6 +10,10 @@ from src.middleware.feedback_gate import FeedbackGateHandler
 from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.onboarding_gate import OnboardingGateHandler
 from src.middleware.resolver import ResolverInterceptor
+from src.middleware.dialog_validation import (
+    DialogValidationGateHandler,
+    DialogValidationInterceptor,
+)
 
 from src.handlers.dispatch import IntentDispatchHandler
 
@@ -21,6 +25,7 @@ from src.services.persistence import (
 
 GATE_HANDLERS = (
     CanFulfillIntentHandler,
+    DialogValidationGateHandler,
     FeedbackGateHandler,
     OnboardingGateHandler,
     TownCaptureHandler,
@@ -30,6 +35,7 @@ GATE_HANDLERS = (
 REQUEST_INTERCEPTORS = (
     LambdaDeadlineInterceptor,
     LoadPersistenceInterceptor,
+    DialogValidationInterceptor,
     IdentityInterceptor,
     ResolverInterceptor,
     ConfirmationMiddleware,

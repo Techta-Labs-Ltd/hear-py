@@ -690,16 +690,9 @@ class NoIntentHandler(AbstractRequestHandler):
         dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
         if dialog_type == "ambiguity":
-            update_store(handler_input, {
-                "pendingAmbiguity": None,
-                "awaitingLocationConfirm": False,
-                "pendingLocationConfirm": None,
-                "_requiresReliableSave": True,
-            })
-            clear_active_dialog(handler_input, "ambiguity")
             return handler_input.response_builder \
-                .speak(ssml("No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?")) \
-                .reprompt(ssml("You can ask for news or sport, a talking newspaper, or what's trending.")) \
+                .speak(ssml("Please say one of the names I offered, the first one, the second one, or say show more. Say cancel to stop choosing.")) \
+                .reprompt(ssml("Say a name, the first one, the second one, show more, or cancel.")) \
                 .set_should_end_session(False) \
                 .response
 
@@ -748,7 +741,7 @@ class NoIntentHandler(AbstractRequestHandler):
             return await SkipFeedbackHandler().handle(handler_input)
 
         if dialog_type == "feedback" or (not dialog_type and store.get("awaitingFeedback")):
-            return await SkipFeedbackHandler().handle(handler_input)
+            return await FeedbackNotEnjoyedHandler().handle(handler_input)
 
         if dialog_type == "resume" or (not dialog_type and store.get("awaitingResume")):
             return self._handle_resume_no(handler_input, store)
@@ -768,7 +761,7 @@ class NoIntentHandler(AbstractRequestHandler):
 
         # 6. Awaiting feedback
         if store.get("awaitingFeedback"):
-            return await SkipFeedbackHandler().handle(handler_input)
+            return await FeedbackNotEnjoyedHandler().handle(handler_input)
 
         # 7. Awaiting follow
         if store.get("awaitingFollow"):

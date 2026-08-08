@@ -16,6 +16,7 @@ from src.utils.skill_request import (
     get_resolved_slot_value,
     get_user_id,
 )
+from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
 logger = logging.getLogger(__name__)
 
 
@@ -209,6 +210,10 @@ class ResolverInterceptor(AbstractRequestInterceptor):
 
     async def process(self, handler_input) -> None:
         try:
+            if handler_input.attributes_manager.request_attributes.get(
+                DIALOG_VALIDATION_FAILURE
+            ):
+                return
             request = handler_input.request_envelope.request if handler_input.request_envelope else None
             if not request or request.type != "IntentRequest":
                 return

@@ -536,7 +536,7 @@
           "slots": [
             {
               "name": "speed",
-              "type": "AMAZON.NUMBER"
+              "type": "HEAR_PLAYBACK_SPEED"
             }
           ],
           "samples": [
@@ -1059,6 +1059,53 @@
               "name": {
                 "value": "trending",
                 "synonyms": ["popular", "top"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_PLAYBACK_SPEED",
+          "values": [
+            {
+              "id": "0.5",
+              "name": {
+                "value": "0.5",
+                "synonyms": ["first", "first speed", "first level", "half", "half speed"]
+              }
+            },
+            {
+              "id": "0.75",
+              "name": {
+                "value": "0.75",
+                "synonyms": ["second", "second speed", "second level", "three quarter speed"]
+              }
+            },
+            {
+              "id": "1",
+              "name": {
+                "value": "1",
+                "synonyms": ["third", "third speed", "third level", "normal", "normal speed", "regular speed", "reset speed"]
+              }
+            },
+            {
+              "id": "1.25",
+              "name": {
+                "value": "1.25",
+                "synonyms": ["fourth", "fourth speed", "fourth level", "one point two five"]
+              }
+            },
+            {
+              "id": "1.5",
+              "name": {
+                "value": "1.5",
+                "synonyms": ["fifth", "fifth speed", "fifth level", "one and a half"]
+              }
+            },
+            {
+              "id": "2",
+              "name": {
+                "value": "2",
+                "synonyms": ["sixth", "sixth speed", "sixth level", "double", "double speed"]
               }
             }
           ]

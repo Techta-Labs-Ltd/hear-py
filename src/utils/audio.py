@@ -96,19 +96,24 @@ def build_content_metadata(content: dict, track_title: str | None = None, resolv
 
 
 def normalise_speed(requested) -> float | None:
-    """Snap a requested speed value to the nearest configured speed."""
-    spd = float(requested) if requested is not None else None
-    if spd is None or (isinstance(spd, float) and (spd != spd)):
+    """Return an exact configured speed; never guess from a misheard value."""
+    aliases = {
+        "first": 0.5, "first speed": 0.5, "half": 0.5, "half speed": 0.5,
+        "second": 0.75, "second speed": 0.75, "three quarter speed": 0.75,
+        "third": 1.0, "third speed": 1.0, "normal": 1.0,
+        "normal speed": 1.0, "regular speed": 1.0, "reset speed": 1.0,
+        "fourth": 1.25, "fourth speed": 1.25,
+        "fifth": 1.5, "fifth speed": 1.5, "one and a half": 1.5,
+        "sixth": 2.0, "sixth speed": 2.0, "double": 2.0, "double speed": 2.0,
+    }
+    raw = str(requested).strip().casefold() if requested is not None else ""
+    if raw in aliases:
+        return aliases[raw]
+    try:
+        spd = float(raw.removesuffix("x").strip())
+    except (TypeError, ValueError):
         return None
-    speeds = settings.speeds
-    best = speeds[0]
-    best_diff = abs(best - spd)
-    for s in speeds[1:]:
-        diff = abs(s - spd)
-        if diff < best_diff:
-            best_diff = diff
-            best = s
-    return best
+    return next((speed for speed in settings.speeds if abs(speed - spd) < 0.001), None)
 
 
 def find_speed_url(speeds: list | None, target_speed: float) -> str | None:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_core.utils.request_util import get_slot_value
 from config import settings
 from src.dependencies import Dependencies
 from src.services.playback import read_playback_session, write_playback_session
@@ -16,7 +15,12 @@ from src.utils.audio import (
     normalise_speed,
     resolve_seek_ms,
 )
-from src.utils.skill_request import get_intent_name, get_request_type, get_user_id
+from src.utils.skill_request import (
+    get_intent_name,
+    get_request_type,
+    get_resolved_slot_value,
+    get_user_id,
+)
 from src.utils.speech import (
     CANNOT_SEEK,
     FAST_FORWARDED,
@@ -133,8 +137,10 @@ class SetPlaybackSpeedHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        raw = get_slot_value(handler_input, "speed")
-        speed = settings.default_speed if not raw else normalise_speed(raw)
+        intent = handler_input.request_envelope.request.intent
+        slot = ((intent.get("slots") if intent else None) or {}).get("speed")
+        raw = get_resolved_slot_value(slot)
+        speed = normalise_speed(raw)
         if speed is None:
             return _open_response(handler_input, PLAYBACK_SPEED_INVALID)
         return await _apply_speed(handler_input, speed)
