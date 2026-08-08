@@ -5,6 +5,7 @@ from src.handlers.dispatch import IntentDispatchHandler
 
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.services.store import DEFAULT_STORE, get_store
+from src.services.resolution import build_pending_resolution
 
 
 
@@ -126,3 +127,19 @@ def test_constrained_whats_latest_stops_for_confirmation():
         response["outputSpeech"]["ssml"]
     )
     assert get_store(handler_input)["pendingResolution"]["searchPayload"] == payload
+
+
+def test_pending_resolution_stores_only_catalog_valid_query_and_sort():
+    pending = build_pending_resolution({
+        "intent": "publication",
+        "searchPayload": {
+            "query": None,
+            "sort": "relevance",
+            "filter": {"organizationIds": ["org-wtn"]},
+        },
+    }, "Wakefield Talking Newspaper")
+
+    assert pending["searchPayload"] == {
+        "query": "",
+        "filter": {"organizationIds": ["org-wtn"]},
+    }

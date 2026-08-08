@@ -115,6 +115,17 @@ def test_explicit_publication_uses_id_without_generic_publication_filter():
     }
 
 
+def test_resolver_search_plan_normalizes_null_query_and_unsupported_sort():
+    payload = _response()
+    payload["slots"].update({"residualQuery": None, "sort": "relevance"})
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["searchPayload"]["query"] == ""
+    assert "sort" not in result["searchPayload"]
+    assert result["slots"]["searchPlan"] == result["searchPayload"]
+
+
 def test_client_defaults_use_fixed_service_contract_without_resolver_settings():
     client = ResolverClient(api_key="secret")
 

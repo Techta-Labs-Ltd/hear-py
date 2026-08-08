@@ -4,6 +4,7 @@ import re
 
 from src.utils.skill_request import get_intent_name, get_user_id
 from src.utils.search_query import normalize_search_query
+from src.utils.search_payload import ALLOWED_SEARCH_SORTS
 
 
 class SearchPayload:
@@ -75,7 +76,7 @@ class SearchPayload:
             "limit": self.limit,
             "page": self.page,
         }
-        if self.sort:
+        if self.sort in ALLOWED_SEARCH_SORTS:
             payload["sort"] = self.sort
         elif is_local:
             payload["sort"] = "nearest"

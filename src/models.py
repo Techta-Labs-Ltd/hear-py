@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from src.utils.search_payload import normalize_search_payload
+
 PrincipalType = Literal[
     "linked_person",
     "linked_household",
@@ -259,11 +261,11 @@ class ResolverResult:
         slots.setdefault("isRecommended", False)
         slots.setdefault("unresolvedReferences", [])
         slots["ambiguousReferences"] = []
-        search_plan = {
+        search_plan = normalize_search_payload({
             "query": slots["residualQuery"],
-            "sort": slots.get("sort") or "relevance",
+            "sort": slots.get("sort"),
             "filter": filters,
-        }
+        })
         slots["searchPlan"] = search_plan
         return {
             "status": self.status,
@@ -342,4 +344,3 @@ ALEXA_TO_NLP = {
     "ClarifySelectionIntent": "general",
     "AMAZON.FallbackIntent": "general",
 }
-

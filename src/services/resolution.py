@@ -2,6 +2,8 @@ from __future__ import annotations
 import time
 import uuid
 
+from src.utils.search_payload import normalize_search_payload
+
 
 class ResolutionBuilder:
     __slots__ = ()
@@ -23,7 +25,7 @@ class ResolutionBuilder:
             "corrections": list(nlp.get("corrections") or []),
             "intent": nlp.get("intent") or "general",
             "confirmationLabel": confirmation_label,
-            "searchPayload": dict(payload),
+            "searchPayload": normalize_search_payload(payload),
             "resolvedEntities": list(nlp.get("entities") or []),
             "alternatives": list(nlp.get("alternatives") or []),
             "createdAt": timestamp,

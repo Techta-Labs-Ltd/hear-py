@@ -11,12 +11,12 @@ from config import settings
 from src.clients.pool import HttpPool
 from src.services.store import get_store, update_store
 from src.utils.normalize_content_item import normalize_content_items
-from src.utils.search_query import normalize_search_query
+from src.utils.search_payload import ALLOWED_SEARCH_SORTS, normalize_search_payload
 from src.utils.skill_request import get_user_id
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_SORT_VALUES = frozenset({"recommended", "nearest", "popular", "latest", "trending"})
+ALLOWED_SORT_VALUES = ALLOWED_SEARCH_SORTS
 
 _SEARCH_FILTER_KEYS = ("alexaUserId", "filter", "isLocal", "isRecommended")
 _DATE_KEYS = ("publishedFrom", "publishedTo")
@@ -156,10 +156,10 @@ class HearApiClient:
         payload: dict | None = None,
         timeout_ms: int | None = None,
     ) -> dict:
-        payload = payload or {}
-        query = payload.get("query") or payload.get("q")
+        payload = normalize_search_payload(payload)
+        query = payload["query"]
         body: dict[str, Any] = {
-            "query": normalize_search_query(query),
+            "query": query,
             "limit": payload.get("limit", self._page_limit),
             "page": payload.get("page", 0),
         }
