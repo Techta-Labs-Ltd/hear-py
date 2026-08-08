@@ -81,6 +81,10 @@ class DynamoDbPersistenceAdapter:
                 size,
                 self.table_name,
             )
+        if expected_version == 0:
+            condition = [not_exists("stateVersion")]
+        else:
+            condition = [eq("stateVersion", expected_version)]
         await self._table.update_item(
             user_id,
             updates={
@@ -88,15 +92,7 @@ class DynamoDbPersistenceAdapter:
                 self.ttl_attribute: expires_at,
                 "stateVersion": expected_version + 1,
             },
-            condition=[
-                {
-                    "op": "or",
-                    "rules": [
-                        not_exists("stateVersion"),
-                        eq("stateVersion", expected_version),
-                    ],
-                }
-            ],
+            condition=condition,
         )
 
     async def delete_attributes(self, request_envelope: dict) -> None:

@@ -11,6 +11,7 @@ PrincipalType = Literal[
 ]
 
 PERSISTED_FIELDS = frozenset({
+    "_persistenceVersion",
     "activeDialog",
     "activePlayback",
     "answeredFeedbackKeys",

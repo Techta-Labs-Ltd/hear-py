@@ -80,7 +80,7 @@ def build_condition(rules: list[dict], start_index: int = 0) -> tuple[str, dict,
     for rule in rules or []:
         if rule.get("op") == "or":
             inner, inner_names, inner_values = build_condition(rule["rules"], start_index=index)
-            expressions.append(f"({inner})")
+            expressions.append(f"({inner.replace(' AND ', ' OR ')})")
             names.update(inner_names)
             values.update(inner_values)
             index += 100

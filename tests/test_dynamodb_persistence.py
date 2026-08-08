@@ -71,13 +71,7 @@ async def test_save_bumps_version_and_sets_ttl():
     assert updates["stateVersion"] == 5
     assert updates["expiresAt"] > 1700000000
     assert call.kwargs["condition"] == [
-        {
-            "op": "or",
-            "rules": [
-                {"op": "not_exists", "name": "stateVersion"},
-                {"op": "=", "name": "stateVersion", "value": 4},
-            ],
-        }
+        {"op": "=", "name": "stateVersion", "value": 4},
     ]
 
 
