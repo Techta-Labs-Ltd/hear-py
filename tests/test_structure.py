@@ -65,6 +65,23 @@ def test_template_has_no_dedicated_resolver_configuration():
     assert "Taxonomy" not in template
 
 
+def test_template_owns_and_wires_durable_persistence_table():
+    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "HearPersistenceTable:" in template
+    assert "Type: AWS::DynamoDB::Table" in template
+    assert "DeletionPolicy: Retain" in template
+    assert "UpdateReplacePolicy: Retain" in template
+    assert "BillingMode: PAY_PER_REQUEST" in template
+    assert "PointInTimeRecoveryEnabled: true" in template
+    assert "AttributeName: expiresAt" in template
+    assert "HEAR_DDB_TABLE: !Ref HearPersistenceTable" in template
+    assert "DynamoDBCrudPolicy: { TableName: !Ref HearPersistenceTable }" in template
+    assert "HEAR_DDB_TABLE: hear-service" not in template
+
+
 def test_runtime_and_container_do_not_install_or_import_spacy():
     root = Path(__file__).resolve().parents[1]
     runtime_sources = [

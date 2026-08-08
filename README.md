@@ -26,8 +26,10 @@ delivery.
 Copy `.env.example` to `.env` for local development. The external resolver uses
 the existing `HEAR_API_KEY`; it does not require separate resolver settings.
 
-Production persistence uses DynamoDB when `HEAR_DDB_TABLE` is set. Memory
-persistence is intended for local development only.
+The deployment stack creates and owns an encrypted DynamoDB table for durable
+listener state, with point-in-time recovery, TTL, and retained deletion policy.
+`HEAR_DDB_TABLE` selects the table outside the stack. Memory persistence is
+intended for local development only.
 
 ## Local checks
 

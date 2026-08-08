@@ -44,7 +44,7 @@ Globals:
         HEAR_API_KEY: !Ref HearApiKey
         HEAR_CLIENT_VERSION: alexa-skill
         HEAR_DDB_REGION: eu-west-1
-        HEAR_DDB_TABLE: hear-service
+        HEAR_DDB_TABLE: !Ref HearPersistenceTable
         HEAR_DDB_PARTITION_KEY: id
         HEAR_PERSISTENCE_DRIVER: dynamodb
         HEAR_PERSISTENCE_CONDITIONAL: "0"
@@ -55,6 +55,31 @@ Globals:
         POWERTOOLS_LOG_LEVEL: INFO
 
 Resources:
+  HearPersistenceTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Application
+          Value: hear-alexa-skill
+        - Key: Stage
+          Value: !Ref Stage
+
   HearSkillFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -62,7 +87,7 @@ Resources:
       PackageType: Image
       ImageUri: !Ref ImageUri
       Policies:
-        - DynamoDBCrudPolicy: { TableName: hear-service }
+        - DynamoDBCrudPolicy: { TableName: !Ref HearPersistenceTable }
 
   AlexaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -74,6 +99,9 @@ Resources:
       EventSourceToken: !Ref AlexaSkillId
 
 Outputs:
+  PersistenceTableName:
+    Description: DynamoDB table used for durable Alexa listener state.
+    Value: !Ref HearPersistenceTable
   SkillFunctionArn:
     Description: Set this as the skill's Default Endpoint in the Alexa console.
     Value: !GetAtt HearSkillFunction.Arn
