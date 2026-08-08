@@ -27,6 +27,64 @@ from src.services.playback import play_next_queued_item
 from src.utils.normalize_content_item import pick_content_source
 import logging
 
+logger = logging.getLogger(__name__)
+
+
+async def _enqueue_next_queued_content(handler_input, token: str, deps: Dependencies):
+    """Prepare the next queue item early; repeated AudioPlayer events are harmless."""
+    store = get_store(handler_input)
+    state = read_playback_session(store)
+    if not state or state.get("contentId") != token:
+        return handler_input.response_builder.response
+    queue = read_playback_queue(store)
+    if not queue:
+        return handler_input.response_builder.response
+    next_index = int(queue.get("currentIndex") or 0) + 1
+    if next_index >= len(queue["orderedContentIds"]):
+        return handler_input.response_builder.response
+    next_id = queue["orderedContentIds"][next_index]
+    prepared = store.get("preparedNextContent")
+    if isinstance(prepared, dict) and prepared.get("contentId") == next_id:
+        logger.info(
+            "Hear: queue item already prepared current=%s next=%s index=%s",
+            token, next_id, next_index,
+        )
+        return handler_input.response_builder.response
+    content = cached_queue_content(store, next_id)
+    if not content:
+        result = await deps.heara.search({
+            "query": "",
+            "filter": {"contentIds": [next_id]},
+            "page": 0,
+            "limit": 1,
+            "alexaUserId": get_user_id(handler_input),
+        })
+        if not result.get("results"):
+            logger.warning(
+                "Hear: queue prefetch found no content current=%s next=%s index=%s",
+                token, next_id, next_index,
+            )
+            return handler_input.response_builder.response
+        content = result["results"][0]
+    update_store(handler_input, {"preparedNextContent": content})
+    directive = build_play_directive(
+        url=content["audioUrl"],
+        token=content["contentId"],
+        prev_token=token,
+        metadata=build_content_metadata(content),
+        progress_report=True,
+        duration_secs=(
+            content["durationMs"] / 1000
+            if isinstance(content.get("durationMs"), (int, float))
+            else None
+        ),
+    )
+    logger.info(
+        "Hear: queue item enqueued current=%s next=%s index=%s",
+        token, next_id, next_index,
+    )
+    return handler_input.response_builder.add_directive(directive).response
+
 class PlaybackStartedHandler(AbstractRequestHandler):
     def __init__(self, *, deps: Dependencies | None = None):
         self._deps = deps or Dependencies()
@@ -66,6 +124,9 @@ class PlaybackStartedHandler(AbstractRequestHandler):
                 "lastOffsetMs": offset_ms,
             })
             await emit_listening_event(handler_input, "started", state)
+            return await _enqueue_next_queued_content(
+                handler_input, token, self._deps,
+            )
         return handler_input.response_builder.response
 
 class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
@@ -82,39 +143,9 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         if not state or state.get("contentId") != token:
             return handler_input.response_builder.response
         await emit_listening_event(handler_input, "nearly_finished", state)
-        queue = read_playback_queue(store)
-        if not queue:
-            return handler_input.response_builder.response
-        next_index = int(queue.get("currentIndex") or 0) + 1
-        if next_index >= len(queue["orderedContentIds"]):
-            return handler_input.response_builder.response
-        next_id = queue["orderedContentIds"][next_index]
-        content = cached_queue_content(store, next_id)
-        if not content:
-            result = await self._deps.heara.search({
-                "query": "",
-                "filter": {"contentIds": [next_id]},
-                "page": 0,
-                "limit": 1,
-                "alexaUserId": get_user_id(handler_input),
-            })
-            if not result.get("results"):
-                return handler_input.response_builder.response
-            content = result["results"][0]
-        update_store(handler_input, {"preparedNextContent": content})
-        directive = build_play_directive(
-            url=content["audioUrl"],
-            token=content["contentId"],
-            prev_token=token,
-            metadata=build_content_metadata(content),
-            progress_report=True,
-            duration_secs=(
-                content["durationMs"] / 1000
-                if isinstance(content.get("durationMs"), (int, float))
-                else None
-            ),
+        return await _enqueue_next_queued_content(
+            handler_input, token, self._deps,
         )
-        return handler_input.response_builder.add_directive(directive).response
 
 class PlaybackFinishedHandler(AbstractRequestHandler):
     def __init__(self, *, deps: Dependencies | None = None):
@@ -198,9 +229,6 @@ class PlaybackStoppedHandler(AbstractRequestHandler):
             update_store(handler_input, {"lastOffsetMs": offset_ms, "lastToken": token})
             await emit_listening_event(handler_input, "stopped", state)
         return handler_input.response_builder.response
-
-logger = logging.getLogger(__name__)
-
 
 class PlaybackFailedHandler(AbstractRequestHandler):
     def __init__(self, *, deps: Dependencies | None = None):

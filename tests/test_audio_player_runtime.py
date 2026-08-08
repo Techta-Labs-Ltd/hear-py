@@ -437,7 +437,7 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
     assert "progressReportDelayInMilliseconds" in first_stream
     assert "progressReportIntervalInMilliseconds" in first_stream
 
-    await build_skill(persistence).invoke(
+    second_started = await build_skill(persistence).invoke(
         _event({
             "type": "AudioPlayer.PlaybackStarted",
             "token": SECOND_CONTENT_ID,
@@ -446,6 +446,9 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
         None,
     )
     assert persistence._store[USER_ID]["playbackQueue"]["currentIndex"] == 1
+    started_stream = second_started["response"]["directives"][0]["audioItem"]["stream"]
+    assert started_stream["token"] == THIRD_CONTENT_ID
+    assert started_stream["expectedPreviousToken"] == SECOND_CONTENT_ID
 
     second_result = await build_skill(persistence).invoke(
         _event({
@@ -455,10 +458,41 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
         }),
         None,
     )
-    second_stream = second_result["response"]["directives"][0]["audioItem"]["stream"]
-    assert second_stream["token"] == THIRD_CONTENT_ID
-    assert second_stream["expectedPreviousToken"] == SECOND_CONTENT_ID
-    assert "progressReportDelayInMilliseconds" in second_stream
+    assert second_result["response"].get("directives") is None
+
+
+@pytest.mark.asyncio
+async def test_playback_started_prefetches_second_when_nearly_finished_never_arrives(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    second = _queued_content(SECOND_CONTENT_ID, "Second bulletin")
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="starting", offset_ms=0),
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": "search",
+            "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID],
+            "currentIndex": 0,
+        },
+    }
+    monkeypatch.setattr(HearApiClient, "search", _fake_search([second]))
+    monkeypatch.setattr("src.handlers.audio.emit_listening_event", AsyncMock())
+
+    result = await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackStarted",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 0,
+        }),
+        None,
+    )
+
+    directive = result["response"]["directives"][0]
+    stream = directive["audioItem"]["stream"]
+    assert directive["playBehavior"] == "ENQUEUE"
+    assert stream["token"] == SECOND_CONTENT_ID
+    assert stream["expectedPreviousToken"] == CONTENT_ID
+    assert persistence._store[USER_ID]["preparedNextContent"]["contentId"] == SECOND_CONTENT_ID
 
 
 @pytest.mark.asyncio
