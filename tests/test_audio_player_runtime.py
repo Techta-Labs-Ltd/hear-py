@@ -532,6 +532,41 @@ async def test_queue_prefetch_falls_back_to_backend_search_when_no_cache_persist
 
 
 @pytest.mark.asyncio
+async def test_queue_enqueue_uses_listener_playback_speed(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    second = _queued_content(SECOND_CONTENT_ID, "Second bulletin")
+    second["playbackSpeeds"] = [{
+        "speed": 1.5,
+        "audioUrl": "https://cdn.hear.media/audio/second-1-5.mp3",
+    }]
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playbackSpeed": 1.5,
+        "activePlayback": _playback_state(status="playing", offset_ms=170_000),
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": "search",
+            "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID],
+            "currentIndex": 0,
+        },
+    }
+    monkeypatch.setattr(HearApiClient, "search", _fake_search([second]))
+    monkeypatch.setattr("src.handlers.audio.emit_listening_event", AsyncMock())
+
+    result = await build_skill(persistence).invoke(
+        _event({
+            "type": "AudioPlayer.PlaybackNearlyFinished",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 170_000,
+        }),
+        None,
+    )
+
+    stream = result["response"]["directives"][0]["audioItem"]["stream"]
+    assert stream["url"] == "https://cdn.hear.media/audio/second-1-5.mp3"
+
+
+@pytest.mark.asyncio
 async def test_playback_finished_does_not_return_prohibited_play_directive(monkeypatch, caplog):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
@@ -561,6 +596,9 @@ async def test_playback_finished_does_not_return_prohibited_play_directive(monke
 
     assert result["response"].get("directives") is None
     assert "without an accepted PlaybackNearlyFinished enqueue" in caplog.text
+    state = persistence._store[USER_ID]
+    assert state["awaitingFeedback"] is True
+    assert state["pendingFeedback"]["contentId"] == CONTENT_ID
 
 
 @pytest.mark.asyncio

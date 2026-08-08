@@ -15,7 +15,12 @@ from src.utils.skill_request import (
 )
 from src.dependencies import Dependencies
 from src.services.queue import cached_queue_content
-from src.utils.audio import build_content_metadata, build_play_directive
+from src.utils.audio import (
+    build_content_metadata,
+    build_play_directive,
+    resolve_audio_url_for_speed,
+)
+from config import settings
 from src.utils.skill_request import (
     get_user_id,
 )
@@ -66,8 +71,14 @@ async def _enqueue_next_queued_content(handler_input, token: str, deps: Dependen
             return handler_input.response_builder.response
         content = result["results"][0]
     update_store(handler_input, {"preparedNextContent": content})
+    playback_speeds = content.get("playbackSpeeds") or []
+    audio_url = resolve_audio_url_for_speed(
+        content["audioUrl"],
+        store.get("playbackSpeed", settings.default_speed),
+        playback_speeds,
+    )
     directive = build_play_directive(
-        url=content["audioUrl"],
+        url=audio_url,
         token=content["contentId"],
         prev_token=token,
         metadata=build_content_metadata(content),
@@ -183,6 +194,9 @@ class PlaybackFinishedHandler(AbstractRequestHandler):
                 })
                 update_store(handler_input, {"lastCompletedSource": source})
             record_feedback_candidate(handler_input, state, completed=True)
+            # AudioPlayer events cannot speak, but activating now guarantees
+            # the next foreground interaction asks about this completed track.
+            activate_best_feedback_candidate(handler_input)
             await emit_listening_event(handler_input, "finished", state)
             queue = read_playback_queue(get_store(handler_input))
             has_prepared_next = bool(get_store(handler_input).get("preparedNextContent"))
@@ -199,11 +213,6 @@ class PlaybackFinishedHandler(AbstractRequestHandler):
                     queue.get("currentIndex"),
                     len(queue["orderedContentIds"]),
                 )
-            if not queue or (
-                int(queue.get("currentIndex") or 0) >= len(queue["orderedContentIds"]) - 1
-                and not has_prepared_next
-            ):
-                activate_best_feedback_candidate(handler_input)
         return handler_input.response_builder.response
 
 class PlaybackStoppedHandler(AbstractRequestHandler):
