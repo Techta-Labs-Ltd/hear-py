@@ -5,7 +5,12 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from src.middleware.onboarding_gate import _is_new_user
-from src.handlers.launch import _handle_launch_request_body, _get_user_id
+from src.handlers.launch import (
+    _ensure_listener_data_for_launch,
+    _handle_launch_request_body,
+    _get_user_id,
+)
+from src.dependencies import Dependencies
 
 
 from src.services.store import get_store, DEFAULT_STORE
@@ -135,6 +140,22 @@ class TestSpeechStrings:
 
 class TestLaunchSimulation:
     @pytest.mark.asyncio
+    async def test_launch_enrichment_uses_injected_locality_dependency(self):
+        hi = _build_handler_input(store_override={"onboardingComplete": True})
+        enriched = {**get_store(hi), "userCity": "Wakefield"}
+        locality = MagicMock()
+        locality.apply_listener_profile = AsyncMock(return_value=enriched)
+
+        result = await _ensure_listener_data_for_launch(
+            hi,
+            get_store(hi),
+            deps=Dependencies(locality=locality),
+        )
+
+        locality.apply_listener_profile.assert_awaited_once_with(hi)
+        assert result["userCity"] == "Wakefield"
+
+    @pytest.mark.asyncio
     async def test_launch_clears_stale_discovery_clarification(self, monkeypatch):
         pending = {
             "intent": "organization",
@@ -163,7 +184,7 @@ class TestLaunchSimulation:
         )
         monkeypatch.setattr(
             "src.handlers.launch._ensure_listener_data_for_launch",
-            AsyncMock(side_effect=lambda _handler_input, store: store),
+            AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
         )
         monkeypatch.setattr(
             "src.handlers.launch._schedule_launch_background_work",

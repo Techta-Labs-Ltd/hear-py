@@ -130,7 +130,11 @@ async def _handle_launch_request_body(handler_input: HandlerInput, *, deps: Depe
         return builder.set_should_end_session(False).response
 
     try:
-        store = await _ensure_listener_data_for_launch(handler_input, store)
+        store = await _ensure_listener_data_for_launch(
+            handler_input,
+            store,
+            deps=d,
+        )
     except Exception:
         pass
 
@@ -160,8 +164,14 @@ async def _handle_launch_request_body(handler_input: HandlerInput, *, deps: Depe
     return handle_returning_user(handler_input, store, resolved_user_name, None)
 
 
-async def _ensure_listener_data_for_launch(handler_input: HandlerInput, store: Dict[str, Any]):
+async def _ensure_listener_data_for_launch(
+    handler_input: HandlerInput,
+    store: Dict[str, Any],
+    *,
+    deps: Dependencies | None = None,
+):
     """Enrich listener profile data on launch if budget allows."""
+    d = deps or Dependencies()
     remaining = get_lambda_remaining_ms(handler_input)
     if isinstance(remaining, (int, float)) and remaining < 3500:
         logger.info("Hear: launch enrichment skipped (budget) remainingMs=%s", remaining)
