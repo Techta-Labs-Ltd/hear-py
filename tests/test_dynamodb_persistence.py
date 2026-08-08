@@ -15,6 +15,7 @@ def _adapter_with_mocked_table():
     adapter.attributes_name = "attributes"
     adapter.ttl_attribute = "expiresAt"
     adapter.ttl_days = 180
+    adapter.conditional_writes = True
     adapter._table = MagicMock()
     adapter._table.get_item = AsyncMock()
     adapter._table.update_item = AsyncMock()
@@ -62,6 +63,16 @@ async def test_missing_item_returns_empty_attributes():
 
 
 @pytest.mark.asyncio
+async def test_legacy_item_without_attributes_preserves_version_for_next_save():
+    adapter = _adapter_with_mocked_table()
+    adapter._table.get_item.return_value = {"stateVersion": 7}
+
+    result = await adapter.get_attributes(_envelope())
+
+    assert result == {"_persistenceVersion": 7}
+
+
+@pytest.mark.asyncio
 async def test_save_bumps_version_and_sets_ttl():
     adapter = _adapter_with_mocked_table()
     adapter._table.update_item.return_value = None
@@ -80,6 +91,21 @@ async def test_save_bumps_version_and_sets_ttl():
     assert call.kwargs["condition"] == [
         {"op": "=", "name": "stateVersion", "value": 4},
     ]
+
+
+@pytest.mark.asyncio
+async def test_save_can_disable_conditional_writes_for_shared_event_stream():
+    adapter = _adapter_with_mocked_table()
+    adapter.conditional_writes = False
+
+    await adapter.save_attributes(
+        _envelope(),
+        {"onboardingComplete": True, "_persistenceVersion": 4},
+    )
+
+    call = adapter._table.update_item.call_args
+    assert call.kwargs["condition"] is None
+    assert call.kwargs["updates"]["stateVersion"] == 5
 
 
 @pytest.mark.asyncio

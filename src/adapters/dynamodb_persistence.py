@@ -40,6 +40,7 @@ class DynamoDbPersistenceAdapter:
         region: str | None = None,
         ttl_attribute: str = "expiresAt",
         ttl_days: int | None = None,
+        conditional_writes: bool = True,
     ) -> None:
         if not table_name:
             raise ValueError("DynamoDbPersistenceAdapter: table_name is required")
@@ -48,6 +49,7 @@ class DynamoDbPersistenceAdapter:
         self.attributes_name = attributes_name
         self.ttl_attribute = ttl_attribute
         self.ttl_days = ttl_days or settings.HEAR_PERSISTENCE_TTL_DAYS
+        self.conditional_writes = conditional_writes
         self._table = DynamoTable(
             table_name=table_name,
             partition_key=partition_key_name,
@@ -63,9 +65,11 @@ class DynamoDbPersistenceAdapter:
     async def get_attributes(self, request_envelope: dict) -> dict:
         user_id = self._user_id(request_envelope)
         item = await self._table.get_item(user_id)
-        if not item or self.attributes_name not in item:
+        if not item:
             return {}
-        attributes = item[self.attributes_name] or {}
+        attributes = item.get(self.attributes_name) or {}
+        if not isinstance(attributes, dict):
+            attributes = {}
         attributes[_VERSION_FIELD] = int(item.get("stateVersion") or 0)
         return attributes
 
@@ -81,7 +85,9 @@ class DynamoDbPersistenceAdapter:
                 size,
                 self.table_name,
             )
-        if expected_version == 0:
+        if not self.conditional_writes:
+            condition = None
+        elif expected_version == 0:
             condition = [not_exists("stateVersion")]
         else:
             condition = [eq("stateVersion", expected_version)]
@@ -112,4 +118,5 @@ def build_dynamo_adapter(
             partition_key_name or settings.HEAR_DDB_PARTITION_KEY or "id"
         ),
         ttl_days=settings.HEAR_PERSISTENCE_TTL_DAYS,
+        conditional_writes=settings.HEAR_PERSISTENCE_CONDITIONAL,
     )
