@@ -23,6 +23,19 @@ class FeedbackService:
     replay_intents = {"AMAZON.RepeatIntent", "AMAZON.StartOverIntent"}
     follow_intents = {"FollowCreatorIntent", "UnfollowCreatorIntent"}
     report_intents = {"ReportCreatorIntent", "ReportContentIntent"}
+    transport_intents = {
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
+        "AMAZON.PreviousIntent",
+        "AMAZON.PauseIntent",
+        "AMAZON.ResumeIntent",
+    }
+    transport_request_types = {
+        "PlaybackController.NextCommandIssued",
+        "PlaybackController.PreviousCommandIssued",
+        "PlaybackController.PauseCommandIssued",
+        "PlaybackController.PlayCommandIssued",
+    }
 
     def should_evaluate(self, handler_input) -> bool:
         request_type = get_request_type(handler_input)
@@ -40,6 +53,9 @@ class FeedbackService:
     def should_block(self, handler_input) -> bool:
         if not self.should_evaluate(handler_input):
             return False
+        request_type = get_request_type(handler_input)
+        if request_type in self.transport_request_types:
+            return False
         store = get_store(handler_input)
         pending = store.get("pendingFeedback") or {}
         if store.get("awaitingFeedback") and pending.get("completed") is False:
@@ -52,13 +68,14 @@ class FeedbackService:
         if not store.get("awaitingFeedback"):
             self.clear_stale_state(handler_input)
             return False
-        if get_request_type(handler_input) != "IntentRequest":
+        if request_type != "IntentRequest":
             return True
         intent_name = get_intent_name(handler_input)
         allowed = (
             self.rating_intents
             | self.replay_intents
             | self.report_intents
+            | self.transport_intents
             | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
         )
         return intent_name not in allowed

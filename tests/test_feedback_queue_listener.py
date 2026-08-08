@@ -29,6 +29,60 @@ from src.utils.normalize_content_item import (
 )
 
 
+@pytest.mark.parametrize("intent_name", [
+    "AMAZON.NextIntent",
+    "AMAZON.SkipIntent",
+    "AMAZON.PreviousIntent",
+    "AMAZON.PauseIntent",
+    "AMAZON.ResumeIntent",
+])
+def test_pending_feedback_does_not_block_transport_intents(
+    mock_handler_input,
+    intent_name,
+):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-1",
+            "contentId": "completed-1",
+            "completed": True,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "intent": {"name": intent_name, "slots": {}},
+    })
+
+    assert FeedbackGateHandler().can_handle(mock_handler_input) is False
+
+
+@pytest.mark.parametrize("request_type", [
+    "PlaybackController.NextCommandIssued",
+    "PlaybackController.PreviousCommandIssued",
+    "PlaybackController.PauseCommandIssued",
+    "PlaybackController.PlayCommandIssued",
+])
+def test_pending_feedback_does_not_block_controller_commands(
+    mock_handler_input,
+    request_type,
+):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-1",
+            "contentId": "completed-1",
+            "completed": True,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({"type": request_type})
+
+    assert FeedbackGateHandler().can_handle(mock_handler_input) is False
+
+
 def test_normalized_credit_prefers_real_organization_then_independent_creator():
     organization = normalize_content_item({
         "contentId": "content-org",
