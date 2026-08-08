@@ -11,7 +11,11 @@ from src.services.dialog_state import (
     clear_active_dialog,
 )
 from src.services.store import update_store
-from src.utils.skill_request import get_resolved_slot_value, get_user_id
+from src.utils.skill_request import (
+    get_resolved_slot_id,
+    get_resolved_slot_value,
+    get_user_id,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +32,113 @@ AMBIGUITY_CONTROL_INTENTS = {
     "AMAZON.StopIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
     "ShowMoreBrowseIntent",
 }
+
+_ORDINAL_INDEX = {
+    "first": 0, "one": 0, "1": 0, "number one": 0,
+    "second": 1, "two": 1, "2": 1, "number two": 1,
+    "third": 2, "three": 2, "3": 2, "number three": 2,
+}
+
+
+def _unique_candidates(candidates: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    unique = []
+    for candidate in candidates:
+        name = str(candidate.get("name") or "").strip()
+        key = name.casefold()
+        if name and key not in seen:
+            seen.add(key)
+            unique.append(candidate)
+    return unique
+
+
+def _selection_slot(handler_input):
+    request = handler_input.request_envelope.request
+    intent = getattr(request, "intent", None)
+    slots = intent.get("slots") if intent else None
+    return slots.get("selection") if slots else None
+
+
+def _match_pending_candidate(
+    handler_input,
+    pending: dict,
+    raw: str,
+) -> dict | None:
+    candidates = list(pending.get("candidates") or [])
+    resolved_id = get_resolved_slot_id(_selection_slot(handler_input))
+    if resolved_id:
+        matched = next(
+            (candidate for candidate in candidates if candidate.get("id") == resolved_id),
+            None,
+        )
+        if matched:
+            return matched
+
+    choices = list(pending.get("choiceCandidates") or _unique_candidates(candidates))
+    displayed = list(pending.get("displayedCandidates") or choices[:3])
+    raw_key = str(raw or "").strip().casefold()
+    ordinal = _ORDINAL_INDEX.get(raw_key)
+    if ordinal is not None and ordinal < len(displayed):
+        return displayed[ordinal]
+
+    matches = [
+        candidate for candidate in choices
+        if raw_key == str(candidate.get("name") or "").strip().casefold()
+        or (
+            len(raw_key) >= 3
+            and raw_key in str(candidate.get("name") or "").strip().casefold()
+        )
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _resolved_pending_candidate(pending: dict, candidate: dict) -> dict:
+    entity_type = str(candidate["type"])
+    entity_id = str(candidate["id"])
+    name = str(candidate["name"])
+    filter_keys = {
+        "creator": "creatorIds",
+        "organization": "organizationIds",
+        "publication": "publicationIds",
+    }
+    name_keys = {
+        "creator": "creatorName",
+        "organization": "organizationName",
+        "publication": "publicationName",
+    }
+    filters = dict((pending.get("searchPayload") or {}).get("filter") or {})
+    for key in filter_keys.values():
+        filters.pop(key, None)
+    filter_key = filter_keys.get(entity_type)
+    if filter_key:
+        filters[filter_key] = [entity_id]
+    payload = {
+        **dict(pending.get("searchPayload") or {}),
+        "query": "",
+        "filter": filters,
+    }
+    slots = {
+        **dict(pending.get("slots") or {}),
+        "residualQuery": "",
+        "ambiguousReferences": [],
+    }
+    if filter_key:
+        slots[filter_key] = [entity_id]
+        slots[name_keys[entity_type]] = name
+    return {
+        "status": "resolved",
+        "intent": entity_type if entity_type in filter_keys else pending.get("intent", "search"),
+        "ambiguityResolution": True,
+        "confirmationLabel": f"content from {name}",
+        "searchPayload": payload,
+        "entities": [{
+            "type": entity_type,
+            "id": entity_id,
+            "canonicalValue": name,
+        }],
+        "slots": slots,
+        "ambiguities": [],
+    }
 
 
 def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | None:
@@ -156,9 +267,18 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                     update_store(handler_input, {"pendingAmbiguity": None})
                     clear_active_dialog(handler_input, "ambiguity")
                 elif alexa_intent not in AMBIGUITY_CONTROL_INTENTS:
-                    result = await self._deps.resolver.resolve_utterance(
-                        raw,
-                        alexa_user_id=get_user_id(handler_input),
+                    matched_candidate = _match_pending_candidate(
+                        handler_input, pending_ambiguity, raw,
+                    )
+                    result = (
+                        _resolved_pending_candidate(
+                            pending_ambiguity, matched_candidate,
+                        )
+                        if matched_candidate
+                        else await self._deps.resolver.resolve_utterance(
+                            raw,
+                            alexa_user_id=get_user_id(handler_input),
+                        )
                     )
                     replace_ambiguity = (
                         alexa_intent in SEARCH_INTENTS

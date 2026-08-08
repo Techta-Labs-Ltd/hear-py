@@ -226,7 +226,9 @@ class ShowMoreBrowseHandler(AbstractRequestHandler):
         store = get_store(handler_input)
         pending = store.get("pendingAmbiguity")
         if isinstance(pending, dict) and pending.get("candidates"):
-            candidates = list(pending["candidates"])
+            candidates = list(
+                pending.get("choiceCandidates") or pending["candidates"]
+            )
             offset = max(3, int(pending.get("spokenCandidateOffset") or 3))
             next_candidates = candidates[offset:offset + 3]
             if not next_candidates:

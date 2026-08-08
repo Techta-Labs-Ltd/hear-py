@@ -204,6 +204,10 @@ def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
             "type": "creator",
             "id": "creator-dalesman",
             "name": "Pendle Voice Dalesman",
+        }, {
+            "type": "organization",
+            "id": "org-leader",
+            "name": "Pendle Voice Leader and Times",
         }],
     }]
     assert result["ambiguities"] == expected

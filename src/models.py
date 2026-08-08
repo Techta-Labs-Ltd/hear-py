@@ -196,7 +196,6 @@ class ResolverResult:
         ambiguities = []
         for ambiguity in self.ambiguities:
             candidates = []
-            candidate_names: set[str] = set()
             for candidate in ambiguity.get("candidates") or []:
                 name = str(
                     candidate.get("name")
@@ -205,9 +204,7 @@ class ResolverResult:
                 ).strip()
                 entity_id = candidate.get("id") or candidate.get("entityId")
                 entity_type = candidate.get("type") or candidate.get("entityType")
-                name_key = name.casefold()
-                if name and entity_id and entity_type and name_key not in candidate_names:
-                    candidate_names.add(name_key)
+                if name and entity_id and entity_type:
                     candidates.append({
                         "type": str(entity_type),
                         "id": str(entity_id),

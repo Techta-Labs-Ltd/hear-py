@@ -1,6 +1,4 @@
-"""Alexa dynamic-entity directives for resolver clarification choices."""
 from __future__ import annotations
-
 
 def build_ambiguity_dynamic_entities_directive(
     candidates: list[dict],
@@ -25,6 +23,14 @@ def build_ambiguity_dynamic_entities_directive(
     prefix = " ".join(common_words)
 
     values = []
+    ordinal_synonyms = (
+        ("first", "one", "number one"),
+        ("second", "two", "number two"),
+        ("third", "three", "number three"),
+        ("fourth", "four", "number four"),
+        ("fifth", "five", "number five"),
+        ("sixth", "six", "number six"),
+    )
     for index, candidate in enumerate(choices):
         name = str(candidate["name"]).strip()
         synonyms: list[str] = []
@@ -32,6 +38,8 @@ def build_ambiguity_dynamic_entities_directive(
             suffix = name[len(prefix):].strip(" ,-–—")
             if suffix and suffix.casefold() != name.casefold():
                 synonyms.append(suffix)
+        if index < len(ordinal_synonyms):
+            synonyms.extend(ordinal_synonyms[index])
         values.append({
             "id": str(candidate.get("id") or f"choice-{index + 1}"),
             "name": {"value": name, "synonyms": synonyms},

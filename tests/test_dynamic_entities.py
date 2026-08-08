@@ -23,5 +23,9 @@ def test_ambiguity_dynamic_entities_include_unique_names_and_suffixes():
         "Pendle Voice Leader and Times",
         "Pendle Voice Dalesman",
     ]
-    assert values[0]["name"]["synonyms"] == ["Leader and Times"]
-    assert values[1]["name"]["synonyms"] == ["Dalesman"]
+    assert values[0]["name"]["synonyms"] == [
+        "Leader and Times", "first", "one", "number one",
+    ]
+    assert values[1]["name"]["synonyms"] == [
+        "Dalesman", "second", "two", "number two",
+    ]

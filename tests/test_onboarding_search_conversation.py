@@ -1046,13 +1046,123 @@ async def test_candidate_in_topic_slot_resolves_before_new_search(
 
     await ResolverInterceptor().process(mock_handler_input)
 
-    resolve.assert_awaited_once()
-    assert resolve.await_args.args == ("neston",)
+    resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["ambiguityResolution"] is True
     assert nlp["searchPayload"]["filter"] == {
         "organizationIds": ["org-neston"],
     }
+
+
+@pytest.mark.asyncio
+async def test_dynamic_entity_id_selects_pending_candidate_without_resolver(
+    monkeypatch,
+    mock_handler_input,
+):
+    candidates = [{
+        "type": "creator",
+        "id": "creator-leader",
+        "name": "Pendle Voice Leader and Times",
+    }, {
+        "type": "creator",
+        "id": "creator-dalesman",
+        "name": "Pendle Voice Dalesman",
+    }]
+    pending = {
+        "intent": "search",
+        "searchPayload": {"query": "", "filter": {}},
+        "slots": {},
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates,
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "intent": {
+            "name": "ClarifySelectionIntent",
+            "slots": {"selection": {
+                "name": "selection",
+                "value": "dalesman",
+                "resolutions": {
+                    "resolutionsPerAuthority": [{
+                        "status": {"code": "ER_SUCCESS_MATCH"},
+                        "values": [{"value": {
+                            "id": "creator-dalesman",
+                            "name": "Pendle Voice Dalesman",
+                        }}],
+                    }],
+                },
+            }},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["ambiguityResolution"] is True
+    assert nlp["searchPayload"]["filter"] == {
+        "creatorIds": ["creator-dalesman"],
+    }
+    assert get_store(mock_handler_input)["pendingAmbiguity"] is None
+
+
+@pytest.mark.asyncio
+async def test_ordinal_selects_currently_displayed_ambiguity_without_resolver(
+    monkeypatch,
+    mock_handler_input,
+):
+    candidates = [{
+        "type": "creator",
+        "id": f"creator-{index}",
+        "name": name,
+    } for index, name in enumerate((
+        "Pendle Voice Leader and Times",
+        "Pendle Voice Dalesman",
+        "Pendle Voice Lancashire Life",
+    ))]
+    pending = {
+        "intent": "search",
+        "searchPayload": {"query": "", "filter": {}},
+        "slots": {},
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates,
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "intent": {
+            "name": "ClarifySelectionIntent",
+            "slots": {"selection": {
+                "name": "selection",
+                "value": "second",
+            }},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["searchPayload"]["filter"] == {"creatorIds": ["creator-1"]}
 
 
 @pytest.mark.asyncio

@@ -43,6 +43,18 @@ _DEFAULT_SEARCH_PAGE_LIMIT = settings.search_page_limit
 logger = logging.getLogger(__name__)
 
 
+def _unique_ambiguity_choices(candidates: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    choices = []
+    for candidate in candidates:
+        name = str(candidate.get("name") or "").strip()
+        key = name.casefold()
+        if name and key not in seen:
+            seen.add(key)
+            choices.append(candidate)
+    return choices
+
+
 def _summarize_intent_slots(handler_input: HandlerInput) -> Dict[str, Any]:
     """Extract slot values from the Alexa intent."""
     slots = None
@@ -152,7 +164,8 @@ async def discover_content_via_search(
             or reference.get("candidates")
             or []
         )
-        displayed = list(reference.get("candidates") or [])[:3]
+        choices = _unique_ambiguity_choices(candidates)
+        displayed = choices[:3]
         pending_ambiguity = {
             **existing_ambiguity,
             "requestId": nlp.get("requestId") or existing_ambiguity.get("requestId"),
@@ -173,10 +186,11 @@ async def discover_content_via_search(
                 **dict(nlp_slots),
             },
             "candidates": candidates,
-            "displayedCandidates": displayed or candidates[:3],
+            "choiceCandidates": choices,
+            "displayedCandidates": displayed,
             "spokenCandidateOffset": (
                 existing_ambiguity.get("spokenCandidateOffset")
-                or min(3, len(candidates))
+                or min(3, len(choices))
             ),
             "createdAt": existing_ambiguity.get("createdAt") or int(time.time()),
             "expiresAt": int(time.time()) + 300,
@@ -191,7 +205,7 @@ async def discover_content_via_search(
         message_candidates = list(
             pending_ambiguity.get("displayedCandidates") or candidates[:3]
         )
-        directive = build_ambiguity_dynamic_entities_directive(candidates)
+        directive = build_ambiguity_dynamic_entities_directive(choices)
         if directive:
             handler_input.response_builder.add_directive(directive)
         return {

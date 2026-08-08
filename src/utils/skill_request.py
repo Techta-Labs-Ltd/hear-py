@@ -49,6 +49,23 @@ def get_resolved_slot_value(slot) -> str | None:
     return _non_empty_string(_read(slot, "value"))
 
 
+def get_resolved_slot_id(slot) -> str | None:
+    """Return Alexa's matched entity ID without falling back to spoken text."""
+    resolutions = _read(slot, "resolutions")
+    authorities = _read(
+        resolutions, "resolutionsPerAuthority", "resolutions_per_authority"
+    ) or []
+    for authority in authorities:
+        status = _read(_read(authority, "status"), "code")
+        if status and status != "ER_SUCCESS_MATCH":
+            continue
+        for item in _read(authority, "values") or []:
+            entity_id = _non_empty_string(_read(_read(item, "value"), "id"))
+            if entity_id:
+                return entity_id
+    return None
+
+
 def get_user_id(handler_input) -> str | None:
     """Extract the Alexa user ID from raw JSON or ASK SDK request models."""
     envelope = getattr(handler_input, "request_envelope", None)
