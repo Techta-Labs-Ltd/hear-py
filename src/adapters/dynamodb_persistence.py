@@ -35,7 +35,7 @@ class DynamoDbPersistenceAdapter:
     def __init__(
         self,
         table_name: str,
-        partition_key_name: str = "alexaUserId",
+        partition_key_name: str = "id",
         attributes_name: str = "attributes",
         region: str | None = None,
         ttl_attribute: str = "expiresAt",
@@ -109,7 +109,7 @@ def build_dynamo_adapter(
         table_name=table_name or settings.dynamo_table,
         region=region or settings.ddb_region,
         partition_key_name=(
-            partition_key_name or settings.HEAR_DDB_PARTITION_KEY or "alexaUserId"
+            partition_key_name or settings.HEAR_DDB_PARTITION_KEY or "id"
         ),
         ttl_days=settings.HEAR_PERSISTENCE_TTL_DAYS,
     )

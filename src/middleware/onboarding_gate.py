@@ -50,6 +50,11 @@ def _is_new_user(store: Dict[str, Any]) -> bool:
     return store.get("playCount", 0) == 0 and not store.get("lastToken")
 
 
+def _onboarding_completed_in_session(handler_input: HandlerInput) -> bool:
+    session = handler_input.attributes_manager.get_session_attributes() or {}
+    return bool(session.get("onboardingComplete"))
+
+
 def _get_stage(handler_input: HandlerInput) -> str | None:
     """Resolve the current onboarding stage from store or session attributes."""
     store = get_store(handler_input)
@@ -89,7 +94,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
         rt = get_request_type(handler_input)
         if rt == "LaunchRequest":
             store = get_store(handler_input)
-            return _is_new_user(store)
+            return _is_new_user(store) and not _onboarding_completed_in_session(handler_input)
 
         if isinstance(rt, str) and rt.startswith("AudioPlayer."):
             return False
@@ -99,7 +104,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
             return False
 
         store = get_store(handler_input)
-        if not _is_new_user(store):
+        if not _is_new_user(store) or _onboarding_completed_in_session(handler_input):
             return False
 
         intent = get_intent_name(handler_input)

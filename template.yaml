@@ -45,7 +45,7 @@ Globals:
         HEAR_CLIENT_VERSION: alexa-skill
         HEAR_DDB_REGION: eu-west-1
         HEAR_DDB_TABLE: hear-service
-        HEAR_DDB_PARTITION_KEY: alexaUserId
+        HEAR_DDB_PARTITION_KEY: id
         HEAR_PERSISTENCE_DRIVER: dynamodb
         HEAR_PERSISTENCE_CONDITIONAL: "0"
         HEAR_PERSISTENCE_TTL_DAYS: "180"

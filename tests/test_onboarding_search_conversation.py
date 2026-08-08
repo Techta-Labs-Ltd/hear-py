@@ -1392,9 +1392,53 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     assert updated["_requiresReliableSave"] is True
     session = handler_input.attributes_manager.set_session_attributes.call_args.args[0]
     assert session["onboardingStage"] is None
+    assert session["onboardingComplete"] is True
     assert session["awaitingLocationConfirm"] is False
+    assert session["awaitingCommunityPlayback"] is True
+    assert session["userCity"] == "Swindon"
     spoken = handler_input.response_builder.speak.call_args.args[0]
     assert "I've set your location to Swindon" in spoken
     assert "What would you like to hear?" in spoken
     assert "Would you like to hear the latest from Swindon" in spoken
     sync.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_location_follow_up_survives_missing_persistence_in_same_session(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.yesno import YesIntentHandler
+    from src.middleware.onboarding_gate import OnboardingGateHandler
+
+    handler_input = _town_request(mock_handler_input, "yes")
+    handler_input.request_envelope.request.intent.name = "AMAZON.YesIntent"
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+    }
+    session = {
+        "onboardingComplete": True,
+        "awaitingCommunityPlayback": True,
+        "userCity": "York",
+        "locality": "York",
+    }
+    handler_input.attributes_manager.get_session_attributes = lambda: session
+    handler_input.attributes_manager.set_session_attributes = lambda value: session.update(value)
+    discover = AsyncMock(return_value={
+        "failed": False,
+        "results": [{
+            "contentId": "content-york",
+            "title": "York update",
+            "audioUrl": "https://cdn.hear.media/content-york.mp3",
+        }],
+    })
+    play = AsyncMock(return_value={"response": "playing"})
+    monkeypatch.setattr("src.handlers.yesno.discover_content_via_search", discover)
+    monkeypatch.setattr("src.handlers.yesno.auto_play_first_from_search", play)
+
+    assert OnboardingGateHandler().can_handle(handler_input) is False
+    response = await YesIntentHandler().handle(handler_input)
+
+    assert response == {"response": "playing"}
+    assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"]["city"] == "York"
+    assert session["awaitingCommunityPlayback"] is False

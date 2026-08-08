@@ -107,8 +107,10 @@ class YesIntentHandler(AbstractRequestHandler):
         if store.get("awaitingLocationConfirm") or session_attrs.get("awaitingLocationConfirm"):
             return await self._confirm_location(handler_input, store, session_attrs)
 
-        if store.get("awaitingCommunityPlayback"):
-            return await self._handle_community_play_yes(handler_input, store)
+        if store.get("awaitingCommunityPlayback") or session_attrs.get("awaitingCommunityPlayback"):
+            return await self._handle_community_play_yes(
+                handler_input, store, session_attrs,
+            )
 
         # 2. Resume
         if dialog_type == "resume" or (not dialog_type and store.get("awaitingResume")):
@@ -188,7 +190,11 @@ class YesIntentHandler(AbstractRequestHandler):
         )
         session_attrs.update({
             "onboardingStage": None,
+            "onboardingComplete": True,
             "awaitingLocationConfirm": False,
+            "awaitingCommunityPlayback": True,
+            "userCity": final_city,
+            "locality": pending.get("locality") or final_city,
         })
         handler_input.attributes_manager.set_session_attributes(session_attrs)
         confirmed = get_store(handler_input)
@@ -252,14 +258,27 @@ class YesIntentHandler(AbstractRequestHandler):
             .set_should_end_session(False) \
             .response
 
-    async def _handle_community_play_yes(self, handler_input, store):
+    async def _handle_community_play_yes(
+        self, handler_input, store, session_attrs=None,
+    ):
         """Play local content after the user accepts the location follow-up."""
-        city = store.get("userCity") or store.get("locality")
+        session_attrs = session_attrs or {}
+        city = (
+            store.get("userCity")
+            or store.get("locality")
+            or session_attrs.get("userCity")
+            or session_attrs.get("locality")
+        )
         update_store(handler_input, {
             "awaitingCommunityPlayback": False,
             "awaitingSearchConfirmation": False,
             "pendingResolution": None,
         })
+        next_session_attrs = dict(
+            handler_input.attributes_manager.get_session_attributes() or {}
+        )
+        next_session_attrs["awaitingCommunityPlayback"] = False
+        handler_input.attributes_manager.set_session_attributes(next_session_attrs)
         clear_active_dialog(handler_input, "search_confirmation")
         attrs = handler_input.attributes_manager.get_request_attributes()
         attrs["_nlp"] = {
