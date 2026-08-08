@@ -23,7 +23,6 @@ from src.services.feedback import (
     activate_best_feedback_candidate,
     record_feedback_candidate,
 )
-from src.services.playback import play_next_queued_item
 from src.utils.normalize_content_item import pick_content_source
 import logging
 
@@ -124,9 +123,6 @@ class PlaybackStartedHandler(AbstractRequestHandler):
                 "lastOffsetMs": offset_ms,
             })
             await emit_listening_event(handler_input, "started", state)
-            return await _enqueue_next_queued_content(
-                handler_input, token, self._deps,
-            )
         return handler_input.response_builder.response
 
 class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
@@ -196,12 +192,13 @@ class PlaybackFinishedHandler(AbstractRequestHandler):
                 and int(queue.get("currentIndex") or 0)
                 < len(queue["orderedContentIds"]) - 1
             ):
-                response = await play_next_queued_item(
-                    handler_input,
-                    speak_intro=False,
+                logger.warning(
+                    "Hear: queue could not advance because Alexa sent PlaybackFinished "
+                    "without an accepted PlaybackNearlyFinished enqueue token=%s index=%s total=%s",
+                    token,
+                    queue.get("currentIndex"),
+                    len(queue["orderedContentIds"]),
                 )
-                if response is not None:
-                    return response
             if not queue or (
                 int(queue.get("currentIndex") or 0) >= len(queue["orderedContentIds"]) - 1
                 and not has_prepared_next

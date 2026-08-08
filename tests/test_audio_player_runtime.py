@@ -446,9 +446,7 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
         None,
     )
     assert persistence._store[USER_ID]["playbackQueue"]["currentIndex"] == 1
-    started_stream = second_started["response"]["directives"][0]["audioItem"]["stream"]
-    assert started_stream["token"] == THIRD_CONTENT_ID
-    assert started_stream["expectedPreviousToken"] == SECOND_CONTENT_ID
+    assert second_started["response"].get("directives") is None
 
     second_result = await build_skill(persistence).invoke(
         _event({
@@ -458,13 +456,15 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
         }),
         None,
     )
-    assert second_result["response"].get("directives") is None
+    second_stream = second_result["response"]["directives"][0]["audioItem"]["stream"]
+    assert second_stream["token"] == THIRD_CONTENT_ID
+    assert second_stream["expectedPreviousToken"] == SECOND_CONTENT_ID
+    assert "progressReportDelayInMilliseconds" in second_stream
 
 
 @pytest.mark.asyncio
-async def test_playback_started_prefetches_second_when_nearly_finished_never_arrives(monkeypatch):
+async def test_playback_started_does_not_return_prohibited_play_directive(monkeypatch):
     persistence = MemoryPersistenceAdapter()
-    second = _queued_content(SECOND_CONTENT_ID, "Second bulletin")
     persistence._store[USER_ID] = {
         "onboardingComplete": True,
         "activePlayback": _playback_state(status="starting", offset_ms=0),
@@ -475,7 +475,6 @@ async def test_playback_started_prefetches_second_when_nearly_finished_never_arr
             "currentIndex": 0,
         },
     }
-    monkeypatch.setattr(HearApiClient, "search", _fake_search([second]))
     monkeypatch.setattr("src.handlers.audio.emit_listening_event", AsyncMock())
 
     result = await build_skill(persistence).invoke(
@@ -487,12 +486,8 @@ async def test_playback_started_prefetches_second_when_nearly_finished_never_arr
         None,
     )
 
-    directive = result["response"]["directives"][0]
-    stream = directive["audioItem"]["stream"]
-    assert directive["playBehavior"] == "ENQUEUE"
-    assert stream["token"] == SECOND_CONTENT_ID
-    assert stream["expectedPreviousToken"] == CONTENT_ID
-    assert persistence._store[USER_ID]["preparedNextContent"]["contentId"] == SECOND_CONTENT_ID
+    assert result["response"].get("directives") is None
+    assert persistence._store[USER_ID].get("preparedNextContent") is None
 
 
 @pytest.mark.asyncio
@@ -537,7 +532,7 @@ async def test_queue_prefetch_falls_back_to_backend_search_when_no_cache_persist
 
 
 @pytest.mark.asyncio
-async def test_playback_finished_starts_next_when_prefetch_was_missed(monkeypatch):
+async def test_playback_finished_does_not_return_prohibited_play_directive(monkeypatch, caplog):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
         "onboardingComplete": True,
@@ -554,25 +549,18 @@ async def test_playback_finished_starts_next_when_prefetch_was_missed(monkeypatc
         "src.handlers.audio.emit_listening_event",
         AsyncMock(),
     )
-    fallback_response = {"directives": [{"type": "AudioPlayer.Play"}]}
-    advance = AsyncMock(return_value=fallback_response)
-    monkeypatch.setattr(
-        "src.handlers.audio.play_next_queued_item",
-        advance,
-    )
+    with caplog.at_level("WARNING", logger="src.handlers.audio"):
+        result = await build_skill(persistence).invoke(
+            _event({
+                "type": "AudioPlayer.PlaybackFinished",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 180_000,
+            }),
+            None,
+        )
 
-    result = await build_skill(persistence).invoke(
-        _event({
-            "type": "AudioPlayer.PlaybackFinished",
-            "token": CONTENT_ID,
-            "offsetInMilliseconds": 180_000,
-        }),
-        None,
-    )
-
-    advance.assert_awaited_once()
-    assert advance.await_args.kwargs == {"speak_intro": False}
-    assert result["response"] == fallback_response
+    assert result["response"].get("directives") is None
+    assert "without an accepted PlaybackNearlyFinished enqueue" in caplog.text
 
 
 @pytest.mark.asyncio
