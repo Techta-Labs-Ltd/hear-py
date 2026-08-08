@@ -116,6 +116,33 @@ def test_onboarding_town_confirmation_accepts_only_yes_or_no(mock_handler_input)
     assert "correct town or city" in failure["speech"]
 
 
+def test_current_onboarding_stage_overrides_stale_permission_dialog(mock_handler_input):
+    update_store(mock_handler_input, {
+        "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_permission"},
+        },
+    })
+    _intent(mock_handler_input, "TownCaptureIntent")
+
+    assert dialog_validation_failure(mock_handler_input) is None
+
+
+def test_completed_onboarding_ignores_stale_onboarding_dialog(mock_handler_input):
+    update_store(mock_handler_input, {
+        "onboardingComplete": True,
+        "onboardingStage": None,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_permission"},
+        },
+    })
+    _intent(mock_handler_input, "PlayContentIntent")
+
+    assert dialog_validation_failure(mock_handler_input) is None
+
+
 @pytest.mark.asyncio
 async def test_invalid_onboarding_reply_never_reaches_resolver(
     monkeypatch, mock_handler_input,

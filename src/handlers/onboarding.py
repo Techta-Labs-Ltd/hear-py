@@ -7,7 +7,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 from src.services.store import get_store, update_store
-from src.services.dialog_state import activate_dialog
+from src.services.dialog_state import activate_dialog, clear_active_dialog
 from src.clients.resolver import ResolverUnavailable
 from src.dependencies import Dependencies
 from src.models import BROWSE_HINTS, FEEDBACK_SKIP_HINTS, LOCAL_HINTS, TRENDING_HINTS
@@ -126,6 +126,11 @@ def ask_for_permission(handler_input: HandlerInput, store: Dict[str, Any]):
     handler_input.attributes_manager.set_session_attributes({
         "onboardingStage": "ask_permission",
     })
+    activate_dialog(
+        handler_input,
+        "onboarding",
+        context={"stage": "ask_permission"},
+    )
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_ASK_PERMISSION)) \
         .set_should_end_session(False) \
@@ -136,6 +141,11 @@ def handle_permission_yes(handler_input: HandlerInput, store: Dict[str, Any]):
     """Handle user consent — send a permissions consent card."""
     permissions = [PERMISSIONS["DEVICE_ADDRESS"], PERMISSIONS["GEOLOCATION"]]
     update_store(handler_input, {"onboardingStage": "ask_permission"})
+    activate_dialog(
+        handler_input,
+        "onboarding",
+        context={"stage": "ask_permission"},
+    )
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_CONSENT_CARD_SENT)) \
         .with_ask_for_permissions_consent_card(permissions) \
@@ -153,6 +163,11 @@ def handle_permission_no(handler_input: HandlerInput, store: Dict[str, Any]):
     handler_input.attributes_manager.set_session_attributes({
         "onboardingStage": ONBOARDING_ASK_TOWN,
     })
+    activate_dialog(
+        handler_input,
+        "onboarding",
+        context={"stage": ONBOARDING_ASK_TOWN},
+    )
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_LOCATION_DENIED)) \
         .reprompt(ssml(REPROMPT_ASK_TOWN)) \
@@ -210,6 +225,11 @@ def start_town_capture(handler_input: HandlerInput, store: Dict[str, Any], name:
     handler_input.attributes_manager.set_session_attributes({
         "onboardingStage": ONBOARDING_ASK_TOWN,
     })
+    activate_dialog(
+        handler_input,
+        "onboarding",
+        context={"stage": ONBOARDING_ASK_TOWN},
+    )
     return handler_input.response_builder \
         .speak(ssml(WELCOME_FIRST_ASK_TOWN(name))) \
         .reprompt(ssml(REPROMPT_ASK_TOWN)) \
@@ -236,6 +256,11 @@ def handle_town_resolver_unavailable(handler_input: HandlerInput, store: Dict[st
             "onboardingStage": ONBOARDING_ASK_TOWN,
             "onboardingTownResolverFailures": failures,
         })
+        activate_dialog(
+            handler_input,
+            "onboarding",
+            context={"stage": ONBOARDING_ASK_TOWN},
+        )
         return _town_retry_response(
             handler_input, TOWN_LOOKUP_UNAVAILABLE_RETRY, REPROMPT_ASK_TOWN,
         )
@@ -248,6 +273,7 @@ def handle_town_resolver_unavailable(handler_input: HandlerInput, store: Dict[st
         "awaitingLocationConfirm": False,
         "pendingLocationConfirm": None,
     })
+    clear_active_dialog(handler_input, "onboarding")
     return handler_input.response_builder \
         .speak(ssml(TOWN_LOOKUP_UNAVAILABLE_CONTINUE)) \
         .reprompt(ssml(REPROMPT_NO_CITY)) \
@@ -318,6 +344,11 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
         awaitingLocationConfirm=True,
         pendingLocationConfirm=match,
     )
+    activate_dialog(
+        handler_input,
+        "onboarding",
+        context={"stage": ONBOARDING_AWAIT_CONFIRM},
+    )
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_TOWN_CONFIRM(match["city"]))) \
         .reprompt(ssml(TOWN_CONFIRM_REPROMPT)) \
@@ -368,6 +399,7 @@ async def finalize_town_captured(
         onboardingStage=None,
         awaitingLocationConfirm=False,
     )
+    clear_active_dialog(handler_input, "onboarding")
     return handler_input.response_builder \
         .speak(ssml(TOWN_GOT_IT(match["city"]))) \
         .reprompt(ssml(REPROMPT_CITY)) \
@@ -391,6 +423,7 @@ def finalize_town_skipped(handler_input: HandlerInput, store: Dict[str, Any]):
         onboardingStage=None,
         awaitingLocationConfirm=False,
     )
+    clear_active_dialog(handler_input, "onboarding")
 
     logger.info("Hear: onboarding town skipped")
 
@@ -412,6 +445,11 @@ def handle_location_not_found(handler_input: HandlerInput, store: Dict[str, Any]
     handler_input.attributes_manager.set_session_attributes({
         "onboardingStage": ONBOARDING_ASK_TOWN,
     })
+    activate_dialog(
+        handler_input,
+        "onboarding",
+        context={"stage": ONBOARDING_ASK_TOWN},
+    )
     return handler_input.response_builder \
         .speak(ssml(LOCATION_NOT_FOUND)) \
         .reprompt(ssml(REPROMPT_ASK_TOWN)) \
@@ -442,6 +480,11 @@ async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dic
         handler_input,
         onboardingStage=ONBOARDING_AWAIT_CONFIRM,
         awaitingLocationConfirm=True,
+    )
+    activate_dialog(
+        handler_input,
+        "onboarding",
+        context={"stage": ONBOARDING_AWAIT_CONFIRM},
     )
     return handler_input.response_builder \
         .speak(ssml(

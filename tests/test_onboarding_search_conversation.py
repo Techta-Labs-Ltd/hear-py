@@ -162,6 +162,12 @@ async def test_onboarding_treats_creator_misclassification_as_town(
     )
 
 
+def test_manual_town_reprompt_exposes_skip_command():
+    from src.utils.speech import REPROMPT_ASK_TOWN
+
+    assert "say skip" in REPROMPT_ASK_TOWN.casefold()
+
+
 @pytest.mark.asyncio
 async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_handler_input):
     monkeypatch.setattr(

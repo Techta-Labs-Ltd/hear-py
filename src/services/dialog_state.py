@@ -29,9 +29,21 @@ class DialogStateManager:
         state = store if isinstance(store, dict) else {}
         active = state.get("activeDialog")
         if isinstance(active, dict) and active.get("type"):
-            expires_at = int(active.get("expiresAt") or 0)
-            if not expires_at or expires_at >= DialogStateManager._now():
-                return active
+            if active.get("type") == "onboarding":
+                stage = state.get("onboardingStage")
+                if stage:
+                    return {
+                        **active,
+                        "context": {
+                            **dict(active.get("context") or {}),
+                            "stage": stage,
+                        },
+                    }
+                active = None
+            if active:
+                expires_at = int(active.get("expiresAt") or 0)
+                if not expires_at or expires_at >= DialogStateManager._now():
+                    return active
 
         if state.get("awaitingSearchConfirmation") and state.get("pendingResolution"):
             return {"type": "search_confirmation", "context": deepcopy(state["pendingResolution"])}
@@ -78,7 +90,12 @@ class DialogStateManager:
     @staticmethod
     def clear(handler_input, *dialog_types: str) -> dict:
         store = get_store(handler_input)
-        active = DialogStateManager.active_from_store(store)
+        raw_active = store.get("activeDialog")
+        active = (
+            raw_active
+            if isinstance(raw_active, dict) and raw_active.get("type")
+            else DialogStateManager.active_from_store(store)
+        )
         if dialog_types and (not active or active.get("type") not in dialog_types):
             return store
         updates = {"activeDialog": None}

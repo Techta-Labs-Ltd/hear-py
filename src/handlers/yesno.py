@@ -199,6 +199,7 @@ class YesIntentHandler(AbstractRequestHandler):
             "locality": pending.get("locality") or final_city,
         })
         handler_input.attributes_manager.set_session_attributes(session_attrs)
+        clear_active_dialog(handler_input, "onboarding")
         confirmed = get_store(handler_input)
         if user_id:
             try:
