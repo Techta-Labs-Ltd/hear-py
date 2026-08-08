@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+import pytest
+
+from src.clients.resolver import ResolverClient
+from src.middleware.confirmation import ConfirmationMiddleware
+from src.middleware.resolver import ResolverInterceptor
+from src.runtime import AttrDict
+from src.services.store import DEFAULT_STORE
+from src.utils.discovery_request import is_reserved_discovery_phrase
+
+
+@pytest.mark.parametrize("phrase", [
+    "anything",
+    "something",
+    "whatever",
+    "play audio",
+    "play me something",
+    "give me something to listen to",
+    "start listening",
+    "let me listen",
+])
+def test_generic_discovery_phrases_are_reserved(phrase):
+    assert is_reserved_discovery_phrase(phrase)
+
+
+@pytest.mark.parametrize("phrase", [
+    "news",
+    "York TN",
+    "Gloucester Talking Newspaper",
+    "local sport",
+])
+def test_meaningful_discovery_phrases_are_not_reserved(phrase):
+    assert not is_reserved_discovery_phrase(phrase)
+
+
+@pytest.mark.asyncio
+async def test_reserved_anything_never_calls_resolver(monkeypatch, mock_handler_input):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {
+                "topic": {"name": "topic", "value": "anything"},
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    attrs = mock_handler_input.attributes_manager.request_attributes
+    assert attrs["_nlp"]["localResolved"] is True
+    assert attrs["_nlp"]["searchPayload"] == {"query": "", "filter": {}}
+    assert attrs["_resolverClarification"]["reprompt"] == (
+        "What would you like to play?"
+    )
+
+
+@pytest.mark.asyncio
+async def test_meaningful_news_still_calls_resolver(monkeypatch, mock_handler_input):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {"topic": {"name": "topic", "value": "news"}},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "intent": "category",
+        "slots": {"category": "news", "residualQuery": ""},
+        "ambiguities": [],
+    })
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        "news",
+        alexa_user_id="amzn1.ask.account.TEST",
+    )

@@ -94,6 +94,14 @@ def _binary_prompt(active: dict) -> tuple[str, str]:
     return speech, "Please say yes or no."
 
 
+def _onboarding_binary_prompt(stage: str) -> tuple[str, str]:
+    if stage == "ask_permission":
+        speech = "Would you like me to use your device location? Please say yes or no."
+    else:
+        speech = "Is that the correct town or city? Please say yes or no."
+    return speech, "Please say yes or no."
+
+
 def dialog_validation_failure(handler_input) -> dict | None:
     if get_request_type(handler_input) != "IntentRequest":
         return None
@@ -102,7 +110,15 @@ def dialog_validation_failure(handler_input) -> dict | None:
         return None
     intent_name = get_intent_name(handler_input)
     dialog_type = active.get("type")
-    if dialog_type == "ambiguity" and intent_name not in _AMBIGUITY_INTENTS:
+    context = active.get("context") or {}
+    onboarding_stage = str(context.get("stage") or "")
+    if (
+        dialog_type == "onboarding"
+        and onboarding_stage in {"ask_permission", "await_location_confirm"}
+        and intent_name not in _BINARY_INTENTS
+    ):
+        speech, reprompt = _onboarding_binary_prompt(onboarding_stage)
+    elif dialog_type == "ambiguity" and intent_name not in _AMBIGUITY_INTENTS:
         speech, reprompt = _ambiguity_prompt(active)
     elif dialog_type in _BINARY_DIALOGS and intent_name not in _BINARY_INTENTS:
         speech, reprompt = _binary_prompt(active)

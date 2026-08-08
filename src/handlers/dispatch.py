@@ -67,6 +67,20 @@ class IntentDispatchHandler(AbstractRequestHandler):
         nlp_data = attrs.get("_nlp", {})
         intent = nlp_data.get("intent", "general")
 
+        clarification = attrs.pop("_resolverClarification", None)
+        if clarification:
+            attrs.pop("_pendingConfirmation", None)
+            handler_input.attributes_manager.request_attributes = attrs
+            logger.info(
+                "Hear: resolver discovery clarification asked intent=%s",
+                intent,
+            )
+            return handler_input.response_builder \
+                .speak(ssml(clarification["speech"])) \
+                .reprompt(ssml(clarification["reprompt"])) \
+                .set_should_end_session(False) \
+                .get_response()
+
         pending = attrs.pop("_pendingConfirmation", None)
         handler_input.attributes_manager.request_attributes = attrs
         if pending:

@@ -98,6 +98,68 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
     }
     resolve.assert_awaited_once()
     assert resolve.await_args.args == ("Herne Bay",)
+    assert resolve.await_args.kwargs == {
+        "alexa_user_id": "amzn1.ask.account.TEST",
+        "prefer_location": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_onboarding_treats_creator_misclassification_as_town(
+    monkeypatch, mock_handler_input,
+):
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "intent": "creator",
+        "resolution": {
+            "match": {
+                "city": "Gloucester",
+                "locality": "Gloucester",
+                "countryCode": "gb",
+                "latitude": 51.8653,
+                "longitude": -2.2458,
+            },
+            "candidates": [],
+        },
+    })
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayByCreatorIntent",
+            "slots": {
+                "creatorQuery": {
+                    "name": "creatorQuery",
+                    "value": "Gloucester",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+    }
+
+    await ResolverInterceptor().process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"]["townName"] == "Gloucester"
+    assert TownCaptureHandler().can_handle(mock_handler_input)
+
+    await TownCaptureHandler().handle(mock_handler_input)
+
+    store = get_store(mock_handler_input)
+    assert store["onboardingStage"] == "await_location_confirm"
+    assert store["pendingLocationConfirm"]["city"] == "Gloucester"
+    assert store["onboardingTownAttempts"] == 0
+    resolve.assert_awaited_once_with(
+        "Gloucester",
+        alexa_user_id="amzn1.ask.account.TEST",
+        prefer_location=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -131,7 +193,7 @@ async def test_town_resolver_failure_retries_once_without_closing_session(
 
     store = get_store(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
-    assert "say your town once more, or say skip" in speech
+    assert "try your town or city again" in speech
     retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
     retry_builder.add_directive.assert_called_once_with({
         "type": "Dialog.ElicitSlot",

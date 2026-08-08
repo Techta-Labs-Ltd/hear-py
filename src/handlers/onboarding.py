@@ -11,7 +11,7 @@ from src.services.dialog_state import activate_dialog
 from src.clients.resolver import ResolverUnavailable
 from src.dependencies import Dependencies
 from src.models import BROWSE_HINTS, FEEDBACK_SKIP_HINTS, LOCAL_HINTS, TRENDING_HINTS
-from src.utils.skill_request import get_intent_name, get_request_type
+from src.utils.skill_request import get_intent_name, get_request_type, get_user_id
 from src.utils.normalize_content_item import pick_content_source
 from src.utils.speech import (
     ssml,
@@ -263,7 +263,11 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
         phrase,
     )
     try:
-        response = await d.resolver.resolve_utterance(phrase)
+        response = await d.resolver.resolve_utterance(
+            phrase,
+            alexa_user_id=get_user_id(handler_input),
+            prefer_location=True,
+        )
         resolution = response.get("resolution") or {}
     except ResolverUnavailable as exc:
         logger.warning("Hear: town resolver unavailable reason=%s", exc)
@@ -271,6 +275,12 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
     update_store(handler_input, {"onboardingTownResolverFailures": 0})
     match = resolution.get("match")
     candidates = resolution.get("candidates") or []
+    logger.info(
+        "Hear: onboarding town resolution matched=%s city=%s candidates=%s",
+        bool(match),
+        (match or {}).get("city"),
+        len(candidates),
+    )
     if not match:
         if candidates:
             names = [candidate["city"] for candidate in candidates[:2]]
@@ -324,7 +334,11 @@ async def finalize_town_captured(
 ):
     d = deps or Dependencies()
     try:
-        response = await d.resolver.resolve_utterance(phrase)
+        response = await d.resolver.resolve_utterance(
+            phrase,
+            alexa_user_id=get_user_id(handler_input),
+            prefer_location=True,
+        )
         resolution = response.get("resolution") or {}
     except ResolverUnavailable as exc:
         logger.warning("Hear: town resolver unavailable reason=%s", exc)

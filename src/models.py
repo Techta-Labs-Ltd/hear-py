@@ -191,7 +191,7 @@ class ResolverResult:
     def entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
         return tuple(entity for entity in self.entities if entity.entity_type == entity_type)
 
-    def to_alexa_payload(self) -> dict[str, Any]:
+    def to_alexa_payload(self, *, prefer_location: bool = False) -> dict[str, Any]:
         slots = dict(self.slots)
         ambiguities = []
         for ambiguity in self.ambiguities:
@@ -244,9 +244,10 @@ class ResolverResult:
             for entity_type in facet_slots
             for entity in self.entities_of_type(entity_type)
         )
-        locations = tuple(
+        all_locations = self.entities_of_type("location")
+        locations = all_locations if prefer_location else tuple(
             location
-            for location in self.entities_of_type("location")
+            for location in all_locations
             if not any(
                 max(location.start, source.start) < min(location.end, source.end)
                 for source in source_entities
@@ -281,7 +282,7 @@ class ResolverResult:
                     "longitude": location.longitude,
                 }.items() if value is not None
             })
-        elif self.entities_of_type("location") and source_entities:
+        elif all_locations and source_entities:
             # A place name can also be the identifying part of a source name
             # (for example "Wakefield Talking Newspaper"). When both resolver
             # entities cover the same words, applying source AND city filters

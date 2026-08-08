@@ -157,8 +157,8 @@ TOWN_GOT_IT = lambda city: f"{escape_ssml_lite(city) or 'your area'} it is. What
 
 TOWN_SKIPPED = "Okay. What would you like to listen to?"
 
-TOWN_NOT_UNDERSTOOD = "Just the town name please — like London or Manchester. Or say skip if you'd rather not."
-TOWN_LOOKUP_UNAVAILABLE_RETRY = "I can't check towns right now. Please say your town once more, or say skip."
+TOWN_NOT_UNDERSTOOD = "I couldn't identify that location. Please say the full name of your town or city."
+TOWN_LOOKUP_UNAVAILABLE_RETRY = "I can't check that location right now. Please try your town or city again."
 TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check towns, so I'll continue without your location. You can set it later. What would you like to listen to?"
 
 REPROMPT_CITY = lambda city: (
@@ -167,9 +167,9 @@ REPROMPT_CITY = lambda city: (
 
 REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
 
-REPROMPT_ASK_TOWN = "Where are you based? Or say skip."
+REPROMPT_ASK_TOWN = "What town or city are you in?"
 
-ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which town or city are you in? Or say skip."
+ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, what town or city are you in?"
 
 COMMUNITY_NEEDS_TOWN = "I'll need your town to find local content. Would you like to set that up?"
 

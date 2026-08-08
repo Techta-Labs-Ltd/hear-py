@@ -17,6 +17,7 @@ from src.utils.skill_request import (
     get_user_id,
 )
 from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
+from src.utils.discovery_request import is_reserved_discovery_phrase
 logger = logging.getLogger(__name__)
 
 
@@ -341,6 +342,29 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                     "needsRedirect": True,
                     "confidence": "high",
                     "slots": {"townName": raw, "placeName": raw},
+                })
+                return
+
+            if (
+                raw
+                and alexa_intent in SEARCH_INTENTS
+                and is_reserved_discovery_phrase(raw)
+            ):
+                logger.info(
+                    "Hear: reserved discovery phrase handled locally intent=%s phrase=%r",
+                    alexa_intent,
+                    raw,
+                )
+                _set_nlp(handler_input, {
+                    "status": "resolved",
+                    "intent": "general",
+                    "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": True,
+                    "needsRedirect": False,
+                    "localResolved": True,
+                    "searchPayload": {"query": "", "filter": {}},
+                    "slots": {"residualQuery": ""},
                 })
                 return
 

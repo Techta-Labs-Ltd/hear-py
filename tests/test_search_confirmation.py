@@ -143,3 +143,150 @@ def test_pending_resolution_stores_only_catalog_valid_query_and_sort():
         "query": "",
         "filter": {"organizationIds": ["org-wtn"]},
     }
+
+
+def test_play_york_tn_still_requires_confirmation():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayByOrganizationIntent",
+                "slots": {
+                    "organizationQuery": {
+                        "name": "organizationQuery",
+                        "value": "York TN",
+                    },
+                },
+            },
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "organization",
+            "confirmationLabel": "content from York Talking News",
+            "searchPayload": {
+                "query": "",
+                "filter": {"organizationIds": ["org-ytn"]},
+            },
+            "slots": {
+                "organizationIds": ["org-ytn"],
+                "organizationName": "York Talking News",
+                "residualQuery": "",
+            },
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "Did you want me to play content from York Talking News?" in (
+        response["outputSpeech"]["ssml"]
+    )
+    store = get_store(handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["activeDialog"]["type"] == "search_confirmation"
+
+
+def test_bare_play_asks_what_to_play_without_search_confirmation():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "PlayContentIntent", "slots": {}},
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "general",
+            "searchPayload": {"query": "", "filter": {}},
+            "slots": {"residualQuery": ""},
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "What would you like me to play?" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
+    store = get_store(handler_input)
+    assert store["awaitingSearchConfirmation"] is False
+
+
+def test_generic_anything_asks_for_specific_request():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayContentIntent",
+                "slots": {"topic": {"name": "topic", "value": "anything"}},
+            },
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "general",
+            "searchPayload": {"query": "anything", "filter": {}},
+            "slots": {"residualQuery": "anything"},
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "name a topic, creator, publication" in response["outputSpeech"]["ssml"]
+    assert get_store(handler_input)["awaitingSearchConfirmation"] is False
+
+
+def test_resolved_trending_request_is_always_confirmed():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "WhatsTrendingIntent", "slots": {}},
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "trending",
+            "searchPayload": {"query": "", "filter": {}, "sort": "trending"},
+            "slots": {"residualQuery": ""},
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "Did you want me to play what’s trending right now?" in (
+        response["outputSpeech"]["ssml"]
+    )
+    assert get_store(handler_input)["activeDialog"]["type"] == "search_confirmation"

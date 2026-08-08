@@ -6,10 +6,48 @@ from src.services.resolution import build_pending_resolution
 
 from src.utils.speech import resolved_search_request_label
 from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
+from src.utils.discovery_request import (
+    is_reserved_discovery_phrase,
+    normalize_discovery_phrase,
+)
 
-_CONFIRMABLE: set[str] = {
+_RESOLVED_DISCOVERY_INTENTS: set[str] = {
     "local", "creator", "organization", "publication", "category", "general",
+    "trending", "browse", "following",
 }
+
+def _has_meaningful_general_request(nlp: dict, raw: str | None) -> bool:
+    slots = nlp.get("slots") or {}
+    payload = nlp.get("searchPayload") or slots.get("searchPlan") or {}
+    filters = payload.get("filter") or {}
+    query = normalize_discovery_phrase(
+        payload.get("query")
+        or slots.get("residualQuery")
+        or slots.get("topic")
+        or slots.get("query")
+        or raw
+    )
+    return bool(filters) or not is_reserved_discovery_phrase(query)
+
+
+def _requires_discovery_clarification(nlp: dict, raw: str | None) -> bool:
+    intent = str(nlp.get("intent") or "")
+    slots = nlp.get("slots") or {}
+    if intent == "general":
+        return not _has_meaningful_general_request(nlp, raw)
+    if intent == "creator":
+        return not bool(slots.get("creatorIds") or slots.get("creatorName"))
+    if intent == "organization":
+        return not bool(slots.get("organizationIds") or slots.get("organizationName"))
+    if intent == "publication":
+        return not bool(
+            slots.get("publicationIds")
+            or slots.get("publicationName")
+            or slots.get("publicationSourceQuery")
+        )
+    if intent == "category":
+        return not bool(slots.get("category") or slots.get("tags") or slots.get("residualQuery"))
+    return False
 
 
 def _build_confirmation_speech(nlp: dict | None) -> str | None:
@@ -204,11 +242,27 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             return
         if nlp["intent"] == "unclear":
             return
-        if nlp["intent"] not in _CONFIRMABLE:
+        if nlp["intent"] not in _RESOLVED_DISCOVERY_INTENTS:
+            return
+
+        raw = _extract_raw_utterance_from_attrs(handler_input)
+        if _requires_discovery_clarification(nlp, raw):
+            attrs["_resolverClarification"] = {
+                "speech": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper.",
+                "reprompt": "What would you like to play?",
+            }
+            attrs.pop("_pendingConfirmation", None)
+            handler_input.attributes_manager.request_attributes = attrs
             return
 
         confirm_text = _build_confirmation_speech(nlp)
         if not confirm_text:
+            attrs["_resolverClarification"] = {
+                "speech": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper.",
+                "reprompt": "What would you like to play?",
+            }
+            attrs.pop("_pendingConfirmation", None)
+            handler_input.attributes_manager.request_attributes = attrs
             return
 
         search_params = _build_search_params(nlp) or {}
@@ -216,7 +270,6 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
         if search_params.get("resolution"):
             search_params["resolution"]["confirmationLabel"] = confirm_text
 
-        raw = _extract_raw_utterance_from_attrs(handler_input)
         alternatives = nlp.get("alternatives") or []
         if not alternatives and raw:
             alternatives = []

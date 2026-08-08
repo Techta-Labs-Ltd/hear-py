@@ -101,6 +101,7 @@ class ResolverClient:
         alexa_user_id: str | None = None,
         timezone: str = "Europe/London",
         country_code: str | None = None,
+        prefer_location: bool = False,
     ) -> dict[str, Any]:
         result = await self.resolve(
             utterance,
@@ -108,7 +109,7 @@ class ResolverClient:
             timezone=timezone,
             country_code=country_code,
         )
-        payload = result.to_alexa_payload()
+        payload = result.to_alexa_payload(prefer_location=prefer_location)
         logger.info(
             "Hear: resolver normalized response status=%s intent=%s slots=%s",
             payload.get("status"),

@@ -172,6 +172,50 @@ def test_overlapping_source_and_location_does_not_overconstrain_search():
     assert "isLocal" not in result["slots"]
 
 
+def test_location_context_keeps_overlapping_town_for_onboarding():
+    payload = _response(intent="creator")
+    payload["entities"] = [{
+        "entityType": "creator",
+        "entityId": "creator-gloucester",
+        "canonicalValue": "Gloucester Talking Newspaper",
+        "originalText": "gloucester",
+        "confidence": 1,
+        "method": "bare_match",
+        "start": 0,
+        "end": 10,
+        "latitude": None,
+        "longitude": None,
+        "countryCode": None,
+    }, {
+        "entityType": "location",
+        "entityId": "location-gloucester",
+        "canonicalValue": "Gloucester",
+        "originalText": "gloucester",
+        "confidence": 1,
+        "method": "bare_match",
+        "start": 0,
+        "end": 10,
+        "latitude": 51.8653,
+        "longitude": -2.2458,
+        "countryCode": "gb",
+    }]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        prefer_location=True,
+    )
+
+    assert result["resolution"]["match"] == {
+        "city": "Gloucester",
+        "locality": "Gloucester",
+        "countryCode": "gb",
+        "latitude": 51.8653,
+        "longitude": -2.2458,
+        "confidence": 1.0,
+        "method": "bare_match",
+    }
+    assert result["slots"]["city"] == "Gloucester"
+
+
 def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
     payload = _response(intent="search")
     payload["entities"] = []
