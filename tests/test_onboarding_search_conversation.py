@@ -859,9 +859,9 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
 
 
     payload = {
-        "query": "",
+        "query": None,
         "filter": {"organizationIds": ["org-neston"]},
-        "sort": "latest",
+        "sort": "relevance",
     }
     resolution = {
         "requestId": "resolved-neston",
@@ -894,7 +894,10 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
 
     response = await YesIntentHandler().handle(mock_handler_input)
 
-    search.assert_awaited_once_with(payload)
+    search.assert_awaited_once_with({
+        "query": "",
+        "filter": {"organizationIds": ["org-neston"]},
+    })
     play.assert_awaited_once()
     assert response == {"shouldEndSession": True}
     store = get_store(mock_handler_input)

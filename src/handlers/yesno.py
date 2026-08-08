@@ -11,6 +11,7 @@ from src.services.queue import clear_queue, reset_queue_items_completed
 from src.services.store import get_store, update_store
 from src.utils.skill_request import get_user_id as get_alexa_user_id
 from src.utils.skill_request import get_request_type, get_intent_name
+from src.utils.search_payload import normalize_search_payload
 from src.utils.speech import (
     ssml,
     escape_ssml_lite,
@@ -336,7 +337,9 @@ class YesIntentHandler(AbstractRequestHandler):
                     .set_should_end_session(False) \
                     .response
 
-            payload = dict(resolution["searchPayload"])
+            # Pending confirmations can outlive a deployment in DynamoDB.
+            # Repair legacy resolver payloads again at the execution boundary.
+            payload = normalize_search_payload(resolution["searchPayload"])
             label = str(resolution.get("confirmationLabel") or "that request")
             update_store(handler_input, {
                 "awaitingSearchConfirmation": False,
