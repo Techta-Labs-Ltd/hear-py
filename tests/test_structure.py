@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import pytest
 
@@ -80,6 +81,27 @@ def test_template_owns_and_wires_durable_persistence_table():
     assert "HEAR_DDB_TABLE: !Ref HearPersistenceTable" in template
     assert "DynamoDBCrudPolicy: { TableName: !Ref HearPersistenceTable }" in template
     assert "HEAR_DDB_TABLE: hear-service" not in template
+
+
+def test_deployment_role_can_manage_table_recovery_configuration():
+    policy_path = (
+        Path(__file__).resolve().parents[1]
+        / "deploy"
+        / "oidc-permissions-policy.json"
+    )
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    actions = {
+        action
+        for statement in policy["Statement"]
+        for action in (
+            statement["Action"]
+            if isinstance(statement["Action"], list)
+            else [statement["Action"]]
+        )
+    }
+
+    assert "dynamodb:UpdateContinuousBackups" in actions
+    assert "dynamodb:DescribeContinuousBackups" in actions
 
 
 def test_runtime_and_container_do_not_install_or_import_spacy():
