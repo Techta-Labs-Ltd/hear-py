@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import logging
 logger = logging.getLogger(__name__)
 
@@ -348,8 +349,18 @@ class YesIntentHandler(AbstractRequestHandler):
             clear_active_dialog(handler_input, "search_confirmation")
             handler_input.attributes_manager.set_session_attributes({})
             logger.info(
-                "Hear: confirmed resolver search START id=%s label=%s",
-                resolution.get("requestId"), label,
+                "Hear: confirmed resolver search START id=%s label=%s payload=%s",
+                resolution.get("requestId"),
+                label,
+                json.dumps(
+                    {
+                        key: value
+                        for key, value in payload.items()
+                        if key != "alexaUserId"
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
             )
             search_result = await self._deps.heara.search(payload)
             search_result["_search_payload"] = payload
