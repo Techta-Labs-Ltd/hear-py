@@ -21,6 +21,7 @@ from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
 from src.utils.discovery_request import is_reserved_discovery_phrase
 from src.utils.discovery_request import is_meaningful_creator_source
 from src.utils.discovery_request import is_meaningful_organization_source
+from src.utils.discovery_request import is_generic_organization_request
 from src.utils.discovery_request import is_meaningful_publication_source
 logger = logging.getLogger(__name__)
 
@@ -329,16 +330,22 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 logger.info("Hear: creator name required; resolver skipped")
                 return
             if (
-                alexa_intent == "PlayByOrganizationIntent"
-                and not is_meaningful_organization_source(raw)
+                (
+                    alexa_intent == "PlayByOrganizationIntent"
+                    and not is_meaningful_organization_source(raw)
+                )
+                or (
+                    alexa_intent == "PlayContentIntent"
+                    and is_generic_organization_request(raw)
+                )
             ):
                 _set_nlp(handler_input, {
                     "status": "resolved",
                     "intent": "organization",
                     "alexaIntent": "organization",
                     "alexaRawIntent": alexa_intent,
-                    "nlpMatchesAlexa": True,
-                    "needsRedirect": False,
+                    "nlpMatchesAlexa": alexa_intent == "PlayByOrganizationIntent",
+                    "needsRedirect": alexa_intent != "PlayByOrganizationIntent",
                     "localResolved": True,
                     "slots": {
                         "organizationQuery": "",

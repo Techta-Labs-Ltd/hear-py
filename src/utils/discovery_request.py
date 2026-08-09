@@ -103,3 +103,7 @@ def is_meaningful_organization_source(value: object) -> bool:
         and normalized not in RESERVED_DISCOVERY_PHRASES
         and normalized not in ORGANIZATION_SOURCE_PLACEHOLDERS
     )
+
+
+def is_generic_organization_request(value: object) -> bool:
+    return normalize_discovery_phrase(value) in ORGANIZATION_SOURCE_PLACEHOLDERS

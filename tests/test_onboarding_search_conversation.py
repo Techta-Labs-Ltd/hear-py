@@ -1575,6 +1575,45 @@ async def test_generic_talking_newspaper_slot_value_still_prompts_for_name(
 
 
 @pytest.mark.asyncio
+async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.dispatch import IntentDispatchHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {
+                "topic": {
+                    "name": "topic",
+                    "value": "talking newspaper",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    await ResolverInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchHandler().handle(mock_handler_input)
+
+    assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
+    assert get_store(mock_handler_input)["awaitingOrganizationName"] is True
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_generic_creator_pipeline_asks_for_creator_name(
     monkeypatch,
     mock_handler_input,
