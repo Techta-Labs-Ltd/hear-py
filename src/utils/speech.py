@@ -540,6 +540,10 @@ ONBOARDING_LOCATION_DENIED = "No worries. Which town or city are you in?"
 ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
 ONBOARDING_DETECTED_TOWN = lambda city: f"I think you're in {escape_ssml_lite(city)} \u2014 is that right?"
 ONBOARDING_TOWN_CONFIRM = lambda city: f"Did you say {escape_ssml_lite(city)}?"
+ONBOARDING_DEVICE_TOWN_CONFIRM = lambda city: (
+    f"Your Alexa device location is set to {escape_ssml_lite(city)}. "
+    f"Should I use {escape_ssml_lite(city)} for your local content?"
+)
 CONSENT_CARD_THANKS = "Thanks \u2014 you're all set. What would you like to listen to?"
 COMMUNITY_PLAYBACK_OFFER = lambda city: f"Would you like to hear the latest from {escape_ssml_lite(city)}?"
 

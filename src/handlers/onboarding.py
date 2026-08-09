@@ -31,8 +31,7 @@ from src.utils.speech import (
     WELCOME_RETURN_CITY,
     WELCOME_RETURN_GENERIC,
     ONBOARDING_TOWN_CONFIRM,
-    ONBOARDING_FETCHING_LOCATION,
-    ONBOARDING_DETECTED_TOWN,
+    ONBOARDING_DEVICE_TOWN_CONFIRM,
     CONSENT_CARD_THANKS,
     LOCATION_DECLINED,
     ONBOARDING_DEFER_CONTENT,
@@ -487,6 +486,39 @@ async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dic
             "_requiresReliableSave": True,
         })
         return handle_location_not_found(handler_input, store)
+    if match.get("latitude") is None or match.get("longitude") is None:
+        try:
+            response = await d.resolver.resolve_utterance(
+                match["city"],
+                alexa_user_id=get_user_id(handler_input),
+                prefer_location=True,
+            )
+            resolved = (response.get("resolution") or {}).get("match")
+        except ResolverUnavailable as exc:
+            logger.warning(
+                "Hear: device-address coordinate resolution unavailable reason=%s",
+                exc,
+            )
+            resolved = None
+        if not resolved:
+            logger.info(
+                "Hear: device-address city could not be resolved to coordinates city=%s",
+                match.get("city"),
+            )
+            return handle_location_not_found(handler_input, store)
+        # Keep address-specific metadata while preferring the resolver's
+        # canonical locality and coordinates.
+        match = {
+            **match,
+            **resolved,
+            "postalCode": match.get("postalCode"),
+            "source": "device",
+            "_status": "resolved",
+        }
+        logger.info(
+            "Hear: device-address city resolved coordinates=true city=%s",
+            match.get("city"),
+        )
     update_store(handler_input, {
         "pendingLocationConfirm": match,
         "awaitingLocationConfirm": True,
@@ -505,9 +537,7 @@ async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dic
         context={"stage": ONBOARDING_AWAIT_CONFIRM},
     )
     return handler_input.response_builder \
-        .speak(ssml(
-            f"{ONBOARDING_FETCHING_LOCATION} {ONBOARDING_DETECTED_TOWN(match['city'])}"
-        )) \
+        .speak(ssml(ONBOARDING_DEVICE_TOWN_CONFIRM(match["city"]))) \
         .reprompt(ssml(TOWN_CONFIRM_REPROMPT)) \
         .set_should_end_session(False) \
         .response

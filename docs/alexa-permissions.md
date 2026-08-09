@@ -12,7 +12,9 @@ For development skill `amzn1.ask.skill.502ef74e-db9f-485f-acdd-13d23c895e59`:
 5. Open the Alexa app Activity screen, or use a supported screened device, and
    approve the `AskForPermissionsConsent` card.
 6. Reopen Hear. The next request re-checks the granted scope and fetches the
-   device address. A voice-only Echo does not display a visual card.
+   device address. Hear resolves the returned city through its locality
+   resolver to obtain canonical latitude and longitude before asking the user
+   to confirm the town. A voice-only Echo does not display a visual card.
 
 The requested runtime scope is:
 

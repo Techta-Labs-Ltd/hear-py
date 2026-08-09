@@ -1,10 +1,17 @@
 from __future__ import annotations
 import pytest
-from unittest.mock import MagicMock
-from src.handlers.onboarding import finalize_town_captured, handle_permission_yes
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+from src.handlers.onboarding import (
+    auto_detect_location_or_manual,
+    finalize_town_captured,
+    handle_permission_yes,
+)
 from src.clients.resolver import ResolverClient
+from src.dependencies import Dependencies
 
 from src.runtime import AttrDict
+from src.runtime import ResponseBuilder
 from src.services.store import get_store
 
 
@@ -40,7 +47,6 @@ async def test_manual_town_capture_completes_onboarding(monkeypatch, mock_handle
 
 
 def test_handle_permission_yes_sends_permission_card(mock_handler_input):
-    from src.runtime import ResponseBuilder
     mock_handler_input.request_envelope = AttrDict(
         mock_handler_input.request_envelope
     )
@@ -55,3 +61,52 @@ def test_handle_permission_yes_sends_permission_card(mock_handler_input):
     assert "read::alexa:device:all:address" in card.get("permissions", [])
     assert "alexa::devices:all:geolocation:read" not in card.get("permissions", [])
     assert result.get("shouldEndSession") is True
+
+
+@pytest.mark.asyncio
+async def test_device_address_city_is_resolved_to_coordinates_before_confirmation(
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.set_session_attributes = MagicMock()
+    locality = SimpleNamespace(detect_device_location=AsyncMock(return_value={
+        "_status": "resolved",
+        "city": "Burnley",
+        "locality": "Burnley",
+        "postalCode": "BB10 1AA",
+        "countryCode": "GB",
+        "latitude": None,
+        "longitude": None,
+        "source": "device",
+    }))
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock(return_value={
+        "resolution": {"match": {
+            "city": "Burnley",
+            "locality": "Burnley",
+            "countryCode": "GB",
+            "latitude": 53.789,
+            "longitude": -2.248,
+        }},
+    }))
+
+    await auto_detect_location_or_manual(
+        mock_handler_input,
+        get_store(mock_handler_input),
+        deps=Dependencies(locality=locality, resolver=resolver),
+    )
+
+    pending = get_store(mock_handler_input)["pendingLocationConfirm"]
+    speech = mock_handler_input.response_builder.response["outputSpeech"]["ssml"]
+    assert "Your Alexa device location is set to Burnley" in speech
+    assert "Should I use Burnley for your local content?" in speech
+    assert "I found" not in speech
+    assert pending["latitude"] == 53.789
+    assert pending["longitude"] == -2.248
+    assert pending["postalCode"] == "BB10 1AA"
+    assert pending["source"] == "device"
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "Burnley",
+        alexa_user_id="amzn1.ask.account.TEST",
+        prefer_location=True,
+    )
