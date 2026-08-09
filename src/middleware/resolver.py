@@ -310,6 +310,34 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 return
 
             raw = _extract_raw_utterance(handler_input, alexa_intent)
+            if alexa_intent == "WhatsTrendingIntent":
+                trending_slots = intent_obj.slots or {}
+                topic = get_resolved_slot_value(trending_slots.get("topic"))
+                date_query = get_resolved_slot_value(trending_slots.get("dateQuery"))
+                if not topic and not date_query:
+                    _set_nlp(handler_input, {
+                        "status": "resolved",
+                        "intent": "trending",
+                        "alexaIntent": "trending",
+                        "alexaRawIntent": alexa_intent,
+                        "nlpMatchesAlexa": True,
+                        "needsRedirect": False,
+                        "localResolved": True,
+                        "searchPayload": {
+                            "query": "",
+                            "filter": {},
+                            "sort": "trending",
+                            "page": 0,
+                            "limit": 20,
+                        },
+                        "slots": {
+                            "residualQuery": "",
+                            "isRecommended": True,
+                            "sort": "trending",
+                        },
+                    })
+                    logger.info("Hear: bare trending request handled locally")
+                    return
             if (
                 alexa_intent == "PlayByCreatorIntent"
                 and not is_meaningful_creator_source(raw)

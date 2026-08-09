@@ -69,6 +69,12 @@ ORGANIZATION_SOURCE_PLACEHOLDERS = frozenset({
     "play me a talking newspaper", "play me a talking news paper",
 })
 
+GENERIC_ORGANIZATION_WORDS = frozenset({
+    "a", "an", "the", "play", "from", "something", "me", "content",
+    "recording", "recordings", "by", "for", "talking", "news",
+    "newspaper", "paper", "organisation", "organization",
+})
+
 
 def normalize_discovery_phrase(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "").casefold()).strip()
@@ -101,9 +107,24 @@ def is_meaningful_organization_source(value: object) -> bool:
     return bool(
         normalized
         and normalized not in RESERVED_DISCOVERY_PHRASES
-        and normalized not in ORGANIZATION_SOURCE_PLACEHOLDERS
+        and not is_generic_organization_request(normalized)
     )
 
 
 def is_generic_organization_request(value: object) -> bool:
-    return normalize_discovery_phrase(value) in ORGANIZATION_SOURCE_PLACEHOLDERS
+    normalized = normalize_discovery_phrase(value)
+    if normalized in ORGANIZATION_SOURCE_PLACEHOLDERS:
+        return True
+    tokens = re.findall(r"[a-z]+", normalized)
+    has_talking_newspaper = (
+        "talking" in tokens
+        and (
+            "newspaper" in tokens
+            or ("news" in tokens and "paper" in tokens)
+        )
+    )
+    return bool(
+        has_talking_newspaper
+        and tokens
+        and all(token in GENERIC_ORGANIZATION_WORDS for token in tokens)
+    )

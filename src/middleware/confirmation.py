@@ -288,6 +288,12 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             handler_input.attributes_manager.request_attributes = attrs
             return
 
+        if alexa_intent == "WhatsTrendingIntent" and nlp.get("intent") == "trending":
+            attrs.pop("_pendingConfirmation", None)
+            attrs.pop("_resolverClarification", None)
+            handler_input.attributes_manager.request_attributes = attrs
+            return
+
         raw = _extract_raw_utterance_from_attrs(handler_input)
         if (
             nlp.get("intent") == "creator"
@@ -389,6 +395,8 @@ class SearchConfirmationGateHandler(AbstractRequestHandler):
         if nlp.get("status") and nlp.get("status") != "resolved":
             return False
         if _has_pending_ambiguity(nlp):
+            return False
+        if alexa_intent == "WhatsTrendingIntent" and nlp.get("intent") == "trending":
             return False
         nlp_slots = nlp.get("slots") or {}
         if (

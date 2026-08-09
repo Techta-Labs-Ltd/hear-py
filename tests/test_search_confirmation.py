@@ -264,7 +264,7 @@ def test_generic_anything_asks_for_specific_request():
     assert get_store(handler_input)["awaitingSearchConfirmation"] is False
 
 
-def test_resolved_trending_request_is_always_confirmed():
+def test_bare_trending_request_bypasses_confirmation():
     envelope = AttrDict({
         "version": "1.0",
         "context": {"System": {"user": {"userId": "test-user"}}},
@@ -288,12 +288,11 @@ def test_resolved_trending_request_is_always_confirmed():
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
 
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
-    assert "Did you want me to play what’s trending right now?" in (
-        response["outputSpeech"]["ssml"]
-    )
-    assert get_store(handler_input)["activeDialog"]["type"] == "search_confirmation"
+    assert handler_input.attributes_manager.request_attributes.get(
+        "_pendingConfirmation"
+    ) is None
+    assert SearchConfirmationGateHandler().can_handle(handler_input) is False
+    assert get_store(handler_input).get("awaitingSearchConfirmation") is False
 
 
 def test_resolved_search_alias_is_always_confirmed():

@@ -9,7 +9,10 @@ from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.resolver import ResolverInterceptor
 from src.runtime import AttrDict
 from src.services.store import DEFAULT_STORE
-from src.utils.discovery_request import is_reserved_discovery_phrase
+from src.utils.discovery_request import (
+    is_generic_organization_request,
+    is_reserved_discovery_phrase,
+)
 
 
 @pytest.mark.parametrize("phrase", [
@@ -38,6 +41,25 @@ def test_generic_discovery_phrases_are_reserved(phrase):
 ])
 def test_meaningful_discovery_phrases_are_not_reserved(phrase):
     assert not is_reserved_discovery_phrase(phrase)
+
+
+@pytest.mark.parametrize("phrase", [
+    "talking newspaper",
+    "play from a talking news paper",
+    "play from a talking a talking newspaper",
+    "play something from the talking talking newspaper",
+])
+def test_generic_talking_newspaper_phrases_need_a_name(phrase):
+    assert is_generic_organization_request(phrase)
+
+
+@pytest.mark.parametrize("phrase", [
+    "Pendle Voice",
+    "York Talking Newspaper",
+    "play from Andover Talking Newspaper",
+])
+def test_named_talking_newspapers_are_not_generic(phrase):
+    assert not is_generic_organization_request(phrase)
 
 
 @pytest.mark.asyncio
@@ -155,7 +177,6 @@ async def test_elicited_pendle_voice_follow_up_reaches_resolver(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("intent_name", "canonical"), [
     ("BrowseContentIntent", "what's new"),
-    ("WhatsTrendingIntent", "what's trending"),
     ("PlayLocalIntent", "play local content"),
     ("PlayRecommendationIntent", "recommend something"),
 ])
@@ -195,3 +216,33 @@ async def test_zero_slot_discovery_uses_canonical_resolver_utterance(
     assert mock_handler_input.attributes_manager.request_attributes.get(
         "_pendingConfirmation"
     )
+
+
+@pytest.mark.asyncio
+async def test_bare_whats_trending_is_complete_without_resolver_or_confirmation(
+    monkeypatch,
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {"name": "WhatsTrendingIntent", "slots": {}},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "trending"
+    assert nlp["searchPayload"]["sort"] == "trending"
+    assert mock_handler_input.attributes_manager.request_attributes.get(
+        "_pendingConfirmation"
+    ) is None

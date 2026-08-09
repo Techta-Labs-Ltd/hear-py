@@ -1575,9 +1575,15 @@ async def test_generic_talking_newspaper_slot_value_still_prompts_for_name(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("generic_phrase", [
+    "talking newspaper",
+    "talking a talking newspaper",
+    "play from a talking a talking newspaper",
+])
 async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
     monkeypatch,
     mock_handler_input,
+    generic_phrase,
 ):
     from src.handlers.dispatch import IntentDispatchHandler
     from src.middleware.confirmation import (
@@ -1594,7 +1600,7 @@ async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
             "slots": {
                 "topic": {
                     "name": "topic",
-                    "value": "talking newspaper",
+                    "value": generic_phrase,
                 },
             },
         },
