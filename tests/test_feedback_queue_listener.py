@@ -274,6 +274,10 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
     assert mock_handler_input.attributes_manager.request_attributes["_store"].get(
         "deferredIntent"
     ) is None
+    report = mock_handler_input.attributes_manager.request_attributes["_store"]["reportHistory"][-1]
+    assert report["subjectType"] == "content"
+    assert report["contentId"] == "old-content"
+    assert report["status"] == "pending"
 
 
 @pytest.mark.asyncio
@@ -385,6 +389,10 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
         "userCity": "Manchester",
         "locality": "Manchester",
         "playCount": 3,
+        "followedCreators": [
+            {"id": "creator-1", "name": "Reader", "type": "creator"},
+            {"id": "org-1", "name": "York Talking News", "type": "organization"},
+        ],
     }
     sync = AsyncMock(return_value={"listenerId": "listener-1"})
     monkeypatch.setattr("src.clients.hear.sync_listener", sync)
@@ -393,6 +401,8 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
 
     profile = sync.await_args.args[0]
     assert profile["alexaUserId"]
+    assert profile["followedCreatorIds"] == ["creator-1"]
+    assert profile["followedOrganizationIds"] == ["org-1"]
     assert profile["city"] == "Manchester"
     assert profile["locality"] == "Manchester"
     assert sync.await_args.kwargs["timeout_ms"] == 2500

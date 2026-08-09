@@ -26,6 +26,21 @@ class TestPersistence:
         assert merged["playbackSpeed"] == 2.0
         assert merged["userCity"] == "London"
 
+    def test_merge_initial_store_clears_legacy_publication_track_feedback(self):
+        merged = merge_initial_store({
+            "awaitingFeedback": True,
+            "pendingFeedback": {
+                "feedbackKey": "track-1",
+                "contentId": "track-1",
+                "publicationId": "publication-1",
+            },
+            "activeDialog": {"type": "feedback"},
+        })
+
+        assert merged["awaitingFeedback"] is False
+        assert merged["pendingFeedback"] is None
+        assert merged["activeDialog"] is None
+
     def test_get_store_returns_copy(self, mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"] = {"playCount": 5}
         store = get_store(mock_handler_input)

@@ -27,6 +27,7 @@ from src.utils.skill_request import (
 from src.services.feedback import (
     activate_best_feedback_candidate,
     record_feedback_candidate,
+    update_publication_feedback_progress,
 )
 from src.utils.normalize_content_item import pick_content_source
 import logging
@@ -134,6 +135,7 @@ class PlaybackStartedHandler(AbstractRequestHandler):
                 "lastOffsetMs": offset_ms,
             })
             await emit_listening_event(handler_input, "started", state)
+            update_publication_feedback_progress(handler_input, state)
         return handler_input.response_builder.response
 
 class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
@@ -233,6 +235,7 @@ class PlaybackStoppedHandler(AbstractRequestHandler):
                 "listenedMs": max(int(state.get("listenedMs") or 0), offset_ms),
             })
             update_store(handler_input, {"lastOffsetMs": offset_ms, "lastToken": token})
+            update_publication_feedback_progress(handler_input, state)
             await emit_listening_event(handler_input, "stopped", state)
         return handler_input.response_builder.response
 
@@ -249,6 +252,7 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         state = read_playback_session(get_store(handler_input))
         if state and state.get("contentId") == token:
             state = write_playback_session(handler_input, {"status": "failed"})
+            update_publication_feedback_progress(handler_input, state)
             await emit_listening_event(handler_input, "failed", state)
             update_store(handler_input, {"preparedNextContent": None})
         logger.warning("Hear audio playback failed contentId=%s", token)
@@ -281,5 +285,6 @@ class PlaybackProgressReportHandler(AbstractRequestHandler):
                 "lastOffsetMs": offset_ms,
                 "lastToken": token,
             })
+            update_publication_feedback_progress(handler_input, state)
             await emit_listening_event(handler_input, "progress", state)
         return handler_input.response_builder.response

@@ -28,6 +28,17 @@ from src.services.dialog_state import activate_dialog
 from src.utils.playback_context import snapshot_report_context
 from src.utils.normalize_content_item import pick_content_source
 from src.utils.speech import FEEDBACK_SKIP_INTRO
+
+
+def _feedback_source(pending: dict, store: dict) -> dict:
+    return pick_content_source({
+        "organizationId": pending.get("organizationId"),
+        "organizationName": pending.get("organizationName"),
+        "creatorId": pending.get("creatorId") or store.get("feedbackCreatorId"),
+        "creatorName": pending.get("creatorName") or store.get("feedbackCreator"),
+    }) or {}
+
+
 class FeedbackEnjoyedHandler(AbstractRequestHandler):
     """Handles the FeedbackEnjoyedIntent — records liked feedback and offers to follow the creator."""
 
@@ -50,19 +61,14 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
         pending = dict(store.get("pendingFeedback") or {})
         await submit_feedback(handler_input, "enjoyed")
 
+        selected_source = _feedback_source(pending, store)
         record_listening_event(
             handler_input,
             category=pending.get("category") or store.get("feedbackCategory"),
-            creator=pending.get("creatorName") or store.get("feedbackCreator"),
+            creator=selected_source.get("name"),
             liked=True,
         )
 
-        selected_source = pick_content_source({
-            "organizationId": pending.get("organizationId"),
-            "organizationName": pending.get("organizationName"),
-            "creatorId": pending.get("creatorId") or store.get("feedbackCreatorId"),
-            "creatorName": pending.get("creatorName") or store.get("feedbackCreator"),
-        }) or {}
         creator_id = selected_source.get("id")
         creator_name = selected_source.get("name")
         source_type = selected_source.get("kind") or "creator"
@@ -124,10 +130,11 @@ class FeedbackSomewhatHandler(AbstractRequestHandler):
 
         pending = dict(store.get("pendingFeedback") or {})
         await submit_feedback(handler_input, "somewhat")
+        selected_source = _feedback_source(pending, store)
         record_listening_event(
             handler_input,
             category=pending.get("category") or store.get("feedbackCategory"),
-            creator=pending.get("creatorName") or store.get("feedbackCreator"),
+            creator=selected_source.get("name"),
             liked=None,
         )
 
@@ -158,10 +165,11 @@ class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
         pending = dict(store.get("pendingFeedback") or {})
         await submit_feedback(handler_input, "not_enjoyed")
 
+        selected_source = _feedback_source(pending, store)
         record_listening_event(
             handler_input,
             category=pending.get("category") or store.get("feedbackCategory"),
-            creator=pending.get("creatorName") or store.get("feedbackCreator"),
+            creator=selected_source.get("name"),
             liked=False,
         )
 

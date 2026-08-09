@@ -269,6 +269,13 @@ class HearApiClient:
                 and item.get("id")
                 and item.get("type", "creator") == "creator"
             ],
+            "followedOrganizationIds": [
+                str(item["id"])
+                for item in (store.get("followedCreators") or [])
+                if isinstance(item, dict)
+                and item.get("id")
+                and item.get("type") == "organization"
+            ],
             "playbackSpeed": store.get("playbackSpeed"),
             "playCount": int(store.get("playCount") or 0),
             "lastPlayedAt": store.get("lastPlayedAt"),

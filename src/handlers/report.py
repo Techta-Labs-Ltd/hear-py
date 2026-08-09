@@ -25,6 +25,7 @@ from src.utils.feedback_flow import idle_next_response
 from src.utils.playback_context import read_audio_player_context, build_report_context
 from src.services.deferred_intent import has_deferred_intent, resume_deferred_intent
 from src.services.dialog_state import clear_active_dialog
+from src.services.moderation import record_report
 class ReportContentHandler(AbstractRequestHandler):
     """Flags the currently playing content for review."""
 
@@ -53,6 +54,14 @@ class ReportContentHandler(AbstractRequestHandler):
                 .response
 
         try:
+            record_report(
+                handler_input,
+                subject_type="content",
+                subject_id=str(content_id),
+                subject_name=report.get("title"),
+                content_id=str(content_id),
+                publication_id=report.get("publicationId"),
+            )
             update_store(handler_input, {
                 "awaitingReportDecision": False,
                 "reportContext": None,
@@ -96,6 +105,14 @@ class ReportCreatorHandler(AbstractRequestHandler):
                 .response
 
         try:
+            record_report(
+                handler_input,
+                subject_type="creator",
+                subject_id=str(creator_id),
+                subject_name=creator_name,
+                content_id=store.get("currentContentId") or store.get("feedbackContentId"),
+                publication_id=store.get("currentPublicationId"),
+            )
             await clear_feedback(handler_input)
 
             confirm = REPORT_CREATOR_CONFIRM(creator_name) \

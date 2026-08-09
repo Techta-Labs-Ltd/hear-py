@@ -208,6 +208,39 @@ def merge_initial_store(stored: dict | None) -> dict:
                 "type": source_type,
             })
         merged["followedCreators"] = normalized_followed[-50:]
+    publication_progress = merged.get("publicationFeedbackProgress")
+    if isinstance(publication_progress, dict):
+        capped_progress = {}
+        ordered = sorted(
+            publication_progress.items(),
+            key=lambda pair: int((pair[1] or {}).get("updatedAt") or 0),
+        )[-5:]
+        for publication_id, progress in ordered:
+            if not isinstance(progress, dict):
+                continue
+            tracks = progress.get("tracks") or {}
+            if isinstance(tracks, dict):
+                tracks = dict(list(tracks.items())[-100:])
+            capped_progress[str(publication_id)] = {**progress, "tracks": tracks}
+        merged["publicationFeedbackProgress"] = capped_progress
+    for history_key in ("feedbackHistory", "reportHistory"):
+        history = merged.get(history_key)
+        merged[history_key] = (
+            [item for item in history if isinstance(item, dict)][-100:]
+            if isinstance(history, list)
+            else []
+        )
+    pending_feedback = merged.get("pendingFeedback")
+    if (
+        isinstance(pending_feedback, dict)
+        and pending_feedback.get("publicationId")
+        and pending_feedback.get("subjectType") != "publication"
+    ):
+        merged["pendingFeedback"] = None
+        merged["awaitingFeedback"] = False
+        dialog = merged.get("activeDialog") or {}
+        if (dialog.get("type") or dialog.get("kind")) == "feedback":
+            merged["activeDialog"] = None
     return merged
 
 

@@ -8,6 +8,10 @@ from typing import Any
 from ask_sdk_core.handler_input import HandlerInput
 from config import settings
 from src.clients.alexa import cancel_feedback_reminder
+from src.services.feedback import (
+    activate_best_feedback_candidate,
+    finalize_other_publication_feedback,
+)
 from src.services.queue import read_playback_queue
 from src.utils.audio import (
     build_content_metadata,
@@ -61,6 +65,10 @@ def create_playback_session(
     offset_ms: int = 0,
 ) -> dict:
     """Create a starting playback record from one flat playable content item."""
+    if finalize_other_publication_feedback(
+        handler_input, content.get("publicationId"),
+    ):
+        activate_best_feedback_candidate(handler_input)
     now = int(time.time() * 1000)
     state = {
         "alexaUserId": get_user_id(handler_input),

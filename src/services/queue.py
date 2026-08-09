@@ -128,11 +128,36 @@ class PlaybackQueue:
             for item in items or []
             if isinstance(item, dict) and item.get("publicationTitle")
         }
+        publication_items = [
+            item for item in items or []
+            if isinstance(item, dict) and item.get("publicationId")
+        ]
+        publication_track_count = None
+        publication_total_duration_ms = None
+        if len(publication_ids) == 1:
+            declared_counts = []
+            for item in publication_items:
+                try:
+                    declared = int(item.get("trackCount") or 0)
+                except (TypeError, ValueError):
+                    declared = 0
+                if declared > 0:
+                    declared_counts.append(declared)
+            publication_track_count = max(declared_counts, default=len(publication_items))
+            durations = [item.get("durationMs") for item in publication_items]
+            if (
+                publication_track_count == len(publication_items)
+                and durations
+                and all(isinstance(value, (int, float)) and value > 0 for value in durations)
+            ):
+                publication_total_duration_ms = sum(int(value) for value in durations)
         queue = {
             "queueId": uuid.uuid4().hex,
             "source": source or "search",
             "publicationId": next(iter(publication_ids)) if len(publication_ids) == 1 else None,
             "publicationTitle": next(iter(publication_titles)) if len(publication_titles) == 1 else None,
+            "publicationTrackCount": publication_track_count,
+            "publicationTotalDurationMs": publication_total_duration_ms,
             "orderedContentIds": content_ids,
             "currentIndex": max(0, min(int(start_index or 0), max(len(content_ids) - 1, 0))),
             "createdAt": int(time.time() * 1000),

@@ -6,7 +6,12 @@ logger = logging.getLogger(__name__)
 import time
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
-from src.services.feedback import clear_feedback
+from src.services.feedback import (
+    activate_best_feedback_candidate,
+    clear_feedback,
+    finalize_publication_feedback,
+    update_publication_feedback_progress,
+)
 from src.services.queue import clear_queue, reset_queue_items_completed
 from src.services.store import get_store, update_store
 from src.utils.skill_request import get_user_id as get_alexa_user_id
@@ -871,7 +876,12 @@ class NoIntentHandler(AbstractRequestHandler):
     def _handle_resume_no(self, handler_input, store):
         state = read_playback_session(store)
         if state:
-            write_playback_session(handler_input, {"status": "abandoned"})
+            state = write_playback_session(handler_input, {"status": "abandoned"})
+            update_publication_feedback_progress(handler_input, state)
+            if finalize_publication_feedback(
+                handler_input, state.get("publicationId"),
+            ):
+                activate_best_feedback_candidate(handler_input)
         update_store(handler_input, {"awaitingResume": False})
         clear_active_dialog(handler_input, "resume")
         return handler_input.response_builder \
