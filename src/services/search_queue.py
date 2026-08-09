@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_MAX_CONCURRENT_PAGE_REQUESTS = 12
 _MAX_PREFETCH_BUDGET_MS = 6000
+_QUEUE_PREFETCH_PAGE_LIMIT = 100
+_BULK_PREFETCH_THRESHOLD_PAGES = 12
 
 
 async def prefetch_search_queue_items(
@@ -41,46 +43,55 @@ async def prefetch_search_queue_items(
     ):
         return queue_items
 
-    pages = list(range(int(current_page) + 1, int(total_pages)))
-    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_PAGE_REQUESTS)
     request_timeout_ms = min(timeout_ms or _MAX_PREFETCH_BUDGET_MS, _MAX_PREFETCH_BUDGET_MS)
+    deadline = time.monotonic() + (request_timeout_ms / 1000)
+    fetch_payload = dict(payload)
+    pages = list(range(int(current_page) + 1, int(total_pages)))
+    if int(current_page) == 0 and int(total_pages) > _BULK_PREFETCH_THRESHOLD_PAGES:
+        fetch_payload["limit"] = max(
+            int(fetch_payload.get("limit") or 0),
+            _QUEUE_PREFETCH_PAGE_LIMIT,
+        )
+        pages = [0]
 
-    async def fetch_page(page: int) -> tuple[int, dict[str, Any]]:
-        async with semaphore:
-            page_payload = {**payload, "page": page}
-            return page, await hear_client.search(
-                page_payload,
-                timeout_ms=request_timeout_ms,
-            )
-
-    tasks = [asyncio.create_task(fetch_page(page)) for page in pages]
-    done, pending = await asyncio.wait(
-        tasks,
-        timeout=request_timeout_ms / 1000,
-    )
-    for task in pending:
-        task.cancel()
-    if pending:
-        await asyncio.gather(*pending, return_exceptions=True)
-
-    page_results: dict[int, dict[str, Any]] = {}
-    for task in done:
-        try:
-            page, result = task.result()
-            page_results[page] = result
-        except Exception:
-            logger.warning("Hear: queue prefetch page request failed", exc_info=True)
-
-    for page in pages:
-        result = page_results.get(page)
-        if not result or result.get("failed"):
+    page_index = 0
+    while page_index < len(pages):
+        page = pages[page_index]
+        remaining_ms = int((deadline - time.monotonic()) * 1000)
+        if remaining_ms <= 0:
             logger.warning(
-                "Hear: queue prefetch stopped page=%s totalPages=%s timedOut=%s",
+                "Hear: queue prefetch stopped page=%s totalPages=%s timedOut=True",
                 page,
                 int(total_pages),
-                page not in page_results,
             )
             break
+        page_payload = {**fetch_payload, "page": page}
+        try:
+            result = await asyncio.wait_for(
+                hear_client.search(
+                    page_payload,
+                    timeout_ms=min(remaining_ms, request_timeout_ms),
+                ),
+                timeout=remaining_ms / 1000,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Hear: queue prefetch stopped page=%s totalPages=%s timedOut=True",
+                page,
+                int(total_pages),
+            )
+            break
+        if result.get("failed"):
+            logger.warning(
+                "Hear: queue prefetch stopped page=%s totalPages=%s timedOut=False",
+                page,
+                int(total_pages),
+            )
+            break
+        if pages == [0]:
+            bulk_total_pages = result.get("total_pages")
+            if isinstance(bulk_total_pages, (int, float)):
+                pages.extend(range(1, int(bulk_total_pages)))
         for item in result.get("results") or []:
             if not isinstance(item, dict):
                 continue
@@ -89,6 +100,7 @@ async def prefetch_search_queue_items(
                 continue
             seen_ids.add(str(content_id))
             queue_items.append({"contentId": str(content_id)})
+        page_index += 1
 
     logger.info(
         "Hear: queue prefetch complete pages=%s queuedContentIds=%s",
