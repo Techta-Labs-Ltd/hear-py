@@ -142,32 +142,13 @@ async def test_real_search_shape_reaches_playback_without_catalog_call_error(
 
 
 @pytest.mark.asyncio
-async def test_search_prefetches_all_pages_into_playback_queue(
+async def test_search_initializes_playback_queue_with_first_page_only(
     monkeypatch,
     mock_handler_input,
 ):
     start = AsyncMock(return_value={"response": "play"})
     monkeypatch.setattr("src.handlers.search.start_playback", start)
     hear_client = AsyncMock()
-    hear_client.search.side_effect = [
-        {
-            "results": [{"contentId": "content-3"}],
-            "total_hits": 4,
-            "total_pages": 3,
-            "page": 1,
-            "failed": False,
-        },
-        {
-            "results": [
-                {"contentId": "content-3"},
-                {"contentId": "content-4"},
-            ],
-            "total_hits": 4,
-            "total_pages": 3,
-            "page": 2,
-            "failed": False,
-        },
-    ]
 
     await auto_play_first_from_search(
         mock_handler_input,
@@ -192,36 +173,20 @@ async def test_search_prefetches_all_pages_into_playback_queue(
     assert store["playbackQueue"]["orderedContentIds"] == [
         "content-1",
         "content-2",
-        "content-3",
-        "content-4",
     ]
-    assert [call.args[0]["page"] for call in hear_client.search.await_args_list] == [1, 2]
+    assert store["playbackQueue"]["pagination"]["currentPage"] == 0
+    assert store["playbackQueue"]["pagination"]["totalPages"] == 3
+    hear_client.search.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_latest_search_prefetches_all_pages_into_navigation_queue(
+async def test_latest_search_initializes_lazy_navigation_queue(
     monkeypatch,
     mock_handler_input,
 ):
     start = AsyncMock(return_value={"response": "play"})
     monkeypatch.setattr("src.handlers.search.start_playback", start)
     hear_client = AsyncMock()
-    hear_client.search.side_effect = [
-        {
-            "results": [{"contentId": f"content-{index}"} for index in range(4, 7)],
-            "total_hits": 9,
-            "total_pages": 3,
-            "page": 1,
-            "failed": False,
-        },
-        {
-            "results": [{"contentId": f"content-{index}"} for index in range(7, 10)],
-            "total_hits": 9,
-            "total_pages": 3,
-            "page": 2,
-            "failed": False,
-        },
-    ]
     first_page = [{
         "id": f"content-{index}",
         "contentId": f"content-{index}",
@@ -244,12 +209,13 @@ async def test_latest_search_prefetches_all_pages_into_navigation_queue(
 
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
     assert store["playbackQueue"]["orderedContentIds"] == [
-        f"content-{index}" for index in range(1, 10)
+        f"content-{index}" for index in range(1, 4)
     ]
     assert [item["contentId"] for item in store["browseCatalog"]["items"]] == [
         "content-1", "content-2", "content-3",
     ]
-    assert [call.args[0]["page"] for call in hear_client.search.await_args_list] == [1, 2]
+    assert store["playbackQueue"]["pagination"]["totalPages"] == 3
+    hear_client.search.assert_not_awaited()
 
 
 @pytest.mark.asyncio

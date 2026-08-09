@@ -148,6 +148,26 @@ def test_publication_track_never_creates_individual_candidate_mid_queue(mock_han
     assert store["awaitingFeedback"] is False
 
 
+def test_loaded_page_boundary_is_not_publication_end_when_more_pages_exist():
+    state = {
+        "contentId": "track-2",
+        "publicationId": "publication-1",
+    }
+    store = {
+        "playbackQueue": {
+            "publicationId": "publication-1",
+            "orderedContentIds": ["track-0", "track-1", "track-2"],
+            "currentIndex": 2,
+            "pagination": {
+                "currentPage": 0,
+                "totalPages": 4,
+            },
+        },
+    }
+
+    assert FeedbackService._publication_is_last_track(state, store) is False
+
+
 def test_standalone_content_keeps_individual_feedback(mock_handler_input):
     _store(mock_handler_input)
     candidate = FeedbackService.record_candidate(mock_handler_input, {

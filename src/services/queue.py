@@ -111,6 +111,10 @@ class PlaybackQueue:
         locality: str | None = None,
         category: str | None = None,
         start_index: int = 0,
+        search_payload: dict | None = None,
+        current_page: int | None = None,
+        total_pages: int | None = None,
+        page_limit: int | None = None,
     ) -> dict:
         del locality, category
         content_ids = []
@@ -162,6 +166,17 @@ class PlaybackQueue:
             "currentIndex": max(0, min(int(start_index or 0), max(len(content_ids) - 1, 0))),
             "createdAt": int(time.time() * 1000),
         }
+        if (
+            isinstance(search_payload, dict)
+            and isinstance(total_pages, (int, float))
+            and int(total_pages) > int(current_page or 0) + 1
+        ):
+            queue["pagination"] = {
+                "searchPayload": dict(search_payload),
+                "currentPage": int(current_page or 0),
+                "totalPages": int(total_pages),
+                "limit": int(page_limit or search_payload.get("limit") or settings.search_page_limit),
+            }
         return update_store(handler_input, {"playbackQueue": queue})
 
     @staticmethod

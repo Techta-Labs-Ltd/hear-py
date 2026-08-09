@@ -39,7 +39,10 @@ from src.utils.dynamic_entities import build_ambiguity_dynamic_entities_directiv
 from src.utils.lambda_deadline import compute_search_timeout_ms, get_lambda_remaining_ms
 from src.utils.search_filters import wants_latest_playback
 from src.services.playback import start_playback
-from src.services.search_queue import prefetch_search_queue_items
+from src.services.search_queue import (
+    initial_search_queue_items,
+    search_queue_pagination,
+)
 _DEFAULT_SEARCH_PAGE_LIMIT = settings.search_page_limit
 logger = logging.getLogger(__name__)
 
@@ -423,17 +426,14 @@ async def auto_play_first_from_search(
     else:
         intro = f"I found {total} stories. Now playing the first one."
 
-    queue_items = await prefetch_search_queue_items(
-        search_result,
-        d.heara,
-        timeout_ms=compute_search_timeout_ms(handler_input),
-    )
+    queue_items = initial_search_queue_items(search_result)
     init_queue(
         handler_input,
         queue_items,
         source=intent or "search",
         locality=store.get("locality"),
         start_index=0,
+        **search_queue_pagination(search_result),
     )
 
     return await start_playback(handler_input, content, intro, 0, {"preserveSessionQueue": True})
@@ -555,17 +555,14 @@ async def _play_first_search_result(
     )
     set_browse_catalog(handler_input, catalog, intent=intent)
 
-    queue_items = await prefetch_search_queue_items(
-        search_result,
-        d.heara,
-        timeout_ms=compute_search_timeout_ms(handler_input),
-    )
+    queue_items = initial_search_queue_items(search_result)
     init_queue(
         handler_input,
         queue_items,
         source=intent,
         locality=store.get("locality"),
         start_index=0,
+        **search_queue_pagination(search_result),
     )
 
     return await start_playback(handler_input, content, intro, 0, {"preserveSessionQueue": True})

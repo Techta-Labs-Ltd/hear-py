@@ -7,7 +7,8 @@ from src.services.playback import ACTIVE_STATUSES, read_playback_session, write_
 from src.services.playback import emit_listening_event
 from src.services.playback import resume_playback, start_playback
 from src.services.dialog_state import clear_transient_discovery_dialog
-from src.services.queue import move_queue
+from src.services.queue import cached_queue_content, move_queue
+from src.services.search_queue import load_next_search_queue_page
 from src.services.store import get_store, update_store
 from src.utils.audio import (
     build_stop_directive,
@@ -97,13 +98,20 @@ async def _restart_active(
 
 
 async def _play_queue_delta(handler_input: HandlerInput, delta: int, speech: str, *, deps: Dependencies | None = None):
+    d = deps or Dependencies()
     content_id = move_queue(handler_input, delta)
+    if not content_id and delta > 0:
+        loaded = await load_next_search_queue_page(handler_input, d.heara)
+        if loaded:
+            content_id = move_queue(handler_input, delta)
     if not content_id:
         return _open_response(
             handler_input,
             NO_PREVIOUS if delta < 0 else NO_CONTENT_AVAILABLE,
         )
-    content = await _find_content(handler_input, content_id, deps=deps)
+    content = cached_queue_content(get_store(handler_input), content_id)
+    if not content:
+        content = await _find_content(handler_input, content_id, deps=d)
     if not content:
         # Restore the queue cursor when resolution fails.
         move_queue(handler_input, -delta)

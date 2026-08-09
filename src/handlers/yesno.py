@@ -41,7 +41,13 @@ from src.utils.audio import build_stop_directive
 from src.utils.feedback_flow import idle_next_response
 from src.services.playback import resume_playback, start_playback
 from src.services.playback import read_playback_session, write_playback_session
-from src.services.queue import move_queue, queue_content_id, read_playback_queue
+from src.services.queue import (
+    cached_queue_content,
+    move_queue,
+    queue_content_id,
+    read_playback_queue,
+)
+from src.services.search_queue import load_next_search_queue_page
 from src.handlers.play import PlayByCreatorHandler
 from src.handlers.play import PlayByOrganizationHandler
 from src.handlers.play import PlayContentHandler
@@ -526,6 +532,11 @@ class YesIntentHandler(AbstractRequestHandler):
 
         queue = read_playback_queue(store)
         next_id = move_queue(handler_input, 1)
+        if queue and not next_id:
+            loaded = await load_next_search_queue_page(handler_input, self._deps.heara)
+            if loaded:
+                queue = read_playback_queue(get_store(handler_input))
+                next_id = move_queue(handler_input, 1)
         if not queue or not next_id:
             clear_queue(handler_input)
             return handler_input.response_builder \
@@ -543,16 +554,17 @@ class YesIntentHandler(AbstractRequestHandler):
         user_id = get_alexa_user_id(handler_input)
         if user_id:
             payload["alexaUserId"] = user_id
-        result = await self._deps.heara.search(payload)
-        if not result.get("results"):
-            clear_queue(handler_input)
-            return handler_input.response_builder \
-                .speak(ssml(NO_CONTENT_AVAILABLE)) \
-                .reprompt(WELCOME_REPROMPT) \
-                .set_should_end_session(False) \
-                .response
-
-        content = result["results"][0]
+        content = cached_queue_content(get_store(handler_input), next_id)
+        if not content:
+            result = await self._deps.heara.search(payload)
+            if not result.get("results"):
+                clear_queue(handler_input)
+                return handler_input.response_builder \
+                    .speak(ssml(NO_CONTENT_AVAILABLE)) \
+                    .reprompt(WELCOME_REPROMPT) \
+                    .set_should_end_session(False) \
+                    .response
+            content = result["results"][0]
         current_index = int(read_playback_queue(get_store(handler_input)).get("currentIndex") or 0)
         total = len(queue["orderedContentIds"])
         intro = QUEUE_NEXT_ANNOUNCE(

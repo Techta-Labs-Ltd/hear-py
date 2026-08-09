@@ -15,6 +15,7 @@ from src.utils.skill_request import (
 )
 from src.dependencies import Dependencies
 from src.services.queue import cached_queue_content
+from src.services.search_queue import load_next_search_queue_page
 from src.utils.audio import (
     build_content_metadata,
     build_play_directive,
@@ -46,7 +47,16 @@ async def _enqueue_next_queued_content(handler_input, token: str, deps: Dependen
         return handler_input.response_builder.response
     next_index = int(queue.get("currentIndex") or 0) + 1
     if next_index >= len(queue["orderedContentIds"]):
-        return handler_input.response_builder.response
+        loaded = await load_next_search_queue_page(handler_input, deps.heara)
+        if not loaded:
+            return handler_input.response_builder.response
+        store = get_store(handler_input)
+        queue = read_playback_queue(store)
+        if not queue:
+            return handler_input.response_builder.response
+        next_index = int(queue.get("currentIndex") or 0) + 1
+        if next_index >= len(queue["orderedContentIds"]):
+            return handler_input.response_builder.response
     next_id = queue["orderedContentIds"][next_index]
     prepared = store.get("preparedNextContent")
     if isinstance(prepared, dict) and prepared.get("contentId") == next_id:

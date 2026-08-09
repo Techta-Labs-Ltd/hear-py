@@ -162,8 +162,15 @@ class FeedbackService:
             if track_index + 1 >= track_count:
                 return True
         queue = read_playback_queue(store)
+        pagination = queue.get("pagination") if queue else None
+        has_more_pages = bool(
+            isinstance(pagination, dict)
+            and int(pagination.get("currentPage") or 0) + 1
+            < int(pagination.get("totalPages") or 0)
+        )
         return bool(
             queue
+            and not has_more_pages
             and queue.get("publicationId") == state.get("publicationId")
             and int(queue.get("currentIndex") or 0) >= len(queue["orderedContentIds"]) - 1
         )
