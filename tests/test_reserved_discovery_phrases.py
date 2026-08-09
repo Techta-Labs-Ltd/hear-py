@@ -175,59 +175,24 @@ async def test_elicited_pendle_voice_follow_up_reaches_resolver(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("intent_name", "canonical"), [
-    ("BrowseContentIntent", "what's new"),
-    ("PlayLocalIntent", "play local content"),
-    ("PlayRecommendationIntent", "recommend something"),
+@pytest.mark.parametrize(("intent_name", "expected_intent", "expected_sort"), [
+    ("WhatsTrendingIntent", "trending", "trending"),
+    ("PlayRecommendationIntent", "trending", "trending"),
+    ("BrowseContentIntent", "browse", "latest"),
+    ("PlayLocalIntent", "local", "latest"),
 ])
-async def test_zero_slot_discovery_uses_canonical_resolver_utterance(
+async def test_complete_zero_slot_discovery_stays_out_of_resolver(
     monkeypatch,
     mock_handler_input,
     intent_name,
-    canonical,
+    expected_intent,
+    expected_sort,
 ):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict({
         "type": "IntentRequest",
         "locale": "en-GB",
         "intent": {"name": intent_name, "slots": {}},
-    })
-    mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
-        "onboardingComplete": True,
-    }
-    resolve = AsyncMock(return_value={
-        "status": "resolved",
-        "intent": "search",
-        "confirmationLabel": canonical,
-        "searchPayload": {"query": canonical, "filter": {}},
-        "slots": {"residualQuery": canonical},
-        "ambiguities": [],
-    })
-    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-
-    await ResolverInterceptor().process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-
-    resolve.assert_awaited_once_with(
-        canonical,
-        alexa_user_id="amzn1.ask.account.TEST",
-    )
-    assert mock_handler_input.attributes_manager.request_attributes.get(
-        "_pendingConfirmation"
-    )
-
-
-@pytest.mark.asyncio
-async def test_bare_whats_trending_is_complete_without_resolver_or_confirmation(
-    monkeypatch,
-    mock_handler_input,
-):
-    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
-    mock_handler_input.request_envelope.request = AttrDict({
-        "type": "IntentRequest",
-        "locale": "en-GB",
-        "intent": {"name": "WhatsTrendingIntent", "slots": {}},
     })
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
         **DEFAULT_STORE,
@@ -241,8 +206,9 @@ async def test_bare_whats_trending_is_complete_without_resolver_or_confirmation(
 
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
-    assert nlp["intent"] == "trending"
-    assert nlp["searchPayload"]["sort"] == "trending"
+    assert nlp["intent"] == expected_intent
+    assert nlp["searchPayload"]["sort"] == expected_sort
+    assert nlp["directDiscoveryRequest"] is True
     assert mock_handler_input.attributes_manager.request_attributes.get(
         "_pendingConfirmation"
     ) is None

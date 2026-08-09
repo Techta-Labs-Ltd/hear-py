@@ -288,7 +288,7 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             handler_input.attributes_manager.request_attributes = attrs
             return
 
-        if alexa_intent == "WhatsTrendingIntent" and nlp.get("intent") == "trending":
+        if nlp.get("directDiscoveryRequest"):
             attrs.pop("_pendingConfirmation", None)
             attrs.pop("_resolverClarification", None)
             handler_input.attributes_manager.request_attributes = attrs
@@ -396,7 +396,7 @@ class SearchConfirmationGateHandler(AbstractRequestHandler):
             return False
         if _has_pending_ambiguity(nlp):
             return False
-        if alexa_intent == "WhatsTrendingIntent" and nlp.get("intent") == "trending":
+        if nlp.get("directDiscoveryRequest"):
             return False
         nlp_slots = nlp.get("slots") or {}
         if (

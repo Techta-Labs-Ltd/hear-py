@@ -281,6 +281,7 @@ def test_bare_trending_request_bypasses_confirmation():
         "_nlp": {
             "status": "resolved",
             "intent": "trending",
+            "directDiscoveryRequest": True,
             "searchPayload": {"query": "", "filter": {}, "sort": "trending"},
             "slots": {"residualQuery": ""},
         },

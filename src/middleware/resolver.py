@@ -248,6 +248,112 @@ def _set_nlp(handler_input, payload: dict) -> None:
     handler_input.attributes_manager.request_attributes = attrs
 
 
+def _local_discovery_resolution(
+    alexa_intent: str,
+    intent_slots: dict,
+    raw: str | None,
+) -> dict | None:
+    """Return discovery requests whose meaning Alexa has already supplied."""
+    topic = get_resolved_slot_value(intent_slots.get("topic"))
+    date_query = get_resolved_slot_value(intent_slots.get("dateQuery"))
+
+    direct: dict[str, tuple[str, str]] = {
+        "WhatsTrendingIntent": ("trending", "trending"),
+        "PlayRecommendationIntent": ("trending", "trending"),
+        "BrowseContentIntent": ("browse", "latest"),
+        "PlayLocalIntent": ("local", "latest"),
+    }
+    direct_slot_names = {
+        "WhatsTrendingIntent": ("topic", "dateQuery"),
+        "PlayRecommendationIntent": ("recommendationQuery",),
+        "BrowseContentIntent": ("dateQuery",),
+        "PlayLocalIntent": ("localQuery",),
+    }
+    if alexa_intent in direct and not any(
+        get_resolved_slot_value(intent_slots.get(name))
+        for name in direct_slot_names[alexa_intent]
+    ):
+        intent_name, sort = direct[alexa_intent]
+        return {
+            "status": "resolved",
+            "intent": intent_name,
+            "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, intent_name),
+            "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": True,
+            "needsRedirect": False,
+            "localResolved": True,
+            "directDiscoveryRequest": True,
+            "searchPayload": {
+                "query": "",
+                "filter": {},
+                "sort": sort,
+                "page": 0,
+                "limit": 20,
+            },
+            "slots": {
+                "residualQuery": "",
+                "isRecommended": intent_name == "trending",
+                "sort": sort,
+            },
+        }
+
+    if alexa_intent == "PlayByCreatorIntent" and not is_meaningful_creator_source(raw):
+        return {
+            "status": "resolved", "intent": "creator",
+            "alexaIntent": "creator", "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": True, "needsRedirect": False,
+            "localResolved": True,
+            "slots": {"creatorQuery": "", "genericCreatorRequest": True},
+        }
+
+    generic_organization = (
+        alexa_intent == "PlayByOrganizationIntent"
+        and not is_meaningful_organization_source(raw)
+    ) or (
+        alexa_intent == "PlayContentIntent"
+        and is_generic_organization_request(raw)
+    )
+    if generic_organization:
+        return {
+            "status": "resolved", "intent": "organization",
+            "alexaIntent": "organization", "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": alexa_intent == "PlayByOrganizationIntent",
+            "needsRedirect": alexa_intent != "PlayByOrganizationIntent",
+            "localResolved": True,
+            "slots": {
+                "organizationQuery": "", "genericOrganizationRequest": True,
+            },
+        }
+
+    if alexa_intent == "PlayPublicationIntent":
+        source = get_resolved_slot_value(intent_slots.get("publicationSourceQuery"))
+        if not is_meaningful_publication_source(source):
+            return {
+                "status": "resolved", "intent": "publication",
+                "alexaIntent": "publication", "alexaRawIntent": alexa_intent,
+                "nlpMatchesAlexa": True, "needsRedirect": False,
+                "localResolved": True, "publicationSourceRequired": True,
+                "slots": {
+                    "publicationSourceQuery": source or "",
+                    "publicationSort": get_resolved_slot_value(
+                        intent_slots.get("publicationSort")
+                    ),
+                    "dateQuery": date_query,
+                },
+            }
+
+    if alexa_intent in SEARCH_INTENTS and is_reserved_discovery_phrase(raw):
+        return {
+            "status": "resolved", "intent": "general",
+            "alexaIntent": "general", "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": True, "needsRedirect": False,
+            "localResolved": True,
+            "searchPayload": {"query": "", "filter": {}},
+            "slots": {"residualQuery": ""},
+        }
+    return None
+
+
 class ResolverInterceptor(AbstractRequestInterceptor):
 
     def __init__(self, *, deps: Dependencies | None = None):
@@ -310,100 +416,19 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 return
 
             raw = _extract_raw_utterance(handler_input, alexa_intent)
-            if alexa_intent == "WhatsTrendingIntent":
-                trending_slots = intent_obj.slots or {}
-                topic = get_resolved_slot_value(trending_slots.get("topic"))
-                date_query = get_resolved_slot_value(trending_slots.get("dateQuery"))
-                if not topic and not date_query:
-                    _set_nlp(handler_input, {
-                        "status": "resolved",
-                        "intent": "trending",
-                        "alexaIntent": "trending",
-                        "alexaRawIntent": alexa_intent,
-                        "nlpMatchesAlexa": True,
-                        "needsRedirect": False,
-                        "localResolved": True,
-                        "searchPayload": {
-                            "query": "",
-                            "filter": {},
-                            "sort": "trending",
-                            "page": 0,
-                            "limit": 20,
-                        },
-                        "slots": {
-                            "residualQuery": "",
-                            "isRecommended": True,
-                            "sort": "trending",
-                        },
-                    })
-                    logger.info("Hear: bare trending request handled locally")
-                    return
-            if (
-                alexa_intent == "PlayByCreatorIntent"
-                and not is_meaningful_creator_source(raw)
-            ):
-                _set_nlp(handler_input, {
-                    "status": "resolved",
-                    "intent": "creator",
-                    "alexaIntent": "creator",
-                    "alexaRawIntent": alexa_intent,
-                    "nlpMatchesAlexa": True,
-                    "needsRedirect": False,
-                    "localResolved": True,
-                    "slots": {
-                        "creatorQuery": "",
-                        "genericCreatorRequest": True,
-                    },
-                })
-                logger.info("Hear: creator name required; resolver skipped")
-                return
-            if (
-                (
-                    alexa_intent == "PlayByOrganizationIntent"
-                    and not is_meaningful_organization_source(raw)
+            local_resolution = _local_discovery_resolution(
+                alexa_intent,
+                intent_obj.slots or {},
+                raw,
+            )
+            if local_resolution:
+                _set_nlp(handler_input, local_resolution)
+                logger.info(
+                    "Hear: discovery request handled locally intent=%s result=%s",
+                    alexa_intent,
+                    local_resolution.get("intent"),
                 )
-                or (
-                    alexa_intent == "PlayContentIntent"
-                    and is_generic_organization_request(raw)
-                )
-            ):
-                _set_nlp(handler_input, {
-                    "status": "resolved",
-                    "intent": "organization",
-                    "alexaIntent": "organization",
-                    "alexaRawIntent": alexa_intent,
-                    "nlpMatchesAlexa": alexa_intent == "PlayByOrganizationIntent",
-                    "needsRedirect": alexa_intent != "PlayByOrganizationIntent",
-                    "localResolved": True,
-                    "slots": {
-                        "organizationQuery": "",
-                        "genericOrganizationRequest": True,
-                    },
-                })
-                logger.info("Hear: talking newspaper name required; resolver skipped")
                 return
-            if alexa_intent == "PlayPublicationIntent":
-                slots = intent_obj.slots or {}
-                source_slot = slots.get("publicationSourceQuery")
-                source = get_resolved_slot_value(source_slot)
-                if not is_meaningful_publication_source(source):
-                    _set_nlp(handler_input, {
-                        "status": "resolved",
-                        "intent": "publication",
-                        "alexaIntent": "publication",
-                        "alexaRawIntent": alexa_intent,
-                        "nlpMatchesAlexa": True,
-                        "needsRedirect": False,
-                        "localResolved": True,
-                        "publicationSourceRequired": True,
-                        "slots": {
-                            "publicationSourceQuery": source or "",
-                            "publicationSort": get_resolved_slot_value(slots.get("publicationSort")),
-                            "dateQuery": get_resolved_slot_value(slots.get("dateQuery")),
-                        },
-                    })
-                    logger.info("Hear: publication source required; resolver skipped")
-                    return
             if not raw and alexa_intent in SEARCH_INTENTS:
                 raw = CANONICAL_ZERO_SLOT_DISCOVERY.get(alexa_intent)
             store = handler_input.attributes_manager.request_attributes.get("_store") or {}
@@ -483,44 +508,6 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                     "confidence": "high",
                     "slots": {"townName": raw, "placeName": raw},
                 })
-                return
-
-            if (
-                raw
-                and alexa_intent in SEARCH_INTENTS
-                and is_reserved_discovery_phrase(raw)
-            ):
-                logger.info(
-                    "Hear: reserved discovery phrase handled locally intent=%s phrase=%r",
-                    alexa_intent,
-                    raw,
-                )
-                if alexa_intent == "PlayByOrganizationIntent":
-                    _set_nlp(handler_input, {
-                        "status": "resolved",
-                        "intent": "organization",
-                        "alexaIntent": "organization",
-                        "alexaRawIntent": alexa_intent,
-                        "nlpMatchesAlexa": True,
-                        "needsRedirect": False,
-                        "localResolved": True,
-                        "slots": {
-                            "organizationQuery": "",
-                            "genericOrganizationRequest": True,
-                        },
-                    })
-                else:
-                    _set_nlp(handler_input, {
-                        "status": "resolved",
-                        "intent": "general",
-                        "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
-                        "alexaRawIntent": alexa_intent,
-                        "nlpMatchesAlexa": True,
-                        "needsRedirect": False,
-                        "localResolved": True,
-                        "searchPayload": {"query": "", "filter": {}},
-                        "slots": {"residualQuery": ""},
-                    })
                 return
 
             if raw and store.get("awaitingCreatorName"):
