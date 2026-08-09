@@ -223,6 +223,10 @@ def test_bare_play_asks_what_to_play_without_search_confirmation():
 
     assert "What would you like me to play?" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
+    assert response["directives"] == [{
+        "type": "Dialog.ElicitSlot",
+        "slotToElicit": "topic",
+    }]
     store = get_store(handler_input)
     assert store["awaitingSearchConfirmation"] is False
 

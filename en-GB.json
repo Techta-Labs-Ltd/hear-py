@@ -1175,6 +1175,22 @@
       "delegationStrategy": "SKILL_RESPONSE",
       "intents": [
         {
+          "name": "PlayContentIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "topic",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": false,
+              "prompts": {
+                "elicitation": "Elicit.PlayContentIntent.topic"
+              }
+            }
+          ]
+        },
+        {
           "name": "TownCaptureIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1241,6 +1257,15 @@
       ]
     },
     "prompts": [
+      {
+        "id": "Elicit.PlayContentIntent.topic",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper."
+          }
+        ]
+      },
       {
         "id": "Elicit.TownCaptureIntent.townName",
         "variations": [

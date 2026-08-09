@@ -22,6 +22,15 @@ _ALEXA_DISCOVERY_INTENTS: set[str] = {
     "WhatsTrendingIntent", "PlayLocalIntent", "PlayRecommendationIntent",
 }
 
+_DISCOVERY_QUERY_SLOTS: dict[str, str] = {
+    "PlayContentIntent": "topic",
+    "PlayByCreatorIntent": "creatorQuery",
+    "PlayByOrganizationIntent": "organizationQuery",
+    "PlayPublicationIntent": "publicationSourceQuery",
+    "PlayLocalIntent": "localQuery",
+    "PlayRecommendationIntent": "recommendationQuery",
+}
+
 def _has_meaningful_general_request(nlp: dict, raw: str | None) -> bool:
     slots = nlp.get("slots") or {}
     payload = nlp.get("searchPayload") or slots.get("searchPlan") or {}
@@ -265,6 +274,11 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             attrs["_resolverClarification"] = {
                 "speech": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper.",
                 "reprompt": "What would you like to play?",
+                "elicitSlot": (
+                    _DISCOVERY_QUERY_SLOTS.get(alexa_intent)
+                    if not raw
+                    else None
+                ),
             }
             attrs.pop("_pendingConfirmation", None)
             handler_input.attributes_manager.request_attributes = attrs
@@ -275,6 +289,11 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             attrs["_resolverClarification"] = {
                 "speech": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper.",
                 "reprompt": "What would you like to play?",
+                "elicitSlot": (
+                    _DISCOVERY_QUERY_SLOTS.get(alexa_intent)
+                    if not raw
+                    else None
+                ),
             }
             attrs.pop("_pendingConfirmation", None)
             handler_input.attributes_manager.request_attributes = attrs

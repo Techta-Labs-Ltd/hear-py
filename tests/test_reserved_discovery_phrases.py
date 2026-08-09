@@ -104,6 +104,55 @@ async def test_meaningful_news_still_calls_resolver(monkeypatch, mock_handler_in
 
 
 @pytest.mark.asyncio
+async def test_elicited_pendle_voice_follow_up_reaches_resolver(
+    monkeypatch,
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {"topic": {"name": "topic", "value": "Pendle Voice"}},
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+    }
+    resolve = AsyncMock(return_value={
+        "status": "ambiguous",
+        "intent": "search",
+        "slots": {"residualQuery": ""},
+        "searchPayload": {"query": "", "filter": {}},
+        "ambiguities": [{
+            "phrase": "pendle voice",
+            "candidates": [{
+                "type": "creator",
+                "id": "creator-leader",
+                "name": "Pendle Voice Leader and Times",
+            }, {
+                "type": "creator",
+                "id": "creator-dalesman",
+                "name": "Pendle Voice Dalesman",
+            }],
+        }],
+    })
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        "Pendle Voice",
+        alexa_user_id="amzn1.ask.account.TEST",
+    )
+    assert mock_handler_input.attributes_manager.request_attributes["_nlp"][
+        "status"
+    ] == "ambiguous"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("intent_name", "canonical"), [
     ("BrowseContentIntent", "what's new"),
     ("WhatsTrendingIntent", "what's trending"),
