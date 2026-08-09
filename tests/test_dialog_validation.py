@@ -113,7 +113,7 @@ def test_onboarding_town_confirmation_accepts_only_yes_or_no(mock_handler_input)
 
     _intent(mock_handler_input, "PlayByCreatorIntent")
     failure = dialog_validation_failure(mock_handler_input)
-    assert "correct town or city" in failure["speech"]
+    assert "correct city" in failure["speech"]
 
 
 def test_current_onboarding_stage_overrides_stale_permission_dialog(mock_handler_input):

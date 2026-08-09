@@ -199,7 +199,7 @@ async def test_town_resolver_failure_retries_once_without_closing_session(
 
     store = get_store(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
-    assert "try your town or city again" in speech
+    assert "try the city name again" in speech
     retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
     retry_builder.add_directive.assert_called_once_with({
         "type": "Dialog.ElicitSlot",

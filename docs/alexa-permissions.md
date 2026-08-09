@@ -14,7 +14,20 @@ For development skill `amzn1.ask.skill.502ef74e-db9f-485f-acdd-13d23c895e59`:
 6. Reopen Hear. The next request re-checks the granted scope and fetches the
    device address. Hear resolves the returned city through its locality
    resolver to obtain canonical latitude and longitude before asking the user
-   to confirm the town. A voice-only Echo does not display a visual card.
+   to confirm the city. A voice-only Echo does not display a visual card.
+
+The Device Settings API can return `204 No Content` even after consent. This
+means Alexa accepted the request but has no address payload for the requesting
+device, so there is no city for the skill to read. Check the address on the
+specific Echo under **Alexa app → Devices → Echo & Alexa → Device Location**,
+then relaunch Hear. The skill falls back to spoken city entry and, after three
+unsuccessful attempts, gives this setup path again or lets the user say skip.
+
+Alexa controls delivery of the `AskForPermissionsConsent` card. If it is not
+visible in Activity, use **More → Skills & Games → Your Skills → Dev → test
+development → Settings → Manage Permissions** and enable Device Address
+directly. The backend must not claim that phone delivery succeeded merely
+because the response contained the consent-card JSON.
 
 The requested runtime scope is:
 

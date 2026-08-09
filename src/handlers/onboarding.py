@@ -27,6 +27,7 @@ from src.utils.speech import (
     REPROMPT_NO_CITY,
     TOWN_LOOKUP_UNAVAILABLE_RETRY,
     TOWN_LOOKUP_UNAVAILABLE_CONTINUE,
+    CITY_SETUP_GUIDANCE,
     WELCOME_RETURN_NAMED,
     WELCOME_RETURN_CITY,
     WELCOME_RETURN_GENERIC,
@@ -57,7 +58,7 @@ PERMISSIONS = {"DEVICE_ADDRESS": DEVICE_ADDRESS, "GEOLOCATION": GEOLOCATION_READ
 logger = logging.getLogger(__name__)
 
 
-TOWN_CONFIRM_REPROMPT = "Say yes to confirm, or no to set a different town."
+TOWN_CONFIRM_REPROMPT = "Say yes to confirm, or no to set a different city."
 
 
 def _update_onboarding_session(handler_input: HandlerInput, **updates: Any) -> None:
@@ -253,13 +254,12 @@ def start_town_capture(handler_input: HandlerInput, store: Dict[str, Any], name:
 
 
 def resume_town_capture(handler_input: HandlerInput, store: Dict[str, Any]):
-    """Retry or give up on town capture based on attempt count."""
-    attempts = store.get("onboardingTownAttempts", 0)
-    if attempts >= MAX_TOWN_ATTEMPTS:
-        return finalize_town_skipped(handler_input, store)
-    update_store(handler_input, {"onboardingTownAttempts": attempts + 1})
+    """Retry city capture, then give actionable setup guidance without auto-skipping."""
+    attempts = int(store.get("onboardingTownAttempts") or 0) + 1
+    update_store(handler_input, {"onboardingTownAttempts": attempts})
+    speech = CITY_SETUP_GUIDANCE if attempts >= MAX_TOWN_ATTEMPTS else TOWN_NOT_UNDERSTOOD
     return _town_retry_response(
-        handler_input, TOWN_NOT_UNDERSTOOD, REPROMPT_ASK_TOWN,
+        handler_input, speech, REPROMPT_ASK_TOWN,
     )
 
 
@@ -331,7 +331,7 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
             })
             return _town_retry_response(
                 handler_input,
-                f"Did you mean {spoken}? Please say the full town name.",
+                f"Did you mean {spoken}? Please say the full city name.",
                 REPROMPT_ASK_TOWN,
             )
         normalized_phrase = _normalize_control_phrase(phrase)

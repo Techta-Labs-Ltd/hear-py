@@ -729,7 +729,7 @@ class NoIntentHandler(AbstractRequestHandler):
             })
             return handler_input.response_builder \
                 .speak(ssml(LOCATION_RETRY)) \
-                .reprompt(ssml("Which town or city should I set?")) \
+                .reprompt(ssml("Which city should I set?")) \
                 .set_should_end_session(False) \
                 .response
 

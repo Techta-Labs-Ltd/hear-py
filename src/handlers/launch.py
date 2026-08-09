@@ -297,7 +297,7 @@ class SetLocationHandler(AbstractRequestHandler):
             "onboardingTownAttempts": 0,
         })
         return handler_input.response_builder \
-            .speak(ssml("Sure. Which town or city are you in now?")) \
-            .reprompt(ssml("Which town or city should I set as your location?")) \
+            .speak(ssml("Sure. Which city are you in now?")) \
+            .reprompt(ssml("Which city should I set as your location?")) \
             .set_should_end_session(False) \
             .response

@@ -149,7 +149,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
 
         return handler_input.response_builder \
             .speak(ssml(
-                "Please answer yes to use your device location, or no to enter your town manually."
+                "Please answer yes to use your device location, or no to enter your city manually."
             )) \
             .set_should_end_session(False) \
             .response

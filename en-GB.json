@@ -1271,7 +1271,7 @@
         "variations": [
           {
             "type": "PlainText",
-            "value": "Which town or city are you in?"
+            "value": "Which city are you in?"
           }
         ]
       },
@@ -1280,7 +1280,7 @@
         "variations": [
           {
             "type": "PlainText",
-            "value": "Which town or city are you in?"
+            "value": "Which city are you in?"
           }
         ]
       },

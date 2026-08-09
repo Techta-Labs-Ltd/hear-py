@@ -98,7 +98,7 @@ def _onboarding_binary_prompt(stage: str) -> tuple[str, str]:
     if stage == "ask_permission":
         speech = "Would you like me to use your device location? Please say yes or no."
     else:
-        speech = "Is that the correct town or city? Please say yes or no."
+        speech = "Is that the correct city? Please say yes or no."
     return speech, "Please say yes or no."
 
 

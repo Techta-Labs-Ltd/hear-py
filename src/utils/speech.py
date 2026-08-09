@@ -139,8 +139,8 @@ def is_bad_credit(value) -> bool:
 # ── Welcome / Onboarding ───────────────────────────────────────────
 
 WELCOME_FIRST_ASK_TOWN = lambda name: (
-    f"Hello {escape_ssml_lite(name)}, welcome to Hear. Which town or city are you in?"
-    if name else "Hello, welcome to Hear. Which town or city are you in?"
+    f"Hello {escape_ssml_lite(name)}, welcome to Hear. Which city are you in?"
+    if name else "Hello, welcome to Hear. Which city are you in?"
 )
 
 WELCOME_FIRST_HAS_CITY = lambda name, city=None: (
@@ -157,9 +157,13 @@ TOWN_GOT_IT = lambda city: f"{escape_ssml_lite(city) or 'your area'} it is. What
 
 TOWN_SKIPPED = "Okay. What would you like to listen to?"
 
-TOWN_NOT_UNDERSTOOD = "I couldn't identify that location. Please say the full name of your town or city, or say skip to continue without one."
-TOWN_LOOKUP_UNAVAILABLE_RETRY = "I can't check that location right now. Please try your town or city again."
-TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check towns, so I'll continue without your location. You can set it later. What would you like to listen to?"
+TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say the full city name, or say skip to continue without one."
+TOWN_LOOKUP_UNAVAILABLE_RETRY = "I can't check that city right now. Please try the city name again."
+TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
+CITY_SETUP_GUIDANCE = (
+    "Sorry, I still couldn't identify your city. You can update Device Location for this Echo "
+    "in the Alexa app and then relaunch Hear, try saying your city again, or say skip to continue."
+)
 
 REPROMPT_CITY = lambda city: (
     f"Say the latest from {escape_ssml_lite(city) or 'your area'}, what's popular, or what's on."
@@ -167,11 +171,11 @@ REPROMPT_CITY = lambda city: (
 
 REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
 
-REPROMPT_ASK_TOWN = "What town or city are you in? You can also say skip."
+REPROMPT_ASK_TOWN = "Which city are you in? You can also say skip."
 
-ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, what town or city are you in?"
+ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which city are you in?"
 
-COMMUNITY_NEEDS_TOWN = "I'll need your town to find local content. Would you like to set that up?"
+COMMUNITY_NEEDS_TOWN = "I'll need your city to find local content. Would you like to set that up?"
 
 WELCOME_REPROMPT = "You can say play followed by a topic, or what's trending. What would you like?"
 
@@ -535,8 +539,11 @@ NO_TRACKS_AVAILABLE = "Welcome to Hear. There are no tracks available right now.
 # ── Onboarding ──────────────────────────────────────────────────────
 
 ONBOARDING_ASK_PERMISSION = "Welcome to Hear. I can bring you the latest audio from your local community \u2014 news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright?"
-ONBOARDING_CONSENT_CARD_SENT = "I've sent a card to your Alexa app \u2014 open it and tap to share your location. If you'd rather not, you can just tell me your town and I'll take it from there."
-ONBOARDING_LOCATION_DENIED = "No worries. Which town or city are you in?"
+ONBOARDING_CONSENT_CARD_SENT = (
+    "Please open the Alexa app, find test development under Your Skills, then open Settings "
+    "and Manage Permissions and enable Device Address. After that, relaunch Hear."
+)
+ONBOARDING_LOCATION_DENIED = "No worries. Which city are you in?"
 ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
 ONBOARDING_DETECTED_TOWN = lambda city: f"I think you're in {escape_ssml_lite(city)} \u2014 is that right?"
 ONBOARDING_TOWN_CONFIRM = lambda city: f"Did you say {escape_ssml_lite(city)}?"
@@ -548,7 +555,10 @@ CONSENT_CARD_THANKS = "Thanks \u2014 you're all set. What would you like to list
 COMMUNITY_PLAYBACK_OFFER = lambda city: f"Would you like to hear the latest from {escape_ssml_lite(city)}?"
 
 # \u2500\u2500 Location (set / confirm / resolution failure) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-LOCATION_NOT_FOUND = "I couldn't find your location from your account. Would you like to tell me which city you're in so I can find content from your area?"
+LOCATION_NOT_FOUND = (
+    "Alexa allowed access, but this device did not return a saved city. You can tell me which city "
+    "you're in now, or say skip."
+)
 LOCATION_DECLINED = "No problem. What would you like to listen to?"
 LOCATION_CONFIRMED = lambda city: (
     f"Thanks. I've set your location to {escape_ssml_lite(city)}. "

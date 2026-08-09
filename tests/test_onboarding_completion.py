@@ -6,6 +6,7 @@ from src.handlers.onboarding import (
     auto_detect_location_or_manual,
     finalize_town_captured,
     handle_permission_yes,
+    resume_town_capture,
 )
 from src.clients.resolver import ResolverClient
 from src.dependencies import Dependencies
@@ -110,3 +111,41 @@ async def test_device_address_city_is_resolved_to_coordinates_before_confirmatio
         alexa_user_id="amzn1.ask.account.TEST",
         prefer_location=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_empty_device_address_explains_missing_saved_city_and_allows_manual_entry(
+    mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.set_session_attributes = MagicMock()
+    locality = SimpleNamespace(
+        detect_device_location=AsyncMock(return_value={"_status": "empty"}),
+    )
+
+    result = await auto_detect_location_or_manual(
+        mock_handler_input,
+        get_store(mock_handler_input),
+        deps=Dependencies(locality=locality),
+    )
+
+    assert "did not return a saved city" in result["outputSpeech"]["ssml"]
+    assert "say skip" in result["outputSpeech"]["ssml"]
+    assert get_store(mock_handler_input)["onboardingStage"] == "ask_town"
+
+
+def test_third_failed_city_attempt_gives_device_setup_guidance(mock_handler_input):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.response_builder = ResponseBuilder()
+    store = get_store(mock_handler_input)
+    store.update({"onboardingStage": "ask_town", "onboardingTownAttempts": 2})
+
+    result = resume_town_capture(mock_handler_input, store)
+
+    speech = result["outputSpeech"]["ssml"]
+    assert "update Device Location for this Echo" in speech
+    assert "relaunch Hear" in speech
+    assert "say skip" in speech
+    assert get_store(mock_handler_input)["onboardingComplete"] is False
+    assert get_store(mock_handler_input)["onboardingTownAttempts"] == 3
