@@ -59,7 +59,9 @@ class PlayContentHandler(AbstractRequestHandler):
         name = get_intent_name(handler_input)
         return (
             get_request_type(handler_input) == "IntentRequest"
-            and name in {"PlayContentIntent", "PlayPublicationIntent"}
+            and name in {
+                "PlayContentIntent", "PlayLatestContentIntent", "PlayPublicationIntent"
+            }
         )
 
     async def handle(self, handler_input: HandlerInput):

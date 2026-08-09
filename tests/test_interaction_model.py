@@ -54,6 +54,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "format": "ContentFormat",
             "dateQuery": "AMAZON.DATE",
         },
+        "PlayLatestContentIntent": {"topic": "AMAZON.SearchQuery"},
         "PlayByOrganizationIntent": {
             "organizationQuery": "AMAZON.SearchQuery",
         },

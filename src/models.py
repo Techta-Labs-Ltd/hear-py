@@ -380,6 +380,7 @@ FEEDBACK_SKIP_HINTS = {
 
 ALEXA_TO_NLP = {
     "PlayContentIntent": "general",
+    "PlayLatestContentIntent": "general",
     "PlayByCreatorIntent": "creator",
     "PlayByOrganizationIntent": "organization",
     "PlayPublicationIntent": "publication",

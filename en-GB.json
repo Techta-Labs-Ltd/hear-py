@@ -187,17 +187,7 @@
           ],
           "samples": [
             "play {dateQuery} content",
-            "play the latest {topic}",
-            "play me the latest {topic}",
-            "play me the newest {topic}",
-            "play me the most recent {topic}",
-            "play me recent {topic}",
-            "find me the latest {topic}",
             "find me {topic}",
-            "play the newest {topic}",
-            "play the most recent {topic}",
-            "play recent {topic}",
-            "play the latest",
             "play {topic}",
             "play some {topic}",
             "I want {topic}",
@@ -244,9 +234,6 @@
             "play {dateQuery} {format}",
             "play me a {format}",
             "play me the {format}",
-            "play me latest {topic}",
-            "play latest {topic}",
-            "get me the latest {topic}",
             "play me some {topic}",
             "give me some {topic}",
             "I would like some {topic}",
@@ -254,6 +241,30 @@
             "show me {topic}",
             "do you have any {topic}",
             "any {topic} please"
+          ]
+        },
+        {
+          "name": "PlayLatestContentIntent",
+          "slots": [
+            {
+              "name": "topic",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play the latest {topic}",
+            "play me the latest {topic}",
+            "play me the newest {topic}",
+            "play me the most recent {topic}",
+            "play me recent {topic}",
+            "find me the latest {topic}",
+            "play the newest {topic}",
+            "play the most recent {topic}",
+            "play recent {topic}",
+            "play me latest {topic}",
+            "play latest {topic}",
+            "get me the latest {topic}",
+            "play the latest"
           ]
         },
         {

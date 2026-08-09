@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from src.middleware.dialog_validation import dialog_validation_failure
 from src.middleware.dialog_validation import DialogValidationInterceptor
-from src.middleware.resolver import ResolverInterceptor
+from src.middleware.resolver import ResolverInterceptor, _extract_raw_utterance
 from src.clients.resolver import ResolverClient
 from src.services.store import update_store
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
@@ -171,3 +171,19 @@ async def test_invalid_onboarding_reply_never_reaches_resolver(
 
     resolve.assert_not_awaited()
     assert mock_handler_input.attributes_manager.request_attributes.get("_nlp") is None
+
+
+def test_latest_content_intent_reconstructs_sort_for_resolver(mock_handler_input):
+    topic_slot = MagicMock()
+    topic_slot.value = "news content in Wakefield"
+    intent = MagicMock()
+    intent.get.return_value = {"topic": topic_slot}
+    request = MagicMock()
+    request.intent = intent
+    envelope = MagicMock()
+    envelope.request = request
+    mock_handler_input.request_envelope = envelope
+
+    assert _extract_raw_utterance(
+        mock_handler_input, "PlayLatestContentIntent"
+    ) == "play latest news content in Wakefield"

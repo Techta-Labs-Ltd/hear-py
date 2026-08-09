@@ -20,12 +20,13 @@ from src.utils.skill_request import (
 from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
 from src.utils.discovery_request import is_reserved_discovery_phrase
 from src.utils.discovery_request import is_meaningful_creator_source
+from src.utils.discovery_request import is_meaningful_organization_source
 from src.utils.discovery_request import is_meaningful_publication_source
 logger = logging.getLogger(__name__)
 
 
 SEARCH_INTENTS = {
-    "PlayContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
+    "PlayContentIntent", "PlayLatestContentIntent", "PlayByCreatorIntent", "PlayByOrganizationIntent",
     "PlayPublicationIntent",
     "BrowseContentIntent", "BrowseByCategoryIntent", "WhatsTrendingIntent",
     "PlayLocalIntent", "PlayRecommendationIntent",
@@ -40,6 +41,7 @@ AMBIGUITY_CONTROL_INTENTS = {
 
 CANONICAL_ZERO_SLOT_DISCOVERY = {
     "PlayContentIntent": "play",
+    "PlayLatestContentIntent": "play latest",
     "PlayByCreatorIntent": "play",
     "PlayByOrganizationIntent": "play",
     "PlayPublicationIntent": "play publication",
@@ -179,6 +181,20 @@ def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | Non
     date_slot = slots.get("dateQuery")
     date_value = getattr(date_slot, "value", None) if date_slot else None
     date_text = str(date_value).strip() if date_value else ""
+    if alexa_intent == "PlayLatestContentIntent":
+        topic_slot = slots.get("topic")
+        format_slot = slots.get("format")
+        topic = getattr(topic_slot, "value", None) if topic_slot else None
+        content_format = getattr(format_slot, "value", None) if format_slot else None
+        parts = ["play"]
+        if date_text:
+            parts.append(date_text)
+        parts.append("latest")
+        if topic and str(topic).strip():
+            parts.append(str(topic).strip())
+        elif content_format and str(content_format).strip():
+            parts.append(str(content_format).strip())
+        return " ".join(parts)
     if alexa_intent == "PlayPublicationIntent":
         source_slot = slots.get("publicationSourceQuery")
         sort_slot = slots.get("publicationSort")
@@ -311,6 +327,25 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                     },
                 })
                 logger.info("Hear: creator name required; resolver skipped")
+                return
+            if (
+                alexa_intent == "PlayByOrganizationIntent"
+                and not is_meaningful_organization_source(raw)
+            ):
+                _set_nlp(handler_input, {
+                    "status": "resolved",
+                    "intent": "organization",
+                    "alexaIntent": "organization",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": True,
+                    "needsRedirect": False,
+                    "localResolved": True,
+                    "slots": {
+                        "organizationQuery": "",
+                        "genericOrganizationRequest": True,
+                    },
+                })
+                logger.info("Hear: talking newspaper name required; resolver skipped")
                 return
             if alexa_intent == "PlayPublicationIntent":
                 slots = intent_obj.slots or {}

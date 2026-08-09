@@ -59,6 +59,16 @@ CREATOR_SOURCE_PLACEHOLDERS = frozenset({
     "play something from a creator", "play me something from a creator",
 })
 
+ORGANIZATION_SOURCE_PLACEHOLDERS = frozenset({
+    "talking newspaper", "talking news paper", "a talking newspaper",
+    "a talking news paper", "the talking newspaper", "the talking news paper",
+    "from a talking newspaper", "from a talking news paper",
+    "play from a talking newspaper", "play from a talking news paper",
+    "play something from a talking newspaper",
+    "play something from a talking news paper",
+    "play me a talking newspaper", "play me a talking news paper",
+})
+
 
 def normalize_discovery_phrase(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "").casefold()).strip()
@@ -83,4 +93,13 @@ def is_meaningful_creator_source(value: object) -> bool:
         normalized
         and normalized not in RESERVED_DISCOVERY_PHRASES
         and normalized not in CREATOR_SOURCE_PLACEHOLDERS
+    )
+
+
+def is_meaningful_organization_source(value: object) -> bool:
+    normalized = normalize_discovery_phrase(value)
+    return bool(
+        normalized
+        and normalized not in RESERVED_DISCOVERY_PHRASES
+        and normalized not in ORGANIZATION_SOURCE_PLACEHOLDERS
     )

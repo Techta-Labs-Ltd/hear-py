@@ -192,6 +192,14 @@ def _extract_raw_utterance_from_attrs(handler_input) -> str | None:
     except Exception:
         return None
 
+    if alexa_intent == "PlayLatestContentIntent":
+        parts = ["latest"]
+        for slot_name in ("topic", "format"):
+            slot = slots.get(slot_name)
+            value = getattr(slot, "value", None) if slot else None
+            if value and str(value).strip():
+                parts.append(str(value).strip())
+        return " ".join(parts) or None
     if alexa_intent == "PlayByCreatorIntent":
         priority = ["creatorQuery", "topic", "organizationQuery", "listPickPhrase", "category", "feedbackPhrase"]
     elif alexa_intent == "PlayByOrganizationIntent":
