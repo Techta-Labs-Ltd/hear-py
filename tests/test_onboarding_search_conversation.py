@@ -1218,6 +1218,58 @@ async def test_candidate_in_topic_slot_resolves_before_new_search(
 
 
 @pytest.mark.asyncio
+async def test_show_more_without_slots_pages_pending_ambiguity_locally(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.dispatch import IntentDispatchHandler
+
+    candidates = [{
+        "type": "creator",
+        "id": f"creator-{index}",
+        "name": name,
+    } for index, name in enumerate((
+        "Pendle Voice Leader and Times",
+        "Pendle Voice Dalesman",
+        "Pendle Voice Lancashire Life",
+        "Pendle Voice Gazette",
+        "Pendle Voice Chronicle",
+    ))]
+    pending = {
+        "intent": "search",
+        "searchPayload": {"query": "", "filter": {}},
+        "slots": {},
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates[:3],
+        "spokenCandidateOffset": 3,
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "intent": {"name": "ShowMoreBrowseIntent"},
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    mock_handler_input.response_builder = ResponseBuilder()
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor().process(mock_handler_input)
+    response = await IntentDispatchHandler().handle(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    assert "Gazette" in response["outputSpeech"]["ssml"]
+    assert "Chronicle" in response["outputSpeech"]["ssml"]
+    assert "trouble understanding" not in response["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
 async def test_dynamic_entity_id_selects_pending_candidate_without_resolver(
     monkeypatch,
     mock_handler_input,

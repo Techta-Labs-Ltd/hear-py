@@ -372,6 +372,7 @@ class ResolverInterceptor(AbstractRequestInterceptor):
             alexa_intent = intent_obj.name if intent_obj else None
             if not alexa_intent:
                 return
+            intent_slots = intent_obj.get("slots") or {}
 
             early_store = (
                 handler_input.attributes_manager.request_attributes.get("_store") or {}
@@ -383,7 +384,7 @@ class ResolverInterceptor(AbstractRequestInterceptor):
             )
 
             if alexa_intent == "SetLocationIntent" and not ambiguity_active:
-                slot = (intent_obj.slots or {}).get("location")
+                slot = intent_slots.get("location")
                 town = get_resolved_slot_value(slot)
                 _set_nlp(handler_input, {
                     "intent": "location_set",
@@ -402,7 +403,7 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 and not isinstance(early_store.get("pendingAmbiguity"), dict)
                 and (early_dialog or {}).get("type") != "ambiguity"
             ):
-                slot = (intent_obj.slots or {}).get("townName")
+                slot = intent_slots.get("townName")
                 town = get_resolved_slot_value(slot)
                 _set_nlp(handler_input, {
                     "intent": "town_capture",
@@ -418,7 +419,7 @@ class ResolverInterceptor(AbstractRequestInterceptor):
             raw = _extract_raw_utterance(handler_input, alexa_intent)
             local_resolution = _local_discovery_resolution(
                 alexa_intent,
-                intent_obj.slots or {},
+                intent_slots,
                 raw,
             )
             if local_resolution:

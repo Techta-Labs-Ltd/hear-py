@@ -1,8 +1,14 @@
 from __future__ import annotations
+
+import asyncio
 import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_MAX_CONCURRENT_PAGE_REQUESTS = 12
+_MAX_PREFETCH_BUDGET_MS = 6000
+
 
 async def prefetch_search_queue_items(
     search_result: dict[str, Any],
@@ -35,14 +41,44 @@ async def prefetch_search_queue_items(
     ):
         return queue_items
 
-    for page in range(int(current_page) + 1, int(total_pages)):
-        page_payload = {**payload, "page": page}
-        result = await hear_client.search(page_payload, timeout_ms=timeout_ms)
-        if result.get("failed"):
+    pages = list(range(int(current_page) + 1, int(total_pages)))
+    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_PAGE_REQUESTS)
+    request_timeout_ms = min(timeout_ms or _MAX_PREFETCH_BUDGET_MS, _MAX_PREFETCH_BUDGET_MS)
+
+    async def fetch_page(page: int) -> tuple[int, dict[str, Any]]:
+        async with semaphore:
+            page_payload = {**payload, "page": page}
+            return page, await hear_client.search(
+                page_payload,
+                timeout_ms=request_timeout_ms,
+            )
+
+    tasks = [asyncio.create_task(fetch_page(page)) for page in pages]
+    done, pending = await asyncio.wait(
+        tasks,
+        timeout=request_timeout_ms / 1000,
+    )
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    page_results: dict[int, dict[str, Any]] = {}
+    for task in done:
+        try:
+            page, result = task.result()
+            page_results[page] = result
+        except Exception:
+            logger.warning("Hear: queue prefetch page request failed", exc_info=True)
+
+    for page in pages:
+        result = page_results.get(page)
+        if not result or result.get("failed"):
             logger.warning(
-                "Hear: queue prefetch stopped page=%s totalPages=%s",
+                "Hear: queue prefetch stopped page=%s totalPages=%s timedOut=%s",
                 page,
                 int(total_pages),
+                page not in page_results,
             )
             break
         for item in result.get("results") or []:
