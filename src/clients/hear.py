@@ -262,7 +262,13 @@ class HearApiClient:
             "clientVersion": _CLIENT_VERSION,
             "locality": store.get("locality"),
             "listeningPattern": store.get("listeningPattern"),
-            "followedCreatorIds": list(store.get("followedCreators") or []),
+            "followedCreatorIds": [
+                str(item["id"])
+                for item in (store.get("followedCreators") or [])
+                if isinstance(item, dict)
+                and item.get("id")
+                and item.get("type", "creator") == "creator"
+            ],
             "playbackSpeed": store.get("playbackSpeed"),
             "playCount": int(store.get("playCount") or 0),
             "lastPlayedAt": store.get("lastPlayedAt"),

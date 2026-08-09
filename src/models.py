@@ -42,6 +42,7 @@ PERSISTED_FIELDS = frozenset({
     "feedbackReminderAlertToken",
     "firstLaunchedAt",
     "followedCreators",
+    "pendingFollowSource",
     "fullName",
     "givenName",
     "lastCompletedSource",

@@ -192,7 +192,22 @@ def merge_initial_store(stored: dict | None) -> dict:
         merged["listeningPattern"] = dict(list(pattern.items())[:40])
     followed = merged.get("followedCreators")
     if isinstance(followed, list):
-        merged["followedCreators"] = followed[-50:]
+        normalized_followed = []
+        seen = set()
+        for item in followed:
+            if not isinstance(item, dict) or not item.get("id"):
+                continue
+            source_type = "organization" if item.get("type") == "organization" else "creator"
+            key = (source_type, str(item["id"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized_followed.append({
+                "id": str(item["id"]),
+                "name": item.get("name"),
+                "type": source_type,
+            })
+        merged["followedCreators"] = normalized_followed[-50:]
     return merged
 
 

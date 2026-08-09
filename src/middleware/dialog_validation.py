@@ -70,8 +70,8 @@ def _ambiguity_prompt(active: dict) -> tuple[str, str]:
         or []
     )[:3]
     message = ambiguous_reference_message("that name", candidates)
-    ordinal = " You can say the first one, the second one, show more, or cancel."
-    return message + ordinal, "Say a name, the first one, the second one, show more, or cancel."
+    ordinal = " You can say the first one, the second one, or show more."
+    return message + ordinal, "Say a name, the first one, the second one, or show more."
 
 
 def _binary_prompt(active: dict) -> tuple[str, str]:

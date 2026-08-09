@@ -35,6 +35,21 @@ from src.utils.feedback_flow import idle_next_response
 from src.utils.playback_context import read_audio_player_context, is_audio_player_active
 from src.handlers.search import play_from_followed_creators
 from src.utils.search_filters import wants_play_from_followed_creators
+from src.utils.normalize_content_item import pick_content_source
+
+
+def _follow_source(store: dict) -> dict | None:
+    pending = store.get("pendingFollowSource")
+    if isinstance(pending, dict) and pending.get("id") and pending.get("name"):
+        return pending
+    playback = store.get("activePlayback") or {}
+    source = pick_content_source({
+        "organizationId": playback.get("organizationId") or store.get("currentOrganizationId"),
+        "organizationName": playback.get("organizationName") or store.get("currentOrganization"),
+        "creatorId": playback.get("creatorId") or store.get("currentCreatorId") or store.get("feedbackCreatorId"),
+        "creatorName": playback.get("creatorName") or store.get("currentCreator") or store.get("feedbackCreator"),
+    })
+    return source
 
 
 class WhoIsCreatorHandler(AbstractRequestHandler):
@@ -85,15 +100,17 @@ class FollowCreatorHandler(AbstractRequestHandler):
             pass
 
         store = get_store(handler_input)
-        creator_id = store.get("currentCreatorId") or store.get("feedbackCreatorId")
-        creator_name = store.get("currentCreator") or store.get("feedbackCreator")
+        source = _follow_source(store) or {}
+        creator_id = source.get("id")
+        creator_name = source.get("name")
+        source_type = source.get("kind") or source.get("type") or "creator"
 
         if not creator_id or not creator_name or is_bad_credit(creator_name):
             return handler_input.response_builder \
                 .speak(NO_CREATOR_TO_FOLLOW) \
                 .response
 
-        if is_following(store, creator_id):
+        if is_following(store, creator_id, source_type):
             if store.get("awaitingFollow"):
                 await clear_feedback(handler_input)
             else:
@@ -107,7 +124,7 @@ class FollowCreatorHandler(AbstractRequestHandler):
                 .response
 
         try:
-            add_followed_creator(handler_input, creator_id, creator_name)
+            add_followed_creator(handler_input, creator_id, creator_name, source_type)
             if store.get("awaitingFollow"):
                 await clear_feedback(handler_input)
 
@@ -137,21 +154,23 @@ class UnfollowCreatorHandler(AbstractRequestHandler):
     async def handle(self, handler_input: HandlerInput):
 
         store = get_store(handler_input)
-        creator_id = store.get("currentCreatorId") or store.get("feedbackCreatorId")
-        creator_name = store.get("currentCreator") or store.get("feedbackCreator")
+        source = _follow_source(store) or {}
+        creator_id = source.get("id")
+        creator_name = source.get("name")
+        source_type = source.get("kind") or source.get("type") or "creator"
 
         if not creator_id or not creator_name:
             return handler_input.response_builder \
                 .speak(NO_CREATOR_TO_FOLLOW) \
                 .response
 
-        if not is_following(store, creator_id):
+        if not is_following(store, creator_id, source_type):
             return handler_input.response_builder \
                 .speak(NOT_FOLLOWING(creator_name)) \
                 .response
 
         try:
-            remove_followed_creator(handler_input, creator_id)
+            remove_followed_creator(handler_input, creator_id, source_type)
             return handler_input.response_builder \
                 .speak(ssml(UNFOLLOW_CREATOR(creator_name))) \
                 .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \

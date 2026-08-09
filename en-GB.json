@@ -397,11 +397,19 @@
             "play a publication",
             "play publications",
             "play something from a publication",
+            "find a publication",
+            "find publications",
+            "give me a publication",
+            "put on a publication",
+            "latest publication",
+            "play the latest publication",
             "play {publicationSort} publications",
             "play the {publicationSort} publication",
+            "play publication from {publicationSourceQuery}",
             "play a publication from {publicationSourceQuery}",
             "play publications from {publicationSourceQuery}",
             "play a publication by {publicationSourceQuery}",
+            "find a publication by {publicationSourceQuery}",
             "find publications from {publicationSourceQuery}",
             "give me a publication from {publicationSourceQuery}"
           ]
@@ -1213,6 +1221,22 @@
               }
             }
           ]
+        },
+        {
+          "name": "PlayPublicationIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "publicationSourceQuery",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.PlayPublicationIntent.publicationSourceQuery"
+              }
+            }
+          ]
         }
       ]
     },
@@ -1241,6 +1265,15 @@
           {
             "type": "PlainText",
             "value": "Which talking newspaper would you like?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.PlayPublicationIntent.publicationSourceQuery",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which publication, creator, or organization would you like?"
           }
         ]
       }

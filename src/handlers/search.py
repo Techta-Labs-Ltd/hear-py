@@ -240,6 +240,9 @@ async def discover_content_via_search(
     limit = opts.get("limit")
 
     nlp_filter = {}
+    option_filter = opts.get("filter") or {}
+    if isinstance(option_filter, dict):
+        nlp_filter.update(option_filter)
     if nlp_slots.get("creatorIds"):
         nlp_filter["creatorIds"] = list(nlp_slots["creatorIds"])
     if nlp_slots.get("organizationIds"):
@@ -481,14 +484,31 @@ async def play_from_followed_creators(handler_input: HandlerInput, *, deps: Depe
             .set_should_end_session(False) \
             .response
 
-    search_result = await _discover_content_avoiding_recent(handler_input, {"q": "", "intent": "following"}, deps=deps)
+    creator_ids = [
+        str(item["id"]) for item in followed
+        if isinstance(item, dict) and item.get("id") and item.get("type", "creator") == "creator"
+    ]
+    organization_ids = [
+        str(item["id"]) for item in followed
+        if isinstance(item, dict) and item.get("id") and item.get("type") == "organization"
+    ]
+    follow_filter = {}
+    if creator_ids:
+        follow_filter["creatorIds"] = list(dict.fromkeys(creator_ids))
+    if organization_ids:
+        follow_filter["organizationIds"] = list(dict.fromkeys(organization_ids))
+    search_result = await _discover_content_avoiding_recent(
+        handler_input,
+        {"q": "", "intent": "following", "filter": follow_filter},
+        deps=deps,
+    )
     if not search_result.get("results"):
         return _build_search_outcome_response(handler_input, search_result)
 
     response = await auto_play_first_from_search(handler_input, search_result, {
         "discoveryIntent": "PlayContentIntent",
         "q": "",
-        "introOverride": "Here is something from creators you follow.",
+        "introOverride": "Here is something from a source you follow.",
     }, deps=deps)
     return response or _build_no_content_response(handler_input)
 

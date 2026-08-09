@@ -692,8 +692,8 @@ class NoIntentHandler(AbstractRequestHandler):
 
         if dialog_type == "ambiguity":
             return handler_input.response_builder \
-                .speak(ssml("Please say one of the names I offered, the first one, the second one, or say show more. Say cancel to stop choosing.")) \
-                .reprompt(ssml("Say a name, the first one, the second one, show more, or cancel.")) \
+                .speak(ssml("Please say one of the names I offered, the first one, the second one, or say show more.")) \
+                .reprompt(ssml("Say a name, the first one, the second one, or show more.")) \
                 .set_should_end_session(False) \
                 .response
 

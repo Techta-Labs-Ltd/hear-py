@@ -144,6 +144,8 @@ class FeedbackService:
             "publicationTitle": state.get("publicationTitle"),
             "creatorId": state.get("creatorId"),
             "creatorName": state.get("creatorName"),
+            "organizationId": state.get("organizationId"),
+            "organizationName": state.get("organizationName"),
             "category": state.get("category"),
             "listenedMs": listened_ms,
             "completed": bool(completed),
@@ -204,6 +206,7 @@ class FeedbackService:
             "activeDialog": None,
             "_requiresReliableSave": False,
             "deferredIntent": None,
+            "pendingFollowSource": None,
         })
 
     @staticmethod

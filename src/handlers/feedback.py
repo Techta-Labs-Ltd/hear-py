@@ -26,6 +26,7 @@ from src.utils.speech import (
 )
 from src.services.dialog_state import activate_dialog
 from src.utils.playback_context import snapshot_report_context
+from src.utils.normalize_content_item import pick_content_source
 from src.utils.speech import FEEDBACK_SKIP_INTRO
 class FeedbackEnjoyedHandler(AbstractRequestHandler):
     """Handles the FeedbackEnjoyedIntent — records liked feedback and offers to follow the creator."""
@@ -56,11 +57,19 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
             liked=True,
         )
 
-        creator_id = pending.get("creatorId") or store.get("feedbackCreatorId")
-        creator_name = pending.get("creatorName") or store.get("feedbackCreator")
+        selected_source = pick_content_source({
+            "organizationId": pending.get("organizationId"),
+            "organizationName": pending.get("organizationName"),
+            "creatorId": pending.get("creatorId") or store.get("feedbackCreatorId"),
+            "creatorName": pending.get("creatorName") or store.get("feedbackCreator"),
+        }) or {}
+        creator_id = selected_source.get("id")
+        creator_name = selected_source.get("name")
+        source_type = selected_source.get("kind") or "creator"
 
         update_store(handler_input, {
             "awaitingFollow": False,
+            "pendingFollowSource": None,
         })
         if has_deferred_intent(handler_input):
             await clear_feedback(handler_input)
@@ -71,9 +80,16 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
             creator_id
             and creator_name
             and not is_bad_credit(creator_name)
-            and not is_following(updated_store, creator_id)
+            and not is_following(updated_store, creator_id, source_type)
         ):
-            update_store(handler_input, {"awaitingFollow": True})
+            update_store(handler_input, {
+                "awaitingFollow": True,
+                "pendingFollowSource": {
+                    "id": creator_id,
+                    "name": creator_name,
+                    "type": source_type,
+                },
+            })
             ask = FEEDBACK_FOLLOW_ASK(creator_name)
             return handler_input.response_builder \
                 .speak(ssml(ask)) \

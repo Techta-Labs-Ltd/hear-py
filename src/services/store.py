@@ -29,6 +29,7 @@ DEFAULT_STORE: dict[str, object] = {
     "playCount": 0,
     "playHistory": [],
     "followedCreators": [],
+    "pendingFollowSource": None,
     "latitude": None,
     "longitude": None,
     "localityResolvedAt": None,

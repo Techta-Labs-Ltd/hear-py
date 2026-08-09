@@ -35,7 +35,6 @@ DISPATCHABLE_INTENTS: list[str] = [
     "resolver_unavailable",
 ]
 
-
 NON_DISPATCHABLE_INTENTS: list[str] = [
     "ReportContentIntent", "ReportCreatorIntent",
     "FollowCreatorIntent", "UnfollowCreatorIntent", "WhoIsCreatorIntent", "WhatsThisAboutIntent",
@@ -75,11 +74,16 @@ class IntentDispatchHandler(AbstractRequestHandler):
                 "Hear: resolver discovery clarification asked intent=%s",
                 intent,
             )
-            return handler_input.response_builder \
+            builder = handler_input.response_builder \
                 .speak(ssml(clarification["speech"])) \
                 .reprompt(ssml(clarification["reprompt"])) \
-                .set_should_end_session(False) \
-                .get_response()
+                .set_should_end_session(False)
+            if clarification.get("elicitSlot"):
+                builder.add_directive({
+                    "type": "Dialog.ElicitSlot",
+                    "slotToElicit": clarification["elicitSlot"],
+                })
+            return builder.get_response()
 
         pending = attrs.pop("_pendingConfirmation", None)
         handler_input.attributes_manager.request_attributes = attrs

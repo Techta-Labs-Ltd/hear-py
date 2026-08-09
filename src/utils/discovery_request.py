@@ -45,6 +45,14 @@ RESERVED_DISCOVERY_PHRASES = frozenset({
     "whatever",
 })
 
+PUBLICATION_SOURCE_PLACEHOLDERS = frozenset({
+    "publication", "publications", "a publication", "the publication",
+    "play publication", "play publications", "play a publication",
+    "play the publication", "play something from a publication",
+    "find publication", "find a publication", "latest publication",
+    "the latest publication", "something from a publication",
+})
+
 
 def normalize_discovery_phrase(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "").casefold()).strip()
@@ -52,3 +60,12 @@ def normalize_discovery_phrase(value: object) -> str:
 
 def is_reserved_discovery_phrase(value: object) -> bool:
     return normalize_discovery_phrase(value) in RESERVED_DISCOVERY_PHRASES
+
+
+def is_meaningful_publication_source(value: object) -> bool:
+    normalized = normalize_discovery_phrase(value)
+    return bool(
+        normalized
+        and normalized not in RESERVED_DISCOVERY_PHRASES
+        and normalized not in PUBLICATION_SOURCE_PLACEHOLDERS
+    )

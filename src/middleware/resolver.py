@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import re
 import time
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from src.models import ALEXA_TO_NLP
@@ -18,6 +19,7 @@ from src.utils.skill_request import (
 )
 from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
 from src.utils.discovery_request import is_reserved_discovery_phrase
+from src.utils.discovery_request import is_meaningful_publication_source
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +53,19 @@ _ORDINAL_INDEX = {
     "first": 0, "one": 0, "1": 0, "number one": 0,
     "second": 1, "two": 1, "2": 1, "number two": 1,
     "third": 2, "three": 2, "3": 2, "number three": 2,
+    "fourth": 3, "four": 3, "4": 3, "number four": 3,
+    "fifth": 4, "five": 4, "5": 4, "number five": 4,
+    "sixth": 5, "six": 5, "6": 5, "number six": 5,
 }
+
+
+def _normalize_ordinal(value: object) -> str:
+    raw = str(value or "").strip().casefold()
+    raw = raw.replace("1st", "first").replace("2nd", "second").replace("3rd", "third")
+    raw = raw.replace("4th", "fourth").replace("5th", "fifth").replace("6th", "sixth")
+    raw = re.sub(r"^(?:the\s+)", "", raw)
+    raw = re.sub(r"\s+(?:one|option|choice)$", "", raw)
+    return raw
 
 
 def _unique_candidates(candidates: list[dict]) -> list[dict]:
@@ -90,7 +104,7 @@ def _match_pending_candidate(
 
     choices = list(pending.get("choiceCandidates") or _unique_candidates(candidates))
     displayed = list(pending.get("displayedCandidates") or choices[:3])
-    raw_key = str(raw or "").strip().casefold()
+    raw_key = _normalize_ordinal(raw)
     ordinal = _ORDINAL_INDEX.get(raw_key)
     if ordinal is not None and ordinal < len(displayed):
         return displayed[ordinal]
@@ -278,6 +292,28 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 return
 
             raw = _extract_raw_utterance(handler_input, alexa_intent)
+            if alexa_intent == "PlayPublicationIntent":
+                slots = intent_obj.slots or {}
+                source_slot = slots.get("publicationSourceQuery")
+                source = get_resolved_slot_value(source_slot)
+                if not is_meaningful_publication_source(source):
+                    _set_nlp(handler_input, {
+                        "status": "resolved",
+                        "intent": "publication",
+                        "alexaIntent": "publication",
+                        "alexaRawIntent": alexa_intent,
+                        "nlpMatchesAlexa": True,
+                        "needsRedirect": False,
+                        "localResolved": True,
+                        "publicationSourceRequired": True,
+                        "slots": {
+                            "publicationSourceQuery": source or "",
+                            "publicationSort": get_resolved_slot_value(slots.get("publicationSort")),
+                            "dateQuery": get_resolved_slot_value(slots.get("dateQuery")),
+                        },
+                    })
+                    logger.info("Hear: publication source required; resolver skipped")
+                    return
             if not raw and alexa_intent in SEARCH_INTENTS:
                 raw = CANONICAL_ZERO_SLOT_DISCOVERY.get(alexa_intent)
             store = handler_input.attributes_manager.request_attributes.get("_store") or {}

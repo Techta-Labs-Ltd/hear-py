@@ -252,6 +252,15 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             return
 
         raw = _extract_raw_utterance_from_attrs(handler_input)
+        if nlp.get("publicationSourceRequired"):
+            attrs["_resolverClarification"] = {
+                "speech": "Which publication, creator, or organization would you like?",
+                "reprompt": "Please say the name of a publication, creator, or organization.",
+                "elicitSlot": "publicationSourceQuery",
+            }
+            attrs.pop("_pendingConfirmation", None)
+            handler_input.attributes_manager.request_attributes = attrs
+            return
         if _requires_discovery_clarification(nlp, raw):
             attrs["_resolverClarification"] = {
                 "speech": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper.",
