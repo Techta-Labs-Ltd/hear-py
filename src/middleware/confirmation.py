@@ -390,6 +390,14 @@ class SearchConfirmationGateHandler(AbstractRequestHandler):
             return False
         if _has_pending_ambiguity(nlp):
             return False
+        nlp_slots = nlp.get("slots") or {}
+        if (
+            nlp_slots.get("genericCreatorRequest")
+            or nlp_slots.get("genericOrganizationRequest")
+        ):
+            # These are explicit incomplete requests, not unconfirmed
+            # searches. Their discovery handlers own the name prompt.
+            return False
         return (
             nlp.get("intent") in _RESOLVED_DISCOVERY_INTENTS
             and not attrs.get("_pendingConfirmation")

@@ -1580,7 +1580,10 @@ async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
     mock_handler_input,
 ):
     from src.handlers.dispatch import IntentDispatchHandler
-    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.confirmation import (
+        ConfirmationMiddleware,
+        SearchConfirmationGateHandler,
+    )
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict({
@@ -1606,6 +1609,7 @@ async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
 
     await ResolverInterceptor().process(mock_handler_input)
     ConfirmationMiddleware().process(mock_handler_input)
+    assert SearchConfirmationGateHandler().can_handle(mock_handler_input) is False
     response = await IntentDispatchHandler().handle(mock_handler_input)
 
     assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
