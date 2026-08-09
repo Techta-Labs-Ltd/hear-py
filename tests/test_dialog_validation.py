@@ -7,6 +7,7 @@ from src.clients.resolver import ResolverClient
 from src.services.store import update_store
 from unittest.mock import AsyncMock, MagicMock
 import pytest
+from src.runtime import ResponseBuilder
 
 
 def _intent(handler_input, name: str) -> None:
@@ -16,7 +17,8 @@ def _intent(handler_input, name: str) -> None:
     }
 
 
-def test_ambiguity_rejects_no_without_clearing_choices(mock_handler_input):
+@pytest.mark.parametrize("intent_name", ["AMAZON.NoIntent", "SkipFeedbackIntent"])
+def test_ambiguity_allows_dismissal_intents(mock_handler_input, intent_name):
     pending = {
         "candidates": [
             {"name": "Nailsea", "id": "one"},
@@ -27,13 +29,45 @@ def test_ambiguity_rejects_no_without_clearing_choices(mock_handler_input):
         "pendingAmbiguity": pending,
         "activeDialog": {"type": "ambiguity", "context": pending},
     })
-    _intent(mock_handler_input, "AMAZON.NoIntent")
-
+    _intent(mock_handler_input, intent_name)
     failure = dialog_validation_failure(mock_handler_input)
 
-    assert failure["dialogType"] == "ambiguity"
-    assert "first one" in failure["speech"]
+    assert failure is None
     assert mock_handler_input.attributes_manager.request_attributes["_store"]["pendingAmbiguity"] == pending
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("intent_name", ["AMAZON.NoIntent", "SkipFeedbackIntent"])
+async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
+    mock_handler_input,
+    intent_name,
+):
+    from src.handlers.feedback import SkipFeedbackHandler
+    from src.handlers.yesno import NoIntentHandler
+    from src.services.store import get_store
+
+    pending = {"candidates": [{"name": "Pendle Voice", "id": "one"}]}
+    playback_queue = {
+        "orderedContentIds": ["content-1", "content-2"],
+        "currentIndex": 0,
+    }
+    update_store(mock_handler_input, {
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+        "playbackQueue": playback_queue,
+    })
+    _intent(mock_handler_input, intent_name)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    handler = NoIntentHandler() if intent_name == "AMAZON.NoIntent" else SkipFeedbackHandler()
+    response = await handler.handle(mock_handler_input)
+
+    store = get_store(mock_handler_input)
+    assert store["pendingAmbiguity"] is None
+    assert store["activeDialog"] is None
+    assert store["playbackQueue"] == playback_queue
+    assert "No problem" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
 
 
 def test_search_confirmation_rejects_new_search(mock_handler_input):

@@ -24,7 +24,7 @@ from src.utils.speech import (
     FEEDBACK_NOT_ENJOYED,
     FEEDBACK_REPORT_REPROMPT,
 )
-from src.services.dialog_state import activate_dialog
+from src.services.dialog_state import activate_dialog, dismiss_ambiguity_dialog
 from src.utils.playback_context import snapshot_report_context
 from src.utils.normalize_content_item import pick_content_source
 from src.utils.speech import FEEDBACK_SKIP_INTRO
@@ -207,6 +207,18 @@ class SkipFeedbackHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         store = get_store(handler_input)
+
+        active_dialog = store.get("activeDialog")
+        if (
+            isinstance(active_dialog, dict)
+            and active_dialog.get("type") == "ambiguity"
+        ) or isinstance(store.get("pendingAmbiguity"), dict):
+            dismiss_ambiguity_dialog(handler_input)
+            return handler_input.response_builder \
+                .speak(ssml("No problem. What would you like to listen to?")) \
+                .reprompt(ssml(WELCOME_REPROMPT)) \
+                .set_should_end_session(False) \
+                .response
 
         if store.get("awaitingReportDecision"):
             await clear_feedback(handler_input)

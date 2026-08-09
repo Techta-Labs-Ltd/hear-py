@@ -27,6 +27,8 @@ _BINARY_INTENTS = _EXIT_INTENTS | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
 _AMBIGUITY_INTENTS = _EXIT_INTENTS | {
     "ClarifySelectionIntent",
     "ShowMoreBrowseIntent",
+    "SkipFeedbackIntent",
+    "AMAZON.NoIntent",
 }
 _FEEDBACK_INTENTS = _EXIT_INTENTS | {
     "FeedbackEnjoyedIntent",

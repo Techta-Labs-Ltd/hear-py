@@ -64,6 +64,7 @@ from src.services.dialog_state import (
     activate_dialog,
     get_active_dialog,
     clear_active_dialog,
+    dismiss_ambiguity_dialog,
 )
 from src.utils.normalize_content_item import pick_content_source
 from src.handlers.system import _current_timestamp_ms
@@ -708,9 +709,10 @@ class NoIntentHandler(AbstractRequestHandler):
         dialog_type = (get_active_dialog(handler_input) or {}).get("type")
 
         if dialog_type == "ambiguity":
+            dismiss_ambiguity_dialog(handler_input)
             return handler_input.response_builder \
-                .speak(ssml("Please say one of the names I offered, the first one, the second one, or say show more.")) \
-                .reprompt(ssml("Say a name, the first one, the second one, or show more.")) \
+                .speak(ssml("No problem. What would you like to listen to?")) \
+                .reprompt(ssml(WELCOME_REPROMPT)) \
                 .set_should_end_session(False) \
                 .response
 

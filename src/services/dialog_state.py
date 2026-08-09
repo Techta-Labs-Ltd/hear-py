@@ -134,6 +134,15 @@ class DialogStateManager:
         return update_store(handler_input, updates)
 
     @staticmethod
+    def dismiss_ambiguity(handler_input) -> dict:
+        """Dismiss the current ambiguity without ending the Alexa session."""
+        return update_store(handler_input, {
+            "pendingAmbiguity": None,
+            "activeDialog": None,
+            "_requiresReliableSave": True,
+        })
+
+    @staticmethod
     def migrate(store: dict) -> dict:
         if not isinstance(store, dict):
             return store
@@ -148,4 +157,5 @@ get_active_dialog = _dialog.get_active
 activate_dialog = _dialog.activate
 clear_active_dialog = _dialog.clear
 clear_transient_discovery_dialog = _dialog.clear_transient_discovery
+dismiss_ambiguity_dialog = _dialog.dismiss_ambiguity
 migrate_active_dialog = _dialog.migrate
