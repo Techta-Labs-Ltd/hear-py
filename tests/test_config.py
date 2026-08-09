@@ -11,7 +11,7 @@ def test_settings_loads_defaults():
 
 
 def test_permission_scopes():
-    assert DEVICE_ADDRESS.startswith("alexa::")
+    assert DEVICE_ADDRESS == "read::alexa:device:all:address"
     assert REMINDERS_READWRITE.startswith("alexa::")
 
 

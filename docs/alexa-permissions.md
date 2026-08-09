@@ -16,7 +16,7 @@ For development skill `amzn1.ask.skill.502ef74e-db9f-485f-acdd-13d23c895e59`:
 
 The requested runtime scope is:
 
-`alexa::devices:all:address:full:read`
+`read::alexa:device:all:address`
 
 Do not enable or request Geolocation until a feature directly consumes live
 coordinates. Permission approval happens outside the Alexa voice session, so

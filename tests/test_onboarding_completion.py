@@ -52,6 +52,6 @@ def test_handle_permission_yes_sends_permission_card(mock_handler_input):
     card = result.get("card")
     assert card is not None, "handle_permission_yes must include a card in the response"
     assert card.get("type") == "AskForPermissionsConsent"
-    assert "alexa::devices:all:address:full:read" in card.get("permissions", [])
+    assert "read::alexa:device:all:address" in card.get("permissions", [])
     assert "alexa::devices:all:geolocation:read" not in card.get("permissions", [])
     assert result.get("shouldEndSession") is True

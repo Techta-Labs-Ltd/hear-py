@@ -476,7 +476,9 @@ def handle_location_not_found(handler_input: HandlerInput, store: Dict[str, Any]
 async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dict[str, Any], *, deps: Dependencies | None = None):
     d = deps or Dependencies()
     match = await d.locality.detect_device_location(handler_input)
-    if not match:
+    if not match or match.get("_status") == "permission_denied":
+        return ask_for_permission(handler_input, store)
+    if match.get("_status") != "resolved":
         return handle_location_not_found(handler_input, store)
     if not match.get("city"):
         update_store(handler_input, {

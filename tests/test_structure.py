@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -147,7 +148,14 @@ async def test_playback_repositories_have_isolated_memory():
 
 
 @pytest.mark.asyncio
-async def test_onboarding_yes_returns_permission_card():
+async def test_onboarding_yes_returns_permission_card(monkeypatch):
+    from src.clients.alexa_locality import AlexaLocalityClient
+
+    monkeypatch.setattr(
+        AlexaLocalityClient,
+        "get_device_address",
+        AsyncMock(return_value={"_status": "permission_denied"}),
+    )
     skill = build_skill(MemoryPersistenceAdapter())
     context = {
         "System": {

@@ -54,9 +54,9 @@ class AlexaLocalityClient:
         try:
             sys = handler_input.request_envelope.context.System
             if not sys.apiEndpoint or sys.apiAccessToken is None or not (sys.device and sys.device.deviceId):
-                return None
+                return {"_status": "unavailable"}
         except Exception:
-            return None
+            return {"_status": "unavailable"}
         api_endpoint = sys.apiEndpoint
         api_access_token = sys.apiAccessToken
         device_id = sys.device.deviceId
@@ -64,41 +64,58 @@ class AlexaLocalityClient:
             client = self._pool.get()
             resp = await client.get(
                 f"{api_endpoint}/v1/devices/{device_id}/settings/address",
-                headers={"Authorization": f"Bearer {api_access_token}"},
+                headers={
+                    "Authorization": f"Bearer {api_access_token}",
+                    "Accept": "application/json",
+                },
             )
             logger.info("Hear: device address API status=%s", resp.status_code)
             if resp.status_code == 403:
-                return {"denied": True}
+                return {"_status": "permission_denied"}
+            if resp.status_code == 401:
+                return {"_status": "unauthorized"}
+            if resp.status_code == 404:
+                return {"_status": "not_found"}
             if resp.status_code == 204:
-                return None
+                return {"_status": "empty"}
             resp.raise_for_status()
             data = resp.json()
             return {
+                "_status": "granted",
                 "city": data.get("city"),
                 "postalCode": data.get("postalCode"),
                 "countryCode": data.get("countryCode"),
                 "stateOrRegion": data.get("stateOrRegion"),
+                "districtOrCounty": data.get("districtOrCounty"),
                 "addressLine3": data.get("addressLine3"),
             }
-        except Exception:
-            return None
+        except Exception as exc:
+            logger.warning(
+                "Hear: device address API failed error=%s", type(exc).__name__,
+            )
+            return {"_status": "temporary_error"}
 
     # -------------------------------------------------- device location ------
 
     async def detect_device_location(self, handler_input) -> dict | None:
-        address = None
-        if self.has_permission(handler_input, permission_scopes.DEVICE_ADDRESS):
-            fetched = await self.get_device_address(handler_input)
-            if fetched and not fetched.get("denied"):
-                address = fetched
+        # Amazon documents context.System.user.permissions as deprecated.
+        # The Device Settings API response is the authoritative permission check.
+        fetched = await self.get_device_address(handler_input)
+        address_status = (fetched or {}).get("_status")
+        address = fetched if address_status == "granted" else None
         geo = None
         if self.has_permission(handler_input, permission_scopes.GEOLOCATION_READ):
             geo = self.get_geolocation(handler_input)
 
-        city = (address or {}).get("city") or (address or {}).get("addressLine3")
+        city = (
+            (address or {}).get("city")
+            or (address or {}).get("addressLine3")
+            or (address or {}).get("districtOrCounty")
+        )
         if not city and not geo:
-            return None
+            return {"_status": address_status or "unavailable"}
         return {
+            "_status": "resolved",
             "city": str(city or "").strip(),
             "locality": str(city or "").strip(),
             "countryCode": (address or {}).get("countryCode"),

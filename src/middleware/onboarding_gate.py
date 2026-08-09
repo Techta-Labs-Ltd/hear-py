@@ -6,8 +6,6 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from config.permission_scopes import DEVICE_ADDRESS
-
 from src.dependencies import Dependencies
 
 from src.services.store import get_store
@@ -63,10 +61,6 @@ def _get_stage(handler_input: HandlerInput) -> str | None:
         sess = handler_input.attributes_manager.get_session_attributes() or {}
         stage = sess.get("onboardingStage")
     return stage or None
-
-
-def _location_scopes_granted(handler_input: HandlerInput, deps: Dependencies) -> bool:
-    return deps.locality.has_permission(handler_input, DEVICE_ADDRESS)
 
 
 def _confirm_echo(handler_input: HandlerInput, store: Dict[str, Any]):
@@ -127,13 +121,10 @@ class OnboardingGateHandler(AbstractRequestHandler):
         rt = get_request_type(handler_input)
         if rt == "LaunchRequest":
             store = get_store(handler_input)
-            if _location_scopes_granted(handler_input, self._deps):
-                logger.info("Hear: onboarding address permission granted on launch")
-                return await auto_detect_location_or_manual(
-                    handler_input, store, deps=self._deps,
-                )
-            logger.info("Hear: onboarding address permission missing on launch")
-            return ask_for_permission(handler_input, store)
+            logger.info("Hear: checking device address on onboarding launch")
+            return await auto_detect_location_or_manual(
+                handler_input, store, deps=self._deps,
+            )
 
         intent = get_intent_name(handler_input)
         stage = _get_stage(handler_input)
@@ -152,8 +143,6 @@ class OnboardingGateHandler(AbstractRequestHandler):
 
         if stage == "ask_permission" or not stage:
             if intent == "AMAZON.YesIntent":
-                if _location_scopes_granted(handler_input, self._deps):
-                    return await auto_detect_location_or_manual(handler_input, store, deps=self._deps)
                 return handle_permission_yes(handler_input, store)
             if intent == "AMAZON.NoIntent":
                 return handle_permission_no(handler_input, store)
