@@ -705,3 +705,57 @@ async def test_playback_finished_accepts_raw_camel_case_offset(monkeypatch):
     pending = persistence._store[USER_ID]["pendingFeedback"]
     assert pending["feedbackKey"] == CONTENT_ID
     assert pending["completed"] is True
+
+
+@pytest.mark.asyncio
+async def test_new_completion_replaces_old_feedback_before_relaunch():
+    persistence = MemoryPersistenceAdapter()
+    pendle_id = "44444444-4444-4444-4444-444444444444"
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playCount": 2,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": CONTENT_ID,
+            "contentId": CONTENT_ID,
+            "title": "029_Car_park",
+            "organizationName": "York Talking News",
+            "playbackStartedAt": 10,
+            "createdAt": 20,
+            "completed": True,
+        },
+        "activeDialog": {
+            "type": "feedback",
+            "context": {"contentId": CONTENT_ID},
+        },
+        "activePlayback": {
+            "contentId": pendle_id,
+            "token": pendle_id,
+            "title": "Pendle weekly update",
+            "organizationId": "org-pendle",
+            "organizationName": "Pendle Voice",
+            "audioUrl": "https://cdn.hear.media/audio/pendle.mp3",
+            "durationMs": 180_000,
+            "offsetMs": 175_000,
+            "listenedMs": 175_000,
+            "sessionId": f"{pendle_id}:session",
+            "status": "playing",
+            "startedAt": 30,
+            "updatedAt": 31,
+        },
+    }
+    skill = build_skill(persistence)
+
+    await skill.invoke(_event({
+        "type": "AudioPlayer.PlaybackFinished",
+        "token": pendle_id,
+        "offsetInMilliseconds": 180_000,
+    }), None)
+    launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
+
+    state = persistence._store[USER_ID]
+    assert state["pendingFeedback"]["contentId"] == pendle_id
+    speech = launch["response"]["outputSpeech"]["ssml"]
+    assert "Pendle weekly update" in speech
+    assert "Pendle Voice" in speech
+    assert "029_Car_park" not in speech

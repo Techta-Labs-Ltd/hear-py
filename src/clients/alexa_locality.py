@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 
 import config.permission_scopes as permission_scopes
@@ -9,6 +10,7 @@ from src.services.store import get_store, update_store
 _PROFILE_TTL_MS = 24 * 60 * 60 * 1000
 _PROFILE_BACKOFF_MS = 5 * 60 * 1000
 _GRANTED_STATUS = "GRANTED"
+logger = logging.getLogger(__name__)
 
 _LOCALITY_POOL = HttpPool(timeout_ms=10_000)
 
@@ -64,6 +66,7 @@ class AlexaLocalityClient:
                 f"{api_endpoint}/v1/devices/{device_id}/settings/address",
                 headers={"Authorization": f"Bearer {api_access_token}"},
             )
+            logger.info("Hear: device address API status=%s", resp.status_code)
             if resp.status_code == 403:
                 return {"denied": True}
             if resp.status_code == 204:

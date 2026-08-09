@@ -21,7 +21,6 @@ from src.handlers.browse import (
 )
 from src.handlers.fallback import FallbackHandler, UnmatchedIntentHandler
 from src.handlers.launch import LaunchRequestHandler
-from src.handlers.onboarding import ConnectionsResponseHandler
 from src.handlers.play import (
     PlayByCreatorHandler,
     PlayByOrganizationHandler,
@@ -59,7 +58,7 @@ from src.handlers.system import (
 )
 from src.handlers.yesno import NoIntentHandler, YesIntentHandler
 REQUEST_HANDLERS = (
-    LaunchRequestHandler, ConnectionsResponseHandler, WhatsTrendingHandler,
+    LaunchRequestHandler, WhatsTrendingHandler,
     BrowseContentHandler,
     PlayByCreatorHandler, PlayByOrganizationHandler, PlayContentHandler,
     ShowMoreBrowseHandler, SetPlaybackSpeedHandler, IncreaseSpeedHandler,

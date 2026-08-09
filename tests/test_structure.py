@@ -177,8 +177,9 @@ async def test_onboarding_yes_returns_permission_card():
 
     assert response["response"]["card"] == {
         "type": "AskForPermissionsConsent",
-        "permissions": [DEVICE_ADDRESS, GEOLOCATION_READ],
+        "permissions": [DEVICE_ADDRESS],
     }
+    assert response["response"]["shouldEndSession"] is True
 
 
 def test_feedback_service_owns_pending_feedback_policy():

@@ -5,10 +5,11 @@ from src.clients.alexa import AlexaClient
 from src.clients.alexa_locality import AlexaLocalityClient
 from src.clients.hear import HearApiClient
 from src.clients.resolver import ResolverClient
+from src.clients.progressive import ProgressiveResponseClient
 
 
 class Dependencies:
-    __slots__ = ("locality", "alexa", "heara", "resolver")
+    __slots__ = ("locality", "alexa", "heara", "resolver", "progressive")
 
     def __init__(
         self,
@@ -17,6 +18,7 @@ class Dependencies:
         alexa: AlexaClient | None = None,
         heara: HearApiClient | None = None,
         resolver: ResolverClient | None = None,
+        progressive: ProgressiveResponseClient | None = None,
     ) -> None:
         self.locality = locality or AlexaLocalityClient()
         self.alexa = alexa or AlexaClient()
@@ -24,3 +26,4 @@ class Dependencies:
         self.resolver = resolver or ResolverClient(
             api_key=settings.HEAR_API_KEY,
         )
+        self.progressive = progressive or ProgressiveResponseClient()

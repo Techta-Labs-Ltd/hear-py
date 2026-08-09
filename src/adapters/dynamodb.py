@@ -1,15 +1,12 @@
 from __future__ import annotations
-
 import asyncio
 import json
 import threading
 from typing import Any
-
 import boto3
 
 _lock = threading.Lock()
 _client: Any = None
-
 
 def get_client(region: str | None = None) -> Any:
     global _client

@@ -2,6 +2,17 @@ from __future__ import annotations
 
 import inspect
 from typing import Any
+from urllib.parse import urlparse
+
+
+def _valid_card_image_url(value: Any) -> bool:
+    try:
+        parsed = urlparse(str(value or ""))
+        return parsed.scheme == "https" and parsed.path.lower().endswith(
+            (".jpg", ".jpeg", ".png")
+        )
+    except Exception:
+        return False
 
 def _wrap(value: Any) -> Any:
     if isinstance(value, AttrDict):
@@ -128,6 +139,37 @@ class ResponseBuilder:
             "type": "AskForPermissionsConsent",
             "permissions": list(permissions or []),
         }
+        return self
+
+    def with_simple_card(self, title: Any, content: Any) -> "ResponseBuilder":
+        self._response["card"] = {
+            "type": "Simple",
+            "title": str(title or "").strip(),
+            "content": str(content or "").strip(),
+        }
+        return self
+
+    def with_standard_card(
+        self,
+        title: Any,
+        text: Any,
+        *,
+        small_image_url: str | None = None,
+        large_image_url: str | None = None,
+    ) -> "ResponseBuilder":
+        card = {
+            "type": "Standard",
+            "title": str(title or "").strip(),
+            "text": str(text or "").strip(),
+        }
+        image = {}
+        if _valid_card_image_url(small_image_url):
+            image["smallImageUrl"] = str(small_image_url)
+        if _valid_card_image_url(large_image_url):
+            image["largeImageUrl"] = str(large_image_url)
+        if image:
+            card["image"] = image
+        self._response["card"] = card
         return self
 
     def add_directive(self, directive: Any) -> "ResponseBuilder":

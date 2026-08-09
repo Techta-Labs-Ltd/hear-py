@@ -149,6 +149,12 @@ class FeedbackService:
         return state.get("contentId")
 
     @staticmethod
+    def _candidate_recency(candidate: dict | None) -> int:
+        value = candidate if isinstance(candidate, dict) else {}
+        playback_started = FeedbackService._safe_int(value.get("playbackStartedAt"))
+        return playback_started or FeedbackService._safe_int(value.get("createdAt"))
+
+    @staticmethod
     def _publication_is_last_track(state: dict, store: dict) -> bool:
         track_index = state.get("trackIndex")
         track_count = state.get("trackCount")
@@ -240,6 +246,10 @@ class FeedbackService:
             "expectedTrackCount": expected_count,
             "expectedDurationMs": expected_duration or None,
             "representativeContentId": str(content_id),
+            "latestPlaybackStartedAt": max(
+                FeedbackService._safe_int(current.get("latestPlaybackStartedAt")),
+                FeedbackService._safe_int(state.get("startedAt")),
+            ),
             "tracks": tracks,
             "updatedAt": int(time.time() * 1000),
         }
@@ -319,6 +329,9 @@ class FeedbackService:
             "listenedMs": listened_ms,
             "completed": True,
             "sessionId": key,
+            "playbackStartedAt": FeedbackService._safe_int(
+                progress.get("latestPlaybackStartedAt"),
+            ),
             "createdAt": int(time.time() * 1000),
         }
         existing = [
@@ -375,6 +388,7 @@ class FeedbackService:
             "listenedMs": listened_ms,
             "completed": bool(completed),
             "sessionId": state.get("sessionId"),
+            "playbackStartedAt": FeedbackService._safe_int(state.get("startedAt")),
             "createdAt": int(time.time() * 1000),
         }
         existing = [
@@ -387,29 +401,36 @@ class FeedbackService:
     @staticmethod
     def activate_best(handler_input) -> dict | None:
         store = get_store(handler_input)
-        if store.get("awaitingFeedback"):
-            return store.get("pendingFeedback")
+        pending = store.get("pendingFeedback") if store.get("awaitingFeedback") else None
         candidates = [
             item for item in (store.get("feedbackCandidates") or [])
             if item.get("completed") is True
             if item.get("feedbackKey") not in (store.get("answeredFeedbackKeys") or [])
         ]
         if not candidates:
-            return None
+            return pending
         candidates.sort(
             key=lambda item: (
-                bool(item.get("completed")),
+                FeedbackService._candidate_recency(item),
                 int(item.get("listenedMs") or 0),
-                int(item.get("createdAt") or 0),
             ),
             reverse=True,
         )
         selected = candidates[0]
-        session_id = selected.get("sessionId")
-        remaining = [item for item in candidates if item.get("sessionId") != session_id]
+        if (
+            isinstance(pending, dict)
+            and FeedbackService._candidate_recency(selected)
+            <= FeedbackService._candidate_recency(pending)
+        ):
+            # Delayed completion events and older backlog must never displace
+            # the most recently selected feedback prompt.
+            update_store(handler_input, {"feedbackCandidates": []})
+            return pending
         update_store(handler_input, {
             "pendingFeedback": selected,
-            "feedbackCandidates": remaining,
+            # Feedback is latest-only. Once selected, older unanswered items
+            # are deliberately discarded instead of resurfacing later.
+            "feedbackCandidates": [],
             "awaitingFeedback": True,
             "_requiresReliableSave": True,
         })

@@ -316,6 +316,7 @@ async def discover_content_via_search(
         json.dumps(logged_payload, sort_keys=True, separators=(",", ":")),
     )
 
+    await d.progressive.send(handler_input, "One moment while I find that for you.")
     result = await d.heara.search(payload, timeout_ms=timeout_ms)
     logger.info(
         "Hear: search response intent=%s failed=%s total=%s returned=%s",
@@ -513,9 +514,18 @@ async def play_from_followed_creators(handler_input: HandlerInput, *, deps: Depe
     return response or _build_no_content_response(handler_input)
 
 
-async def _play_first_search_result(handler_input: HandlerInput, items: List[Dict[str, Any]], label: Optional[str] = None, *, deps: Dependencies | None = None):
-    """Play the first item from a list of search results directly."""
-    del deps
+async def _play_first_search_result(
+    handler_input: HandlerInput,
+    search_result: Dict[str, Any],
+    label: Optional[str] = None,
+    *,
+    deps: Dependencies | None = None,
+):
+    """Play the first result while retaining every server page for navigation."""
+    d = deps or Dependencies()
+    items = list(search_result.get("results") or [])
+    if not items:
+        return _build_no_content_response(handler_input)
     content = _resolve_content_for_playback(items[0], handler_input)
     if not content:
         return _build_no_content_response(handler_input)
@@ -532,10 +542,28 @@ async def _play_first_search_result(handler_input: HandlerInput, items: List[Dic
     credit = pick_content_credit(content) or label
     intro = LOCAL_CONTENT_FALLBACK(title, credit)
 
+    payload = search_result.get("_search_payload") or {}
+    intent = get_intent_name(handler_input) or "search"
+    catalog = build_catalog_from_search_result(
+        search_result,
+        intent=intent,
+        q=payload.get("query") or "",
+        search_payload=payload,
+        page=search_result.get("page", 0),
+        limit=payload.get("limit") or _DEFAULT_SEARCH_PAGE_LIMIT,
+        exclude_recent=recent_exclude_filters(store),
+    )
+    set_browse_catalog(handler_input, catalog, intent=intent)
+
+    queue_items = await prefetch_search_queue_items(
+        search_result,
+        d.heara,
+        timeout_ms=compute_search_timeout_ms(handler_input),
+    )
     init_queue(
         handler_input,
-        [{"contentId": i.get("contentId")} for i in items],
-        source=get_intent_name(handler_input) or "search",
+        queue_items,
+        source=intent,
         locality=store.get("locality"),
         start_index=0,
     )

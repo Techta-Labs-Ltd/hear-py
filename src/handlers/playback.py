@@ -6,6 +6,7 @@ from src.dependencies import Dependencies
 from src.services.playback import ACTIVE_STATUSES, read_playback_session, write_playback_session
 from src.services.playback import emit_listening_event
 from src.services.playback import resume_playback, start_playback
+from src.services.dialog_state import clear_transient_discovery_dialog
 from src.services.queue import move_queue
 from src.services.store import get_store, update_store
 from src.utils.audio import (
@@ -205,6 +206,11 @@ class PauseIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
+        if (
+            get_request_type(handler_input) == "IntentRequest"
+            and get_intent_name(handler_input) == "AMAZON.StopIntent"
+        ):
+            clear_transient_discovery_dialog(handler_input)
         state = write_playback_session(handler_input, {"status": "paused"})
         await emit_listening_event(handler_input, "paused", state)
         return handler_input.response_builder.add_directive(build_stop_directive()).response

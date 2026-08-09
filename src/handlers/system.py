@@ -30,7 +30,7 @@ from src.services.observability import (
     flush_sentry,
     last_resort_skill_response,
 )
-from src.services.dialog_state import clear_active_dialog
+from src.services.dialog_state import clear_transient_discovery_dialog
 def _current_timestamp_ms() -> int:
     """Return current UTC time in milliseconds."""
     return int(time.time() * 1000)
@@ -49,6 +49,10 @@ class HelpIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder \
             .speak(ssml(HELP)) \
             .reprompt(ssml(IDLE_DO_NEXT_REPROMPT)) \
+            .with_simple_card(
+                "Hear – things to try",
+                "Say: What's trending?\nPlay news.\nPlay from a talking newspaper.\nPlay Pendle Voice.\nWhat's this about?",
+            ) \
             .set_should_end_session(False) \
             .response
 
@@ -63,12 +67,11 @@ class CancelIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
+        clear_transient_discovery_dialog(handler_input)
         update_store(handler_input, {
-            "pendingAmbiguity": None,
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
         })
-        clear_active_dialog(handler_input, "ambiguity")
         try:
             await emit_user_playback_event(handler_input, {
                 "eventType": USER_PLAYBACK_EVENT_TYPES["CANCELLED"],
@@ -125,6 +128,7 @@ class SessionEndedHandler(AbstractRequestHandler):
         return get_request_type(handler_input) == "SessionEndedRequest"
 
     async def handle(self, handler_input: HandlerInput):
+        clear_transient_discovery_dialog(handler_input)
         reason = None
         try:
             reason = handler_input.request_envelope.request.reason

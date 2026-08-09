@@ -198,6 +198,66 @@ class TestLaunchSimulation:
         assert store["awaitingOrganizationName"] is False
         assert store["activeDialog"] is None
 
+    @pytest.mark.asyncio
+    async def test_launch_clears_stale_search_confirmation_without_durable_state_loss(
+        self, monkeypatch,
+    ):
+        resolution = {
+            "confirmationLabel": "sport",
+            "searchPayload": {"query": "sport"},
+            "expiresAt": 4102444800,
+        }
+        playback = {"token": "token-123", "title": "Self Control.mp3"}
+        feedback = {"contentId": "content-123"}
+        hi = _build_handler_input(store_override={
+            "playCount": 5,
+            "onboardingComplete": True,
+            "awaitingSearchConfirmation": True,
+            "pendingResolution": resolution,
+            "pendingSuggestions": [{"label": "news"}],
+            "suggestionIndex": 1,
+            "excludedSuggestions": ["sport"],
+            "activeDialog": {
+                "type": "search_confirmation",
+                "context": resolution,
+                "expiresAt": 4102444800,
+            },
+            "activePlayback": playback,
+            "pendingFeedback": feedback,
+            "followedCreators": ["creator-123"],
+            "userCity": "Pendle",
+        })
+        monkeypatch.setattr(
+            "src.services.launch.record_launch",
+            lambda *_args: {"save": {}},
+        )
+        monkeypatch.setattr(
+            "src.handlers.launch.has_unfinished_playback",
+            lambda _store: False,
+        )
+        monkeypatch.setattr(
+            "src.handlers.launch._ensure_listener_data_for_launch",
+            AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
+        )
+        monkeypatch.setattr(
+            "src.handlers.launch._schedule_launch_background_work",
+            lambda *_args: None,
+        )
+
+        await _handle_launch_request_body(hi)
+
+        store = get_store(hi)
+        assert store["awaitingSearchConfirmation"] is False
+        assert store["pendingResolution"] is None
+        assert store["pendingSuggestions"] == []
+        assert store["suggestionIndex"] == 0
+        assert store["excludedSuggestions"] == []
+        assert store["activeDialog"] is None
+        assert store["activePlayback"] == playback
+        assert store["pendingFeedback"] == feedback
+        assert store["followedCreators"] == ["creator-123"]
+        assert store["userCity"] == "Pendle"
+
     @patch("src.services.launch.record_launch")
     def test_new_user_empty_store(self, mock_record):
         hi = _build_handler_input()

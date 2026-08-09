@@ -149,6 +149,13 @@ class WhatsThisAboutHandler(AbstractRequestHandler):
             creator = None
 
         phrase = CONTENT_ABOUT_PHRASE(title, summary, None, creator)
-        return handler_input.response_builder \
-            .speak(ssml(phrase)) \
-            .response
+        card_title = str(title or "Current recording")
+        card_lines = []
+        if creator:
+            card_lines.append(f"By {creator}")
+        if summary:
+            card_lines.append(str(summary))
+        builder = handler_input.response_builder.speak(ssml(phrase))
+        if card_lines:
+            builder = builder.with_simple_card(card_title, "\n\n".join(card_lines))
+        return builder.response

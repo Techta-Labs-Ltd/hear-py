@@ -16,6 +16,8 @@ _LEGACY_FLAGS = {
     "resume": "awaitingResume",
 }
 
+_TRANSIENT_DISCOVERY_DIALOGS = {"search_confirmation", "ambiguity"}
+
 
 class DialogStateManager:
     __slots__ = ()
@@ -104,6 +106,33 @@ class DialogStateManager:
         return update_store(handler_input, updates)
 
     @staticmethod
+    def clear_transient_discovery(handler_input) -> dict:
+        """Discard discovery choices that are only valid in the current session."""
+        store = get_store(handler_input)
+        raw_active = store.get("activeDialog")
+        active_type = raw_active.get("type") if isinstance(raw_active, dict) else None
+        updates = {
+            "awaitingSearchConfirmation": False,
+            "pendingResolution": None,
+            "pendingAmbiguity": None,
+            "pendingSuggestions": [],
+            "suggestionIndex": 0,
+            "excludedSuggestions": [],
+            "awaitingOrganizationName": False,
+            "_requiresReliableSave": True,
+        }
+        if active_type in _TRANSIENT_DISCOVERY_DIALOGS or (
+            not active_type
+            and (
+                store.get("awaitingSearchConfirmation")
+                or store.get("pendingResolution")
+                or store.get("pendingAmbiguity")
+            )
+        ):
+            updates["activeDialog"] = None
+        return update_store(handler_input, updates)
+
+    @staticmethod
     def migrate(store: dict) -> dict:
         if not isinstance(store, dict):
             return store
@@ -117,4 +146,5 @@ active_dialog_from_store = _dialog.active_from_store
 get_active_dialog = _dialog.get_active
 activate_dialog = _dialog.activate
 clear_active_dialog = _dialog.clear
+clear_transient_discovery_dialog = _dialog.clear_transient_discovery
 migrate_active_dialog = _dialog.migrate

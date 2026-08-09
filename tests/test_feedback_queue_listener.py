@@ -19,6 +19,7 @@ from src.runtime import AttrDict
 from src.clients.hear import sync_listener_for_launch
 
 from src.services.playback import _resolve_content
+from src.services.feedback import FeedbackService
 
 from src.services.store import DEFAULT_STORE
 
@@ -169,6 +170,67 @@ def test_internal_short_identifier_is_not_used_as_spoken_title():
     })
 
     assert content_title_for_speech(item) == "A weekly sport update from York"
+
+
+def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_input):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "york-old",
+            "contentId": "york-old",
+            "title": "029_Car_park",
+            "organizationName": "York Talking News",
+            "playbackStartedAt": 100,
+            "createdAt": 200,
+            "completed": True,
+        },
+        "feedbackCandidates": [{
+            "feedbackKey": "pendle-new",
+            "contentId": "pendle-new",
+            "title": "Pendle weekly update",
+            "organizationName": "Pendle Voice",
+            "playbackStartedAt": 300,
+            "createdAt": 400,
+            "completed": True,
+        }],
+    }
+
+    selected = FeedbackService.activate_best(mock_handler_input)
+
+    store = mock_handler_input.attributes_manager.request_attributes["_store"]
+    assert selected["contentId"] == "pendle-new"
+    assert store["pendingFeedback"]["organizationName"] == "Pendle Voice"
+    assert store["feedbackCandidates"] == []
+    assert store["activeDialog"]["context"]["contentId"] == "pendle-new"
+
+
+def test_delayed_old_completion_cannot_replace_newer_pending_feedback(mock_handler_input):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "pendle-new",
+            "contentId": "pendle-new",
+            "playbackStartedAt": 300,
+            "createdAt": 400,
+            "completed": True,
+        },
+        "feedbackCandidates": [{
+            "feedbackKey": "york-delayed",
+            "contentId": "york-delayed",
+            "playbackStartedAt": 100,
+            "createdAt": 500,
+            "completed": True,
+        }],
+    }
+
+    selected = FeedbackService.activate_best(mock_handler_input)
+
+    store = mock_handler_input.attributes_manager.request_attributes["_store"]
+    assert selected["contentId"] == "pendle-new"
+    assert store["pendingFeedback"]["contentId"] == "pendle-new"
+    assert store["feedbackCandidates"] == []
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,7 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
+from config.permission_scopes import DEVICE_ADDRESS
 
 from src.dependencies import Dependencies
 
@@ -66,9 +66,7 @@ def _get_stage(handler_input: HandlerInput) -> str | None:
 
 
 def _location_scopes_granted(handler_input: HandlerInput, deps: Dependencies) -> bool:
-    return deps.locality.has_permission(handler_input, DEVICE_ADDRESS) or deps.locality.has_permission(
-        handler_input, GEOLOCATION_READ
-    )
+    return deps.locality.has_permission(handler_input, DEVICE_ADDRESS)
 
 
 def _confirm_echo(handler_input: HandlerInput, store: Dict[str, Any]):
@@ -129,6 +127,12 @@ class OnboardingGateHandler(AbstractRequestHandler):
         rt = get_request_type(handler_input)
         if rt == "LaunchRequest":
             store = get_store(handler_input)
+            if _location_scopes_granted(handler_input, self._deps):
+                logger.info("Hear: onboarding address permission granted on launch")
+                return await auto_detect_location_or_manual(
+                    handler_input, store, deps=self._deps,
+                )
+            logger.info("Hear: onboarding address permission missing on launch")
             return ask_for_permission(handler_input, store)
 
         intent = get_intent_name(handler_input)

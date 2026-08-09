@@ -138,19 +138,35 @@ def ask_for_permission(handler_input: HandlerInput, store: Dict[str, Any]):
 
 
 def handle_permission_yes(handler_input: HandlerInput, store: Dict[str, Any]):
-    """Handle user consent — send a permissions consent card."""
-    permissions = [PERMISSIONS["DEVICE_ADDRESS"], PERMISSIONS["GEOLOCATION"]]
+    """Send the Alexa-owned consent card for the location data we consume."""
+    permissions = [PERMISSIONS["DEVICE_ADDRESS"]]
     update_store(handler_input, {"onboardingStage": "ask_permission"})
     activate_dialog(
         handler_input,
         "onboarding",
         context={"stage": "ask_permission"},
     )
+    logger.info(
+        "Hear: permission card requested scopes=%s requestId=%s cardPresent=true",
+        permissions,
+        _request_id(handler_input),
+    )
     return handler_input.response_builder \
         .speak(ssml(ONBOARDING_CONSENT_CARD_SENT)) \
         .with_ask_for_permissions_consent_card(permissions) \
-        .set_should_end_session(False) \
+        .set_should_end_session(True) \
         .response
+
+
+def _request_id(handler_input: HandlerInput) -> str:
+    try:
+        request = handler_input.request_envelope.request
+        return str(request.requestId or "")
+    except Exception:
+        try:
+            return str(handler_input.request_envelope["request"].get("requestId") or "")
+        except Exception:
+            return ""
 
 
 def handle_permission_no(handler_input: HandlerInput, store: Dict[str, Any]):
@@ -495,30 +511,3 @@ async def auto_detect_location_or_manual(handler_input: HandlerInput, store: Dic
         .response
 
 
-def _consent_status_code(handler_input) -> str:
-    try:
-        request = handler_input.request_envelope.request
-        return str((getattr(request, "status", None) or {}).get("code") or "")
-    except Exception:
-        return ""
-
-
-class ConnectionsResponseHandler(AbstractRequestHandler):
-
-    def __init__(self, *, deps: Dependencies | None = None):
-        self._deps = deps or Dependencies()
-
-    def can_handle(self, handler_input: HandlerInput) -> bool:
-        return get_request_type(handler_input) == "Connections.Response"
-
-    async def handle(self, handler_input: HandlerInput):
-        store = get_store(handler_input)
-        granted = _consent_status_code(handler_input).startswith("2")
-        if store.get("onboardingComplete"):
-            return handler_input.response_builder \
-                .speak(ssml(CONSENT_CARD_THANKS if granted else LOCATION_DECLINED)) \
-                .set_should_end_session(False) \
-                .response
-        if granted:
-            return await auto_detect_location_or_manual(handler_input, store, deps=self._deps)
-        return handle_permission_no(handler_input, store)

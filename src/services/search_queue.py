@@ -1,11 +1,8 @@
 from __future__ import annotations
-
 import logging
 from typing import Any
 
-
 logger = logging.getLogger(__name__)
-
 
 async def prefetch_search_queue_items(
     search_result: dict[str, Any],

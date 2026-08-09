@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.handlers.search import auto_play_first_from_search
+from src.handlers.search import auto_play_first_from_search, _play_first_search_result
 
 from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.clients.hear import (
@@ -194,6 +194,60 @@ async def test_search_prefetches_all_pages_into_playback_queue(
         "content-2",
         "content-3",
         "content-4",
+    ]
+    assert [call.args[0]["page"] for call in hear_client.search.await_args_list] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_latest_search_prefetches_all_pages_into_navigation_queue(
+    monkeypatch,
+    mock_handler_input,
+):
+    start = AsyncMock(return_value={"response": "play"})
+    monkeypatch.setattr("src.handlers.search.start_playback", start)
+    hear_client = AsyncMock()
+    hear_client.search.side_effect = [
+        {
+            "results": [{"contentId": f"content-{index}"} for index in range(4, 7)],
+            "total_hits": 9,
+            "total_pages": 3,
+            "page": 1,
+            "failed": False,
+        },
+        {
+            "results": [{"contentId": f"content-{index}"} for index in range(7, 10)],
+            "total_hits": 9,
+            "total_pages": 3,
+            "page": 2,
+            "failed": False,
+        },
+    ]
+    first_page = [{
+        "id": f"content-{index}",
+        "contentId": f"content-{index}",
+        "title": "Latest Pendle recording" if index == 1 else f"Pendle recording {index}",
+        "audioUrl": f"https://cdn.hear.media/audio/content-{index}.mp3",
+    } for index in range(1, 4)]
+
+    await _play_first_search_result(
+        mock_handler_input,
+        {
+            "results": first_page,
+            "total_hits": 9,
+            "total_pages": 3,
+            "page": 0,
+            "_search_payload": {"query": "", "page": 0, "limit": 3},
+        },
+        label="Pendle Voice",
+        deps=Dependencies(heara=hear_client),
+    )
+
+    store = mock_handler_input.attributes_manager.request_attributes["_store"]
+    assert store["playbackQueue"]["orderedContentIds"] == [
+        f"content-{index}" for index in range(1, 10)
+    ]
+    assert [item["contentId"] for item in store["browseCatalog"]["items"]] == [
+        "content-1", "content-2", "content-3",
     ]
     assert [call.args[0]["page"] for call in hear_client.search.await_args_list] == [1, 2]
 

@@ -131,7 +131,7 @@ class PlayContentHandler(AbstractRequestHandler):
             try:
                 if search_q and wants_latest_playback(raw_phrase or ""):
                     return await _play_first_search_result(
-                        handler_input, search_result["results"], label=search_q,
+                        handler_input, search_result, label=search_q,
                         deps=self._deps,
                     )
             except Exception:
@@ -226,7 +226,7 @@ class PlayByCreatorHandler(AbstractRequestHandler):
         try:
             if wants_latest_playback(raw_phrase or ""):
                 return await _play_first_search_result(
-                    handler_input, search_result["results"], label=creator_label,
+                    handler_input, search_result, label=creator_label,
                     deps=self._deps,
                 )
         except Exception:
@@ -367,7 +367,7 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
         try:
             if wants_latest_playback(raw_phrase or ""):
                 return await _play_first_search_result(
-                    handler_input, search_result["results"], label=org_label,
+                    handler_input, search_result, label=org_label,
                     deps=self._deps,
                 )
         except Exception:
