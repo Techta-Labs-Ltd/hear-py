@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -29,7 +30,7 @@ def _handler_input(*, scopes=None):
 
 
 @pytest.mark.asyncio
-async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent():
+async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent(caplog):
     response = SimpleNamespace(
         status_code=200,
         raise_for_status=lambda: None,
@@ -44,7 +45,8 @@ async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent():
     pool = _Pool(response)
     client = AlexaLocalityClient(pool=pool)
 
-    result = await client.detect_device_location(_handler_input())
+    with caplog.at_level(logging.INFO, logger="src.clients.alexa_locality"):
+        result = await client.detect_device_location(_handler_input())
 
     assert result["_status"] == "resolved"
     assert result["city"] == "Burnley"
@@ -56,6 +58,14 @@ async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent():
         "Authorization": "Bearer request-token",
         "Accept": "application/json",
     }
+    assert "path=/v1/devices/<redacted>/settings/address" in caplog.text
+    assert "deviceIdPresent=true" in caplog.text
+    assert '"city":"Burnley"' in caplog.text
+    assert '"stateOrRegion":"Lancashire"' in caplog.text
+    assert '"postalCodePresent":true' in caplog.text
+    assert "device-123" not in caplog.text
+    assert "request-token" not in caplog.text
+    assert "BB10 1AA" not in caplog.text
 
 
 @pytest.mark.asyncio

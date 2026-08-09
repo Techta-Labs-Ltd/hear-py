@@ -158,6 +158,10 @@ TOWN_GOT_IT = lambda city: f"{escape_ssml_lite(city) or 'your area'} it is. What
 TOWN_SKIPPED = "Okay. What would you like to listen to?"
 
 TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say the full city name, or say skip to continue without one."
+CITY_NOT_FOUND = lambda city: (
+    f"Sorry, I couldn't find {escape_ssml_lite(city)} as a city. "
+    "Please say the city name again, or say skip to continue without local content."
+)
 TOWN_LOOKUP_UNAVAILABLE_RETRY = "I can't check that city right now. Please try the city name again."
 TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
 CITY_SETUP_GUIDANCE = (
@@ -556,8 +560,9 @@ COMMUNITY_PLAYBACK_OFFER = lambda city: f"Would you like to hear the latest from
 
 # \u2500\u2500 Location (set / confirm / resolution failure) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 LOCATION_NOT_FOUND = (
-    "Alexa allowed access, but this device did not return a saved city. You can tell me which city "
-    "you're in now, or say skip."
+    "Welcome back to Hear. I don't have a city for this Echo yet. "
+    "You can tell me your city now, or say skip. "
+    "To use your Echo's saved location instead, update Device Location in the Alexa app and relaunch Hear."
 )
 LOCATION_DECLINED = "No problem. What would you like to listen to?"
 LOCATION_CONFIRMED = lambda city: (

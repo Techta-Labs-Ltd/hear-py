@@ -237,14 +237,26 @@ class TownCaptureHandler(AbstractRequestHandler):
             return False
 
         attrs = handler_input.attributes_manager.get_request_attributes()
-        nlp_intent = (attrs or {}).get("_nlp", {}).get("intent")
+        nlp = (attrs or {}).get("_nlp", {})
+        nlp_intent = nlp.get("intent")
         if nlp_intent == "town_capture":
             return True
         if nlp_intent:
-            return False
+            # A free-form city reply can be classified as a generic search
+            # when the resolver finds no city entity. Keep that reply owned by
+            # onboarding, but never steal a resolved creator/organisation
+            # ambiguity from its active discovery flow.
+            return bool(
+                nlp_intent == "search"
+                and not (nlp.get("entities") or [])
+                and ((nlp.get("slots") or {}).get("residualQuery"))
+                and get_intent_name(handler_input) in (
+                    "TownCaptureIntent",
+                    "SetLocationIntent",
+                )
+            )
 
-        intent_name = get_intent_name(handler_input)
-        return intent_name in (
+        return get_intent_name(handler_input) in (
             "TownCaptureIntent",
             "SetLocationIntent",
             "AMAZON.NoIntent",

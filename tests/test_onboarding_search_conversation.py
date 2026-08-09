@@ -169,6 +169,101 @@ def test_manual_town_reprompt_exposes_skip_command():
 
 
 @pytest.mark.asyncio
+async def test_onboarding_gate_preserves_city_phrase_misclassified_as_search(
+    mock_handler_input,
+):
+    from src.middleware.onboarding_gate import OnboardingGateHandler
+
+    handler_input = _town_request(mock_handler_input, "ammm ba")
+    handler_input.request_envelope.request.intent.name = "PlayContentIntent"
+    handler_input.request_envelope.request.intent.slots = {
+        "topic": {"name": "topic", "value": "ammm ba"},
+    }
+    handler_input.attributes_manager.get_session_attributes = lambda: {}
+    handler_input.attributes_manager.request_attributes["_nlp"] = {
+        "status": "resolved",
+        "intent": "search",
+        "entities": [],
+        "slots": {
+            "residualQuery": "ammm ba",
+            "latest": False,
+            "isRecommended": False,
+            "isPublication": False,
+            "sort": "relevance",
+        },
+    }
+    gate = OnboardingGateHandler()
+
+    assert gate.can_handle(handler_input) is True
+    await gate.handle(handler_input)
+
+    speech = handler_input.response_builder.speak.call_args.args[0]
+    assert "couldn't find ammm ba as a city" in speech.casefold()
+    handler_input.response_builder.speak.return_value.reprompt.return_value \
+        .set_should_end_session.assert_called_once_with(False)
+
+
+@pytest.mark.asyncio
+async def test_town_intent_remains_owned_when_resolver_calls_it_search(
+    monkeypatch,
+    mock_handler_input,
+):
+    resolve = AsyncMock(return_value={
+        "status": "resolved",
+        "intent": "search",
+        "entities": [],
+        "resolution": {"match": None, "candidates": []},
+        "slots": {"residualQuery": "ammm ba"},
+    })
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    handler_input = _town_request(mock_handler_input, "ammm ba")
+    handler_input.attributes_manager.request_attributes["_nlp"] = {
+        "status": "resolved",
+        "intent": "search",
+        "entities": [],
+        "slots": {"residualQuery": "ammm ba"},
+    }
+    handler = TownCaptureHandler()
+
+    assert handler.can_handle(handler_input) is True
+    await handler.handle(handler_input)
+
+    speech = handler_input.response_builder.speak.call_args.args[0]
+    assert "couldn't find ammm ba as a city" in speech.casefold()
+    handler_input.response_builder.speak.return_value.reprompt.return_value \
+        .add_directive.return_value.set_should_end_session.assert_called_once_with(False)
+
+
+@pytest.mark.asyncio
+async def test_unknown_city_names_city_and_keeps_session_open(
+    monkeypatch,
+    mock_handler_input,
+):
+    monkeypatch.setattr(
+        ResolverClient,
+        "resolve_utterance",
+        AsyncMock(return_value={
+            "status": "resolved",
+            "resolution": {"match": None, "candidates": []},
+        }),
+    )
+    handler_input = _town_request(mock_handler_input, "nottinghamshire place")
+
+    await TownCaptureHandler().handle(handler_input)
+
+    speech = handler_input.response_builder.speak.call_args.args[0]
+    assert "couldn't find nottinghamshire place as a city" in speech.casefold()
+    retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
+    retry_builder.add_directive.assert_called_once_with({
+        "type": "Dialog.ElicitSlot",
+        "slotToElicit": "townName",
+    })
+    retry_builder.add_directive.return_value.set_should_end_session \
+        .assert_called_once_with(False)
+    assert get_store(handler_input)["onboardingStage"] == "ask_town"
+
+
+@pytest.mark.asyncio
 async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_handler_input):
     monkeypatch.setattr(
         ResolverClient, "resolve_utterance",

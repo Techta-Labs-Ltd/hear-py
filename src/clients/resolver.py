@@ -20,6 +20,40 @@ RESOLVER_DEFAULT_COUNTRY = "gb"
 _RESOLVER_POOL = HttpPool(timeout_ms=RESOLVER_TIMEOUT_MS)
 
 
+def _without_coordinates(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_coordinates(item)
+            for key, item in value.items()
+            if key not in {"latitude", "longitude"}
+        }
+    if isinstance(value, list):
+        return [_without_coordinates(item) for item in value]
+    return value
+
+
+def _resolver_response_log(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return useful resolver diagnostics without coordinates or account data."""
+    safe_slots = _without_coordinates(payload.get("slots") or {})
+    safe_entities = []
+    for entity in payload.get("entities") or []:
+        if not isinstance(entity, dict):
+            continue
+        safe_entities.append({
+            "type": entity.get("entityType") or entity.get("type"),
+            "id": entity.get("entityId") or entity.get("id"),
+            "value": entity.get("canonicalValue") or entity.get("name"),
+        })
+    return {
+        "status": payload.get("status"),
+        "intent": payload.get("intent"),
+        "entities": safe_entities,
+        "slots": safe_slots,
+        "ambiguityCount": len(payload.get("ambiguities") or []),
+        "timingMs": payload.get("timingMs"),
+    }
+
+
 class ResolverClient:
     __slots__ = ("_host", "_api_key", "_default_country", "_timeout", "_pool", "_transport")
 
@@ -86,6 +120,15 @@ class ResolverClient:
             payload = response.json()
             if not isinstance(payload, dict):
                 raise ResolverUnavailable("resolver response must be an object")
+            logger.info(
+                "Hear: resolver response httpStatus=%s payload=%s",
+                response.status_code,
+                json.dumps(
+                    _resolver_response_log(payload),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
             return ResolverResult.from_payload(payload)
         except ResolverUnavailable as exc:
             logger.warning("Resolver response rejected reason=%s", exc)

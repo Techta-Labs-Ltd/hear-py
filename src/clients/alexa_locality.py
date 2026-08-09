@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import time
 
 import config.permission_scopes as permission_scopes
@@ -13,6 +14,25 @@ _GRANTED_STATUS = "GRANTED"
 logger = logging.getLogger(__name__)
 
 _LOCALITY_POOL = HttpPool(timeout_ms=10_000)
+
+
+def _request_id(handler_input) -> str:
+    try:
+        return str(handler_input.request_envelope.request.requestId or "")
+    except Exception:
+        return ""
+
+
+def _safe_address_log(data: dict) -> dict:
+    """Expose locality diagnostics without logging a street address or postcode."""
+    return {
+        "city": data.get("city"),
+        "countryCode": data.get("countryCode"),
+        "stateOrRegion": data.get("stateOrRegion"),
+        "districtOrCounty": data.get("districtOrCounty"),
+        "postalCodePresent": bool(data.get("postalCode")),
+        "addressLine3Present": bool(data.get("addressLine3")),
+    }
 
 
 class AlexaLocalityClient:
@@ -61,6 +81,14 @@ class AlexaLocalityClient:
         api_access_token = sys.apiAccessToken
         device_id = sys.device.deviceId
         try:
+            logger.info(
+                "Hear: device address request method=GET apiEndpoint=%s "
+                "path=/v1/devices/<redacted>/settings/address requestId=%s "
+                "tokenPresent=%s deviceIdPresent=true",
+                api_endpoint,
+                _request_id(handler_input),
+                bool(api_access_token),
+            )
             client = self._pool.get()
             resp = await client.get(
                 f"{api_endpoint}/v1/devices/{device_id}/settings/address",
@@ -69,7 +97,11 @@ class AlexaLocalityClient:
                     "Accept": "application/json",
                 },
             )
-            logger.info("Hear: device address API status=%s", resp.status_code)
+            logger.info(
+                "Hear: device address response status=%s requestId=%s",
+                resp.status_code,
+                _request_id(handler_input),
+            )
             if resp.status_code == 403:
                 return {"_status": "permission_denied"}
             if resp.status_code == 401:
@@ -80,6 +112,11 @@ class AlexaLocalityClient:
                 return {"_status": "empty"}
             resp.raise_for_status()
             data = resp.json()
+            logger.info(
+                "Hear: device address response data=%s requestId=%s",
+                json.dumps(_safe_address_log(data), sort_keys=True, separators=(",", ":")),
+                _request_id(handler_input),
+            )
             return {
                 "_status": "granted",
                 "city": data.get("city"),
@@ -165,6 +202,13 @@ class AlexaLocalityClient:
         api_endpoint = sys.apiEndpoint
         api_access_token = sys.apiAccessToken
         try:
+            logger.info(
+                "Hear: profile setting request setting=%s requestId=%s "
+                "tokenPresent=%s",
+                label or setting_path,
+                _request_id(handler_input),
+                bool(api_access_token),
+            )
             client = self._pool.get()
             resp = await client.get(
                 f"{api_endpoint}/v2/accounts/~current/settings/{setting_path}",
@@ -174,11 +218,26 @@ class AlexaLocalityClient:
                 },
             )
             if resp.status_code in (403, 401):
+                logger.info(
+                    "Hear: profile setting response setting=%s status=%s valuePresent=false",
+                    label or setting_path,
+                    resp.status_code,
+                )
                 return {"value": None, "status": resp.status_code}
             if resp.status_code == 204:
+                logger.info(
+                    "Hear: profile setting response setting=%s status=204 valuePresent=false",
+                    label or setting_path,
+                )
                 return {"value": None, "status": 204}
             data = resp.json()
             parsed = self._parse_profile_setting_value(data)
+            logger.info(
+                "Hear: profile setting response setting=%s status=%s valuePresent=%s",
+                label or setting_path,
+                resp.status_code,
+                bool(parsed),
+            )
             return {"value": parsed, "status": resp.status_code}
         except Exception as e:
             status = getattr(getattr(e, "response", None), "status_code", 0)

@@ -130,7 +130,10 @@ async def test_empty_device_address_explains_missing_saved_city_and_allows_manua
         deps=Dependencies(locality=locality),
     )
 
-    assert "did not return a saved city" in result["outputSpeech"]["ssml"]
+    speech = result["outputSpeech"]["ssml"]
+    assert "Welcome back to Hear" in speech
+    assert "I don't have a city for this Echo yet" in speech
+    assert "Alexa gave Hear permission" not in speech
     assert "say skip" in result["outputSpeech"]["ssml"]
     assert get_store(mock_handler_input)["onboardingStage"] == "ask_town"
 

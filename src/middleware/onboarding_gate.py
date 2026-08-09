@@ -131,11 +131,24 @@ class OnboardingGateHandler(AbstractRequestHandler):
         store = get_store(handler_input)
 
         if stage == ONBOARDING_ASK_TOWN:
-            logger.info(
-                "Hear: town reply was not captured intent=%s; asking again",
-                intent,
+            attrs = handler_input.attributes_manager.get_request_attributes() or {}
+            nlp = attrs.get("_nlp") or {}
+            slots = nlp.get("slots") or {}
+            attempted_city = (
+                slots.get("townName")
+                or slots.get("placeName")
+                or slots.get("residualQuery")
             )
-            return resume_town_capture(handler_input, store)
+            logger.info(
+                "Hear: city reply was not captured intent=%s attempted=%s; asking again",
+                intent,
+                bool(attempted_city),
+            )
+            return resume_town_capture(
+                handler_input,
+                store,
+                str(attempted_city).strip() if attempted_city else None,
+            )
         if stage == ONBOARDING_AWAIT_CONFIRM:
             redirect = _confirm_echo(handler_input, store)
             if redirect is not None:

@@ -21,6 +21,7 @@ from src.utils.speech import (
     WELCOME_FIRST_ASK_TOWN,
     REPROMPT_ASK_TOWN,
     TOWN_NOT_UNDERSTOOD,
+    CITY_NOT_FOUND,
     TOWN_GOT_IT,
     REPROMPT_CITY,
     TOWN_SKIPPED,
@@ -253,11 +254,20 @@ def start_town_capture(handler_input: HandlerInput, store: Dict[str, Any], name:
         .response
 
 
-def resume_town_capture(handler_input: HandlerInput, store: Dict[str, Any]):
+def resume_town_capture(
+    handler_input: HandlerInput,
+    store: Dict[str, Any],
+    attempted_city: str | None = None,
+):
     """Retry city capture, then give actionable setup guidance without auto-skipping."""
     attempts = int(store.get("onboardingTownAttempts") or 0) + 1
     update_store(handler_input, {"onboardingTownAttempts": attempts})
-    speech = CITY_SETUP_GUIDANCE if attempts >= MAX_TOWN_ATTEMPTS else TOWN_NOT_UNDERSTOOD
+    if attempts >= MAX_TOWN_ATTEMPTS:
+        speech = CITY_SETUP_GUIDANCE
+    elif attempted_city:
+        speech = CITY_NOT_FOUND(attempted_city)
+    else:
+        speech = TOWN_NOT_UNDERSTOOD
     return _town_retry_response(
         handler_input, speech, REPROMPT_ASK_TOWN,
     )
@@ -346,7 +356,7 @@ async def stage_town_confirmation(handler_input: HandlerInput, store: Dict[str, 
                 .reprompt(ssml(REPROMPT_ASK_TOWN)) \
                 .set_should_end_session(False) \
                 .response
-        return resume_town_capture(handler_input, store)
+        return resume_town_capture(handler_input, store, phrase)
     update_store(handler_input, {
         "pendingLocationConfirm": match,
         "awaitingLocationConfirm": True,
