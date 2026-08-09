@@ -123,7 +123,11 @@ async def _apply_speed(handler_input: HandlerInput, speed: float):
     store = get_store(handler_input)
     state = read_playback_session(store)
     variants = store.get("currentPlaybackSpeeds") or []
-    if variants and not find_speed_url(variants, speed):
+    if (
+        speed != settings.default_speed
+        and variants
+        and not find_speed_url(variants, speed)
+    ):
         available = ", ".join(f"{value.get('speed')}x" for value in variants)
         return _open_response(handler_input, PLAYBACK_SPEED_UNAVAILABLE(speed, available))
     update_store(handler_input, {"playbackSpeed": speed})
@@ -149,8 +153,11 @@ class SetPlaybackSpeedHandler(AbstractRequestHandler):
     async def handle(self, handler_input: HandlerInput):
         intent = handler_input.request_envelope.request.intent
         slot = ((intent.get("slots") if intent else None) or {}).get("speed")
-        raw = get_resolved_slot_value(slot)
-        speed = normalise_speed(raw)
+        speed = (
+            settings.default_speed
+            if slot is None
+            else normalise_speed(get_resolved_slot_value(slot))
+        )
         if speed is None:
             return _open_response(handler_input, PLAYBACK_SPEED_INVALID)
         return await _apply_speed(handler_input, speed)

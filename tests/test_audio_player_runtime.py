@@ -356,6 +356,42 @@ async def test_increase_speed_restarts_paused_track_at_saved_offset():
 
 
 @pytest.mark.asyncio
+async def test_bare_normal_speed_resets_to_base_audio_without_speed_slot():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playbackSpeed": 1.5,
+        "currentPlaybackSpeeds": [{
+            "speed": 1.5,
+            "audioUrl": "https://cdn.hear.media/faster.mp3",
+        }],
+        "activePlayback": {
+            **_playback_state(status="paused", offset_ms=42_000),
+            "audioUrl": "https://cdn.hear.media/normal.mp3",
+            "playbackSpeeds": [{
+                "speed": 1.5,
+                "audioUrl": "https://cdn.hear.media/faster.mp3",
+            }],
+        },
+    }
+
+    result = await build_skill(persistence).invoke(
+        _event({
+            "type": "IntentRequest",
+            "intent": {"name": "SetPlaybackSpeedIntent", "slots": {}},
+        }),
+        None,
+    )
+
+    response = result["response"]
+    directive = response["directives"][0]
+    assert persistence._store[USER_ID]["playbackSpeed"] == 1.0
+    assert directive["audioItem"]["stream"]["offsetInMilliseconds"] == 42_000
+    assert directive["audioItem"]["stream"]["url"] == "https://cdn.hear.media/normal.mp3"
+    assert "reset to normal" in response["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
 async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
