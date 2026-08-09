@@ -205,8 +205,9 @@ def _extract_raw_utterance_from_attrs(handler_input) -> str | None:
 
     for slot_name in priority:
         slot = slots.get(slot_name)
-        if slot and slot.value and str(slot.value).strip():
-            return str(slot.value).strip()
+        value = getattr(slot, "value", None) if slot else None
+        if value and str(value).strip():
+            return str(value).strip()
     return None
 
 
@@ -280,6 +281,25 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
             return
 
         raw = _extract_raw_utterance_from_attrs(handler_input)
+        if (
+            nlp.get("intent") == "creator"
+            and (nlp.get("slots") or {}).get("genericCreatorRequest")
+        ):
+            # The creator handler owns the prompt and follow-up state.
+            attrs.pop("_pendingConfirmation", None)
+            attrs.pop("_resolverClarification", None)
+            handler_input.attributes_manager.request_attributes = attrs
+            return
+        if (
+            nlp.get("intent") == "organization"
+            and (nlp.get("slots") or {}).get("genericOrganizationRequest")
+        ):
+            # The organization handler owns this prompt because it also
+            # persists awaitingOrganizationName for the follow-up turn.
+            attrs.pop("_pendingConfirmation", None)
+            attrs.pop("_resolverClarification", None)
+            handler_input.attributes_manager.request_attributes = attrs
+            return
         if nlp.get("publicationSourceRequired"):
             attrs["_resolverClarification"] = {
                 "speech": "Which publication, creator, or organization would you like?",

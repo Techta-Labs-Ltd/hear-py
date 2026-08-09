@@ -53,6 +53,12 @@ PUBLICATION_SOURCE_PLACEHOLDERS = frozenset({
     "the latest publication", "something from a publication",
 })
 
+CREATOR_SOURCE_PLACEHOLDERS = frozenset({
+    "creator", "a creator", "the creator", "from a creator",
+    "play creator", "play a creator", "play from a creator",
+    "play something from a creator", "play me something from a creator",
+})
+
 
 def normalize_discovery_phrase(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "").casefold()).strip()
@@ -68,4 +74,13 @@ def is_meaningful_publication_source(value: object) -> bool:
         normalized
         and normalized not in RESERVED_DISCOVERY_PHRASES
         and normalized not in PUBLICATION_SOURCE_PLACEHOLDERS
+    )
+
+
+def is_meaningful_creator_source(value: object) -> bool:
+    normalized = normalize_discovery_phrase(value)
+    return bool(
+        normalized
+        and normalized not in RESERVED_DISCOVERY_PHRASES
+        and normalized not in CREATOR_SOURCE_PLACEHOLDERS
     )

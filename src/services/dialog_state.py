@@ -119,6 +119,7 @@ class DialogStateManager:
             "suggestionIndex": 0,
             "excludedSuggestions": [],
             "awaitingOrganizationName": False,
+            "awaitingCreatorName": False,
             "_requiresReliableSave": True,
         }
         if active_type in _TRANSIENT_DISCOVERY_DIALOGS or (

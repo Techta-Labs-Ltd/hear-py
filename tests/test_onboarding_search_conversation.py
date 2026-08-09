@@ -10,7 +10,7 @@ from src.handlers.launch import TownCaptureHandler
 from src.middleware.pipeline import REQUEST_INTERCEPTORS
 from src.middleware.resolver import ResolverInterceptor
 
-from src.runtime import AttrDict
+from src.runtime import AttrDict, ResponseBuilder
 from src.services.store import DEFAULT_STORE, get_store
 
 from src.clients.resolver import ResolverUnavailable, ResolverClient
@@ -1493,6 +1493,128 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     }
     json.dumps(directive)
     discover.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generic_talking_newspaper_pipeline_prompts_when_slot_has_no_value(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.dispatch import IntentDispatchHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayByOrganizationIntent",
+            "slots": {
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "confirmationStatus": "NONE",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    await ResolverInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchHandler().handle(mock_handler_input)
+
+    assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
+    assert get_store(mock_handler_input)["awaitingOrganizationName"] is True
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generic_creator_pipeline_asks_for_creator_name(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.dispatch import IntentDispatchHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayByCreatorIntent",
+            "slots": {
+                "creatorQuery": {
+                    "name": "creatorQuery",
+                    "value": "a creator",
+                    "confirmationStatus": "NONE",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    await ResolverInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchHandler().handle(mock_handler_input)
+
+    assert "Which creator would you like to hear" in response["outputSpeech"]["ssml"]
+    assert response["directives"] == [{
+        "type": "Dialog.ElicitSlot",
+        "slotToElicit": "creatorQuery",
+    }]
+    assert response["shouldEndSession"] is False
+    assert get_store(mock_handler_input)["awaitingCreatorName"] is True
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_generic_publication_pipeline_prompts_when_slot_has_no_value(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.dispatch import IntentDispatchHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayPublicationIntent",
+            "slots": {
+                "publicationSourceQuery": {
+                    "name": "publicationSourceQuery",
+                    "confirmationStatus": "NONE",
+                },
+            },
+        },
+    })
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    await ResolverInterceptor().process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    response = IntentDispatchHandler().handle(mock_handler_input)
+
+    assert "Which publication, creator, or organization would you like" in response["outputSpeech"]["ssml"]
+    resolve.assert_not_awaited()
 
 
 @pytest.mark.asyncio

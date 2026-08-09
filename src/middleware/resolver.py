@@ -19,6 +19,7 @@ from src.utils.skill_request import (
 )
 from src.middleware.dialog_validation import DIALOG_VALIDATION_FAILURE
 from src.utils.discovery_request import is_reserved_discovery_phrase
+from src.utils.discovery_request import is_meaningful_creator_source
 from src.utils.discovery_request import is_meaningful_publication_source
 logger = logging.getLogger(__name__)
 
@@ -292,6 +293,25 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                 return
 
             raw = _extract_raw_utterance(handler_input, alexa_intent)
+            if (
+                alexa_intent == "PlayByCreatorIntent"
+                and not is_meaningful_creator_source(raw)
+            ):
+                _set_nlp(handler_input, {
+                    "status": "resolved",
+                    "intent": "creator",
+                    "alexaIntent": "creator",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": True,
+                    "needsRedirect": False,
+                    "localResolved": True,
+                    "slots": {
+                        "creatorQuery": "",
+                        "genericCreatorRequest": True,
+                    },
+                })
+                logger.info("Hear: creator name required; resolver skipped")
+                return
             if alexa_intent == "PlayPublicationIntent":
                 slots = intent_obj.slots or {}
                 source_slot = slots.get("publicationSourceQuery")
@@ -405,16 +425,49 @@ class ResolverInterceptor(AbstractRequestInterceptor):
                     alexa_intent,
                     raw,
                 )
+                if alexa_intent == "PlayByOrganizationIntent":
+                    _set_nlp(handler_input, {
+                        "status": "resolved",
+                        "intent": "organization",
+                        "alexaIntent": "organization",
+                        "alexaRawIntent": alexa_intent,
+                        "nlpMatchesAlexa": True,
+                        "needsRedirect": False,
+                        "localResolved": True,
+                        "slots": {
+                            "organizationQuery": "",
+                            "genericOrganizationRequest": True,
+                        },
+                    })
+                else:
+                    _set_nlp(handler_input, {
+                        "status": "resolved",
+                        "intent": "general",
+                        "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
+                        "alexaRawIntent": alexa_intent,
+                        "nlpMatchesAlexa": True,
+                        "needsRedirect": False,
+                        "localResolved": True,
+                        "searchPayload": {"query": "", "filter": {}},
+                        "slots": {"residualQuery": ""},
+                    })
+                return
+
+            if raw and store.get("awaitingCreatorName"):
+                result = await self._deps.resolver.resolve_utterance(
+                    raw,
+                    alexa_user_id=get_user_id(handler_input),
+                )
+                result["intent"] = "creator"
+                result.setdefault("slots", {})["creatorQuery"] = raw
+                result["slots"]["creatorFollowUp"] = True
                 _set_nlp(handler_input, {
-                    "status": "resolved",
-                    "intent": "general",
-                    "alexaIntent": ALEXA_TO_NLP.get(alexa_intent, "general"),
+                    **result,
+                    "alexaIntent": "creator",
                     "alexaRawIntent": alexa_intent,
-                    "nlpMatchesAlexa": True,
-                    "needsRedirect": False,
+                    "nlpMatchesAlexa": alexa_intent == "PlayByCreatorIntent",
+                    "needsRedirect": alexa_intent != "PlayByCreatorIntent",
                     "localResolved": True,
-                    "searchPayload": {"query": "", "filter": {}},
-                    "slots": {"residualQuery": ""},
                 })
                 return
 

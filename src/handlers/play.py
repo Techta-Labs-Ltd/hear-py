@@ -185,6 +185,7 @@ class PlayByCreatorHandler(AbstractRequestHandler):
         attrs = handler_input.attributes_manager.get_request_attributes()
         nlp = attrs.get("_nlp", {}) if attrs else {}
         nlp_slots = nlp.get("slots", {}) if nlp else {}
+        generic_creator_request = bool(nlp_slots.get("genericCreatorRequest"))
         creator_query = nlp_slots.get("creatorQuery") or \
             _extract_slot_value(handler_input, "creatorQuery") or \
             _extract_slot_value(handler_input, "query") or _raw_search_phrase(handler_input)
@@ -196,12 +197,19 @@ class PlayByCreatorHandler(AbstractRequestHandler):
                 and _has_active_browse_catalog(active_store):
             return await ShowMoreBrowseHandler().handle(handler_input)
 
-        if not creator_query and not resolved_creator:
+        if generic_creator_request or (not creator_query and not resolved_creator):
+            update_store(handler_input, {"awaitingCreatorName": True})
             return handler_input.response_builder \
                 .speak(ssml("Which creator would you like to hear?")) \
                 .reprompt(ssml("Just say their name.")) \
+                .add_directive({
+                    "type": "Dialog.ElicitSlot",
+                    "slotToElicit": "creatorQuery",
+                }) \
                 .set_should_end_session(False) \
                 .response
+
+        update_store(handler_input, {"awaitingCreatorName": False})
 
         search_result = await discover_content_via_search(handler_input, {
             "q": nlp_slots.get("residualQuery", "") if resolved_creator else creator_query,

@@ -440,6 +440,9 @@
             }
           ],
           "samples": [
+            "play from a creator",
+            "play something from a creator",
+            "play me something from a creator",
             "play from {creatorQuery}",
             "play something by {creatorQuery}",
             "play something from {creatorQuery}",
