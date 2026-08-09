@@ -45,6 +45,16 @@ def _has_meaningful_general_request(nlp: dict, raw: str | None) -> bool:
     return bool(filters) or not is_reserved_discovery_phrase(query)
 
 
+def _has_pending_ambiguity(nlp: dict | None) -> bool:
+    if not isinstance(nlp, dict):
+        return False
+    slots = nlp.get("slots") or {}
+    return bool(
+        nlp.get("ambiguities")
+        or slots.get("ambiguousReferences")
+    )
+
+
 def _requires_discovery_clarification(nlp: dict, raw: str | None) -> bool:
     intent = str(nlp.get("intent") or "")
     slots = nlp.get("slots") or {}
@@ -260,6 +270,15 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
         if nlp["intent"] not in _RESOLVED_DISCOVERY_INTENTS:
             return
 
+        # The resolver contract can report status=resolved while still
+        # returning ambiguity candidates. Candidate selection must happen
+        # before confirmation or generic-query validation.
+        if _has_pending_ambiguity(nlp):
+            attrs.pop("_pendingConfirmation", None)
+            attrs.pop("_resolverClarification", None)
+            handler_input.attributes_manager.request_attributes = attrs
+            return
+
         raw = _extract_raw_utterance_from_attrs(handler_input)
         if nlp.get("publicationSourceRequired"):
             attrs["_resolverClarification"] = {
@@ -340,6 +359,8 @@ class SearchConfirmationGateHandler(AbstractRequestHandler):
         if nlp.get("intent") in {"unclear", "resolver_unavailable"}:
             return False
         if nlp.get("status") and nlp.get("status") != "resolved":
+            return False
+        if _has_pending_ambiguity(nlp):
             return False
         return (
             nlp.get("intent") in _RESOLVED_DISCOVERY_INTENTS

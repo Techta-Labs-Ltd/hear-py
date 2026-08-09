@@ -352,3 +352,65 @@ def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
     response = gate.handle(handler_input)
     assert "couldn't safely confirm that search" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
+
+
+def test_resolved_pendle_ambiguity_bypasses_generic_clarification():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayContentIntent",
+                "slots": {
+                    "topic": {"name": "topic", "value": "pendle voice"},
+                },
+            },
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "search",
+            "ambiguities": [{
+                "phrase": "pendle voice",
+                "candidates": [{
+                    "type": "creator",
+                    "id": "creator-leader",
+                    "name": "Pendle Voice Leader and Times",
+                }, {
+                    "type": "creator",
+                    "id": "creator-dalesman",
+                    "name": "Pendle Voice Dalesman",
+                }],
+            }],
+            "searchPayload": {"query": "", "filter": {}},
+            "slots": {
+                "residualQuery": "",
+                "ambiguousReferences": [{
+                    "phrase": "pendle voice",
+                    "candidates": [{
+                        "type": "creator",
+                        "id": "creator-leader",
+                        "name": "Pendle Voice Leader and Times",
+                    }, {
+                        "type": "creator",
+                        "id": "creator-dalesman",
+                        "name": "Pendle Voice Dalesman",
+                    }],
+                }],
+            },
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+
+    attrs = handler_input.attributes_manager.request_attributes
+    assert "_resolverClarification" not in attrs
+    assert "_pendingConfirmation" not in attrs
+    assert SearchConfirmationGateHandler().can_handle(handler_input) is False
