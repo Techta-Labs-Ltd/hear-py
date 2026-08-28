@@ -329,6 +329,68 @@ def test_resolved_search_alias_is_always_confirmed():
     assert get_store(handler_input)["awaitingSearchConfirmation"] is True
 
 
+def test_location_only_search_is_confirmed_with_city_filter():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayByOrganizationIntent",
+                "slots": {
+                    "organizationQuery": {
+                        "name": "organizationQuery",
+                        "value": "Liverpool",
+                    },
+                },
+            },
+        },
+    })
+    attributes = AttributesManager(envelope)
+    payload = {
+        "query": "",
+        "filter": {
+            "city": "Liverpool",
+            "countryCode": "gb",
+            "latitude": 53.4072,
+            "longitude": -2.9917,
+        },
+    }
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "search",
+            "searchPayload": payload,
+            "slots": {
+                "city": "Liverpool",
+                "placeName": "Liverpool",
+                "countryCode": "gb",
+                "latitude": 53.4072,
+                "longitude": -2.9917,
+                "isLocal": True,
+                "residualQuery": "",
+                "searchPlan": payload,
+            },
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "Did you want me to play content in Liverpool?" in (
+        response["outputSpeech"]["ssml"]
+    )
+    attrs = handler_input.attributes_manager.request_attributes
+    assert "_resolverClarification" not in attrs
+    store = get_store(handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingResolution"]["searchPayload"] == payload
+
+
 def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
     envelope = AttrDict({
         "version": "1.0",

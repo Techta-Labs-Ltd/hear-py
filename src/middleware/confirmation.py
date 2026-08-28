@@ -96,6 +96,11 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
         category or slots.get("tags") or residual
     ):
         return resolved_search_request_label(slots)
+    if intent == "search" and city:
+        # A location-only resolver result is a complete catalogue request.
+        # Its text query is intentionally empty because the city belongs in
+        # the search filter, so do not mistake it for missing user input.
+        return resolved_search_request_label(slots)
 
     if intent == "local":
         prefix = "the latest " if slots.get("latest") else ""
