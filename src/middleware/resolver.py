@@ -34,6 +34,9 @@ SEARCH_INTENTS = {
 }
 
 
+LOCATION_MUTATION_INTENTS = {"location_set", "town_capture"}
+
+
 AMBIGUITY_CONTROL_INTENTS = {
     "AMAZON.YesIntent", "AMAZON.NoIntent", "AMAZON.CancelIntent",
     "AMAZON.StopIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
@@ -584,6 +587,20 @@ class ResolverInterceptor(AbstractRequestInterceptor):
 
             expected = ALEXA_TO_NLP.get(alexa_intent, "general")
             actual = result["intent"]
+            if (
+                alexa_intent in SEARCH_INTENTS
+                and actual in LOCATION_MUTATION_INTENTS
+            ):
+                # A city in a playback request is a one-off search facet.  It
+                # must never redirect into SetLocationHandler/TownCaptureHandler,
+                # which own persistent listener-location changes.
+                logger.warning(
+                    "Hear: blocked location mutation from discovery intent=%s resolved=%s",
+                    alexa_intent,
+                    actual,
+                )
+                actual = expected
+                result = {**result, "intent": actual}
             _set_nlp(handler_input, {
                 **result,
                 "alexaIntent": expected,

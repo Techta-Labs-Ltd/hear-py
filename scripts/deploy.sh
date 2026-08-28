@@ -6,7 +6,7 @@
 # Usage:  scripts/deploy.sh [image-tag]
 set -euo pipefail
 
-ACCOUNT=650790810013
+ACCOUNT=692859951746
 REGION=eu-west-1
 ECR_REPO=hear-python
 FUNCTION=Hear-Python-dev

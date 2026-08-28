@@ -195,7 +195,7 @@ def test_play_york_tn_still_requires_confirmation():
     assert store["activeDialog"]["type"] == "search_confirmation"
 
 
-def test_bare_play_asks_what_to_play_without_search_confirmation():
+def test_empty_play_request_reports_failed_recognition_and_stays_open():
     envelope = AttrDict({
         "version": "1.0",
         "context": {"System": {"user": {"userId": "test-user"}}},
@@ -221,12 +221,9 @@ def test_bare_play_asks_what_to_play_without_search_confirmation():
     ConfirmationMiddleware().process(handler_input)
     response = IntentDispatchHandler().handle(handler_input)
 
-    assert "What would you like me to play?" in response["outputSpeech"]["ssml"]
+    assert "Sorry, I didn't catch that" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
-    assert response["directives"] == [{
-        "type": "Dialog.ElicitSlot",
-        "slotToElicit": "topic",
-    }]
+    assert response.get("directives") in (None, [])
     store = get_store(handler_input)
     assert store["awaitingSearchConfirmation"] is False
 
@@ -260,7 +257,9 @@ def test_generic_anything_asks_for_specific_request():
     ConfirmationMiddleware().process(handler_input)
     response = IntentDispatchHandler().handle(handler_input)
 
-    assert "name a topic, creator, publication" in response["outputSpeech"]["ssml"]
+    assert "Sorry, I didn't catch that" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
+    assert response.get("directives") in (None, [])
     assert get_store(handler_input)["awaitingSearchConfirmation"] is False
 
 

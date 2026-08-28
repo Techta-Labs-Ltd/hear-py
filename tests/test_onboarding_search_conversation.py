@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.handlers.launch import TownCaptureHandler
+from src.handlers.launch import SetLocationHandler, TownCaptureHandler
 
 from src.middleware.pipeline import REQUEST_INTERCEPTORS
 from src.middleware.resolver import ResolverInterceptor
@@ -39,6 +39,72 @@ def _town_request(mock_handler_input, value: str):
     store = {**DEFAULT_STORE, "onboardingStage": "ask_town"}
     mock_handler_input.attributes_manager.request_attributes["_store"] = store
     return mock_handler_input
+
+
+@pytest.mark.asyncio
+async def test_playback_location_is_search_filter_not_saved_location(
+    monkeypatch, mock_handler_input,
+):
+    mock_handler_input.request_envelope = AttrDict(
+        mock_handler_input.request_envelope
+    )
+    mock_handler_input.request_envelope.request = AttrDict({
+        "type": "IntentRequest",
+        "locale": "en-GB",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {
+                "query": {
+                    "name": "query",
+                    "value": "play something from Manchester",
+                },
+            },
+        },
+    })
+    original_store = {
+        **DEFAULT_STORE,
+        "onboardingComplete": True,
+        "userCity": "Swindon",
+        "locality": "Swindon",
+        "latitude": 51.5558,
+        "longitude": -1.7797,
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = original_store
+    monkeypatch.setattr(
+        ResolverClient,
+        "resolve_utterance",
+        AsyncMock(return_value={
+            "status": "resolved",
+            "intent": "location_set",
+            "searchPayload": {
+                "query": "",
+                "filter": {
+                    "city": "Manchester",
+                    "latitude": 53.4808,
+                    "longitude": -2.2426,
+                },
+            },
+            "slots": {
+                "city": "Manchester",
+                "locality": "Manchester",
+                "latitude": 53.4808,
+                "longitude": -2.2426,
+                "isLocal": True,
+            },
+        }),
+    )
+
+    await ResolverInterceptor().process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "general"
+    assert nlp["searchPayload"]["filter"]["city"] == "Manchester"
+    assert not SetLocationHandler().can_handle(mock_handler_input)
+    store = get_store(mock_handler_input)
+    assert store["userCity"] == "Swindon"
+    assert store["locality"] == "Swindon"
+    assert store["latitude"] == 51.5558
+    assert store["longitude"] == -1.7797
 
 
 @pytest.mark.asyncio

@@ -90,8 +90,9 @@ async def test_reserved_anything_never_calls_resolver(monkeypatch, mock_handler_
     assert attrs["_nlp"]["localResolved"] is True
     assert attrs["_nlp"]["searchPayload"] == {"query": "", "filter": {}}
     assert attrs["_resolverClarification"]["reprompt"] == (
-        "What would you like to play?"
+        "Please say your request again."
     )
+    assert "elicitSlot" not in attrs["_resolverClarification"]
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,141 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pytest-asyncio
+      - name: Create test environment
+        run: cp .env.example .env
+      - name: Audit project
+        run: python .agents/skills/hear-alexa-python/scripts/audit_project.py .
+      - name: Compile Python
+        run: python -m compileall -q main.py src config
+      - name: Run tests
+        run: python -m pytest -q
+      - name: Build skill smoke test
+        run: python -c "import main; main._build_skill(); print('main imports + skill builds OK')"
+
+  deploy:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: hear-production-deployment
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION_PROD || 'eu-west-1' }}
+      ECR_REPO: ${{ vars.ECR_REPO_PROD || 'hear-python' }}
+      STACK_NAME: ${{ vars.STACK_NAME_PROD }}
+      STAGE: production
+      SHORT_STAGE: ${{ vars.SHORT_STAGE_PROD }}
+      ALEXA_SKILL_ID: ${{ vars.ALEXA_SKILL_ID_PROD }}
+      HEAR_API_URL: ${{ vars.HEAR_API_URL_PROD || 'https://alexa.hear.media/api/v1' }}
+      HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_PROD || 'alexa' }}
+      POWERTOOLS_LOG_LEVEL: ${{ vars.POWERTOOLS_LOG_LEVEL_PROD || 'INFO' }}
+      SSM_PARAMETER_PREFIX: ${{ vars.SSM_PARAMETER_PREFIX_PROD || '/hear/production' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production configuration
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+        run: |
+          : "${AWS_DEPLOY_ROLE_ARN:?Set the AWS_DEPLOY_ROLE_ARN_PROD secret}"
+          : "${STACK_NAME:?Set the STACK_NAME_PROD variable}"
+          : "${SHORT_STAGE:?Set the SHORT_STAGE_PROD variable}"
+          : "${ALEXA_SKILL_ID:?Set the ALEXA_SKILL_ID_PROD variable}"
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build, tag, and push production image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPO:production-${{ github.sha }}"
+          docker build --platform linux/amd64 --provenance=false -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+      - name: Deploy production stack
+        id: cloudformation
+        continue-on-error: true
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          get_required() {
+            aws ssm get-parameter --name "$SSM_PARAMETER_PREFIX/$1" --with-decryption \
+              --query 'Parameter.Value' --output text --region "$AWS_REGION"
+          }
+          get_optional() {
+            aws ssm get-parameter --name "$SSM_PARAMETER_PREFIX/$1" --with-decryption \
+              --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null || true
+          }
+          HEAR_API_KEY=$(get_required HEAR_API_KEY)
+          SENTRY_DSN=$(get_optional SENTRY_DSN)
+          echo "::add-mask::$HEAR_API_KEY"
+          [[ -z "$SENTRY_DSN" ]] || echo "::add-mask::$SENTRY_DSN"
+          aws cloudformation deploy \
+            --template-file template.yaml \
+            --stack-name "$STACK_NAME" \
+            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+            --region "$AWS_REGION" \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
+              AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
+              HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
+              SentryDsn="$SENTRY_DSN" PowerToolsLogLevel="$POWERTOOLS_LOG_LEVEL"
+      - name: Show production stack outputs
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" --query "Stacks[0].Outputs" --output table
+      - name: Verify production resolver
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          FUNCTION_ARN=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='SkillFunctionArn'].OutputValue | [0]" \
+            --output text)
+          aws lambda invoke --function-name "$FUNCTION_ARN" --region "$AWS_REGION" \
+            --cli-binary-format raw-in-base64-out --payload '{"diagnostic":"resolver"}' \
+            "$RUNNER_TEMP/resolver-health.json"
+          jq -e '.ok == true and .canonicalValue == "Herne Bay"' "$RUNNER_TEMP/resolver-health.json"
+      - name: Show CloudFormation failure details
+        if: steps.cloudformation.outcome == 'failure'
+        run: |
+          aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "reverse(sort_by(StackEvents[?ResourceStatus=='CREATE_FAILED' || ResourceStatus=='UPDATE_FAILED' || ResourceStatus=='DELETE_FAILED'], &Timestamp))[:20].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+            --output table
+      - name: Fail after deployment failure
+        if: steps.cloudformation.outcome == 'failure'
+        run: exit 1

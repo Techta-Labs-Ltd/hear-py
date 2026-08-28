@@ -16,6 +16,12 @@ Parameters:
   AlexaSkillId:
     Type: String
     Default: ""
+  HearApiUrl:
+    Type: String
+    Default: https://alexa.hear.media/api/v1
+  HearApiPathPrefix:
+    Type: String
+    Default: alexa
   HearApiKey:
     Type: String
     NoEcho: true
@@ -24,6 +30,10 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ""
+  PowerToolsLogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
@@ -39,8 +49,8 @@ Globals:
         STAGE: !Ref Stage
         NODE_ENV: !Ref Stage
         SENTRY_ENVIRONMENT: !Ref Stage
-        HEAR_API_URL: https://alexa.hear.media/api/v1
-        HEAR_API_PATH_PREFIX: alexa
+        HEAR_API_URL: !Ref HearApiUrl
+        HEAR_API_PATH_PREFIX: !Ref HearApiPathPrefix
         HEAR_API_KEY: !Ref HearApiKey
         HEAR_CLIENT_VERSION: alexa-skill
         HEAR_DDB_REGION: eu-west-1
@@ -52,7 +62,7 @@ Globals:
         HEAR_AUDIO_SPEED_PARAM: speed
         SENTRY_DSN: !Ref SentryDsn
         POWERTOOLS_SERVICE_NAME: hear-alexa-skill
-        POWERTOOLS_LOG_LEVEL: INFO
+        POWERTOOLS_LOG_LEVEL: !Ref PowerToolsLogLevel
 
 Resources:
   HearPersistenceTable:
