@@ -71,8 +71,6 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
         return None
     intent = nlp["intent"]
     slots = nlp.get("slots") or {}
-    if nlp.get("confirmationLabel"):
-        return str(nlp["confirmationLabel"])
     category = slots.get("category") or slots.get("topic") or None
     creator = (
         slots.get("creatorName") or slots.get("creatorQuery")
@@ -86,15 +84,30 @@ def _build_confirmation_speech(nlp: dict | None) -> str | None:
     city = slots.get("city") or slots.get("placeName") or None
     residual = str(slots.get("residualQuery", "")).strip() or ""
 
+    has_subject = bool(category or slots.get("tags") or residual)
+    has_source = bool(
+        slots.get("creatorIds")
+        or slots.get("organizationIds")
+        or slots.get("publicationIds")
+        or creator
+        or org
+        or publication_source
+    )
+    if intent in {"category", "general", "search"} and has_subject and not has_source:
+        subject = resolved_search_request_label(slots)
+        if subject.startswith("the latest "):
+            return "the latest content on " + subject.removeprefix("the latest ")
+        return "content on " + subject
+    if nlp.get("confirmationLabel"):
+        return str(nlp["confirmationLabel"])
+
     if intent == "organization" and org:
         return resolved_search_request_label(slots, org)
     if intent == "creator" and creator:
         return resolved_search_request_label(slots, creator)
     if intent == "publication":
         return resolved_search_request_label(slots, publication_source)
-    if intent in {"category", "general"} and (
-        category or slots.get("tags") or residual
-    ):
+    if intent in {"category", "general"} and has_subject:
         return resolved_search_request_label(slots)
     if intent == "search" and city:
         # A location-only resolver result is a complete catalogue request.

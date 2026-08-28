@@ -325,8 +325,56 @@ def test_resolved_search_alias_is_always_confirmed():
     ConfirmationMiddleware().process(handler_input)
     response = IntentDispatchHandler().handle(handler_input)
 
-    assert "Did you want me to play Wakefield news?" in response["outputSpeech"]["ssml"]
+    assert "Did you want me to play content on Wakefield news?" in (
+        response["outputSpeech"]["ssml"]
+    )
     assert get_store(handler_input)["awaitingSearchConfirmation"] is True
+
+
+def test_category_search_is_described_as_content_on_subject():
+    envelope = AttrDict({
+        "version": "1.0",
+        "context": {"System": {"user": {"userId": "test-user"}}},
+        "request": {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayContentIntent",
+                "slots": {"topic": {"name": "topic", "value": "history"}},
+            },
+        },
+    })
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "category",
+            "confirmationLabel": "history",
+            "searchPayload": {
+                "query": "",
+                "filter": {"categorySlugs": ["history"]},
+            },
+            "slots": {
+                "category": "history",
+                "tags": ["history"],
+                "residualQuery": "",
+            },
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchHandler().handle(handler_input)
+
+    assert "Did you want me to play content on history?" in (
+        response["outputSpeech"]["ssml"]
+    )
+    assert get_store(handler_input)["pendingResolution"]["searchPayload"] == {
+        "query": "",
+        "filter": {"categorySlugs": ["history"]},
+    }
 
 
 def test_location_only_search_is_confirmed_with_city_filter():
