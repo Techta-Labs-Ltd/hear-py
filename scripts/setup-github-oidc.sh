@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ONE-TIME setup: creates the GitHub Actions OIDC identity provider and the
 # deploy role that the workflow assumes. Requires IAM admin permissions.
-# After it runs, add the printed ARN as a GitHub repo secret named
-# AWS_DEPLOY_ROLE_ARN.
+# After it runs, add the printed ARN as AWS_DEPLOY_ROLE_ARN_DEV and
+# AWS_DEPLOY_ROLE_ARN_PROD GitHub secrets.
 set -euo pipefail
 
-ACCOUNT=650790810013
+ACCOUNT=692859951746
 ROLE_NAME=github-actions-hear-deploy
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PROVIDER_ARN="arn:aws:iam::${ACCOUNT}:oidc-provider/token.actions.githubusercontent.com"
@@ -41,6 +41,6 @@ echo "attached permissions policy"
 
 echo
 echo "=================================================================="
-echo "Add this as a GitHub repo secret named  AWS_DEPLOY_ROLE_ARN :"
+echo "Add this ARN as GitHub secrets AWS_DEPLOY_ROLE_ARN_DEV and AWS_DEPLOY_ROLE_ARN_PROD:"
 echo "  arn:aws:iam::${ACCOUNT}:role/${ROLE_NAME}"
 echo "=================================================================="

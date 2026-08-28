@@ -110,7 +110,7 @@ def test_runtime_and_container_do_not_install_or_import_spacy():
     runtime_sources = [
         root / "requirements.txt",
         root / "Dockerfile",
-        root / ".github" / "workflows" / "deploy.yml",
+        *sorted((root / ".github" / "workflows").glob("*.yml")),
         *sorted((root / "src").rglob("*.py")),
     ]
     combined = "\n".join(

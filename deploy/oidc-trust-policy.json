@@ -12,7 +12,10 @@
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:Techta-Labs-Ltd/hear-py:*"
+          "token.actions.githubusercontent.com:sub": [
+            "repo:Techta-Labs-Ltd/hear-py:environment:development",
+            "repo:Techta-Labs-Ltd/hear-py:environment:production"
+          ]
         }
       }
     }

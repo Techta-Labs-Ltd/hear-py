@@ -1,0 +1,21 @@
+version = 0.1
+
+[development.deploy.parameters]
+stack_name = "hear-py-development"
+region = "eu-west-1"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+confirm_changeset = false
+fail_on_empty_changeset = false
+resolve_s3 = true
+parameter_overrides = "Stage=development ShortStage=dev PowerToolsLogLevel=DEBUG"
+tags = "Application=hear-alexa-skill Stage=development ManagedBy=SAM"
+
+[production.deploy.parameters]
+stack_name = "hear-py-production"
+region = "eu-west-1"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+confirm_changeset = true
+fail_on_empty_changeset = false
+resolve_s3 = true
+parameter_overrides = "Stage=production ShortStage=prod PowerToolsLogLevel=INFO"
+tags = "Application=hear-alexa-skill Stage=production ManagedBy=SAM"
