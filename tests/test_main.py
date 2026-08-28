@@ -19,7 +19,7 @@ async def test_resolver_healthcheck_reports_canonical_town(monkeypatch):
             "entityId": "location-1",
             "canonicalValue": "Herne Bay",
             "originalText": "herne bay",
-            "confidence": 1,
+            "confidence": 100,
             "method": "exact",
             "start": 0,
             "end": 9,

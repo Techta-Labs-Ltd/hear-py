@@ -21,25 +21,25 @@ def _response(**overrides):
             {
                 "entityType": "creator", "entityId": "creator-1",
                 "canonicalValue": "Adeshina Ayomide", "originalText": "adeshina",
-                "confidence": 1, "method": "exact", "start": 23, "end": 31,
+                "confidence": 100, "method": "exact", "start": 23, "end": 31,
                 "latitude": None, "longitude": None, "countryCode": None,
             },
             {
                 "entityType": "publication", "entityId": "publication-1",
                 "canonicalValue": "Buxton Talking Sport", "originalText": "sport",
-                "confidence": 1, "method": "bare_match", "start": 12, "end": 17,
+                "confidence": 100, "method": "bare_match", "start": 12, "end": 17,
                 "latitude": None, "longitude": None, "countryCode": None,
             },
             {
                 "entityType": "category", "entityId": "sport",
                 "canonicalValue": "Sport", "originalText": "sport",
-                "confidence": 1, "method": "bare_match", "start": 12, "end": 17,
+                "confidence": 100, "method": "bare_match", "start": 12, "end": 17,
                 "latitude": None, "longitude": None, "countryCode": None,
             },
             {
                 "entityType": "tag", "entityId": "sport",
                 "canonicalValue": "#sport", "originalText": "sport",
-                "confidence": 1, "method": "bare_match", "start": 12, "end": 17,
+                "confidence": 100, "method": "bare_match", "start": 12, "end": 17,
                 "latitude": None, "longitude": None, "countryCode": None,
             },
         ],
@@ -163,6 +163,66 @@ def test_single_or_partial_tag_is_not_used_as_a_filter():
     assert result["searchPayload"]["filter"] == {}
 
 
+def test_new_integer_confidence_contract_ignores_partial_phonetic_location():
+    payload = _response(intent="category")
+    payload["entities"] = [{
+        "entityType": "category",
+        "entityId": "sports",
+        "canonicalValue": "Sports",
+        "originalText": "sports",
+        "confidence": 100,
+        "method": "bare_match",
+        "start": 12,
+        "end": 18,
+        "latitude": None,
+        "longitude": None,
+        "countryCode": None,
+        "locationRole": None,
+    }, {
+        "entityType": "location",
+        "entityId": "location-1826486249",
+        "canonicalValue": "Upwood",
+        "originalText": "update",
+        "confidence": 93,
+        "method": "phonetic_bare",
+        "start": 28,
+        "end": 34,
+        "latitude": 52.43,
+        "longitude": -0.15,
+        "countryCode": "gb",
+        "locationRole": "unspecified",
+    }]
+    payload["slots"].update({
+        "residualQuery": "breifing",
+        "city": "Upwood",
+        "latitude": 52.43,
+        "longitude": -0.15,
+        "isLocal": True,
+    })
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["entities"][0]["confidence"] == 100
+    assert result["entities"][1]["confidence"] == 93
+    assert result["entities"][1]["locationRole"] == "unspecified"
+    assert result["searchPayload"] == {
+        "query": "breifing",
+        "sort": "latest",
+        "filter": {"categorySlugs": ["sports"]},
+    }
+    assert result["resolution"]["match"] is None
+    assert "city" not in result["slots"]
+    assert "isLocal" not in result["slots"]
+
+
+@pytest.mark.parametrize("confidence", [0, 101, 1.0, 99.5, "100", True])
+def test_entity_model_rejects_confidence_outside_integer_1_to_100(confidence):
+    entity = {**_response()["entities"][0], "confidence": confidence}
+
+    with pytest.raises(ResolverUnavailable):
+        ResolvedEntity.from_payload(entity)
+
+
 def test_explicit_publication_uses_id_without_generic_publication_filter():
     payload = _response()
     payload["entities"] = [payload["entities"][1]]
@@ -194,7 +254,7 @@ def test_overlapping_source_and_location_does_not_overconstrain_search():
         "entityId": "creator-wakefield",
         "canonicalValue": "Wakefield Talking Newspaper",
         "originalText": "Wakefield",
-        "confidence": 1,
+        "confidence": 100,
         "method": "bare_match",
         "start": 0,
         "end": 9,
@@ -206,7 +266,7 @@ def test_overlapping_source_and_location_does_not_overconstrain_search():
         "entityId": "wakefield",
         "canonicalValue": "Wakefield",
         "originalText": "Wakefield",
-        "confidence": 1,
+        "confidence": 100,
         "method": "exact",
         "start": 0,
         "end": 9,
@@ -240,7 +300,7 @@ def test_location_context_keeps_overlapping_town_for_onboarding():
         "entityId": "creator-gloucester",
         "canonicalValue": "Gloucester Talking Newspaper",
         "originalText": "gloucester",
-        "confidence": 1,
+        "confidence": 100,
         "method": "bare_match",
         "start": 0,
         "end": 10,
@@ -252,7 +312,7 @@ def test_location_context_keeps_overlapping_town_for_onboarding():
         "entityId": "location-gloucester",
         "canonicalValue": "Gloucester",
         "originalText": "gloucester",
-        "confidence": 1,
+        "confidence": 100,
         "method": "bare_match",
         "start": 0,
         "end": 10,
@@ -271,7 +331,7 @@ def test_location_context_keeps_overlapping_town_for_onboarding():
         "countryCode": "gb",
         "latitude": 51.8653,
         "longitude": -2.2458,
-        "confidence": 1.0,
+        "confidence": 100,
         "method": "bare_match",
     }
     assert result["slots"]["city"] == "Gloucester"

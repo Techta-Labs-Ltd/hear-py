@@ -111,13 +111,14 @@ class ResolvedEntity:
     entity_id: str
     canonical_value: str
     original_text: str
-    confidence: float
+    confidence: int
     method: str
     start: int
     end: int
     latitude: float | None = None
     longitude: float | None = None
     country_code: str | None = None
+    location_role: str | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> ResolvedEntity:
@@ -128,18 +129,26 @@ class ResolvedEntity:
         if any(key not in payload for key in required):
             raise ResolverUnavailable("resolver entity contract is invalid")
         try:
+            confidence = payload["confidence"]
+            if (
+                isinstance(confidence, bool)
+                or not isinstance(confidence, int)
+                or not 1 <= confidence <= 100
+            ):
+                raise ValueError("confidence must be an integer from 1 to 100")
             return cls(
                 entity_type=str(payload["entityType"]),
                 entity_id=str(payload["entityId"]),
                 canonical_value=str(payload["canonicalValue"]),
                 original_text=str(payload["originalText"]),
-                confidence=float(payload["confidence"]),
+                confidence=confidence,
                 method=str(payload["method"]),
                 start=int(payload["start"]),
                 end=int(payload["end"]),
                 latitude=_optional_float(payload.get("latitude")),
                 longitude=_optional_float(payload.get("longitude")),
                 country_code=_optional_string(payload.get("countryCode")),
+                location_role=_optional_string(payload.get("locationRole")),
             )
         except (TypeError, ValueError) as exc:
             raise ResolverUnavailable("resolver entity contract is invalid") from exc
@@ -157,6 +166,7 @@ class ResolvedEntity:
             "latitude": self.latitude,
             "longitude": self.longitude,
             "countryCode": self.country_code,
+            "locationRole": self.location_role,
         }
 
 
@@ -198,11 +208,11 @@ class ResolverResult:
     def fully_matched_entities_of_type(
         self, entity_type: str,
     ) -> tuple[ResolvedEntity, ...]:
-        """Return exact-confidence facets across the resolver's 0-1/0-100 scales."""
+        """Return resolver facets with the maximum 1-100 confidence score."""
         return tuple(
             entity
             for entity in self.entities_of_type(entity_type)
-            if entity.confidence in {1.0, 100.0}
+            if entity.confidence == 100
         )
 
     def to_alexa_payload(self, *, prefer_location: bool = False) -> dict[str, Any]:
@@ -236,7 +246,7 @@ class ResolverResult:
             "publication": ("publicationIds", "publicationName"),
         }
         for entity_type, (ids_key, name_key) in facet_slots.items():
-            discovered = self.entities_of_type(entity_type)
+            discovered = self.fully_matched_entities_of_type(entity_type)
             if discovered:
                 slots[ids_key] = [entity.entity_id for entity in discovered]
                 slots[name_key] = discovered[0].canonical_value
@@ -260,7 +270,13 @@ class ResolverResult:
             for entity_type in facet_slots
             for entity in self.entities_of_type(entity_type)
         )
-        all_locations = self.entities_of_type("location")
+        location_slot_keys = (
+            "city", "placeName", "countryCode", "latitude", "longitude",
+            "isLocal",
+        )
+        for key in location_slot_keys:
+            slots.pop(key, None)
+        all_locations = self.fully_matched_entities_of_type("location")
         locations = all_locations if prefer_location else tuple(
             location
             for location in all_locations
@@ -303,10 +319,7 @@ class ResolverResult:
             # (for example "Wakefield Talking Newspaper"). When both resolver
             # entities cover the same words, applying source AND city filters
             # incorrectly removes every catalogue result.
-            for key in (
-                "city", "placeName", "countryCode", "latitude", "longitude",
-                "isLocal",
-            ):
+            for key in location_slot_keys:
                 slots.pop(key, None)
 
         for key in ("publishedFrom", "publishedTo"):
