@@ -252,7 +252,12 @@ async def discover_content_via_search(
         nlp_filter["organizationIds"] = list(nlp_slots["organizationIds"])
     if nlp_slots.get("publicationIds"):
         nlp_filter["publicationIds"] = list(nlp_slots["publicationIds"])
-    if nlp_slots.get("category"):
+    category_slugs = nlp_slots.get("categorySlugs")
+    if isinstance(category_slugs, list) and category_slugs:
+        nlp_filter["categorySlugs"] = [
+            str(value).strip() for value in category_slugs if str(value).strip()
+        ]
+    elif nlp_slots.get("category"):
         nlp_filter["categorySlugs"] = [str(nlp_slots["category"]).strip()]
     city_val = nlp_slots.get("city") or nlp_slots.get("placeName")
     if city_val:

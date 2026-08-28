@@ -101,10 +101,66 @@ def test_canonical_entities_drive_all_discovered_facets_without_fake_ambiguity()
     assert result["slots"]["publicationName"] == "Buxton Talking Sport"
     assert result["slots"]["category"] == "sport"
     assert result["slots"]["categoryName"] == "Sport"
-    assert result["slots"]["tags"] == ["sport"]
-    assert result["slots"]["tagNames"] == ["#sport"]
+    assert result["slots"]["categorySlugs"] == ["sport"]
+    assert "tags" not in result["slots"]
     assert result["slots"]["ambiguousReferences"] == []
     assert result["ambiguities"] == []
+
+
+def test_all_full_confidence_categories_are_passed_directly_to_filter():
+    payload = _response(intent="category")
+    payload["entities"] = [{
+        "entityType": "category", "entityId": slug,
+        "canonicalValue": name, "originalText": name.lower(),
+        "confidence": 100, "method": "bare_match", "start": start,
+        "end": start + len(name), "latitude": None, "longitude": None,
+        "countryCode": None,
+    } for slug, name, start in (
+        ("history", "History", 5), ("politics", "Politics", 13),
+    )]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["slots"]["categorySlugs"] == ["history", "politics"]
+    assert result["searchPayload"]["filter"] == {
+        "categorySlugs": ["history", "politics"],
+    }
+
+
+def test_two_full_confidence_tags_are_filtered_when_no_category_matches():
+    payload = _response(intent="search")
+    payload["entities"] = [{
+        "entityType": "tag", "entityId": slug,
+        "canonicalValue": name, "originalText": name,
+        "confidence": 100, "method": "exact", "start": start,
+        "end": start + len(name), "latitude": None, "longitude": None,
+        "countryCode": None,
+    } for slug, name, start in (
+        ("local-history", "local history", 5),
+        ("oral-history", "oral history", 19),
+    )]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["slots"]["tags"] == ["local-history", "oral-history"]
+    assert result["searchPayload"]["filter"] == {
+        "tags": ["local-history", "oral-history"],
+    }
+
+
+def test_single_or_partial_tag_is_not_used_as_a_filter():
+    payload = _response(intent="search")
+    payload["entities"] = [{
+        "entityType": "tag", "entityId": "history",
+        "canonicalValue": "History", "originalText": "history",
+        "confidence": 80, "method": "fuzzy", "start": 5, "end": 12,
+        "latitude": None, "longitude": None, "countryCode": None,
+    }]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert "tags" not in result["slots"]
+    assert result["searchPayload"]["filter"] == {}
 
 
 def test_explicit_publication_uses_id_without_generic_publication_filter():

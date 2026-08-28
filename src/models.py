@@ -195,6 +195,16 @@ class ResolverResult:
     def entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
         return tuple(entity for entity in self.entities if entity.entity_type == entity_type)
 
+    def fully_matched_entities_of_type(
+        self, entity_type: str,
+    ) -> tuple[ResolvedEntity, ...]:
+        """Return exact-confidence facets across the resolver's 0-1/0-100 scales."""
+        return tuple(
+            entity
+            for entity in self.entities_of_type(entity_type)
+            if entity.confidence in {1.0, 100.0}
+        )
+
     def to_alexa_payload(self, *, prefer_location: bool = False) -> dict[str, Any]:
         slots = dict(self.slots)
         ambiguities = []
@@ -232,13 +242,15 @@ class ResolverResult:
                 slots[name_key] = discovered[0].canonical_value
                 filters[ids_key] = list(slots[ids_key])
 
-        categories = self.entities_of_type("category")
+        categories = self.fully_matched_entities_of_type("category")
         if categories:
+            category_slugs = [entity.entity_id for entity in categories]
             slots["category"] = categories[0].entity_id
             slots["categoryName"] = categories[0].canonical_value
-            filters["categorySlugs"] = [entity.entity_id for entity in categories]
-        tags = self.entities_of_type("tag")
-        if tags:
+            slots["categorySlugs"] = category_slugs
+            filters["categorySlugs"] = category_slugs
+        tags = self.fully_matched_entities_of_type("tag")
+        if not categories and len(tags) >= 2:
             slots["tags"] = [entity.entity_id for entity in tags]
             slots["tagNames"] = [entity.canonical_value for entity in tags]
             filters["tags"] = list(slots["tags"])

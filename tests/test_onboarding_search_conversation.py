@@ -603,6 +603,42 @@ async def test_publication_discovery_sends_format_and_creator_filters(
 
 
 @pytest.mark.asyncio
+async def test_discovery_preserves_all_resolved_category_filters(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.handlers.search import discover_content_via_search
+
+    mock_handler_input.attributes_manager.request_attributes.update({
+        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_nlp": {
+            "intent": "category",
+            "slots": {
+                "category": "history",
+                "categorySlugs": ["history", "politics"],
+                "residualQuery": "",
+                "searchPlan": {
+                    "query": "",
+                    "filter": {"categorySlugs": ["history", "politics"]},
+                },
+            },
+        },
+    })
+    search = AsyncMock(return_value={
+        "failed": False,
+        "results": [],
+        "total_hits": 0,
+    })
+    monkeypatch.setattr(HearApiClient, "search", search)
+
+    await discover_content_via_search(mock_handler_input)
+
+    assert search.await_args.args[0]["filter"]["categorySlugs"] == [
+        "history", "politics",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_unresolved_source_is_not_sent_as_a_search_query(
     monkeypatch,
     mock_handler_input,
