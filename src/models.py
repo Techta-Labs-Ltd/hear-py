@@ -268,7 +268,7 @@ class ResolverResult:
         source_entities = tuple(
             entity
             for entity_type in facet_slots
-            for entity in self.entities_of_type(entity_type)
+            for entity in self.fully_matched_entities_of_type(entity_type)
         )
         location_slot_keys = (
             "city", "placeName", "countryCode", "latitude", "longitude",
@@ -276,7 +276,11 @@ class ResolverResult:
         )
         for key in location_slot_keys:
             slots.pop(key, None)
-        all_locations = self.fully_matched_entities_of_type("location")
+        all_locations = (
+            ()
+            if self.intent == "category"
+            else self.fully_matched_entities_of_type("location")
+        )
         locations = all_locations if prefer_location else tuple(
             location
             for location in all_locations
@@ -344,7 +348,15 @@ class ResolverResult:
         return {
             "status": self.status,
             "intent": self.intent,
-            "entities": [entity.to_payload() for entity in self.entities],
+            "entities": [
+                entity.to_payload()
+                for entity in self.entities
+                if entity.confidence == 100
+                and not (
+                    self.intent == "category"
+                    and entity.entity_type == "location"
+                )
+            ],
             "slots": slots,
             "ambiguities": list(ambiguities),
             "timingMs": self.timing_ms,

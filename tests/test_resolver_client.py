@@ -163,7 +163,7 @@ def test_single_or_partial_tag_is_not_used_as_a_filter():
     assert result["searchPayload"]["filter"] == {}
 
 
-def test_new_integer_confidence_contract_ignores_partial_phonetic_location():
+def test_new_integer_confidence_contract_discards_partial_phonetic_location():
     payload = _response(intent="category")
     payload["entities"] = [{
         "entityType": "category",
@@ -202,9 +202,20 @@ def test_new_integer_confidence_contract_ignores_partial_phonetic_location():
 
     result = ResolverResult.from_payload(payload).to_alexa_payload()
 
-    assert result["entities"][0]["confidence"] == 100
-    assert result["entities"][1]["confidence"] == 93
-    assert result["entities"][1]["locationRole"] == "unspecified"
+    assert result["entities"] == [{
+        "entityType": "category",
+        "entityId": "sports",
+        "canonicalValue": "Sports",
+        "originalText": "sports",
+        "confidence": 100,
+        "method": "bare_match",
+        "start": 12,
+        "end": 18,
+        "latitude": None,
+        "longitude": None,
+        "countryCode": None,
+        "locationRole": None,
+    }]
     assert result["searchPayload"] == {
         "query": "breifing",
         "sort": "latest",
@@ -213,6 +224,60 @@ def test_new_integer_confidence_contract_ignores_partial_phonetic_location():
     assert result["resolution"]["match"] is None
     assert "city" not in result["slots"]
     assert "isLocal" not in result["slots"]
+
+
+def test_category_intent_discards_location_even_at_full_confidence():
+    payload = _response(intent="category")
+    payload["entities"] = [{
+        "entityType": "category",
+        "entityId": "sport",
+        "canonicalValue": "Sport",
+        "originalText": "sport",
+        "confidence": 100,
+        "method": "bare_match",
+        "start": 12,
+        "end": 17,
+        "latitude": None,
+        "longitude": None,
+        "countryCode": None,
+        "locationRole": None,
+    }, {
+        "entityType": "location",
+        "entityId": "location-upwood",
+        "canonicalValue": "Upwood",
+        "originalText": "update",
+        "confidence": 100,
+        "method": "phonetic_bare",
+        "start": 27,
+        "end": 33,
+        "latitude": 52.43,
+        "longitude": -0.15,
+        "countryCode": "gb",
+        "locationRole": "unspecified",
+    }]
+    payload["slots"].update({
+        "residualQuery": "breifing",
+        "city": "Upwood",
+        "countryCode": "gb",
+        "latitude": 52.43,
+        "longitude": -0.15,
+        "isLocal": True,
+    })
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert [entity["entityType"] for entity in result["entities"]] == [
+        "category",
+    ]
+    assert result["searchPayload"]["filter"] == {
+        "categorySlugs": ["sport"],
+    }
+    assert result["resolution"]["match"] is None
+    for key in (
+        "city", "placeName", "countryCode", "latitude", "longitude",
+        "isLocal",
+    ):
+        assert key not in result["slots"]
 
 
 @pytest.mark.parametrize("confidence", [0, 101, 1.0, 99.5, "100", True])
