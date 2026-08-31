@@ -248,3 +248,16 @@ def test_latest_content_intent_reconstructs_sort_for_resolver(mock_handler_input
         ResolverWorkflow._extract_raw_utterance(mock_handler_input, "PlayLatestContentIntent")
         == "play latest news content in Wakefield"
     )
+
+
+def test_content_intent_preserves_raw_slot_for_internal_state(mock_handler_input):
+    topic_slot = MagicMock()
+    topic_slot.value = "tnf"
+    intent = MagicMock()
+    intent.get.return_value = {"topic": topic_slot}
+    request = MagicMock()
+    request.intent = intent
+    envelope = MagicMock()
+    envelope.request = request
+    mock_handler_input.request_envelope = envelope
+    assert ResolverWorkflow._extract_raw_utterance(mock_handler_input, "PlayContentIntent") == "tnf"

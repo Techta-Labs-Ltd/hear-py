@@ -66,6 +66,9 @@ class DiscoveryConstants:
             "my local community",
             "from my local community",
             "something from my local community",
+            "play my local community",
+            "play from my local community",
+            "play something from my local community",
             "community",
             "around me",
             "around here",
@@ -149,6 +152,15 @@ class DiscoveryConstants:
         "TownCaptureIntent": "town_capture",
         "ClarifySelectionIntent": "general",
         "AMAZON.FallbackIntent": "general",
+    }
+    RESOLVER_CARRIERS = {
+        "PlayContentIntent": "play",
+        "PlayByCreatorIntent": "play from",
+        "PlayByOrganizationIntent": "play from",
+        "BrowseByCategoryIntent": "play",
+        "PlayLocalIntent": "play local",
+        "PlayRecommendationIntent": "recommend",
+        "WhatsTrendingIntent": "what's trending",
     }
     RESERVED_DISCOVERY_PHRASES = frozenset(
         {

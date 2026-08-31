@@ -419,12 +419,12 @@ class ResolverWorkflowRunner:
         )
         return True
 
-    async def _resolver_result(self, handler_input, raw: str) -> dict:
-        return await self._deps.resolver.resolve_utterance(
-            raw,
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
-            timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input),
-        )
+    async def _resolver_result(self, handler_input, raw: str, alexa_intent: str | None = None) -> dict:
+        carrier = DiscoveryConstants.RESOLVER_CARRIERS.get(alexa_intent, "")
+        normalized = SearchFilterUtils.normalize_discovery_phrase(raw)
+        has_carrier = not carrier or normalized == carrier or normalized.startswith(f"{carrier} ")
+        utterance = raw if has_carrier else f"{carrier} {raw}"
+        return await self._deps.resolver.resolve_utterance(utterance, alexa_user_id=AlexaRequest.get_user_id(handler_input), timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input))
 
     async def _resolve_ambiguity(
         self,
@@ -446,7 +446,7 @@ class ResolverWorkflowRunner:
         result = (
             ResolverWorkflow._resolved_pending_candidate(pending, candidate)
             if candidate
-            else await self._resolver_result(handler_input, raw)
+            else await self._resolver_result(handler_input, raw, alexa_intent)
         )
         replace = bool(
             alexa_intent in ResolverWorkflow.SEARCH_INTENTS
@@ -529,7 +529,7 @@ class ResolverWorkflowRunner:
         if not follow_up:
             return False
         intent_name, slot_name, matching_intent = follow_up
-        result = await self._resolver_result(handler_input, raw)
+        result = await self._resolver_result(handler_input, raw, matching_intent)
         result["intent"] = intent_name
         result.setdefault("slots", {})[slot_name] = raw
         result["slots"][f"{intent_name}FollowUp"] = True
@@ -576,7 +576,7 @@ class ResolverWorkflowRunner:
             return
         expected = DiscoveryConstants.ALEXA_TO_NLP.get(alexa_intent, "general")
         if alexa_intent in ResolverWorkflow.SEARCH_INTENTS:
-            result = await self._resolver_result(handler_input, raw)
+            result = await self._resolver_result(handler_input, raw, alexa_intent)
         else:
             if alexa_intent not in DiscoveryConstants.ALEXA_TO_NLP:
                 return

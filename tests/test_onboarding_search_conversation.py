@@ -1188,7 +1188,7 @@ async def test_explicit_search_replaces_pending_ambiguity(monkeypatch, mock_hand
     resolve = AsyncMock(side_effect=resolve)
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    assert [call.args for call in resolve.await_args_list] == [("tnf",)]
+    assert [call.args for call in resolve.await_args_list] == [("play tnf",)]
     store = User.snapshot(mock_handler_input)
     assert store["pendingAmbiguity"] is None
     assert store["activeDialog"] is None

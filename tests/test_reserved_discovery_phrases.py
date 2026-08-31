@@ -119,7 +119,7 @@ async def test_meaningful_news_still_calls_resolver(monkeypatch, mock_handler_in
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
     resolve.assert_awaited_once_with(
-        "news", alexa_user_id="amzn1.ask.account.TEST", timeout_ms=5000
+        "play news", alexa_user_id="amzn1.ask.account.TEST", timeout_ms=5000
     )
 
 
@@ -168,7 +168,7 @@ async def test_elicited_pendle_voice_follow_up_reaches_resolver(monkeypatch, moc
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
     resolve.assert_awaited_once_with(
-        "Pendle Voice", alexa_user_id="amzn1.ask.account.TEST", timeout_ms=5000
+        "play Pendle Voice", alexa_user_id="amzn1.ask.account.TEST", timeout_ms=5000
     )
     assert mock_handler_input.attributes_manager.request_attributes["_nlp"]["status"] == "ambiguous"
 
