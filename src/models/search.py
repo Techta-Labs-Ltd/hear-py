@@ -176,8 +176,11 @@ class Search:
         candidates = list(existing.get("candidates") or reference.get("candidates") or [])
         choices = Search._unique_ambiguity_choices(candidates)
         displayed = choices[:3]
+        ambiguity_context = nlp.get("ambiguityContext")
+        ambiguity_context = ambiguity_context if isinstance(ambiguity_context, dict) else {}
         pending = {
             **existing,
+            **ambiguity_context,
             "requestId": nlp.get("requestId") or existing.get("requestId"),
             "intent": nlp.get("intent") or "general",
             "originalUtterance": nlp.get("originalUtterance")
@@ -219,6 +222,78 @@ class Search:
             )
         )
         return {"results": [], "total_hits": 0, "failed": False, "client_message": message}
+
+    @staticmethod
+    def apply_publication_result_ambiguity(
+        handler_input: HandlerInput,
+        search_result: dict,
+        *,
+        intent: str,
+        request_label: str | None = None,
+    ) -> dict:
+        choices = Search._unique_ambiguity_choices(
+            list(search_result.get("_publication_choices") or [])
+        )
+        payload = dict(search_result.get("_search_payload") or {})
+        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        query = str(payload.get("query") or "").strip()
+        should_ask = bool(
+            len(choices) > 1
+            and (
+                filters.get("isPublication")
+                or intent == "publication"
+                or (intent == "organization" and not query)
+            )
+        )
+        if not should_ask:
+            return search_result
+        store = User.snapshot(handler_input)
+        nlp = dict(RequestContext.request(handler_input).get("_nlp") or {})
+        slots = dict(nlp.get("slots") or {})
+        phrase = (
+            request_label
+            or SearchPayload.request_label(slots, query)
+            or nlp.get("originalUtterance")
+            or "that source"
+        )
+        limit = max(1, int(payload.get("limit") or len(choices) or 1))
+        total_hits = max(0, int(search_result.get("total_hits") or len(choices)))
+        total_pages = BrowseUtils.resolve_total_pages(
+            total_hits,
+            limit,
+            search_result.get("total_pages"),
+            len(choices),
+        )
+        candidate_pagination = {
+            "kind": "publication",
+            "currentPage": max(0, int(search_result.get("page") or payload.get("page") or 0)),
+            "totalPages": total_pages,
+            "totalHits": total_hits,
+            "limit": limit,
+        }
+        slots["ambiguousReferences"] = [{"phrase": phrase, "candidates": choices}]
+        special = Search._ambiguity_response(
+            handler_input,
+            store,
+            {
+                **nlp,
+                "intent": intent,
+                "searchPayload": payload,
+                "slots": slots,
+                "ambiguityContext": {"candidatePagination": candidate_pagination},
+            },
+            slots,
+        )
+        if not special:
+            return search_result
+        special.update(
+            {
+                "_search_payload": payload,
+                "_request_label": phrase,
+                "client_message": SearchSpeech.publication_ambiguity_message(choices[:3]),
+            }
+        )
+        return special
 
     @staticmethod
     def _unresolved_response(slots: dict) -> dict | None:
@@ -303,10 +378,16 @@ class Search:
             result.get("total_hits", 0),
             len(result.get("results") or []),
         )
-        result["_search_payload"] = dict(payload)
+        result.setdefault("_search_payload", dict(payload))
         label = SearchPayload.request_label(slots, query)
         if label:
             result["_request_label"] = label
+        result = Search.apply_publication_result_ambiguity(
+            handler_input,
+            result,
+            intent=str(intent),
+            request_label=label,
+        )
         if isinstance(result.get("results"), list):
             result["results"] = ContentNormalizer.normalize_content_items(result["results"])
         return result

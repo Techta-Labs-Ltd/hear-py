@@ -82,6 +82,23 @@ async def test_search_serializes_an_absent_query_as_an_empty_string(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_search_sends_and_returns_effective_pagination(monkeypatch):
+    sent = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        sent.update(body)
+        return (200, {"results": [], "total": 0, "page": 0, "limit": 3})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    result = await HearApiClient(HearApiOptions(page_limit=3)).search({"query": "TNF"})
+
+    assert sent["limit"] == 3
+    assert sent["page"] == 0
+    assert result["_search_payload"]["limit"] == 3
+    assert result["_search_payload"]["page"] == 0
+
+
+@pytest.mark.asyncio
 async def test_search_normalizes_legacy_top_level_dates_into_filter(monkeypatch):
     sent = {}
 

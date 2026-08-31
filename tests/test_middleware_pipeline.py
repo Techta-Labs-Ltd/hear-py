@@ -27,6 +27,13 @@ def test_pipeline_declarations_preserve_behavioral_order():
     assert [item.__name__ for item in RouteRegistry.RESPONSE_INTERCEPTORS] == [
         "SavePersistenceInterceptor"
     ]
+    controllers = [item.__name__ for item in RouteRegistry.REQUEST_CONTROLLERS]
+    assert controllers.index("BrowseNavigationHandler") < controllers.index(
+        "NextIntentHandler"
+    )
+    assert controllers.index("BrowseNavigationHandler") < controllers.index(
+        "PreviousIntentHandler"
+    )
 
 
 @pytest.mark.asyncio

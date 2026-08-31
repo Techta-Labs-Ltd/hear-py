@@ -365,7 +365,26 @@
             "more content",
             "what else did you find",
             "keep going",
-            "what comes next"
+            "what comes next",
+            "next choices",
+            "show next choices",
+            "more choices",
+            "next publications",
+            "show next publications",
+            "show more publications"
+          ]
+        },
+        {
+          "name": "ShowPreviousBrowseIntent",
+          "slots": [],
+          "samples": [
+            "previous publication choices",
+            "show previous choices",
+            "show me previous choices",
+            "show earlier publications",
+            "show the previous publications",
+            "go back to previous choices",
+            "back to previous choices"
           ]
         },
         {

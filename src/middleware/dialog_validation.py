@@ -23,6 +23,9 @@ class DialogValidationPolicy:
     _AMBIGUITY_INTENTS = _EXIT_INTENTS | {
         "ClarifySelectionIntent",
         "ShowMoreBrowseIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.PreviousIntent",
+        "ShowPreviousBrowseIntent",
         "SkipFeedbackIntent",
         "AMAZON.NoIntent",
     }
@@ -72,7 +75,12 @@ class DialogValidationPolicy:
             or context.get("candidates")
             or []
         )[:3]
-        message = SearchSpeech.ambiguous_reference_message("that name", candidates)
+        publication_picker = (context.get("candidatePagination") or {}).get("kind") == "publication"
+        message = (
+            SearchSpeech.publication_ambiguity_message(candidates)
+            if publication_picker
+            else SearchSpeech.ambiguous_reference_message("that name", candidates)
+        )
         ordinal = " You can say the first one, the second one, or show more."
         return (
             message + ordinal,

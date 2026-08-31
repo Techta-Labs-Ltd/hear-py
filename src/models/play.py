@@ -78,15 +78,6 @@ class PlayContent:
             len(result.get("results", [])),
         )
         if not result.get("results"):
-            if query:
-                return (
-                    handler_input.response_builder.speak(
-                        Ssml.ssml(SearchSpeech.search_no_match(query))
-                    )
-                    .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                    .set_should_end_session(False)
-                    .response
-                )
             return Search._build_search_outcome_response(handler_input, result)
         if query and SearchFilterUtils.wants_latest_playback(raw or ""):
             return await Search._play_first_search_result(

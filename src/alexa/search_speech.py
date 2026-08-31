@@ -72,6 +72,57 @@ class SearchSpeech:
         return f"I found more than one match for that name. Did you mean {choices}?"
 
     @staticmethod
+    def _publication_choice_message(candidates: list[dict], introduction: str) -> str:
+        _, names = SearchSpeech._candidate_names(candidates)
+        if not names:
+            return f"{introduction} Which publication would you like?"
+        choices = names[0] if len(names) == 1 else f"{', '.join(names[:-1])}, or {names[-1]}"
+        ordinals = "first" if len(names) == 1 else "first or second"
+        if len(names) >= 3:
+            ordinals = "first, second, or third"
+        return (
+            f"{introduction} Which publication would you like: {choices}? "
+            f"You can say the publication name, or say {ordinals}."
+        )
+
+    @staticmethod
+    def publication_ambiguity_message(candidates: list[dict]) -> str:
+        return SearchSpeech._publication_choice_message(
+            candidates, "I found more than one publication."
+        )
+
+    @staticmethod
+    def more_publication_choices_message(candidates: list[dict]) -> str:
+        return SearchSpeech._publication_choice_message(
+            candidates, "Here are more publication choices."
+        )
+
+    @staticmethod
+    def previous_publication_choices_message(candidates: list[dict]) -> str:
+        return SearchSpeech._publication_choice_message(
+            candidates, "Here are the previous publication choices."
+        )
+
+    @staticmethod
+    def first_publication_choices_message(candidates: list[dict]) -> str:
+        return SearchSpeech._publication_choice_message(
+            candidates, "You are already at the first publication choices."
+        )
+
+    @staticmethod
+    def publication_choices_exhausted_message(candidates: list[dict]) -> str:
+        return SearchSpeech._publication_choice_message(
+            candidates, "Those are all the publication choices I found."
+        )
+
+    @staticmethod
+    def publication_choices_unavailable_message() -> str:
+        return (
+            "I couldn't load more publication choices right now. Please say one of the names "
+            "I already offered, or say show more to try again."
+        )
+
+    @staticmethod
     def ambiguity_retry_message(candidates: list[dict]) -> str:
         choices = SearchSpeech.ambiguous_reference_message("that name", candidates)
         return f"That did not match the available choices. {choices} You can also say show more."

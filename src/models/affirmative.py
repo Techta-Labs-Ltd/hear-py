@@ -6,6 +6,7 @@ import time
 
 from ask_sdk_core.handler_input import HandlerInput
 
+from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
@@ -19,7 +20,7 @@ from src.models.social import FollowCreator
 from src.models.suggestion import SuggestionConfirmation
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
-from src.utils.filters import SearchFilters, SearchFilterUtils
+from src.utils.filters import SearchFilters, SearchPayload
 
 
 class Affirmative:
@@ -316,8 +317,16 @@ class Affirmative:
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
-        result["_search_payload"] = payload
+        result.setdefault("_search_payload", dict(payload))
+        result = Search.apply_publication_result_ambiguity(
+            handler_input,
+            result,
+            intent=str(resolution.get("intent") or "search"),
+            request_label=label,
+        )
         if not result.get("results"):
+            if result.get("client_message"):
+                return result, Search._build_search_outcome_response(handler_input, result)
             return result, None
         response = await Search.auto_play_first_from_search(
             handler_input,
@@ -428,7 +437,9 @@ class Affirmative:
             return self._missing_resolution_response(handler_input)
         if int(resolution.get("expiresAt") or 0) < int(time.time()):
             return self._expired_resolution_response(handler_input)
-        payload = SearchFilterUtils.normalize_search_payload(resolution["searchPayload"])
+        payload = SearchPayload.with_pagination(
+            resolution["searchPayload"], settings.search_page_limit
+        )
         user_id = AlexaRequest.get_user_id(handler_input)
         if user_id:
             payload["alexaUserId"] = user_id

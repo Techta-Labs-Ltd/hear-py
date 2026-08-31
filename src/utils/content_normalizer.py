@@ -7,6 +7,34 @@ from src.utils.content import ContentIdentity, ContentUtils
 
 class ContentNormalizer:
     @staticmethod
+    def publication_choices(items: object) -> list[dict]:
+        if not isinstance(items, list):
+            return []
+        choices = []
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            tracks = item.get("tracks")
+            is_publication = bool(
+                item.get("isPublication")
+                or item.get("type") == "publication"
+                or (item.get("publicationId") and isinstance(tracks, list))
+            )
+            publication_id = ContentUtils.nullable_string(item.get("publicationId"))
+            title = ContentUtils.repair_mojibake(
+                item.get("publicationTitle") or item.get("title")
+            )
+            key = str(publication_id or "").casefold()
+            if not is_publication or not publication_id or not title or key in seen:
+                continue
+            seen.add(key)
+            choices.append(
+                {"type": "publication", "id": publication_id, "name": str(title).strip()}
+            )
+        return choices
+
+    @staticmethod
     def _pick_playback_speeds(item: dict) -> list | None:
         if isinstance(item.get("playback_speed"), list) and item["playback_speed"]:
             return item["playback_speed"]

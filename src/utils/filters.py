@@ -266,6 +266,20 @@ class SearchFilters:
 
 class SearchPayload:
     @staticmethod
+    def with_pagination(payload: dict | None, default_limit: int) -> dict:
+        normalized = SearchFilterUtils.normalize_search_payload(payload)
+        try:
+            limit = int(normalized.get("limit") or default_limit)
+        except (TypeError, ValueError):
+            limit = int(default_limit)
+        try:
+            page = int(normalized.get("page") or 0)
+        except (TypeError, ValueError):
+            page = 0
+        normalized.update({"limit": max(1, limit), "page": max(0, page)})
+        return normalized
+
+    @staticmethod
     def resolution_filter(
         slots: dict, option_filter: dict | None = None, is_publication: bool = False
     ) -> dict:

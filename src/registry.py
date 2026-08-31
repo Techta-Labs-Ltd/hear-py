@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.container import ApplicationContainer
 from src.controllers.browse import (
     BrowseContentHandler,
-    ShowMoreBrowseHandler,
+    BrowseNavigationHandler,
     WhatsTrendingHandler,
 )
 from src.controllers.can_fulfill import CanFulfillIntentHandler
@@ -109,7 +109,7 @@ class RouteRegistry:
         PlayByCreatorHandler,
         PlayByOrganizationHandler,
         PlayContentHandler,
-        ShowMoreBrowseHandler,
+        BrowseNavigationHandler,
         SetPlaybackSpeedHandler,
         IncreaseSpeedHandler,
         DecreaseSpeedHandler,
