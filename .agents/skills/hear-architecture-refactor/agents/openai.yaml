@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hear Class MVC Refactor"
+  short_description: "Enforce class-only MVC architecture for Hear"
+  default_prompt: "Use $hear-architecture-refactor to audit and refactor the Hear Alexa backend into class-only MVC architecture."

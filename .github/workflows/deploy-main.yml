@@ -22,17 +22,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest pytest-asyncio
+          python -m pip install -r requirements.txt pytest pytest-asyncio ruff
       - name: Create test environment
         run: cp .env.example .env
       - name: Audit project
-        run: python .agents/skills/hear-alexa-python/scripts/audit_project.py .
+        run: python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict
       - name: Compile Python
         run: python -m compileall -q main.py src config
+      - name: Lint Python
+        run: python -m ruff check src tests --select E4,E7,E9,F,I
       - name: Run tests
         run: python -m pytest -q
       - name: Build skill smoke test
-        run: python -c "import main; main._build_skill(); print('main imports + skill builds OK')"
+        run: python -c "from src.application import Application; Application.build_skill(); print('main imports + skill builds OK')"
 
   deploy:
     if: github.event_name == 'push' || github.ref == 'refs/heads/main'
@@ -49,14 +51,19 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION_PROD || 'eu-west-1' }}
       ECR_REPO: ${{ vars.ECR_REPO_PROD || 'hear-python' }}
-      STACK_NAME: ${{ vars.STACK_NAME_PROD }}
+      STACK_NAME: ${{ vars.STACK_NAME_PROD || 'hear-py-prod' }}
       STAGE: production
-      SHORT_STAGE: ${{ vars.SHORT_STAGE_PROD }}
+      SHORT_STAGE: ${{ vars.SHORT_STAGE_PROD || 'prod' }}
       ALEXA_SKILL_ID: ${{ vars.ALEXA_SKILL_ID_PROD }}
       HEAR_API_URL: ${{ vars.HEAR_API_URL_PROD || 'https://alexa.hear.media/api/v1' }}
       HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_PROD || 'alexa' }}
+      WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_PROD || 'https://alexa.hear.media/api/v1/alexa/events' }}
       POWERTOOLS_LOG_LEVEL: ${{ vars.POWERTOOLS_LOG_LEVEL_PROD || 'INFO' }}
-      SSM_PARAMETER_PREFIX: ${{ vars.SSM_PARAMETER_PREFIX_PROD || '/hear/production' }}
+      RESERVED_CONCURRENCY: ${{ vars.RESERVED_CONCURRENCY_PROD || '20' }}
+      PROVISIONED_CONCURRENCY: ${{ vars.PROVISIONED_CONCURRENCY_PROD || '0' }}
+      HEAR_API_KEY: ${{ secrets.HEAR_API_KEY_PROD }}
+      WEBHOOK_OUTBOUND_SECRET: ${{ secrets.WEBHOOK_OUTBOUND_SECRET_PROD }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN_PROD }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate production configuration
@@ -67,11 +74,20 @@ jobs:
           : "${STACK_NAME:?Set the STACK_NAME_PROD variable}"
           : "${SHORT_STAGE:?Set the SHORT_STAGE_PROD variable}"
           : "${ALEXA_SKILL_ID:?Set the ALEXA_SKILL_ID_PROD variable}"
+          : "${HEAR_API_KEY:?Set the HEAR_API_KEY_PROD secret}"
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Ensure production ECR repository
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" >/dev/null 2>&1 || \
+            aws ecr create-repository \
+              --repository-name "$ECR_REPO" \
+              --region "$AWS_REGION" \
+              --image-scanning-configuration scanOnPush=true \
+              --encryption-configuration encryptionType=AES256 >/dev/null
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -90,18 +106,6 @@ jobs:
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: |
-          get_required() {
-            aws ssm get-parameter --name "$SSM_PARAMETER_PREFIX/$1" --with-decryption \
-              --query 'Parameter.Value' --output text --region "$AWS_REGION"
-          }
-          get_optional() {
-            aws ssm get-parameter --name "$SSM_PARAMETER_PREFIX/$1" --with-decryption \
-              --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null || true
-          }
-          HEAR_API_KEY=$(get_required HEAR_API_KEY)
-          SENTRY_DSN=$(get_optional SENTRY_DSN)
-          echo "::add-mask::$HEAR_API_KEY"
-          [[ -z "$SENTRY_DSN" ]] || echo "::add-mask::$SENTRY_DSN"
           aws cloudformation deploy \
             --template-file template.yaml \
             --stack-name "$STACK_NAME" \
@@ -112,7 +116,9 @@ jobs:
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
-              SentryDsn="$SENTRY_DSN" PowerToolsLogLevel="$POWERTOOLS_LOG_LEVEL"
+              WebhookOutboundUrl="$WEBHOOK_OUTBOUND_URL" WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
+              SentryDsn="$SENTRY_DSN" PowerToolsLogLevel="$POWERTOOLS_LOG_LEVEL" \
+              ReservedConcurrency="$RESERVED_CONCURRENCY" ProvisionedConcurrency="$PROVISIONED_CONCURRENCY"
       - name: Show production stack outputs
         if: steps.cloudformation.outcome == 'success'
         run: |

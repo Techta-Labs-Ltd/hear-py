@@ -1,32 +1,29 @@
 from __future__ import annotations
-from src.dependencies import Dependencies
-from src.handlers.audio import (
-    PlaybackFailedHandler,
-    PlaybackFinishedHandler,
-    PlaybackNearlyFinishedHandler,
-    PlaybackProgressReportHandler,
-    PlaybackStartedHandler,
-    PlaybackStoppedHandler,
+
+from src.container import ApplicationContainer
+from src.controllers.browse import (
+    BrowseContentHandler,
+    ShowMoreBrowseHandler,
+    WhatsTrendingHandler,
 )
-from src.handlers.feedback import (
+from src.controllers.can_fulfill import CanFulfillIntentHandler
+from src.controllers.confirmation import NoIntentHandler, YesIntentHandler
+from src.controllers.error import ErrorHandler
+from src.controllers.fallback import FallbackHandler, UnmatchedIntentHandler
+from src.controllers.feedback import (
     FeedbackEnjoyedHandler,
     FeedbackNotEnjoyedHandler,
     FeedbackSomewhatHandler,
     SkipFeedbackHandler,
 )
-from src.handlers.browse import (
-    BrowseContentHandler,
-    ShowMoreBrowseHandler,
-    WhatsTrendingHandler,
-)
-from src.handlers.fallback import FallbackHandler, UnmatchedIntentHandler
-from src.handlers.launch import LaunchRequestHandler
-from src.handlers.play import (
+from src.controllers.intent_dispatch import IntentDispatchGateHandler
+from src.controllers.launch import LaunchRequestHandler, TownCaptureHandler
+from src.controllers.play import (
     PlayByCreatorHandler,
     PlayByOrganizationHandler,
     PlayContentHandler,
 )
-from src.handlers.playback import (
+from src.controllers.playback_controls import (
     DecreaseSpeedHandler,
     FastForwardIntentHandler,
     IncreaseSpeedHandler,
@@ -38,17 +35,25 @@ from src.handlers.playback import (
     RewindIntentHandler,
     SetPlaybackSpeedHandler,
 )
-from src.handlers.report import (
+from src.controllers.playback_events import (
+    PlaybackFailedHandler,
+    PlaybackFinishedHandler,
+    PlaybackNearlyFinishedHandler,
+    PlaybackProgressReportHandler,
+    PlaybackStartedHandler,
+    PlaybackStoppedHandler,
+)
+from src.controllers.report import (
     ReportContentHandler,
     ReportCreatorHandler,
     WhatsThisAboutHandler,
 )
-from src.handlers.social import (
+from src.controllers.social import (
     FollowCreatorHandler,
     UnfollowCreatorHandler,
     WhoIsCreatorHandler,
 )
-from src.handlers.system import (
+from src.controllers.system import (
     CancelIntentHandler,
     HelpIntentHandler,
     NavigateHomeHandler,
@@ -56,33 +61,107 @@ from src.handlers.system import (
     UnknownRequestHandler,
     UnsupportedIntentHandler,
 )
-from src.handlers.yesno import NoIntentHandler, YesIntentHandler
-REQUEST_HANDLERS = (
-    LaunchRequestHandler, WhatsTrendingHandler,
-    BrowseContentHandler,
-    PlayByCreatorHandler, PlayByOrganizationHandler, PlayContentHandler,
-    ShowMoreBrowseHandler, SetPlaybackSpeedHandler, IncreaseSpeedHandler,
-    DecreaseSpeedHandler, PauseIntentHandler, ResumeIntentHandler,
-    NextIntentHandler, PreviousIntentHandler, RepeatIntentHandler,
-    RewindIntentHandler, FastForwardIntentHandler, WhoIsCreatorHandler,
-    FollowCreatorHandler, UnfollowCreatorHandler, ReportContentHandler,
-    ReportCreatorHandler, WhatsThisAboutHandler,
-    PlaybackStartedHandler, PlaybackProgressReportHandler,
-    PlaybackNearlyFinishedHandler, PlaybackFinishedHandler,
-    PlaybackStoppedHandler, PlaybackFailedHandler, FeedbackEnjoyedHandler,
-    FeedbackSomewhatHandler, FeedbackNotEnjoyedHandler, SkipFeedbackHandler,
-    YesIntentHandler, NoIntentHandler, NavigateHomeHandler, UnsupportedIntentHandler,
-    HelpIntentHandler, CancelIntentHandler, SessionEndedHandler, FallbackHandler,
-    UnmatchedIntentHandler, UnknownRequestHandler,
+from src.middleware.confirmation import (
+    ConfirmationMiddleware,
+    SearchConfirmationGateHandler,
 )
+from src.middleware.deadline import LambdaDeadlineInterceptor
+from src.middleware.dialog_validation import (
+    DialogValidationGateHandler,
+    DialogValidationInterceptor,
+)
+from src.middleware.feedback_gate import FeedbackGateHandler
+from src.middleware.identity import IdentityInterceptor
+from src.middleware.onboarding_gate import OnboardingGateHandler
+from src.middleware.persistence import (
+    LoadPersistenceInterceptor,
+    SavePersistenceInterceptor,
+)
+from src.middleware.resolver import ResolverInterceptor
 
 
-def register_handlers(builder, deps: Dependencies | None = None) -> None:
-    """Register application handlers in dispatch order."""
-    if deps is None:
-        deps = Dependencies()
-    for handler_type in REQUEST_HANDLERS:
-        try:
-            builder.add_request_handler(handler_type(deps=deps))
-        except TypeError:
-            builder.add_request_handler(handler_type())
+class RouteRegistry:
+    GATE_HANDLERS = (
+        CanFulfillIntentHandler,
+        DialogValidationGateHandler,
+        FeedbackGateHandler,
+        OnboardingGateHandler,
+        TownCaptureHandler,
+        SearchConfirmationGateHandler,
+        IntentDispatchGateHandler,
+    )
+    REQUEST_INTERCEPTORS = (
+        LambdaDeadlineInterceptor,
+        LoadPersistenceInterceptor,
+        DialogValidationInterceptor,
+        IdentityInterceptor,
+        ResolverInterceptor,
+        ConfirmationMiddleware,
+    )
+    RESPONSE_INTERCEPTORS = (SavePersistenceInterceptor,)
+    REQUEST_CONTROLLERS = (
+        LaunchRequestHandler,
+        WhatsTrendingHandler,
+        BrowseContentHandler,
+        PlayByCreatorHandler,
+        PlayByOrganizationHandler,
+        PlayContentHandler,
+        ShowMoreBrowseHandler,
+        SetPlaybackSpeedHandler,
+        IncreaseSpeedHandler,
+        DecreaseSpeedHandler,
+        PauseIntentHandler,
+        ResumeIntentHandler,
+        NextIntentHandler,
+        PreviousIntentHandler,
+        RepeatIntentHandler,
+        RewindIntentHandler,
+        FastForwardIntentHandler,
+        WhoIsCreatorHandler,
+        FollowCreatorHandler,
+        UnfollowCreatorHandler,
+        ReportContentHandler,
+        ReportCreatorHandler,
+        WhatsThisAboutHandler,
+        PlaybackStartedHandler,
+        PlaybackProgressReportHandler,
+        PlaybackNearlyFinishedHandler,
+        PlaybackFinishedHandler,
+        PlaybackStoppedHandler,
+        PlaybackFailedHandler,
+        FeedbackEnjoyedHandler,
+        FeedbackSomewhatHandler,
+        FeedbackNotEnjoyedHandler,
+        SkipFeedbackHandler,
+        YesIntentHandler,
+        NoIntentHandler,
+        NavigateHomeHandler,
+        UnsupportedIntentHandler,
+        HelpIntentHandler,
+        CancelIntentHandler,
+        SessionEndedHandler,
+        FallbackHandler,
+        UnmatchedIntentHandler,
+        UnknownRequestHandler,
+    )
+
+    @staticmethod
+    def register(builder, container: ApplicationContainer) -> None:
+        RouteRegistry.register_middleware(builder, container)
+        RouteRegistry.register_controllers(builder, container)
+
+    @staticmethod
+    def register_middleware(builder, container: ApplicationContainer) -> None:
+        for handler_type in RouteRegistry.GATE_HANDLERS:
+            builder.add_request_handler(container.create(handler_type))
+        builder.add_exception_handler(container.create(ErrorHandler))
+        for interceptor_type in RouteRegistry.REQUEST_INTERCEPTORS:
+            builder.add_global_request_interceptor(container.create(interceptor_type))
+        for interceptor_type in RouteRegistry.RESPONSE_INTERCEPTORS:
+            builder.add_global_response_interceptor(container.create(interceptor_type))
+
+    @staticmethod
+    def register_controllers(builder, deps: ApplicationContainer | None = None) -> None:
+        deps = deps or ApplicationContainer()
+        for controller_type in RouteRegistry.REQUEST_CONTROLLERS:
+            builder.add_request_handler(deps.create(controller_type))

@@ -26,6 +26,13 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ""
+  WebhookOutboundUrl:
+    Type: String
+    Default: https://alexa.hear.media/api/v1/alexa/events
+  WebhookOutboundSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
   SentryDsn:
     Type: String
     NoEcho: true
@@ -34,9 +41,18 @@ Parameters:
     Type: String
     Default: INFO
     AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+  ReservedConcurrency:
+    Type: Number
+    Default: 20
+    MinValue: 1
+  ProvisionedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
+  HasProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
 
 Globals:
   Function:
@@ -57,12 +73,26 @@ Globals:
         HEAR_DDB_TABLE: !Ref HearPersistenceTable
         HEAR_DDB_PARTITION_KEY: id
         HEAR_PERSISTENCE_DRIVER: dynamodb
-        HEAR_PERSISTENCE_CONDITIONAL: "0"
+        HEAR_PERSISTENCE_CONDITIONAL: "1"
+        HEAR_PERSISTENCE_CONFLICT_RETRIES: "3"
+        HEAR_PERSISTENCE_CONFLICT_BACKOFF_MS: "20"
         HEAR_PERSISTENCE_TTL_DAYS: "180"
+        HEAR_DDB_ITEM_SIZE_WARN_BYTES: "65536"
+        HEAR_DDB_ITEM_SIZE_MAX_BYTES: "350000"
+        HEAR_PERSISTED_COLLECTION_LIMIT: "100"
+        HEAR_PERSISTED_TEXT_LIMIT: "4096"
         HEAR_AUDIO_SPEED_PARAM: speed
+        HEAR_HTTP_CIRCUIT_FAILURE_THRESHOLD: "5"
+        HEAR_HTTP_CIRCUIT_RECOVERY_MS: "30000"
+        HEAR_EVENT_WEBHOOK_TIMEOUT_MS: "10000"
+        HEAR_LISTENER_SYNC_ON_LAUNCH: "1"
+        SQS_OUT_QUEUE_URL: !Ref OutboundQueue
+        WEBHOOK_OUTBOUND_URL: !Ref WebhookOutboundUrl
+        WEBHOOK_OUTBOUND_SECRET: !Ref WebhookOutboundSecret
         SENTRY_DSN: !Ref SentryDsn
         POWERTOOLS_SERVICE_NAME: hear-alexa-skill
         POWERTOOLS_LOG_LEVEL: !Ref PowerToolsLogLevel
+        HEAR_METRICS_NAMESPACE: HearAlexa
 
 Resources:
   HearPersistenceTable:
@@ -96,8 +126,175 @@ Resources:
       FunctionName: !Sub Hear-Python-${ShortStage}
       PackageType: Image
       ImageUri: !Ref ImageUri
+      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      AutoPublishAlias: live
+      ProvisionedConcurrencyConfig: !If
+        - HasProvisionedConcurrency
+        - ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref HearPersistenceTable }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+
+  OutboundDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-alexa-events-${Stage}-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  OutboundQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-alexa-events-${Stage}
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OutboundDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  OutboundConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Outbound-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: ["main.outbound_handler"]
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - SQSPollerPolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+      Events:
+        OutboundEvents:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt OutboundQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1
+            ScalingConfig:
+              MaximumConcurrency: 10
+            FunctionResponseTypes: [ReportBatchItemFailures]
+
+  HearSkillErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear Alexa Lambda invocation errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref HearSkillFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  HearSkillThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear Alexa Lambda throttled invocations
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref HearSkillFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  HearSkillDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear Alexa p95 duration exceeds the response budget
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref HearSkillFunction
+      ExtendedStatistic: p95
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 7500
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  HearPersistenceLoadFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear Alexa persistence load failures
+      Namespace: HearAlexa
+      MetricName: PersistenceLoadFailure
+      Dimensions:
+        - Name: service
+          Value: hear-alexa-skill
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  HearPersistenceSaveFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear Alexa persistence save failures
+      Namespace: HearAlexa
+      MetricName: PersistenceSaveFailure
+      Dimensions:
+        - Name: service
+          Value: hear-alexa-skill
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  OutboundQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear outbound events are not reaching the backend
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt OutboundQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 300
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  OutboundDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear outbound events reached the dead-letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt OutboundDeadLetterQueue.QueueName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
 
   AlexaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -115,3 +312,9 @@ Outputs:
   SkillFunctionArn:
     Description: Set this as the skill's Default Endpoint in the Alexa console.
     Value: !GetAtt HearSkillFunction.Arn
+  OutboundQueueUrl:
+    Description: SQS queue carrying Alexa events to the Hear backend worker.
+    Value: !Ref OutboundQueue
+  OutboundDeadLetterQueueUrl:
+    Description: Failed outbound events retained for investigation.
+    Value: !Ref OutboundDeadLetterQueue

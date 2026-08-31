@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hear-py/store.schema.json",
   "title": "Hear persisted user state",
-  "description": "The only fields persisted into the single DynamoDB item per user (PERSISTED_FIELDS in src/models.py).",
+  "description": "The only fields persisted into the single DynamoDB item per user (PERSISTED_FIELDS in src/models/persistence.py).",
   "type": "object",
   "additionalProperties": false,
   "properties": {

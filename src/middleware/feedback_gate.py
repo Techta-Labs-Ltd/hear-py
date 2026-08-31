@@ -1,11 +1,16 @@
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
-from src.services.feedback import feedback_service
+from src.alexa.feedback import AlexaFeedback
 
 
 class FeedbackGateHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: object | None = None):
+        self._deps = deps
+
     def can_handle(self, handler_input) -> bool:
-        return feedback_service.should_block(handler_input)
+        return self._deps.feedback.should_block(handler_input)
 
     def handle(self, handler_input):
-        return feedback_service.pending_response(handler_input)
+        return AlexaFeedback.present_pending_feedback(
+            handler_input, self._deps.user.snapshot(handler_input)
+        )

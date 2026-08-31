@@ -8,6 +8,15 @@
       "Resource": "*"
     },
     {
+      "Sid": "EcrRepositoryBootstrap",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DescribeRepositories"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "EcrPushPull",
       "Effect": "Allow",
       "Action": [
@@ -17,7 +26,10 @@
         "ecr:CompleteLayerUpload",
         "ecr:PutImage",
         "ecr:BatchGetImage",
-        "ecr:GetDownloadUrlForLayer"
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:DescribeImages",
+        "ecr:GetRepositoryPolicy",
+        "ecr:SetRepositoryPolicy"
       ],
       "Resource": "arn:aws:ecr:eu-west-1:692859951746:repository/hear-python"
     },
@@ -33,6 +45,11 @@
       "Action": [
         "lambda:*",
         "logs:*",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource",
         "dynamodb:CreateTable",
         "dynamodb:DeleteTable",
         "dynamodb:DescribeTable",
@@ -42,7 +59,15 @@
         "dynamodb:UpdateContinuousBackups",
         "dynamodb:DescribeContinuousBackups",
         "dynamodb:TagResource",
-        "dynamodb:UntagResource"
+        "dynamodb:UntagResource",
+        "sqs:CreateQueue",
+        "sqs:DeleteQueue",
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl",
+        "sqs:ListQueueTags",
+        "sqs:SetQueueAttributes",
+        "sqs:TagQueue",
+        "sqs:UntagQueue"
       ],
       "Resource": "*"
     },

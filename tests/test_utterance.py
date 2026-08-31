@@ -1,15 +1,25 @@
 import asyncio
-from src.runtime import AsyncSkill
-from src.adapters.memory_persistence import MemoryPersistenceAdapter
-from src.middleware import register_middleware
+
+from src.alexa.runtime import AsyncSkill
+from src.container import ApplicationContainer
+from src.controllers.browse import BrowseContentHandler, WhatsTrendingHandler
+from src.controllers.confirmation import NoIntentHandler, YesIntentHandler
+from src.controllers.launch import LaunchRequestHandler
+from src.controllers.play import PlayByCreatorHandler, PlayContentHandler
+from src.controllers.social import FollowCreatorHandler
+from src.controllers.system import CancelIntentHandler, HelpIntentHandler
+from src.database.persistence import MemoryPersistenceAdapter
+from src.registry import RouteRegistry
 
 USER_ID = "amzn1.ask.account.TEST"
+
 
 def make_event(intent_name, slots=None):
     return {
         "version": "1.0",
         "session": {
-            "new": True, "sessionId": "s1",
+            "new": True,
+            "sessionId": "s1",
             "application": {"applicationId": "amzn1.ask.skill.test"},
             "attributes": {},
             "user": {"userId": USER_ID},
@@ -47,7 +57,6 @@ def run(label, event):
     directives = resp.get("directives", [])
     end = resp.get("shouldEndSession")
     card = resp.get("card")
-
     print(f"--- {label} ---")
     print(f"  Speech: {speech}")
     if directives:
@@ -69,52 +78,37 @@ persistence._store[USER_ID] = {
     "onboardingComplete": True,
     "userName": "John",
 }
-
-from src.handlers.launch import LaunchRequestHandler
-
-from src.handlers.browse import WhatsTrendingHandler, BrowseContentHandler
-from src.handlers.play import PlayContentHandler, PlayByCreatorHandler
-
-from src.handlers.system import HelpIntentHandler, CancelIntentHandler
-from src.handlers.yesno import YesIntentHandler, NoIntentHandler
-
-from src.handlers.social import FollowCreatorHandler
-
-
 skill = AsyncSkill(persistence_adapter=persistence)
-register_middleware(skill)
-skill.add_request_handler(LaunchRequestHandler())
-skill.add_request_handler(PlayContentHandler())
-skill.add_request_handler(PlayByCreatorHandler())
-skill.add_request_handler(BrowseContentHandler())
-skill.add_request_handler(WhatsTrendingHandler())
+container = ApplicationContainer()
+RouteRegistry.register_middleware(skill, container)
+skill.add_request_handler(LaunchRequestHandler(deps=container))
+skill.add_request_handler(PlayContentHandler(deps=container))
+skill.add_request_handler(PlayByCreatorHandler(deps=container))
+skill.add_request_handler(BrowseContentHandler(deps=container))
+skill.add_request_handler(WhatsTrendingHandler(deps=container))
 skill.add_request_handler(HelpIntentHandler())
-skill.add_request_handler(CancelIntentHandler())
-skill.add_request_handler(YesIntentHandler())
-skill.add_request_handler(NoIntentHandler())
-skill.add_request_handler(FollowCreatorHandler())
-
-# Test: "play me the latest sport from David"
+skill.add_request_handler(CancelIntentHandler(deps=container))
+skill.add_request_handler(YesIntentHandler(deps=container))
+skill.add_request_handler(NoIntentHandler(deps=container))
+skill.add_request_handler(FollowCreatorHandler(deps=container))
 run(
-    'play me the latest sport from David',
-    make_event("PlayContentIntent", {
-        "topic": {"name": "topic", "value": "sport"},
-        "creatorQuery": {"name": "creatorQuery", "value": "David"},
-    }),
+    "play me the latest sport from David",
+    make_event(
+        "PlayContentIntent",
+        {
+            "topic": {"name": "topic", "value": "sport"},
+            "creatorQuery": {"name": "creatorQuery", "value": "David"},
+        },
+    ),
 )
-
-# Test: "play me the latest sport"
 run(
-    'play me the latest sport',
-    make_event("PlayContentIntent", {
-        "topic": {"name": "topic", "value": "sport"},
-    }),
+    "play me the latest sport",
+    make_event("PlayContentIntent", {"topic": {"name": "topic", "value": "sport"}}),
 )
-
-# Test: "play from David"
 run(
-    'play from David',
-    make_event("PlayByCreatorIntent", {
-        "creatorQuery": {"name": "creatorQuery", "value": "David"},
-    }),
+    "play from David",
+    make_event(
+        "PlayByCreatorIntent",
+        {"creatorQuery": {"name": "creatorQuery", "value": "David"}},
+    ),
 )

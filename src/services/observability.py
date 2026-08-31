@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import logging
+
 import sentry_sdk
 from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 
 from config import settings
-from src.utils.speech import ERROR_GENERIC
 
 
 class ErrorReporter:
+    logger = logging.getLogger(__name__)
+
     def __init__(self) -> None:
         self._initialized = False
 
@@ -21,18 +24,19 @@ class ErrorReporter:
         try:
             sentry_sdk.init(
                 dsn=settings.SENTRY_DSN,
-                environment=(
-                    settings.SENTRY_ENVIRONMENT
-                    or settings.STAGE
-                    or settings.NODE_ENV
-                    or "development"
-                ),
+                environment=settings.SENTRY_ENVIRONMENT
+                or settings.STAGE
+                or settings.NODE_ENV
+                or "development",
                 traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
                 integrations=[AwsLambdaIntegration(timeout_warning=True)],
                 before_send=self._before_send,
             )
             self._initialized = True
-        except Exception:
+        except Exception as error:
+            ErrorReporter.logger.warning(
+                "Sentry initialization failed error=%s", type(error).__name__
+            )
             return
 
     def _before_send(self, event: dict, hint: dict) -> dict | None:
@@ -50,7 +54,12 @@ class ErrorReporter:
             with sentry_sdk.push_scope() as scope:
                 scope.set_context("alexa", self._alexa_context(handler_input))
                 sentry_sdk.capture_exception(error)
-        except Exception:
+        except Exception as capture_error:
+            ErrorReporter.logger.warning(
+                "Sentry capture failed error=%s original=%s",
+                type(capture_error).__name__,
+                type(error).__name__,
+            )
             return
 
     def _alexa_context(self, handler_input) -> dict:
@@ -68,26 +77,6 @@ class ErrorReporter:
             return
         try:
             sentry_sdk.flush(timeout=max_ms / 1000.0)
-        except Exception:
+        except Exception as error:
+            ErrorReporter.logger.warning("Sentry flush failed error=%s", type(error).__name__)
             return
-
-    @staticmethod
-    def last_resort_response() -> dict:
-        return {
-            "version": "1.0",
-            "response": {
-                "outputSpeech": {
-                    "type": "SSML",
-                    "ssml": f"<speak>{ERROR_GENERIC}</speak>",
-                },
-                "shouldEndSession": True,
-            },
-        }
-
-
-error_reporter = ErrorReporter()
-
-init_sentry = error_reporter.initialize
-capture_skill_exception = error_reporter.capture
-flush_sentry = error_reporter.flush
-last_resort_skill_response = error_reporter.last_resort_response

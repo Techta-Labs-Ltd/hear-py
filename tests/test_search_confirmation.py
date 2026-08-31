@@ -1,40 +1,45 @@
 from __future__ import annotations
 
-from src.middleware.confirmation import ConfirmationMiddleware, SearchConfirmationGateHandler
-from src.handlers.dispatch import IntentDispatchHandler
-
-from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.services.store import DEFAULT_STORE, get_store
-from src.services.resolution import build_pending_resolution
-
+from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.constants.state import StateSchema
+from src.container import ApplicationContainer
+from src.controllers.intent_dispatch import IntentDispatchGateHandler
+from src.middleware.confirmation import (
+    ConfirmationMiddleware,
+    SearchConfirmationGateHandler,
+)
+from src.models.resolver import ResolutionBuilder
+from src.models.user import User
 
 
 def test_full_resolved_search_is_spoken_before_backend_search():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {
-            "System": {
-                "user": {"userId": "test-user"},
-                "device": {"deviceId": "test-device"},
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {
+                "System": {
+                    "user": {"userId": "test-user"},
+                    "device": {"deviceId": "test-device"},
+                }
             },
-        },
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": "PlayByOrganizationIntent",
-                "slots": {
-                    "organizationQuery": {
-                        "name": "organizationQuery",
-                        "value": "latest community service from ytn",
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayByOrganizationIntent",
+                    "slots": {
+                        "organizationQuery": {
+                            "name": "organizationQuery",
+                            "value": "latest community service from ytn",
+                        }
                     },
                 },
             },
-        },
-    })
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "intent": "organization",
@@ -59,18 +64,14 @@ def test_full_resolved_search_is_spoken_before_backend_search():
             },
         },
     }
-    handler_input = HandlerInput(
-        envelope, attributes, None, ResponseBuilder(),
-    )
-
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
     assert (
-        "Did you want me to play the latest community services "
-        "from York Talking News?"
-    ) in response["outputSpeech"]["ssml"]
-    store = get_store(handler_input)
+        "Did you want me to play the latest community services from York Talking News?"
+        in response["outputSpeech"]["ssml"]
+    )
+    store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     pending = store["pendingResolution"]
     assert pending["searchPayload"]["filter"]["tags"] == ["community-services"]
@@ -78,36 +79,33 @@ def test_full_resolved_search_is_spoken_before_backend_search():
 
 
 def test_constrained_whats_latest_stops_for_confirmation():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {"name": "WhatsTrendingIntent", "slots": {}},
-        },
-    })
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "WhatsTrendingIntent", "slots": {}},
+            },
+        }
+    )
     attributes = AttributesManager(envelope)
     payload = {
         "query": "update",
-        "filter": {
-            "categorySlugs": ["sport"],
-            "organizationIds": ["org-ytn"],
-        },
+        "filter": {"categorySlugs": ["sport"], "organizationIds": ["org-ytn"]},
         "sort": "latest",
         "page": 0,
         "limit": 20,
     }
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
             "intent": "category",
             "requestId": "resolution-trending-1",
-            "confirmationLabel": (
-                "the latest sport update from York Talking News"
-            ),
+            "confirmationLabel": "the latest sport update from York Talking News",
             "searchPayload": payload,
             "slots": {
                 "latest": True,
@@ -119,26 +117,24 @@ def test_constrained_whats_latest_stops_for_confirmation():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
-    assert "Did you want me to play the latest sport update" in (
-        response["outputSpeech"]["ssml"]
-    )
-    assert get_store(handler_input)["pendingResolution"]["searchPayload"] == payload
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    assert "Did you want me to play the latest sport update" in response["outputSpeech"]["ssml"]
+    assert User.snapshot(handler_input)["pendingResolution"]["searchPayload"] == payload
 
 
 def test_pending_resolution_stores_only_catalog_valid_query_and_sort():
-    pending = build_pending_resolution({
-        "intent": "publication",
-        "searchPayload": {
-            "query": None,
-            "sort": "relevance",
-            "filter": {"organizationIds": ["org-wtn"]},
+    pending = ResolutionBuilder.build(
+        {
+            "intent": "publication",
+            "searchPayload": {
+                "query": None,
+                "sort": "relevance",
+                "filter": {"organizationIds": ["org-wtn"]},
+            },
         },
-    }, "Wakefield Talking Newspaper")
-
+        "Wakefield Talking Newspaper",
+    )
     assert pending["searchPayload"] == {
         "query": "",
         "filter": {"organizationIds": ["org-wtn"]},
@@ -146,35 +142,34 @@ def test_pending_resolution_stores_only_catalog_valid_query_and_sort():
 
 
 def test_play_york_tn_still_requires_confirmation():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": "PlayByOrganizationIntent",
-                "slots": {
-                    "organizationQuery": {
-                        "name": "organizationQuery",
-                        "value": "York TN",
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayByOrganizationIntent",
+                    "slots": {
+                        "organizationQuery": {
+                            "name": "organizationQuery",
+                            "value": "York TN",
+                        }
                     },
                 },
             },
-        },
-    })
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
             "intent": "organization",
             "confirmationLabel": "content from York Talking News",
-            "searchPayload": {
-                "query": "",
-                "filter": {"organizationIds": ["org-ytn"]},
-            },
+            "searchPayload": {"query": "", "filter": {"organizationIds": ["org-ytn"]}},
             "slots": {
                 "organizationIds": ["org-ytn"],
                 "organizationName": "York Talking News",
@@ -183,31 +178,32 @@ def test_play_york_tn_still_requires_confirmation():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
-    assert "Did you want me to play content from York Talking News?" in (
-        response["outputSpeech"]["ssml"]
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    assert (
+        "Did you want me to play content from York Talking News?"
+        in response["outputSpeech"]["ssml"]
     )
-    store = get_store(handler_input)
+    store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     assert store["activeDialog"]["type"] == "search_confirmation"
 
 
 def test_empty_play_request_reports_failed_recognition_and_stays_open():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {"name": "PlayContentIntent", "slots": {}},
-        },
-    })
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "PlayContentIntent", "slots": {}},
+            },
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
@@ -217,33 +213,33 @@ def test_empty_play_request_reports_failed_recognition_and_stays_open():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
     assert "Sorry, I didn't catch that" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
     assert response.get("directives") in (None, [])
-    store = get_store(handler_input)
+    store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is False
 
 
 def test_generic_anything_asks_for_specific_request():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": "PlayContentIntent",
-                "slots": {"topic": {"name": "topic", "value": "anything"}},
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayContentIntent",
+                    "slots": {"topic": {"name": "topic", "value": "anything"}},
+                },
             },
-        },
-    })
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
@@ -253,29 +249,29 @@ def test_generic_anything_asks_for_specific_request():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
     assert "Sorry, I didn't catch that" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
     assert response.get("directives") in (None, [])
-    assert get_store(handler_input)["awaitingSearchConfirmation"] is False
+    assert User.snapshot(handler_input)["awaitingSearchConfirmation"] is False
 
 
 def test_bare_trending_request_bypasses_confirmation():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {"name": "WhatsTrendingIntent", "slots": {}},
-        },
-    })
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "WhatsTrendingIntent", "slots": {}},
+            },
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
@@ -286,31 +282,30 @@ def test_bare_trending_request_bypasses_confirmation():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    assert handler_input.attributes_manager.request_attributes.get(
-        "_pendingConfirmation"
-    ) is None
+    assert handler_input.attributes_manager.request_attributes.get("_pendingConfirmation") is None
     assert SearchConfirmationGateHandler().can_handle(handler_input) is False
-    assert get_store(handler_input).get("awaitingSearchConfirmation") is False
+    assert User.snapshot(handler_input).get("awaitingSearchConfirmation") is False
 
 
 def test_resolved_search_alias_is_always_confirmed():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": "PlayContentIntent",
-                "slots": {"topic": {"name": "topic", "value": "Wakefield news"}},
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayContentIntent",
+                    "slots": {"topic": {"name": "topic", "value": "Wakefield news"}},
+                },
             },
-        },
-    })
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
@@ -321,80 +316,69 @@ def test_resolved_search_alias_is_always_confirmed():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
-    assert "Did you want me to play content on Wakefield news?" in (
-        response["outputSpeech"]["ssml"]
-    )
-    assert get_store(handler_input)["awaitingSearchConfirmation"] is True
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    assert "Did you want me to play content on Wakefield news?" in response["outputSpeech"]["ssml"]
+    assert User.snapshot(handler_input)["awaitingSearchConfirmation"] is True
 
 
 def test_category_search_is_described_as_content_on_subject():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": "PlayContentIntent",
-                "slots": {"topic": {"name": "topic", "value": "history"}},
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayContentIntent",
+                    "slots": {"topic": {"name": "topic", "value": "history"}},
+                },
             },
-        },
-    })
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
             "intent": "category",
             "confirmationLabel": "history",
-            "searchPayload": {
-                "query": "",
-                "filter": {"categorySlugs": ["history"]},
-            },
-            "slots": {
-                "category": "history",
-                "tags": ["history"],
-                "residualQuery": "",
-            },
+            "searchPayload": {"query": "", "filter": {"categorySlugs": ["history"]}},
+            "slots": {"category": "history", "tags": ["history"], "residualQuery": ""},
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
-    assert "Did you want me to play content on history?" in (
-        response["outputSpeech"]["ssml"]
-    )
-    assert get_store(handler_input)["pendingResolution"]["searchPayload"] == {
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    assert "Did you want me to play content on history?" in response["outputSpeech"]["ssml"]
+    assert User.snapshot(handler_input)["pendingResolution"]["searchPayload"] == {
         "query": "",
         "filter": {"categorySlugs": ["history"]},
     }
 
 
 def test_location_only_search_is_confirmed_with_city_filter():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": "PlayByOrganizationIntent",
-                "slots": {
-                    "organizationQuery": {
-                        "name": "organizationQuery",
-                        "value": "Liverpool",
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayByOrganizationIntent",
+                    "slots": {
+                        "organizationQuery": {
+                            "name": "organizationQuery",
+                            "value": "Liverpool",
+                        }
                     },
                 },
             },
-        },
-    })
+        }
+    )
     attributes = AttributesManager(envelope)
     payload = {
         "query": "",
@@ -406,7 +390,7 @@ def test_location_only_search_is_confirmed_with_city_filter():
         },
     }
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
@@ -425,38 +409,35 @@ def test_location_only_search_is_confirmed_with_city_filter():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchHandler().handle(handler_input)
-
-    assert "Did you want me to play content in Liverpool?" in (
-        response["outputSpeech"]["ssml"]
-    )
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    assert "Did you want me to play content in Liverpool?" in response["outputSpeech"]["ssml"]
     attrs = handler_input.attributes_manager.request_attributes
     assert "_resolverClarification" not in attrs
-    store = get_store(handler_input)
+    store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     assert store["pendingResolution"]["searchPayload"] == payload
 
 
 def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {"name": "PlayContentIntent", "slots": {}},
-        },
-    })
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "PlayContentIntent", "slots": {}},
+            },
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
     gate = SearchConfirmationGateHandler()
-
     assert gate.can_handle(handler_input) is True
     response = gate.handle(handler_input)
     assert "couldn't safely confirm that search" in response["outputSpeech"]["ssml"]
@@ -464,61 +445,69 @@ def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
 
 
 def test_resolved_pendle_ambiguity_bypasses_generic_clarification():
-    envelope = AttrDict({
-        "version": "1.0",
-        "context": {"System": {"user": {"userId": "test-user"}}},
-        "request": {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": "PlayContentIntent",
-                "slots": {
-                    "topic": {"name": "topic", "value": "pendle voice"},
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayContentIntent",
+                    "slots": {"topic": {"name": "topic", "value": "pendle voice"}},
                 },
             },
-        },
-    })
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {**DEFAULT_STORE, "onboardingComplete": True},
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
         "_dirty": False,
         "_nlp": {
             "status": "resolved",
             "intent": "search",
-            "ambiguities": [{
-                "phrase": "pendle voice",
-                "candidates": [{
-                    "type": "creator",
-                    "id": "creator-leader",
-                    "name": "Pendle Voice Leader and Times",
-                }, {
-                    "type": "creator",
-                    "id": "creator-dalesman",
-                    "name": "Pendle Voice Dalesman",
-                }],
-            }],
+            "ambiguities": [
+                {
+                    "phrase": "pendle voice",
+                    "candidates": [
+                        {
+                            "type": "creator",
+                            "id": "creator-leader",
+                            "name": "Pendle Voice Leader and Times",
+                        },
+                        {
+                            "type": "creator",
+                            "id": "creator-dalesman",
+                            "name": "Pendle Voice Dalesman",
+                        },
+                    ],
+                }
+            ],
             "searchPayload": {"query": "", "filter": {}},
             "slots": {
                 "residualQuery": "",
-                "ambiguousReferences": [{
-                    "phrase": "pendle voice",
-                    "candidates": [{
-                        "type": "creator",
-                        "id": "creator-leader",
-                        "name": "Pendle Voice Leader and Times",
-                    }, {
-                        "type": "creator",
-                        "id": "creator-dalesman",
-                        "name": "Pendle Voice Dalesman",
-                    }],
-                }],
+                "ambiguousReferences": [
+                    {
+                        "phrase": "pendle voice",
+                        "candidates": [
+                            {
+                                "type": "creator",
+                                "id": "creator-leader",
+                                "name": "Pendle Voice Leader and Times",
+                            },
+                            {
+                                "type": "creator",
+                                "id": "creator-dalesman",
+                                "name": "Pendle Voice Dalesman",
+                            },
+                        ],
+                    }
+                ],
             },
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-
     ConfirmationMiddleware().process(handler_input)
-
     attrs = handler_input.attributes_manager.request_attributes
     assert "_resolverClarification" not in attrs
     assert "_pendingConfirmation" not in attrs

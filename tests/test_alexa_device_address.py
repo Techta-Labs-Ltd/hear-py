@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.clients.alexa_locality import AlexaLocalityClient
-from src.runtime import AttrDict
+from src.alexa.runtime import AttrDict
+from src.clients.alexa_settings import AlexaSettingsClient
+from src.services.alexa_locality import AlexaLocalityService
 
 
 class _Pool:
@@ -19,14 +20,20 @@ class _Pool:
 
 
 def _handler_input(*, scopes=None):
-    return SimpleNamespace(request_envelope=AttrDict({
-        "context": {"System": {
-            "apiEndpoint": "https://api.eu.amazonalexa.com",
-            "apiAccessToken": "request-token",
-            "device": {"deviceId": "device-123"},
-            "user": {"permissions": {"scopes": scopes or {}}},
-        }},
-    }))
+    return SimpleNamespace(
+        request_envelope=AttrDict(
+            {
+                "context": {
+                    "System": {
+                        "apiEndpoint": "https://api.eu.amazonalexa.com",
+                        "apiAccessToken": "request-token",
+                        "device": {"deviceId": "device-123"},
+                        "user": {"permissions": {"scopes": scopes or {}}},
+                    }
+                }
+            }
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -43,17 +50,13 @@ async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent(ca
         },
     )
     pool = _Pool(response)
-    client = AlexaLocalityClient(pool=pool)
-
-    with caplog.at_level(logging.INFO, logger="src.clients.alexa_locality"):
+    client = AlexaLocalityService(AlexaSettingsClient(pool=pool))
+    with caplog.at_level(logging.INFO, logger="src.clients.alexa_settings"):
         result = await client.detect_device_location(_handler_input())
-
     assert result["_status"] == "resolved"
     assert result["city"] == "Burnley"
     call = pool.client.get.await_args
-    assert call.args[0] == (
-        "https://api.eu.amazonalexa.com/v1/devices/device-123/settings/address"
-    )
+    assert call.args[0] == "https://api.eu.amazonalexa.com/v1/devices/device-123/settings/address"
     assert call.kwargs["headers"] == {
         "Authorization": "Bearer request-token",
         "Accept": "application/json",
@@ -71,8 +74,8 @@ async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent(ca
 @pytest.mark.asyncio
 async def test_address_api_403_is_reported_as_permission_denied():
     pool = _Pool(SimpleNamespace(status_code=403))
-    result = await AlexaLocalityClient(pool=pool).detect_device_location(
-        _handler_input(),
+    result = await AlexaLocalityService(AlexaSettingsClient(pool=pool)).detect_device_location(
+        _handler_input()
     )
     assert result == {"_status": "permission_denied"}
 
@@ -91,9 +94,9 @@ async def test_address_uses_district_when_city_is_empty():
             "stateOrRegion": "Lancashire",
         },
     )
-    result = await AlexaLocalityClient(pool=_Pool(response)).detect_device_location(
-        _handler_input(),
-    )
+    result = await AlexaLocalityService(
+        AlexaSettingsClient(pool=_Pool(response))
+    ).detect_device_location(_handler_input())
     assert result["city"] == "Pendle"
 
 
@@ -104,7 +107,7 @@ async def test_address_uses_district_when_city_is_empty():
 )
 async def test_address_api_preserves_non_permission_failure(status_code, expected):
     pool = _Pool(SimpleNamespace(status_code=status_code))
-    result = await AlexaLocalityClient(pool=pool).detect_device_location(
-        _handler_input(),
+    result = await AlexaLocalityService(AlexaSettingsClient(pool=pool)).detect_device_location(
+        _handler_input()
     )
     assert result == {"_status": expected}

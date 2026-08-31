@@ -6,163 +6,158 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
-from src.dependencies import Dependencies
-
-from src.services.store import get_store
-
-from src.utils.skill_request import get_request_type, get_intent_name
-from src.utils.speech import (
-    ssml, ONBOARDING_TOWN_CONFIRM,
-)
-from src.handlers.onboarding import (
-    ONBOARDING_ASK_TOWN,
-    ONBOARDING_AWAIT_CONFIRM,
-    TOWN_CONFIRM_REPROMPT,
-    ask_for_permission,
-    handle_permission_yes,
-    handle_permission_no,
-    auto_detect_location_or_manual,
-    resume_town_capture,
-)
+from src.alexa.context import RequestContext
+from src.alexa.request import AlexaRequest
+from src.alexa.speech import Speech
+from src.alexa.ssml import Ssml
+from src.constants.onboarding import OnboardingConstants
+from src.models.onboarding import Onboarding
 
 
-logger = logging.getLogger(__name__)
+class OnboardingPolicy:
+    logger = logging.getLogger(__name__)
+    _ASK_TOWN_OWNED_INTENTS = frozenset(
+        {
+            "TownCaptureIntent",
+            "SetLocationIntent",
+            "AMAZON.NoIntent",
+            "SkipFeedbackIntent",
+        }
+    )
+    _AWAIT_CONFIRM_OWNED_INTENTS = frozenset(
+        {
+            "AMAZON.YesIntent",
+            "AMAZON.NoIntent",
+            "TownCaptureIntent",
+            "SetLocationIntent",
+        }
+    )
+    _NLP_OWNED_INTENTS = frozenset({"town_capture", "location_set"})
 
-# Intents that own the current onboarding stage. The gate must NOT claim
-# these so their handlers keep resolving the in-flight flow.
-_ASK_TOWN_OWNED_INTENTS = frozenset({
-    "TownCaptureIntent", "SetLocationIntent",
-    "AMAZON.NoIntent", "SkipFeedbackIntent",
-})
-_AWAIT_CONFIRM_OWNED_INTENTS = frozenset({
-    "AMAZON.YesIntent", "AMAZON.NoIntent",
-    "TownCaptureIntent", "SetLocationIntent",
-})
-_NLP_OWNED_INTENTS = frozenset({"town_capture", "location_set"})
+    @staticmethod
+    def _is_new_user(store: Dict[str, Any]) -> bool:
+        """Check if the user is new (no completed onboarding, no prior playback)."""
+        if store.get("onboardingComplete"):
+            return False
+        return store.get("playCount", 0) == 0 and (not store.get("lastToken"))
 
+    @staticmethod
+    def _onboarding_completed_in_session(handler_input: HandlerInput) -> bool:
+        session = RequestContext.session(handler_input) or {}
+        return bool(session.get("onboardingComplete"))
 
-def _is_new_user(store: Dict[str, Any]) -> bool:
-    """Check if the user is new (no completed onboarding, no prior playback)."""
-    if store.get("onboardingComplete"):
-        return False
-    return store.get("playCount", 0) == 0 and not store.get("lastToken")
+    @staticmethod
+    def _get_stage(handler_input: HandlerInput, store: dict) -> str | None:
+        """Resolve the current onboarding stage from store or session attributes."""
+        stage = store.get("onboardingStage")
+        if not stage:
+            sess = RequestContext.session(handler_input) or {}
+            stage = sess.get("onboardingStage")
+        return stage or None
 
-
-def _onboarding_completed_in_session(handler_input: HandlerInput) -> bool:
-    session = handler_input.attributes_manager.get_session_attributes() or {}
-    return bool(session.get("onboardingComplete"))
-
-
-def _get_stage(handler_input: HandlerInput) -> str | None:
-    """Resolve the current onboarding stage from store or session attributes."""
-    store = get_store(handler_input)
-    stage = store.get("onboardingStage")
-    if not stage:
-        sess = handler_input.attributes_manager.get_session_attributes() or {}
-        stage = sess.get("onboardingStage")
-    return stage or None
-
-
-def _confirm_echo(handler_input: HandlerInput, store: Dict[str, Any]):
-    """Re-ask the location confirmation using the pending candidate city."""
-    pending = store.get("pendingLocationConfirm") or {}
-    city = pending.get("city")
-    if not city:
-        return None
-    return handler_input.response_builder \
-        .speak(ssml(ONBOARDING_TOWN_CONFIRM(city))) \
-        .reprompt(ssml(TOWN_CONFIRM_REPROMPT)) \
-        .set_should_end_session(False) \
-        .response
+    @staticmethod
+    def _confirm_echo(handler_input: HandlerInput, store: Dict[str, Any]):
+        """Re-ask the location confirmation using the pending candidate city."""
+        pending = store.get("pendingLocationConfirm") or {}
+        city = pending.get("city")
+        if not city:
+            return None
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(Speech.ONBOARDING_TOWN_CONFIRM(city)))
+            .reprompt(Ssml.ssml(OnboardingConstants.TOWN_CONFIRM_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
 
 
 class OnboardingGateHandler(AbstractRequestHandler):
     """Gate handler that routes new users through onboarding before any content handlers."""
 
-    def __init__(self, *, deps: Dependencies | None = None):
-        self._deps = deps or Dependencies()
+    def __init__(self, *, deps: object | None = None):
+        self._deps = deps
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
-        rt = get_request_type(handler_input)
+        rt = AlexaRequest.get_request_type(handler_input)
         if rt == "LaunchRequest":
-            store = get_store(handler_input)
-            return _is_new_user(store) and not _onboarding_completed_in_session(handler_input)
-
+            store = self._deps.user.snapshot(handler_input)
+            return OnboardingPolicy._is_new_user(store) and (
+                not OnboardingPolicy._onboarding_completed_in_session(handler_input)
+            )
         if isinstance(rt, str) and rt.startswith("AudioPlayer."):
             return False
         if rt == "SessionEndedRequest":
             return False
         if rt != "IntentRequest":
             return False
-
-        store = get_store(handler_input)
-        if not _is_new_user(store) or _onboarding_completed_in_session(handler_input):
+        store = self._deps.user.snapshot(handler_input)
+        if not OnboardingPolicy._is_new_user(
+            store
+        ) or OnboardingPolicy._onboarding_completed_in_session(handler_input):
             return False
-
-        intent = get_intent_name(handler_input)
+        intent = AlexaRequest.get_intent_name(handler_input)
         if intent in ("AMAZON.StopIntent", "AMAZON.CancelIntent"):
             return False
-
-        stage = _get_stage(handler_input)
-        if stage in (ONBOARDING_ASK_TOWN, ONBOARDING_AWAIT_CONFIRM):
-            attrs = handler_input.attributes_manager.get_request_attributes()
+        stage = OnboardingPolicy._get_stage(handler_input, store)
+        if stage in (
+            OnboardingConstants.ONBOARDING_ASK_TOWN,
+            OnboardingConstants.ONBOARDING_AWAIT_CONFIRM,
+        ):
+            attrs = RequestContext.request(handler_input)
             nlp = attrs.get("_nlp", {}) if attrs else {}
-            if nlp.get("intent") in _NLP_OWNED_INTENTS:
+            if nlp.get("intent") in OnboardingPolicy._NLP_OWNED_INTENTS:
                 return False
             owned = (
-                _ASK_TOWN_OWNED_INTENTS if stage == ONBOARDING_ASK_TOWN
-                else _AWAIT_CONFIRM_OWNED_INTENTS
+                OnboardingPolicy._ASK_TOWN_OWNED_INTENTS
+                if stage == OnboardingConstants.ONBOARDING_ASK_TOWN
+                else OnboardingPolicy._AWAIT_CONFIRM_OWNED_INTENTS
             )
             return intent not in owned
-
         return stage == "ask_permission" or not stage
 
     async def handle(self, handler_input: HandlerInput):
-        rt = get_request_type(handler_input)
+        rt = AlexaRequest.get_request_type(handler_input)
         if rt == "LaunchRequest":
-            store = get_store(handler_input)
-            logger.info("Hear: checking device address on onboarding launch")
-            return await auto_detect_location_or_manual(
-                handler_input, store, deps=self._deps,
+            store = self._deps.user.snapshot(handler_input)
+            OnboardingPolicy.logger.info("Hear: checking device address on onboarding launch")
+            return await Onboarding.auto_detect_location_or_manual(
+                handler_input, store, deps=self._deps
             )
-
-        intent = get_intent_name(handler_input)
-        stage = _get_stage(handler_input)
-        store = get_store(handler_input)
-
-        if stage == ONBOARDING_ASK_TOWN:
-            attrs = handler_input.attributes_manager.get_request_attributes() or {}
+        intent = AlexaRequest.get_intent_name(handler_input)
+        store = self._deps.user.snapshot(handler_input)
+        stage = OnboardingPolicy._get_stage(handler_input, store)
+        if stage == OnboardingConstants.ONBOARDING_ASK_TOWN:
+            attrs = RequestContext.request(handler_input) or {}
             nlp = attrs.get("_nlp") or {}
             slots = nlp.get("slots") or {}
             attempted_city = (
-                slots.get("townName")
-                or slots.get("placeName")
-                or slots.get("residualQuery")
+                slots.get("townName") or slots.get("placeName") or slots.get("residualQuery")
             )
-            logger.info(
+            OnboardingPolicy.logger.info(
                 "Hear: city reply was not captured intent=%s attempted=%s; asking again",
                 intent,
                 bool(attempted_city),
             )
-            return resume_town_capture(
+            return Onboarding.resume_town_capture(
                 handler_input,
                 store,
                 str(attempted_city).strip() if attempted_city else None,
+                deps=self._deps,
             )
-        if stage == ONBOARDING_AWAIT_CONFIRM:
-            redirect = _confirm_echo(handler_input, store)
+        if stage == OnboardingConstants.ONBOARDING_AWAIT_CONFIRM:
+            redirect = OnboardingPolicy._confirm_echo(handler_input, store)
             if redirect is not None:
                 return redirect
-
         if stage == "ask_permission" or not stage:
             if intent == "AMAZON.YesIntent":
-                return handle_permission_yes(handler_input, store)
+                return Onboarding.handle_permission_yes(handler_input, store, deps=self._deps)
             if intent == "AMAZON.NoIntent":
-                return handle_permission_no(handler_input, store)
-
-        return handler_input.response_builder \
-            .speak(ssml(
-                "Please answer yes to use your device location, or no to enter your city manually."
-            )) \
-            .set_should_end_session(False) \
+                return Onboarding.handle_permission_no(handler_input, store, deps=self._deps)
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(
+                    "Please answer yes to use your device location, or no to enter your city manually."
+                )
+            )
+            .set_should_end_session(False)
             .response
+        )

@@ -4,34 +4,43 @@ import logging
 
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
-from src.models import IdentityContext
-from src.utils.skill_request import get_user_id
+from src.alexa.context import RequestContext
+from src.alexa.request import AlexaRequest
+from src.models.listener import IdentityContext
 
-logger = logging.getLogger(__name__)
 
+class IdentityPolicy:
+    logger = logging.getLogger(__name__)
 
-def _get_envelope_value(envelope, *path):
-    node = envelope
-    for key in path:
-        if node is None:
-            return None
-        try:
-            node = getattr(node, key)
-        except (AttributeError, TypeError):
-            try:
-                node = node[key]
-            except (KeyError, TypeError, IndexError):
+    @staticmethod
+    def _get_envelope_value(envelope, *path):
+        node = envelope
+        for key in path:
+            if node is None:
                 return None
-    return node
+            try:
+                node = getattr(node, key)
+            except (AttributeError, TypeError):
+                try:
+                    node = node[key]
+                except (KeyError, TypeError, IndexError):
+                    return None
+        return node
 
 
 class IdentityInterceptor(AbstractRequestInterceptor):
     async def process(self, handler_input) -> None:
         envelope = handler_input.request_envelope
-        user_id = get_user_id(handler_input)
-        person_id = _get_envelope_value(envelope, "context", "System", "person", "personId")
-        device_id = _get_envelope_value(envelope, "context", "System", "device", "deviceId")
-        access_token = _get_envelope_value(envelope, "context", "System", "user", "accessToken")
+        user_id = AlexaRequest.get_user_id(handler_input)
+        person_id = IdentityPolicy._get_envelope_value(
+            envelope, "context", "System", "person", "personId"
+        )
+        device_id = IdentityPolicy._get_envelope_value(
+            envelope, "context", "System", "device", "deviceId"
+        )
+        access_token = IdentityPolicy._get_envelope_value(
+            envelope, "context", "System", "user", "accessToken"
+        )
         is_linked = isinstance(access_token, str) and bool(access_token.strip())
         if is_linked and person_id:
             principal_type = "linked_person"
@@ -49,8 +58,10 @@ class IdentityInterceptor(AbstractRequestInterceptor):
             access_token=access_token or None,
             is_linked=is_linked,
         )
-        attrs = handler_input.attributes_manager.request_attributes
+        attrs = RequestContext.request(handler_input)
         attrs["_identity"] = identity
-        handler_input.attributes_manager.request_attributes = attrs
+        RequestContext.replace_request(handler_input, attrs)
         if not user_id:
-            logger.warning("Hear request rejected for backend dispatch: missing Alexa user ID")
+            IdentityPolicy.logger.warning(
+                "Hear request rejected for backend dispatch: missing Alexa user ID"
+            )

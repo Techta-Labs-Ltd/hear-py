@@ -1,35 +1,31 @@
-from pathlib import Path
+import ast
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
-from src.adapters.memory_persistence import MemoryPersistenceAdapter
-from src.application import build_skill
-from src.registry import REQUEST_HANDLERS
-
-from src.middleware import GATE_HANDLERS, REQUEST_INTERCEPTORS, RESPONSE_INTERCEPTORS
+from config.permission_scopes import DEVICE_ADDRESS
+from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.application import Application
+from src.clients.alexa import AlexaClient
 from src.clients.hear import HearApiClient
-
-
+from src.clients.resolver import ResolverClient, ResolverOptions
+from src.container import ApplicationContainer
+from src.database.persistence import MemoryPersistenceAdapter
+from src.models.feedback import FeedbackService
+from src.models.playback import Playback
+from src.registry import RouteRegistry
 from src.services.observability import ErrorReporter
-from src.services.feedback import FeedbackService
-from src.services.playback import PlaybackService
-from src.services.persistence import PlaybackStateRepository
-
-from src.services.tasks import BackgroundTaskManager
-from src.clients.resolver import ResolverClient
-
-from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from config.permission_scopes import DEVICE_ADDRESS, GEOLOCATION_READ
 
 
 def test_skill_factory_registers_the_complete_pipeline():
-    skill = build_skill(MemoryPersistenceAdapter())
-
-    assert len(skill.request_handlers) == len(GATE_HANDLERS) + len(REQUEST_HANDLERS)
-    assert len(skill._request_interceptors) == len(REQUEST_INTERCEPTORS)
-    assert len(skill._response_interceptors) == len(RESPONSE_INTERCEPTORS)
+    skill = Application.build_skill(MemoryPersistenceAdapter(), deps=ApplicationContainer())
+    assert len(skill.request_handlers) == len(RouteRegistry.GATE_HANDLERS) + len(
+        RouteRegistry.REQUEST_CONTROLLERS
+    )
+    assert len(skill._request_interceptors) == len(RouteRegistry.REQUEST_INTERCEPTORS)
+    assert len(skill._response_interceptors) == len(RouteRegistry.RESPONSE_INTERCEPTORS)
 
 
 def test_obsolete_resolver_and_webhook_packages_are_absent():
@@ -38,28 +34,90 @@ def test_obsolete_resolver_and_webhook_packages_are_absent():
     assert not (root / "src" / "webhooks").exists()
 
 
+def test_related_domain_models_are_consolidated():
+    models = Path(__file__).resolve().parents[1] / "src" / "models"
+    assert not (models / "identity.py").exists()
+    assert not (models / "resolution.py").exists()
+    assert not (models / "launch.py").exists()
+    assert not (models / "deferred.py").exists()
+
+
+def test_runtime_and_utility_modules_have_clear_owners():
+    src = Path(__file__).resolve().parents[1] / "src"
+    assert not any((src / "runtime").glob("*.py"))
+    assert not (src / "filters.py").exists()
+    assert (src / "alexa" / "runtime.py").exists()
+    assert (src / "utils" / "deadline.py").exists()
+    assert (src / "utils" / "filters.py").exists()
+
+
+def test_github_workflows_use_the_current_architecture_audit():
+    root = Path(__file__).resolve().parents[1]
+    workflows = [
+        root / ".github" / "workflows" / "deploy-develop.yml",
+        root / ".github" / "workflows" / "deploy-main.yml",
+    ]
+    for workflow in workflows:
+        source = workflow.read_text(encoding="utf-8")
+        assert "hear-architecture-refactor/scripts/audit_architecture.py . --strict" in source
+        assert "hear-alexa-python/scripts/audit_project.py" not in source
+
+
+def test_models_only_expose_classes_with_imports_at_the_top():
+    root = Path(__file__).resolve().parents[1] / "src" / "models"
+    for path in root.glob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            allowed = isinstance(node, (ast.Import, ast.ImportFrom, ast.ClassDef))
+            type_checking = (
+                isinstance(node, ast.If)
+                and isinstance(node.test, ast.Name)
+                and (node.test.id == "TYPE_CHECKING")
+            )
+            assert allowed or type_checking, (
+                f"{path.name}:{node.lineno} contains module-level {type(node).__name__}"
+            )
+        first_class = min((node.lineno for node in tree.body if isinstance(node, ast.ClassDef)))
+        late_imports = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Import, ast.ImportFrom)) and node.lineno > first_class
+        ]
+        assert not late_imports, f"{path.name} has late imports at {late_imports}"
+
+
+def test_dependency_container_exposes_feature_facades():
+    dependencies = ApplicationContainer()
+    assert not hasattr(dependencies, "onboarding_store")
+    assert not hasattr(dependencies, "playback_store")
+    assert not hasattr(dependencies, "playback_queue")
+    assert dependencies.playback.state is not None
+    assert dependencies.playback.queue is not None
+
+
 def test_alexa_entry_graph_does_not_import_resolver_implementation():
     root = Path(__file__).resolve().parents[1]
     alexa_modules = [
         root / "main.py",
         root / "src" / "application.py",
-        root / "src" / "middleware" / "pipeline.py",
+        root / "src" / "registry.py",
         root / "src" / "middleware" / "resolver.py",
-        root / "src" / "handlers" / "can_fulfill.py",
-        root / "src" / "handlers" / "play.py",
-        root / "src" / "handlers" / "onboarding.py",
+        root / "src" / "controllers" / "can_fulfill.py",
+        root / "src" / "controllers" / "play.py",
+        root / "src" / "models" / "search.py",
+        root / "src" / "models" / "onboarding.py",
+        root / "src" / "models" / "browse.py",
     ]
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in alexa_modules)
-
+    combined = "\n".join((path.read_text(encoding="utf-8") for path in alexa_modules))
     assert "from src.resolver" not in combined
     assert "import src.resolver" not in combined
     assert "import spacy" not in combined
 
 
 def test_template_has_no_dedicated_resolver_configuration():
-    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(
-        encoding="utf-8"
-    )
+    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
     assert "RESOLVER_" not in template
     assert "ResolverApiKey" not in template
     assert "ResolverFunction:" not in template
@@ -68,10 +126,7 @@ def test_template_has_no_dedicated_resolver_configuration():
 
 
 def test_template_owns_and_wires_durable_persistence_table():
-    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(
-        encoding="utf-8"
-    )
-
+    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
     assert "HearPersistenceTable:" in template
     assert "Type: AWS::DynamoDB::Table" in template
     assert "DeletionPolicy: Retain" in template
@@ -84,25 +139,46 @@ def test_template_owns_and_wires_durable_persistence_table():
     assert "HEAR_DDB_TABLE: hear-service" not in template
 
 
+def test_template_has_scaling_guards_and_operational_alarms():
+    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
+    assert "ReservedConcurrentExecutions: !Ref ReservedConcurrency" in template
+    assert "ProvisionedConcurrencyConfig: !If" in template
+    assert "HearSkillErrorAlarm:" in template
+    assert "HearSkillThrottleAlarm:" in template
+    assert "HearSkillDurationAlarm:" in template
+    assert "HearPersistenceLoadFailureAlarm:" in template
+    assert "HearPersistenceSaveFailureAlarm:" in template
+    assert "OutboundQueueAgeAlarm:" in template
+    assert "OutboundDeadLetterAlarm:" in template
+
+
+def test_template_owns_outbound_event_delivery_pipeline():
+    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
+    assert "OutboundQueue:" in template
+    assert "OutboundDeadLetterQueue:" in template
+    assert "OutboundConsumerFunction:" in template
+    assert "SQS_OUT_QUEUE_URL: !Ref OutboundQueue" in template
+    assert "SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }" in template
+    assert "SQSPollerPolicy: { QueueName: !GetAtt OutboundQueue.QueueName }" in template
+    assert "FunctionResponseTypes: [ReportBatchItemFailures]" in template
+
+
 def test_deployment_role_can_manage_table_recovery_configuration():
-    policy_path = (
-        Path(__file__).resolve().parents[1]
-        / "deploy"
-        / "oidc-permissions-policy.json"
-    )
+    policy_path = Path(__file__).resolve().parents[1] / "deploy" / "oidc-permissions-policy.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     actions = {
         action
         for statement in policy["Statement"]
         for action in (
-            statement["Action"]
-            if isinstance(statement["Action"], list)
-            else [statement["Action"]]
+            statement["Action"] if isinstance(statement["Action"], list) else [statement["Action"]]
         )
     }
-
     assert "dynamodb:UpdateContinuousBackups" in actions
     assert "dynamodb:DescribeContinuousBackups" in actions
+    assert "cloudwatch:PutMetricAlarm" in actions
+    assert "cloudwatch:DeleteAlarms" in actions
+    assert "sqs:CreateQueue" in actions
+    assert "sqs:SetQueueAttributes" in actions
 
 
 def test_runtime_and_container_do_not_install_or_import_spacy():
@@ -113,10 +189,7 @@ def test_runtime_and_container_do_not_install_or_import_spacy():
         *sorted((root / ".github" / "workflows").glob("*.yml")),
         *sorted((root / "src").rglob("*.py")),
     ]
-    combined = "\n".join(
-        path.read_text(encoding="utf-8").lower() for path in runtime_sources
-    )
-
+    combined = "\n".join((path.read_text(encoding="utf-8").lower() for path in runtime_sources))
     assert "spacy" not in combined
     assert "en_core_web" not in combined
 
@@ -124,39 +197,24 @@ def test_runtime_and_container_do_not_install_or_import_spacy():
 def test_stateful_services_have_explicit_owners():
     assert isinstance(HearApiClient(), HearApiClient)
     assert isinstance(ErrorReporter(), ErrorReporter)
-    assert isinstance(PlaybackService(), PlaybackService)
-    assert isinstance(BackgroundTaskManager(), BackgroundTaskManager)
+    assert isinstance(Playback(AlexaClient()), Playback)
     assert isinstance(FeedbackService(), FeedbackService)
     assert isinstance(
-        ResolverClient(host="https://resolver.test", api_key="test"),
+        ResolverClient(ResolverOptions(host="https://resolver.test", api_key="test")),
         ResolverClient,
     )
 
 
 @pytest.mark.asyncio
-async def test_playback_repositories_have_isolated_memory():
-    first = PlaybackStateRepository()
-    second = PlaybackStateRepository()
-
-    await first.set("user-1", {"contentId": "track-1"})
-
-    assert await first.get("user-1") == {
-        "alexaUserId": "user-1",
-        "contentId": "track-1",
-    }
-    assert await second.get("user-1") is None
-
-
-@pytest.mark.asyncio
 async def test_onboarding_yes_returns_permission_card(monkeypatch):
-    from src.clients.alexa_locality import AlexaLocalityClient
+    from src.clients.alexa_settings import AlexaSettingsClient
 
     monkeypatch.setattr(
-        AlexaLocalityClient,
+        AlexaSettingsClient,
         "get_device_address",
         AsyncMock(return_value={"_status": "permission_denied"}),
     )
-    skill = build_skill(MemoryPersistenceAdapter())
+    skill = Application.build_skill(MemoryPersistenceAdapter(), deps=ApplicationContainer())
     context = {
         "System": {
             "user": {"userId": "test-user"},
@@ -179,10 +237,8 @@ async def test_onboarding_yes_returns_permission_card(monkeypatch):
             "intent": {"name": "AMAZON.YesIntent", "slots": {}},
         },
     }
-
     await skill.invoke(launch, None)
     response = await skill.invoke(yes, None)
-
     assert response["response"]["card"] == {
         "type": "AskForPermissionsConsent",
         "permissions": [DEVICE_ADDRESS],
@@ -191,35 +247,31 @@ async def test_onboarding_yes_returns_permission_card(monkeypatch):
 
 
 def test_feedback_service_owns_pending_feedback_policy():
-    envelope = AttrDict({
-        "context": {
-            "System": {
-                "user": {"userId": "test-user"},
-                "device": {"deviceId": "test-device"},
-            }
-        },
-        "request": {
-            "type": "IntentRequest",
-            "intent": {"name": "PlayContentIntent", "slots": {}},
-        },
-    })
+    envelope = AttrDict(
+        {
+            "context": {
+                "System": {
+                    "user": {"userId": "test-user"},
+                    "device": {"deviceId": "test-device"},
+                }
+            },
+            "request": {
+                "type": "IntentRequest",
+                "intent": {"name": "PlayContentIntent", "slots": {}},
+            },
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
-        "_store": {
-            "awaitingFeedback": True,
-            "feedbackContentTitle": "Example",
-        },
+        "_store": {"awaitingFeedback": True, "feedbackContentTitle": "Example"},
         "_dirty": False,
     }
-    handler_input = HandlerInput(
-        envelope,
-        attributes,
-        None,
-        ResponseBuilder(),
-    )
-
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
     service = FeedbackService()
-
     assert service.should_block(handler_input)
-    response = service.pending_response(handler_input)
+    from src.alexa.feedback import AlexaFeedback
+
+    response = AlexaFeedback.present_pending_feedback(
+        handler_input, attributes.request_attributes["_store"]
+    )
     assert response["shouldEndSession"] is False

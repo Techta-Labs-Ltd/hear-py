@@ -12,6 +12,7 @@ param(
     [string] $EcrRepository = "hear-python",
     [string] $HearApiUrl = "https://alexa.hear.media/api/v1",
     [string] $HearApiPathPrefix = "alexa",
+    [string] $WebhookOutboundUrl = "https://alexa.hear.media/api/v1/alexa/events",
     [switch] $ConfirmProduction
 )
 
@@ -77,6 +78,7 @@ if ($LASTEXITCODE -ne 0) { throw "Docker build failed." }
 if ($LASTEXITCODE -ne 0) { throw "Docker push failed." }
 
 $hearApiKey = Get-SsmParameter "$parameterPrefix/HEAR_API_KEY"
+$webhookOutboundSecret = Get-SsmParameter "$parameterPrefix/WEBHOOK_OUTBOUND_SECRET" -Optional
 $sentryDsn = Get-SsmParameter "$parameterPrefix/SENTRY_DSN" -Optional
 
 $parameterOverrides = @(
@@ -87,6 +89,8 @@ $parameterOverrides = @(
     "HearApiUrl=$HearApiUrl",
     "HearApiPathPrefix=$HearApiPathPrefix",
     "HearApiKey=$hearApiKey",
+    "WebhookOutboundUrl=$WebhookOutboundUrl",
+    "WebhookOutboundSecret=$webhookOutboundSecret",
     "SentryDsn=$sentryDsn",
     "PowerToolsLogLevel=$logLevel"
 )
@@ -110,7 +114,7 @@ if ($Environment -eq "production") {
 & sam @samArgs
 if ($LASTEXITCODE -ne 0) { throw "SAM deployment failed." }
 
-$stackName = if ($Environment -eq "production") { "hear-py-production" } else { "hear-py-development" }
+$stackName = if ($Environment -eq "production") { "hear-py-prod" } else { "hear-py-development" }
 $functionArn = (Invoke-Aws cloudformation describe-stacks --stack-name $stackName `
     --region $Region --query "Stacks[0].Outputs[?OutputKey=='SkillFunctionArn'].OutputValue | [0]" `
     --output text).Trim()

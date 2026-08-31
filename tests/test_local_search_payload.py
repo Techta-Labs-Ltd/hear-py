@@ -1,9 +1,9 @@
-from src.utils.search_filters import SearchPayload
+from src.utils.filters import SearchPayload
 
 
 def test_saved_city_uses_registered_listener_radius(mock_handler_input):
     payload = SearchPayload.build(
-        mock_handler_input,
+        "user-1",
         {
             "userCity": "York",
             "locality": "York",
@@ -13,7 +13,6 @@ def test_saved_city_uses_registered_listener_radius(mock_handler_input):
         q="",
         nlp_filter={"city": "York", "isLocal": True},
     )
-
     assert payload["isLocal"] is True
     assert payload["sort"] == "nearest"
     assert payload["filter"] == {
@@ -27,7 +26,7 @@ def test_my_city_without_named_facet_uses_registered_listener_radius(
     mock_handler_input,
 ):
     payload = SearchPayload.build(
-        mock_handler_input,
+        "user-1",
         {
             "userCity": "Swindon",
             "locality": "Swindon",
@@ -37,7 +36,6 @@ def test_my_city_without_named_facet_uses_registered_listener_radius(
         q="",
         nlp_filter={"isLocal": True},
     )
-
     assert payload["isLocal"] is True
     assert payload["sort"] == "nearest"
     assert payload["filter"] == {
@@ -51,7 +49,7 @@ def test_different_named_city_uses_city_coordinates_and_nearest_sort(
     mock_handler_input,
 ):
     payload = SearchPayload.build(
-        mock_handler_input,
+        "user-1",
         {"userCity": "Swindon", "locality": "Swindon"},
         q="",
         nlp_filter={
@@ -61,7 +59,6 @@ def test_different_named_city_uses_city_coordinates_and_nearest_sort(
             "isLocal": True,
         },
     )
-
     assert payload["isLocal"] is True
     assert payload["filter"] == {
         "city": "Manchester",
@@ -72,35 +69,23 @@ def test_different_named_city_uses_city_coordinates_and_nearest_sort(
 
 
 def test_absent_query_is_serialized_as_an_empty_string(mock_handler_input):
-    payload = SearchPayload.build(mock_handler_input, q=None)
-
+    payload = SearchPayload.build("user-1", q=None)
     assert payload["query"] == ""
 
 
 def test_publication_filter_is_nested_in_search_filter(mock_handler_input):
     payload = SearchPayload.build(
-        mock_handler_input,
-        q="",
-        sort="trending",
-        nlp_filter={"isPublication": True},
+        "user-1", q="", sort="trending", nlp_filter={"isPublication": True}
     )
-
     assert payload["filter"] == {"isPublication": True}
     assert payload["sort"] == "trending"
 
 
 def test_publication_dates_are_nested_in_search_filter(mock_handler_input):
     payload = SearchPayload.build(
-        mock_handler_input,
+        "user-1",
         q="",
         sort="latest",
-        nlp_filter={
-            "publishedFrom": 1780272000,
-            "publishedTo": 1782864000,
-        },
+        nlp_filter={"publishedFrom": 1780272000, "publishedTo": 1782864000},
     )
-
-    assert payload["filter"] == {
-        "publishedFrom": 1780272000,
-        "publishedTo": 1782864000,
-    }
+    assert payload["filter"] == {"publishedFrom": 1780272000, "publishedTo": 1782864000}

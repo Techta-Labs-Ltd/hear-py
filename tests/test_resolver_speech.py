@@ -1,28 +1,30 @@
-from src.utils.speech import ambiguous_reference_message
+from src.alexa.search_speech import SearchSpeech
 
 
 def test_ambiguous_reference_message_does_not_speak_raw_alias():
-    message = ambiguous_reference_message("badtn", [
-        {"name": "Barking and Dagenham Talking Newspaper"},
-        {"name": "Brentwood and District Talking Newspaper"},
-        {"name": "Burnley and District Talking Newspaper"},
-    ])
-
-    assert message == (
-        "I found more than one match for that name. Did you mean "
-        "Barking and Dagenham Talking Newspaper, "
-        "Brentwood and District Talking Newspaper, or "
-        "Burnley and District Talking Newspaper?"
+    message = SearchSpeech.ambiguous_reference_message(
+        "badtn",
+        [
+            {"name": "Barking and Dagenham Talking Newspaper"},
+            {"name": "Brentwood and District Talking Newspaper"},
+            {"name": "Burnley and District Talking Newspaper"},
+        ],
+    )
+    assert (
+        message
+        == "I found more than one match for that name. Did you mean Barking and Dagenham Talking Newspaper, Brentwood and District Talking Newspaper, or Burnley and District Talking Newspaper?"
     )
     assert "badtn" not in message.lower()
 
 
 def test_common_ambiguity_prefix_requests_distinguishing_words():
-    message = ambiguous_reference_message("sussex", [
-        {"name": "Sussex Coast Talking Magazine"},
-        {"name": "Sussex Coast Talking News"},
-        {"name": "Sussex Coast Talking Newspaper Worthing"},
-    ])
-
+    message = SearchSpeech.ambiguous_reference_message(
+        "sussex",
+        [
+            {"name": "Sussex Coast Talking Magazine"},
+            {"name": "Sussex Coast Talking News"},
+            {"name": "Sussex Coast Talking Newspaper Worthing"},
+        ],
+    )
     assert "beginning Sussex Coast Talking" in message
     assert "Magazine, News, or Newspaper Worthing" in message

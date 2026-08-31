@@ -1,48 +1,41 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from src.handlers.feedback import FeedbackNotEnjoyedHandler
-
-from src.handlers.feedback import FeedbackEnjoyedHandler
-
-from src.handlers.feedback import SkipFeedbackHandler
-
-from src.handlers.report import ReportContentHandler
-
-from src.handlers.yesno import NoIntentHandler
-
-from src.middleware.feedback_gate import FeedbackGateHandler
-from src.runtime import AttrDict
-from src.clients.hear import sync_listener_for_launch
-
-from src.services.playback import _resolve_content
-from src.services.feedback import FeedbackService
-
-from src.services.store import DEFAULT_STORE
-
-from src.utils.normalize_content_item import (
-    content_title_for_speech,
-    normalize_content_item,
-    pick_content_credit,
+from src.alexa.runtime import AttrDict
+from src.constants.state import StateSchema
+from src.container import ApplicationContainer
+from src.controllers.confirmation import NoIntentHandler
+from src.controllers.feedback import (
+    FeedbackEnjoyedHandler,
+    FeedbackNotEnjoyedHandler,
+    SkipFeedbackHandler,
 )
+from src.controllers.report import ReportContentHandler
+from src.middleware.feedback_gate import FeedbackGateHandler
+from src.models.feedback import FeedbackService
+from src.models.playback import Playback
+from src.services.listener_sync import ListenerSyncService
+from src.utils.content import ContentUtils
+from src.utils.content_normalizer import ContentNormalizer
 
 
-@pytest.mark.parametrize("intent_name", [
-    "AMAZON.NextIntent",
-    "AMAZON.SkipIntent",
-    "AMAZON.PreviousIntent",
-    "AMAZON.PauseIntent",
-    "AMAZON.ResumeIntent",
-])
-def test_pending_feedback_does_not_block_transport_intents(
-    mock_handler_input,
-    intent_name,
-):
+@pytest.mark.parametrize(
+    "intent_name",
+    [
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
+        "AMAZON.PreviousIntent",
+        "AMAZON.PauseIntent",
+        "AMAZON.ResumeIntent",
+    ],
+)
+def test_pending_feedback_does_not_block_transport_intents(mock_handler_input, intent_name):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
         "pendingFeedback": {
             "feedbackKey": "completed-1",
@@ -51,26 +44,24 @@ def test_pending_feedback_does_not_block_transport_intents(
         },
     }
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
-    mock_handler_input.request_envelope.request = AttrDict({
-        "type": "IntentRequest",
-        "intent": {"name": intent_name, "slots": {}},
-    })
-
-    assert FeedbackGateHandler().can_handle(mock_handler_input) is False
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
+    )
+    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
-@pytest.mark.parametrize("request_type", [
-    "PlaybackController.NextCommandIssued",
-    "PlaybackController.PreviousCommandIssued",
-    "PlaybackController.PauseCommandIssued",
-    "PlaybackController.PlayCommandIssued",
-])
-def test_pending_feedback_does_not_block_controller_commands(
-    mock_handler_input,
-    request_type,
-):
+@pytest.mark.parametrize(
+    "request_type",
+    [
+        "PlaybackController.NextCommandIssued",
+        "PlaybackController.PreviousCommandIssued",
+        "PlaybackController.PauseCommandIssued",
+        "PlaybackController.PlayCommandIssued",
+    ],
+)
+def test_pending_feedback_does_not_block_controller_commands(mock_handler_input, request_type):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
         "pendingFeedback": {
             "feedbackKey": "completed-1",
@@ -80,37 +71,38 @@ def test_pending_feedback_does_not_block_controller_commands(
     }
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict({"type": request_type})
-
-    assert FeedbackGateHandler().can_handle(mock_handler_input) is False
+    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
 def test_normalized_credit_prefers_real_organization_then_independent_creator():
-    organization = normalize_content_item({
-        "contentId": "content-org",
-        "title": "Sport",
-        "audioUrl": "https://cdn.hear.media/org.mp3",
-        "creator": {"id": "creator-1", "name": "Individual Reporter"},
-        "organization": {"id": "org-1", "name": "York Talking News"},
-    })
-    assert pick_content_credit(organization) == "York Talking News"
-
-    independent = normalize_content_item({
-        "contentId": "content-independent",
-        "title": "Sport",
-        "audioUrl": "https://cdn.hear.media/independent.mp3",
-        "creator": {"id": "creator-2", "name": "David Beard"},
-        "organization": {"id": "org-2", "name": "Independent Creator"},
-    })
-    assert pick_content_credit(independent) == "David Beard"
+    organization = ContentNormalizer.normalize_content_item(
+        {
+            "contentId": "content-org",
+            "title": "Sport",
+            "audioUrl": "https://cdn.hear.media/org.mp3",
+            "creator": {"id": "creator-1", "name": "Individual Reporter"},
+            "organization": {"id": "org-1", "name": "York Talking News"},
+        }
+    )
+    assert ContentUtils.pick_content_credit(organization) == "York Talking News"
+    independent = ContentNormalizer.normalize_content_item(
+        {
+            "contentId": "content-independent",
+            "title": "Sport",
+            "audioUrl": "https://cdn.hear.media/independent.mp3",
+            "creator": {"id": "creator-2", "name": "David Beard"},
+            "organization": {"id": "org-2", "name": "Independent Creator"},
+        }
+    )
+    assert ContentUtils.pick_content_credit(independent) == "David Beard"
 
 
 @pytest.mark.asyncio
 async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
-    monkeypatch,
-    mock_handler_input,
+    monkeypatch, mock_handler_input
 ):
     store = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
         "pendingFeedback": {
             "feedbackKey": "track-115",
@@ -128,53 +120,60 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
         "feedbackCreatorId": "creator-other",
         "feedbackCreator": "Other Creator",
         "currentContentTitle": "Another current track",
-        "followedCreators": [{
-            "id": "creator-tynedale",
-            "name": "Tynedale Talking Magazine",
-        }],
+        "followedCreators": [{"id": "creator-tynedale", "name": "Tynedale Talking Magazine"}],
     }
     mock_handler_input.attributes_manager.request_attributes["_store"] = store
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
-    mock_handler_input.request_envelope.request = AttrDict({
-        "type": "IntentRequest",
-        "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
-    })
-    await FeedbackEnjoyedHandler().handle(mock_handler_input)
-
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
+        }
+    )
+    await FeedbackEnjoyedHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "feedback on TRACK115 by Tynedale Talking Magazine" in spoken
     assert "WhatsApp Ptt" not in spoken
-    assert mock_handler_input.attributes_manager.request_attributes["_store"]["pendingFeedback"] is None
+    assert (
+        mock_handler_input.attributes_manager.request_attributes["_store"]["pendingFeedback"]
+        is None
+    )
 
 
 def test_normalization_repairs_common_api_text_encoding():
-    item = normalize_content_item({
-        "contentId": "content-1",
-        "title": "Todayâ€™s bulletin",
-        "audioUrl": "https://cdn.hear.media/one.mp3",
-        "organization": {
-            "id": "org-1",
-            "name": "Five Valley Sounds â€“ Stroudâ€™s Talking Newspaper",
-        },
-    })
-    assert item["title"] == "Today’s bulletin"
-    assert pick_content_credit(item) == "Five Valley Sounds – Stroud’s Talking Newspaper"
+    item = ContentNormalizer.normalize_content_item(
+        {
+            "contentId": "content-1",
+            "title": "TodayÃ¢â‚¬â„¢s bulletin",
+            "audioUrl": "https://cdn.hear.media/one.mp3",
+            "organization": {
+                "id": "org-1",
+                "name": "Five Valley Sounds Ã¢â‚¬â€œ StroudÃ¢â‚¬â„¢s Talking Newspaper",
+            },
+        }
+    )
+    assert item["title"] == "Todayâ€™s bulletin"
+    assert (
+        ContentUtils.pick_content_credit(item)
+        == "Five Valley Sounds â€“ Stroudâ€™s Talking Newspaper"
+    )
 
 
 def test_internal_short_identifier_is_not_used_as_spoken_title():
-    item = normalize_content_item({
-        "contentId": "content-1",
-        "title": "00000006",
-        "shortDescription": "A weekly sport update from York",
-        "audioUrl": "https://cdn.hear.media/one.mp3",
-    })
-
-    assert content_title_for_speech(item) == "A weekly sport update from York"
+    item = ContentNormalizer.normalize_content_item(
+        {
+            "contentId": "content-1",
+            "title": "00000006",
+            "shortDescription": "A weekly sport update from York",
+            "audioUrl": "https://cdn.hear.media/one.mp3",
+        }
+    )
+    assert ContentUtils.content_title_for_speech(item) == "A weekly sport update from York"
 
 
 def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_input):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
         "pendingFeedback": {
             "feedbackKey": "york-old",
@@ -185,19 +184,19 @@ def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_i
             "createdAt": 200,
             "completed": True,
         },
-        "feedbackCandidates": [{
-            "feedbackKey": "pendle-new",
-            "contentId": "pendle-new",
-            "title": "Pendle weekly update",
-            "organizationName": "Pendle Voice",
-            "playbackStartedAt": 300,
-            "createdAt": 400,
-            "completed": True,
-        }],
+        "feedbackCandidates": [
+            {
+                "feedbackKey": "pendle-new",
+                "contentId": "pendle-new",
+                "title": "Pendle weekly update",
+                "organizationName": "Pendle Voice",
+                "playbackStartedAt": 300,
+                "createdAt": 400,
+                "completed": True,
+            }
+        ],
     }
-
     selected = FeedbackService.activate_best(mock_handler_input)
-
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
     assert selected["contentId"] == "pendle-new"
     assert store["pendingFeedback"]["organizationName"] == "Pendle Voice"
@@ -205,9 +204,11 @@ def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_i
     assert store["activeDialog"]["context"]["contentId"] == "pendle-new"
 
 
-def test_delayed_old_completion_cannot_replace_newer_pending_feedback(mock_handler_input):
+def test_delayed_old_completion_cannot_replace_newer_pending_feedback(
+    mock_handler_input,
+):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
         "pendingFeedback": {
             "feedbackKey": "pendle-new",
@@ -216,17 +217,17 @@ def test_delayed_old_completion_cannot_replace_newer_pending_feedback(mock_handl
             "createdAt": 400,
             "completed": True,
         },
-        "feedbackCandidates": [{
-            "feedbackKey": "york-delayed",
-            "contentId": "york-delayed",
-            "playbackStartedAt": 100,
-            "createdAt": 500,
-            "completed": True,
-        }],
+        "feedbackCandidates": [
+            {
+                "feedbackKey": "york-delayed",
+                "contentId": "york-delayed",
+                "playbackStartedAt": 100,
+                "createdAt": 500,
+                "completed": True,
+            }
+        ],
     }
-
     selected = FeedbackService.activate_best(mock_handler_input)
-
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
     assert selected["contentId"] == "pendle-new"
     assert store["pendingFeedback"]["contentId"] == "pendle-new"
@@ -235,8 +236,7 @@ def test_delayed_old_completion_cannot_replace_newer_pending_feedback(mock_handl
 
 @pytest.mark.asyncio
 async def test_queue_resolves_next_item_from_cached_catalog_without_api(
-    monkeypatch,
-    mock_handler_input,
+    monkeypatch, mock_handler_input
 ):
     cached = {
         "contentId": "content-2",
@@ -245,25 +245,23 @@ async def test_queue_resolves_next_item_from_cached_catalog_without_api(
         "audioUrl": "https://cdn.hear.media/two.mp3",
     }
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "browseCatalog": {"items": [cached]},
     }
-    api_search = AsyncMock()
-    monkeypatch.setattr("src.clients.hear.search", api_search)
-
-    result = await _resolve_content(mock_handler_input, "content-2")
-
+    hear_client = AsyncMock()
+    result = await Playback._resolve_content(
+        mock_handler_input, "content-2", hear_client=hear_client
+    )
     assert result == cached
-    api_search.assert_not_awaited()
+    hear_client.search.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_negative_feedback_reports_without_resuming_rejected_play_request(
-    monkeypatch,
-    mock_handler_input,
+    monkeypatch, mock_handler_input
 ):
     store = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
         "awaitingFeedback": True,
         "pendingFeedback": {
@@ -274,68 +272,62 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
             "creatorName": "Old Publisher",
         },
     }
-    mock_handler_input.attributes_manager.request_attributes.update({
-        "_store": store,
-        "_nlp": {
-            "intent": "organization",
-            "slots": {
-                "organizationIds": ["org-tnf"],
-                "organizationName": "Talking News Federation",
-                "residualQuery": "",
-            },
-        },
-    })
-    mock_handler_input.request_envelope = AttrDict(
-        mock_handler_input.request_envelope
-    )
-    mock_handler_input.request_envelope.request = AttrDict({
-        "type": "IntentRequest",
-        "intent": {
-            "name": "PlayByOrganizationIntent",
-            "slots": {
-                "organizationQuery": {
-                    "name": "organizationQuery",
-                    "value": "tnf",
+    mock_handler_input.attributes_manager.request_attributes.update(
+        {
+            "_store": store,
+            "_nlp": {
+                "intent": "organization",
+                "slots": {
+                    "organizationIds": ["org-tnf"],
+                    "organizationName": "Talking News Federation",
+                    "residualQuery": "",
                 },
             },
-        },
-    })
-
-    FeedbackGateHandler().handle(mock_handler_input)
-    mock_handler_input.request_envelope.request.intent = AttrDict({
-        "name": "FeedbackNotEnjoyedIntent",
-        "slots": {},
-    })
-    mock_handler_input.redispatch = AsyncMock(return_value={
-        "outputSpeech": {
-            "type": "SSML",
-            "ssml": "<speak>I found 4 stories. Now playing one.</speak>",
-        },
-        "directives": [{"type": "AudioPlayer.Play"}],
-    })
-    monkeypatch.setattr(
-        "src.handlers.feedback",
-        AsyncMock(),
+        }
     )
-
-    feedback_response = await FeedbackNotEnjoyedHandler().handle(mock_handler_input)
-
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {
+                "name": "PlayByOrganizationIntent",
+                "slots": {"organizationQuery": {"name": "organizationQuery", "value": "tnf"}},
+            },
+        }
+    )
+    FeedbackGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    mock_handler_input.request_envelope.request.intent = AttrDict(
+        {"name": "FeedbackNotEnjoyedIntent", "slots": {}}
+    )
+    mock_handler_input.redispatch = AsyncMock(
+        return_value={
+            "outputSpeech": {
+                "type": "SSML",
+                "ssml": "<speak>I found 4 stories. Now playing one.</speak>",
+            },
+            "directives": [{"type": "AudioPlayer.Play"}],
+        }
+    )
+    monkeypatch.setattr("src.controllers.feedback", AsyncMock())
+    feedback_response = await FeedbackNotEnjoyedHandler(deps=ApplicationContainer()).handle(
+        mock_handler_input
+    )
     assert feedback_response is not None
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "say report this content" in spoken
-    assert mock_handler_input.attributes_manager.request_attributes["_store"][
-        "awaitingReportDecision"
-    ] is True
-    mock_handler_input.request_envelope.request.intent = AttrDict({
-        "name": "ReportContentIntent",
-        "slots": {},
-    })
-    response = await ReportContentHandler().handle(mock_handler_input)
-
+    assert (
+        mock_handler_input.attributes_manager.request_attributes["_store"]["awaitingReportDecision"]
+        is True
+    )
+    mock_handler_input.request_envelope.request.intent = AttrDict(
+        {"name": "ReportContentIntent", "slots": {}}
+    )
+    await ReportContentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     mock_handler_input.redispatch.assert_not_awaited()
-    assert mock_handler_input.attributes_manager.request_attributes["_store"].get(
-        "deferredIntent"
-    ) is None
+    assert (
+        mock_handler_input.attributes_manager.request_attributes["_store"].get("deferredIntent")
+        is None
+    )
     report = mock_handler_input.attributes_manager.request_attributes["_store"]["reportHistory"][-1]
     assert report["subjectType"] == "content"
     assert report["contentId"] == "old-content"
@@ -344,80 +336,72 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
 
 @pytest.mark.asyncio
 async def test_skip_feedback_does_not_restore_rejected_search_confirmation(
-    monkeypatch,
-    mock_handler_input,
+    monkeypatch, mock_handler_input
 ):
     payload = {
         "query": "update",
-        "filter": {
-            "categorySlugs": ["sport"],
-            "organizationIds": ["org-ytn"],
-        },
+        "filter": {"categorySlugs": ["sport"], "organizationIds": ["org-ytn"]},
         "sort": "latest",
         "page": 0,
         "limit": 20,
     }
-    mock_handler_input.attributes_manager.request_attributes.update({
-        "_store": {
-            **DEFAULT_STORE,
-            "onboardingComplete": True,
-            "awaitingFeedback": True,
-            "pendingFeedback": {
-                "feedbackKey": "old-content",
-                "contentId": "old-content",
-                "title": "Old bulletin",
+    mock_handler_input.attributes_manager.request_attributes.update(
+        {
+            "_store": {
+                **StateSchema.DEFAULT_STORE,
+                "onboardingComplete": True,
+                "awaitingFeedback": True,
+                "pendingFeedback": {
+                    "feedbackKey": "old-content",
+                    "contentId": "old-content",
+                    "title": "Old bulletin",
+                },
             },
-        },
-        "_nlp": {
-            "intent": "category",
-            "confirmationLabel": "the latest sport update from York Talking News",
-            "searchPayload": payload,
-            "slots": {"searchPlan": payload},
-        },
-        "_pendingConfirmation": {
-            "confirmText": "the latest sport update from York Talking News",
-            "resolution": {
-                "requestId": "resolution-ytn",
+            "_nlp": {
+                "intent": "category",
                 "confirmationLabel": "the latest sport update from York Talking News",
                 "searchPayload": payload,
-                "expiresAt": 4102444800,
+                "slots": {"searchPlan": payload},
             },
-        },
-    })
-    mock_handler_input.request_envelope = AttrDict(
-        mock_handler_input.request_envelope
+            "_pendingConfirmation": {
+                "confirmText": "the latest sport update from York Talking News",
+                "resolution": {
+                    "requestId": "resolution-ytn",
+                    "confirmationLabel": "the latest sport update from York Talking News",
+                    "searchPayload": payload,
+                    "expiresAt": 4102444800,
+                },
+            },
+        }
     )
-    mock_handler_input.request_envelope.request = AttrDict({
-        "type": "IntentRequest",
-        "intent": {"name": "PlayContentIntent", "slots": {}},
-    })
-    FeedbackGateHandler().handle(mock_handler_input)
-    mock_handler_input.request_envelope.request.intent = AttrDict({
-        "name": "AMAZON.NoIntent",
-        "slots": {},
-    })
-    mock_handler_input.redispatch = AsyncMock(return_value={
-        "outputSpeech": {
-            "ssml": "<speak>Did you want me to play the latest sport update from York Talking News?</speak>",
-        },
-    })
-    monkeypatch.setattr("src.handlers.feedback", AsyncMock())
-
-    await SkipFeedbackHandler().handle(mock_handler_input)
-
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "PlayContentIntent", "slots": {}}}
+    )
+    FeedbackGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    mock_handler_input.request_envelope.request.intent = AttrDict(
+        {"name": "AMAZON.NoIntent", "slots": {}}
+    )
+    mock_handler_input.redispatch = AsyncMock(
+        return_value={
+            "outputSpeech": {
+                "ssml": "<speak>Did you want me to play the latest sport update from York Talking News?</speak>"
+            }
+        }
+    )
+    monkeypatch.setattr("src.controllers.feedback", AsyncMock())
+    await SkipFeedbackHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     mock_handler_input.redispatch.assert_not_awaited()
-    assert mock_handler_input.attributes_manager.request_attributes["_store"].get(
-        "deferredIntent"
-    ) is None
+    assert (
+        mock_handler_input.attributes_manager.request_attributes["_store"].get("deferredIntent")
+        is None
+    )
 
 
 @pytest.mark.asyncio
-async def test_plain_no_records_not_enjoyed_feedback(
-    monkeypatch,
-    mock_handler_input,
-):
+async def test_plain_no_records_not_enjoyed_feedback(monkeypatch, mock_handler_input):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
         "activeDialog": {
             "type": "feedback",
@@ -425,29 +409,23 @@ async def test_plain_no_records_not_enjoyed_feedback(
             "createdAt": 1,
             "expiresAt": 4102444800,
         },
-        "pendingFeedback": {
-            "feedbackKey": "old-content",
-            "contentId": "old-content",
-        },
+        "pendingFeedback": {"feedbackKey": "old-content", "contentId": "old-content"},
     }
     submit = AsyncMock()
-    monkeypatch.setattr("src.handlers.feedback.submit_feedback", submit)
-
-    await NoIntentHandler().handle(mock_handler_input)
-
+    monkeypatch.setattr("src.models.feedback.FeedbackService.submit", submit)
+    await NoIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     submit.assert_awaited_once_with(mock_handler_input, "not_enjoyed")
-    assert mock_handler_input.attributes_manager.request_attributes["_store"][
-        "awaitingFeedback"
-    ] is False
+    assert (
+        mock_handler_input.attributes_manager.request_attributes["_store"]["awaitingFeedback"]
+        is False
+    )
 
 
 @pytest.mark.asyncio
 async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_handler_input):
-    mock_handler_input.request_envelope = AttrDict(
-        mock_handler_input.request_envelope
-    )
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **DEFAULT_STORE,
+        **StateSchema.DEFAULT_STORE,
         "userCity": "Manchester",
         "locality": "Manchester",
         "playCount": 3,
@@ -457,10 +435,8 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
         ],
     }
     sync = AsyncMock(return_value={"listenerId": "listener-1"})
-    monkeypatch.setattr("src.clients.hear.sync_listener", sync)
-
-    assert await sync_listener_for_launch(mock_handler_input)
-
+    service = ListenerSyncService(SimpleNamespace(sync_listener=sync))
+    assert await service.sync_for_launch(mock_handler_input)
     profile = sync.await_args.args[0]
     assert profile["alexaUserId"]
     assert profile["followedCreatorIds"] == ["creator-1"]

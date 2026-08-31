@@ -2,65 +2,66 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
-from src.handlers.search import auto_play_first_from_search, _play_first_search_result
-
-from src.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.clients.hear import (
-    ALLOWED_SORT_VALUES,
-    _build_alexa_relative_path,
-    _build_alexa_search_path,
-    _build_api_path,
-    search,
-)
-
-from src.services.playback import start_playback
-from src.dependencies import Dependencies
+from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.clients.hear import HearApiClient, HearApiOptions, HearApiSupport
+from src.clients.pool import CircuitHttpClient, HttpCircuitBreaker, HttpCircuitOpen
+from src.container import ApplicationContainer
+from src.models.playback import Playback
+from src.models.search import Search
 
 
+@pytest.mark.asyncio
+async def test_http_circuit_opens_after_repeated_server_failures():
+    calls = 0
 
-def test_search_path_applies_configured_prefix_once(monkeypatch):
-    monkeypatch.setattr(
-        "src.clients.hear.settings.HEAR_API_PATH_PREFIX",
-        "alexa",
+    async def respond(request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(503, request=request)
+
+    raw = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    client = CircuitHttpClient(raw, HttpCircuitBreaker(2, 60000))
+    assert (await client.get("https://service.test/one")).status_code == 503
+    assert (await client.get("https://service.test/two")).status_code == 503
+    with pytest.raises(HttpCircuitOpen):
+        await client.get("https://service.test/three")
+    assert calls == 2
+    await client.aclose()
+
+
+def test_search_path_applies_configured_prefix_once():
+    client = HearApiClient(HearApiOptions(path_prefix="alexa"))
+    assert client._build_api_path(client._build_alexa_search_path()) == "/alexa/search"
+
+
+def test_search_path_uses_legacy_alexa_route_without_prefix():
+    client = HearApiClient(HearApiOptions(path_prefix=""))
+    assert client._build_api_path(client._build_alexa_search_path()) == "/alexa/search"
+
+
+def test_location_path_applies_configured_prefix_once():
+    client = HearApiClient(HearApiOptions(path_prefix="alexa"))
+    assert (
+        client._build_api_path(client._build_alexa_relative_path("location")) == "/alexa/location"
     )
-
-    assert _build_api_path(_build_alexa_search_path()) == "/alexa/search"
-
-
-def test_search_path_uses_legacy_alexa_route_without_prefix(monkeypatch):
-    monkeypatch.setattr(
-        "src.clients.hear.settings.HEAR_API_PATH_PREFIX",
-        "",
-    )
-
-    assert _build_api_path(_build_alexa_search_path()) == "/alexa/search"
-
-
-def test_location_path_applies_configured_prefix_once(monkeypatch):
-    monkeypatch.setattr(
-        "src.clients.hear.settings.HEAR_API_PATH_PREFIX",
-        "alexa",
-    )
-
-    assert _build_api_path(_build_alexa_relative_path("location")) == "/alexa/location"
 
 
 @pytest.mark.asyncio
 async def test_search_omits_sort_values_the_api_rejects(monkeypatch):
     sent = {}
 
-    async def fake_request(method, path, body, timeout_ms):
+    async def fake_request(self, method, path, body, timeout_ms):
         sent.update(body)
-        return 200, {"results": [], "total": 0}
+        return (200, {"results": [], "total": 0})
 
-    monkeypatch.setattr("src.clients.hear._request", fake_request)
-
-    await search({"query": "news", "sort": "relevance"})
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    client = HearApiClient()
+    await client.search({"query": "news", "sort": "relevance"})
     assert "sort" not in sent
-
-    await search({"query": "news", "sort": "recommended"})
+    await client.search({"query": "news", "sort": "recommended"})
     assert sent["sort"] == "recommended"
 
 
@@ -68,16 +69,15 @@ async def test_search_omits_sort_values_the_api_rejects(monkeypatch):
 async def test_search_serializes_an_absent_query_as_an_empty_string(monkeypatch):
     sent = {}
 
-    async def fake_request(method, path, body, timeout_ms):
+    async def fake_request(self, method, path, body, timeout_ms):
         sent.update(body)
-        return 200, {"results": [], "total": 0}
+        return (200, {"results": [], "total": 0})
 
-    monkeypatch.setattr("src.clients.hear._request", fake_request)
-
-    await search({"query": None})
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    client = HearApiClient()
+    await client.search({"query": None})
     assert sent["query"] == ""
-
-    await search({"query": None, "q": "TNF"})
+    await client.search({"query": None, "q": "TNF"})
     assert sent["query"] == "TNF"
 
 
@@ -85,72 +85,72 @@ async def test_search_serializes_an_absent_query_as_an_empty_string(monkeypatch)
 async def test_search_normalizes_legacy_top_level_dates_into_filter(monkeypatch):
     sent = {}
 
-    async def fake_request(method, path, body, timeout_ms):
+    async def fake_request(self, method, path, body, timeout_ms):
         sent.update(body)
-        return 200, {"results": [], "total": 0}
+        return (200, {"results": [], "total": 0})
 
-    monkeypatch.setattr("src.clients.hear._request", fake_request)
-
-    await search({
-        "query": "",
-        "publishedFrom": 1780272000,
-        "publishedTo": 1782864000,
-        "sort": "latest",
-    })
-
-    assert sent["filter"] == {
-        "publishedFrom": 1780272000,
-        "publishedTo": 1782864000,
-    }
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    await HearApiClient().search(
+        {
+            "query": "",
+            "publishedFrom": 1780272000,
+            "publishedTo": 1782864000,
+            "sort": "latest",
+        }
+    )
+    assert sent["filter"] == {"publishedFrom": 1780272000, "publishedTo": 1782864000}
     assert "publishedFrom" not in sent
     assert "publishedTo" not in sent
 
 
 def test_allowed_sort_values_match_api_enum():
-    assert ALLOWED_SORT_VALUES == {
-        "recommended", "nearest", "popular", "latest", "trending",
+    assert HearApiSupport.ALLOWED_SORT_VALUES == {
+        "recommended",
+        "nearest",
+        "popular",
+        "latest",
+        "trending",
     }
 
 
 @pytest.mark.asyncio
 async def test_real_search_shape_reaches_playback_without_catalog_call_error(
-    monkeypatch,
-    mock_handler_input,
+    monkeypatch, mock_handler_input
 ):
     expected = {"response": "play"}
     start = AsyncMock(return_value=expected)
-    monkeypatch.setattr("src.handlers.search.start_playback", start)
-    result = await auto_play_first_from_search(
+    monkeypatch.setattr("src.models.playback.Playback.start", start)
+    result = await Search.auto_play_first_from_search(
         mock_handler_input,
         {
-            "results": [{
-                "contentId": "content-1",
-                "title": "Morning update",
-                "spokenTitle": "Morning update",
-                "creator": "Shetland Life",
-                "audioUrl": "https://cdn.hear.media/audio/content-1.mp3",
-                "playbackSpeeds": [],
-            }],
+            "results": [
+                {
+                    "contentId": "content-1",
+                    "title": "Morning update",
+                    "spokenTitle": "Morning update",
+                    "creator": "Shetland Life",
+                    "audioUrl": "https://cdn.hear.media/audio/content-1.mp3",
+                    "playbackSpeeds": [],
+                }
+            ],
             "total_hits": 1,
             "total_pages": 1,
             "page": 0,
         },
+        deps=ApplicationContainer(),
     )
-
     assert result == expected
     start.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_search_initializes_playback_queue_with_first_page_only(
-    monkeypatch,
-    mock_handler_input,
+    monkeypatch, mock_handler_input
 ):
     start = AsyncMock(return_value={"response": "play"})
-    monkeypatch.setattr("src.handlers.search.start_playback", start)
+    monkeypatch.setattr("src.models.playback.Playback.start", start)
     hear_client = AsyncMock()
-
-    await auto_play_first_from_search(
+    await Search.auto_play_first_from_search(
         mock_handler_input,
         {
             "results": [
@@ -166,35 +166,30 @@ async def test_search_initializes_playback_queue_with_first_page_only(
             "page": 0,
             "_search_payload": {"query": "wakefield", "page": 0, "limit": 2},
         },
-        deps=Dependencies(heara=hear_client),
+        deps=ApplicationContainer(heara=hear_client),
     )
-
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
-    assert store["playbackQueue"]["orderedContentIds"] == [
-        "content-1",
-        "content-2",
-    ]
+    assert store["playbackQueue"]["orderedContentIds"] == ["content-1", "content-2"]
     assert store["playbackQueue"]["pagination"]["currentPage"] == 0
     assert store["playbackQueue"]["pagination"]["totalPages"] == 3
     hear_client.search.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_latest_search_initializes_lazy_navigation_queue(
-    monkeypatch,
-    mock_handler_input,
-):
+async def test_latest_search_initializes_lazy_navigation_queue(monkeypatch, mock_handler_input):
     start = AsyncMock(return_value={"response": "play"})
-    monkeypatch.setattr("src.handlers.search.start_playback", start)
+    monkeypatch.setattr("src.models.playback.Playback.start", start)
     hear_client = AsyncMock()
-    first_page = [{
-        "id": f"content-{index}",
-        "contentId": f"content-{index}",
-        "title": "Latest Pendle recording" if index == 1 else f"Pendle recording {index}",
-        "audioUrl": f"https://cdn.hear.media/audio/content-{index}.mp3",
-    } for index in range(1, 4)]
-
-    await _play_first_search_result(
+    first_page = [
+        {
+            "id": f"content-{index}",
+            "contentId": f"content-{index}",
+            "title": "Latest Pendle recording" if index == 1 else f"Pendle recording {index}",
+            "audioUrl": f"https://cdn.hear.media/audio/content-{index}.mp3",
+        }
+        for index in range(1, 4)
+    ]
+    await Search._play_first_search_result(
         mock_handler_input,
         {
             "results": first_page,
@@ -204,67 +199,55 @@ async def test_latest_search_initializes_lazy_navigation_queue(
             "_search_payload": {"query": "", "page": 0, "limit": 3},
         },
         label="Pendle Voice",
-        deps=Dependencies(heara=hear_client),
+        deps=ApplicationContainer(heara=hear_client),
     )
-
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
     assert store["playbackQueue"]["orderedContentIds"] == [
         f"content-{index}" for index in range(1, 4)
     ]
     assert [item["contentId"] for item in store["browseCatalog"]["items"]] == [
-        "content-1", "content-2", "content-3",
+        "content-1",
+        "content-2",
+        "content-3",
     ]
     assert store["playbackQueue"]["pagination"]["totalPages"] == 3
     hear_client.search.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_start_playback_awaits_cleanup_and_builds_audio_directive(
-    monkeypatch,
-):
-    envelope = AttrDict({
-        "context": {
-            "System": {
-                "user": {"userId": "test-user"},
-                "device": {"deviceId": "test-device"},
+async def test_start_playback_awaits_cleanup_and_builds_audio_directive(monkeypatch):
+    envelope = AttrDict(
+        {
+            "context": {
+                "System": {
+                    "user": {"userId": "test-user"},
+                    "device": {"deviceId": "test-device"},
+                }
             },
-        },
-        "request": {"type": "IntentRequest"},
-    })
+            "request": {"type": "IntentRequest"},
+        }
+    )
     attributes = AttributesManager(envelope)
     attributes.request_attributes = {
         "_store": {"playbackSpeed": 1.0, "lastOffsetMs": 0},
         "_dirty": False,
     }
-    handler_input = HandlerInput(
-        envelope,
-        attributes,
-        None,
-        ResponseBuilder(),
-    )
-    cancel = AsyncMock()
-    monkeypatch.setattr(
-        "src.services.playback.cancel_feedback_reminder",
-        cancel,
-    )
-
-    response = await start_playback(
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    reminders = AsyncMock()
+    response = await Playback.start_playback(
         handler_input,
         {
             "contentId": "content-1",
             "title": "20260514092830_7ac22a7f",
             "spokenTitle": "A readable morning update",
             "creator": "Shetland Life",
-            "category": {
-                "slug": "monthly-update",
-                "name": "Monthly Update",
-            },
+            "category": {"slug": "monthly-update", "name": "Monthly Update"},
             "audioUrl": "https://cdn.hear.media/audio/content-1.mp3",
             "playbackSpeeds": [],
         },
         "Now playing.",
+        reminders=reminders,
     )
-
     directive = response["directives"][0]
     assert directive["type"] == "AudioPlayer.Play"
     assert directive["audioItem"]["stream"]["url"].startswith("https://")
@@ -272,5 +255,5 @@ async def test_start_playback_awaits_cleanup_and_builds_audio_directive(
     assert directive["audioItem"]["metadata"]["title"] == "A readable morning update"
     assert directive["audioItem"]["metadata"]["subtitle"] == "Monthly Update"
     assert response["shouldEndSession"] is True
-    cancel.assert_awaited_once_with(handler_input)
+    reminders.cancel.assert_awaited_once_with(handler_input)
     assert directive["audioItem"]["stream"]["token"] == "content-1"

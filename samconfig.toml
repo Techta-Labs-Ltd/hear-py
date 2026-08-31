@@ -11,7 +11,7 @@ parameter_overrides = "Stage=development ShortStage=dev PowerToolsLogLevel=DEBUG
 tags = "Application=hear-alexa-skill Stage=development ManagedBy=SAM"
 
 [production.deploy.parameters]
-stack_name = "hear-py-production"
+stack_name = "hear-py-prod"
 region = "eu-west-1"
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = true
