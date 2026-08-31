@@ -24,6 +24,11 @@ report events are published to SQS and forwarded by the outbound worker to the
 Hear backend. This repository does not host a resolver, taxonomy runtime,
 inbound webhooks, or notification ingestion.
 
+## Backend contracts
+
+- [Backend event and feedback contract](docs/backend-events-and-feedback.md)
+- [Alexa permission flow](docs/alexa-permissions.md)
+
 ## Configuration
 
 Copy `.env.example` to `.env` for local development. The external resolver uses

@@ -586,6 +586,100 @@ async def test_publication_discovery_sends_format_and_creator_filters(
 
 
 @pytest.mark.asyncio
+async def test_multiple_publications_from_source_start_ambiguity_selection(
+    monkeypatch, mock_handler_input
+):
+    from src.models.search import Search
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayByOrganizationIntent",
+                "slots": {
+                    "organizationQuery": {"name": "organizationQuery", "value": "TNF"}
+                },
+            },
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes.update(
+        {
+            "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+            "_nlp": {
+                "intent": "organization",
+                "requestId": "tnf-publications",
+                "originalUtterance": "play TNF",
+                "slots": {
+                    "organizationIds": ["org-tnf"],
+                    "organizationName": "Talking News Federation",
+                    "residualQuery": "",
+                },
+            },
+        }
+    )
+    search = AsyncMock(
+        return_value={
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-1",
+                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                },
+                {
+                    "contentId": "track-2",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                },
+            ],
+            "_publication_choices": [
+                {
+                    "type": "publication",
+                    "id": "publication-buxton",
+                    "name": "Buxton Talking Song",
+                },
+                {
+                    "type": "publication",
+                    "id": "publication-sermons",
+                    "name": "Daily Sermons",
+                },
+            ],
+            "total_hits": 5,
+            "total_pages": 2,
+            "page": 0,
+        }
+    )
+    monkeypatch.setattr(HearApiClient, "search", search)
+
+    result = await Search.discover_content_via_search(
+        mock_handler_input, {"q": "", "intent": "organization"}, deps=ApplicationContainer()
+    )
+
+    payload = search.await_args.args[0]
+    assert payload["limit"] == 3
+    assert result["results"] == []
+    assert "Buxton Talking Song" in result["client_message"]
+    assert "Daily Sermons" in result["client_message"]
+    pending = User.snapshot(mock_handler_input)["pendingAmbiguity"]
+    assert [candidate["id"] for candidate in pending["candidates"]] == [
+        "publication-buxton",
+        "publication-sermons",
+    ]
+    assert pending["searchPayload"]["limit"] == 3
+    assert pending["candidatePagination"] == {
+        "kind": "publication",
+        "currentPage": 0,
+        "totalPages": 2,
+        "totalHits": 5,
+        "limit": 3,
+    }
+    response = Search._build_search_outcome_response(mock_handler_input, result)
+    directives = response["directives"]
+    assert directives[0]["type"] == "Dialog.UpdateDynamicEntities"
+
+
+@pytest.mark.asyncio
 async def test_discovery_preserves_all_resolved_category_filters(monkeypatch, mock_handler_input):
     from src.models.search import Search
 
@@ -1114,6 +1208,8 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
         {
             "query": "",
             "filter": {"organizationIds": ["org-neston"]},
+            "limit": 3,
+            "page": 0,
             "alexaUserId": "amzn1.ask.account.TEST",
         },
         timeout_ms=8000,
@@ -1125,6 +1221,81 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
     assert store["pendingResolution"] is None
     assert store["awaitingLocationConfirm"] is False
     assert store["pendingLocationConfirm"] is None
+
+
+@pytest.mark.asyncio
+async def test_confirmed_source_with_multiple_publications_asks_for_publication(
+    monkeypatch, mock_handler_input
+):
+    from src.controllers.confirmation import YesIntentHandler
+
+    resolution = {
+        "requestId": "resolved-tnf",
+        "intent": "organization",
+        "confirmationLabel": "content from Talking News Federation",
+        "searchPayload": {"query": "", "filter": {"organizationIds": ["org-tnf"]}},
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "AMAZON.YesIntent", "slots": {}}}
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": resolution,
+        "activeDialog": {
+            "type": "search_confirmation",
+            "context": resolution,
+            "expiresAt": 4102444800,
+        },
+    }
+    search = AsyncMock(
+        return_value={
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-1",
+                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                },
+                {
+                    "contentId": "track-2",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                },
+            ],
+            "_publication_choices": [
+                {
+                    "type": "publication",
+                    "id": "publication-buxton",
+                    "name": "Buxton Talking Song",
+                },
+                {
+                    "type": "publication",
+                    "id": "publication-sermons",
+                    "name": "Daily Sermons",
+                },
+            ],
+            "total_hits": 2,
+        }
+    )
+    play = AsyncMock(return_value={"shouldEndSession": True})
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
+
+    response = await YesIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    sent = search.await_args.args[0]
+    assert sent["limit"] == 3
+    assert sent["page"] == 0
+    assert "Which publication would you like" in response["outputSpeech"]["ssml"]
+    assert "Buxton Talking Song" in response["outputSpeech"]["ssml"]
+    assert "Daily Sermons" in response["outputSpeech"]["ssml"]
+    assert response["directives"][0]["type"] == "Dialog.UpdateDynamicEntities"
+    play.assert_not_awaited()
+    pending = User.snapshot(mock_handler_input)["pendingAmbiguity"]
+    assert all(candidate["type"] == "publication" for candidate in pending["candidates"])
 
 
 @pytest.mark.asyncio
@@ -1323,6 +1494,218 @@ async def test_show_more_without_slots_pages_pending_ambiguity_locally(
 
 
 @pytest.mark.asyncio
+async def test_show_more_fetches_next_publication_page_and_selection_uses_page_zero(
+    monkeypatch, mock_handler_input
+):
+    from src.controllers.intent_dispatch import IntentDispatchGateHandler
+
+    initial = [
+        {"type": "publication", "id": f"publication-{index}", "name": name}
+        for index, name in enumerate(
+            ("Buxton Talking Song", "Daily Sermons", "Hexham Talking Newspapers Reading"),
+            start=1,
+        )
+    ]
+    pending = {
+        "intent": "organization",
+        "searchPayload": {
+            "query": "",
+            "filter": {"organizationIds": ["org-tnf"]},
+            "limit": 3,
+            "page": 0,
+        },
+        "slots": {"organizationIds": ["org-tnf"]},
+        "candidates": initial,
+        "choiceCandidates": initial,
+        "displayedCandidates": initial,
+        "spokenCandidateOffset": 3,
+        "candidatePagination": {
+            "kind": "publication",
+            "currentPage": 0,
+            "totalPages": 2,
+            "totalHits": 5,
+            "limit": 3,
+        },
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "ShowMoreBrowseIntent", "slots": {}}}
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    search = AsyncMock(
+        return_value={
+            "failed": False,
+            "results": [],
+            "_publication_choices": [
+                initial[-1],
+                {
+                    "type": "publication",
+                    "id": "publication-4",
+                    "name": "Swindon Talking News",
+                },
+                {
+                    "type": "publication",
+                    "id": "publication-5",
+                    "name": "York Audio Magazine",
+                },
+            ],
+            "page": 1,
+            "total_pages": 2,
+            "total_hits": 5,
+        }
+    )
+    resolve = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+        mock_handler_input
+    )
+
+    resolve.assert_not_awaited()
+    sent = search.await_args.args[0]
+    assert sent == {
+        "query": "",
+        "filter": {"organizationIds": ["org-tnf"]},
+        "limit": 3,
+        "page": 1,
+        "alexaUserId": "amzn1.ask.account.TEST",
+    }
+    assert "Swindon Talking News" in response["outputSpeech"]["ssml"]
+    assert "York Audio Magazine" in response["outputSpeech"]["ssml"]
+    directive = response["directives"][0]
+    assert directive["type"] == "Dialog.UpdateDynamicEntities"
+    assert len(directive["types"][0]["values"]) == 5
+    updated = User.snapshot(mock_handler_input)["pendingAmbiguity"]
+    assert len(updated["candidates"]) == 5
+    assert [candidate["id"] for candidate in updated["displayedCandidates"]] == [
+        "publication-4",
+        "publication-5",
+    ]
+    assert updated["candidatePagination"]["currentPage"] == 1
+
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {
+                "name": "ClarifySelectionIntent",
+                "slots": {"selection": {"name": "selection", "value": "second"}},
+            },
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["searchPayload"]["filter"] == {"publicationIds": ["publication-5"]}
+    assert nlp["searchPayload"]["page"] == 0
+
+
+@pytest.mark.asyncio
+async def test_publication_choices_support_previous_and_next_navigation(
+    monkeypatch, mock_handler_input
+):
+    from src.controllers.browse import BrowseNavigationHandler
+
+    candidates = [
+        {"type": "publication", "id": f"publication-{index}", "name": name}
+        for index, name in enumerate(
+            (
+                "Buxton Talking Song",
+                "Daily Sermons",
+                "Hexham Talking Newspapers Reading",
+                "Swindon Talking News",
+                "York Audio Magazine",
+            ),
+            start=1,
+        )
+    ]
+    pending = {
+        "intent": "organization",
+        "searchPayload": {"query": "", "filter": {}, "limit": 3, "page": 1},
+        "slots": {},
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates[3:],
+        "spokenCandidateOffset": 5,
+        "candidatePagination": {
+            "kind": "publication",
+            "currentPage": 1,
+            "totalPages": 2,
+            "totalHits": 5,
+            "limit": 3,
+        },
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    search = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "search", search)
+    handler = BrowseNavigationHandler(deps=ApplicationContainer())
+
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {"name": "ShowPreviousBrowseIntent", "slots": {}},
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    assert handler.can_handle(mock_handler_input) is True
+    previous_response = await handler.handle(mock_handler_input)
+    assert "previous publication choices" in previous_response["outputSpeech"]["ssml"]
+    assert "Which publication would you like" in previous_response["outputSpeech"]["ssml"]
+    assert "Buxton Talking Song" in previous_response["outputSpeech"]["ssml"]
+    assert [
+        candidate["id"]
+        for candidate in User.snapshot(mock_handler_input)["pendingAmbiguity"][
+            "displayedCandidates"
+        ]
+    ] == ["publication-1", "publication-2", "publication-3"]
+
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "AMAZON.NextIntent", "slots": {}}}
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    assert handler.can_handle(mock_handler_input) is True
+    next_response = await handler.handle(mock_handler_input)
+    assert "more publication choices" in next_response["outputSpeech"]["ssml"]
+    assert "Which publication would you like" in next_response["outputSpeech"]["ssml"]
+    assert "Swindon Talking News" in next_response["outputSpeech"]["ssml"]
+    assert "York Audio Magazine" in next_response["outputSpeech"]["ssml"]
+    search.assert_not_awaited()
+
+
+@pytest.mark.parametrize("intent_name", ["AMAZON.NextIntent", "AMAZON.PreviousIntent"])
+def test_browse_navigation_leaves_transport_intents_to_playback_without_ambiguity(
+    mock_handler_input, intent_name
+):
+    from src.controllers.browse import BrowseNavigationHandler
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    handler = BrowseNavigationHandler(deps=ApplicationContainer())
+    assert handler.can_handle(mock_handler_input) is False
+
+
+@pytest.mark.asyncio
 async def test_dynamic_entity_id_selects_pending_candidate_without_resolver(
     monkeypatch, mock_handler_input
 ):
@@ -1386,6 +1769,62 @@ async def test_dynamic_entity_id_selects_pending_candidate_without_resolver(
     assert nlp["ambiguityResolution"] is True
     assert nlp["searchPayload"]["filter"] == {"creatorIds": ["creator-dalesman"]}
     assert User.snapshot(mock_handler_input)["pendingAmbiguity"] is None
+
+
+@pytest.mark.asyncio
+async def test_publication_choice_replaces_source_filter_with_publication_filter(
+    monkeypatch, mock_handler_input
+):
+    pending = {
+        "intent": "organization",
+        "searchPayload": {
+            "query": "",
+            "filter": {"organizationIds": ["org-tnf"]},
+            "limit": 3,
+            "page": 0,
+        },
+        "slots": {"organizationIds": ["org-tnf"]},
+        "candidates": [
+            {
+                "type": "publication",
+                "id": "publication-buxton",
+                "name": "Buxton Talking Song",
+            },
+            {
+                "type": "publication",
+                "id": "publication-sermons",
+                "name": "Daily Sermons",
+            },
+        ],
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {
+                "name": "ClarifySelectionIntent",
+                "slots": {"selection": {"name": "selection", "value": "second"}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "publication"
+    assert nlp["searchPayload"]["filter"] == {
+        "publicationIds": ["publication-sermons"]
+    }
+    assert nlp["searchPayload"]["limit"] == 3
 
 
 @pytest.mark.asyncio

@@ -23,7 +23,16 @@ def _intent(handler_input, name: str) -> None:
     }
 
 
-@pytest.mark.parametrize("intent_name", ["AMAZON.NoIntent", "SkipFeedbackIntent"])
+@pytest.mark.parametrize(
+    "intent_name",
+    [
+        "AMAZON.NoIntent",
+        "SkipFeedbackIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.PreviousIntent",
+        "ShowPreviousBrowseIntent",
+    ],
+)
 def test_ambiguity_allows_dismissal_intents(mock_handler_input, intent_name):
     pending = {
         "candidates": [

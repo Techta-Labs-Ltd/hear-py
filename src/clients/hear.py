@@ -11,7 +11,7 @@ from config import settings
 from src.clients.pool import HttpPool
 from src.constants.search import SearchConstants
 from src.utils.content_normalizer import ContentNormalizer
-from src.utils.filters import SearchFilterUtils
+from src.utils.filters import SearchPayload
 
 
 class HearApiSupport:
@@ -141,6 +141,7 @@ class HearApiClient:
     @staticmethod
     def _normalize_search_response(data: dict, search_payload: dict | None = None) -> dict:
         raw_results = data.get("results") or data.get("items") or []
+        publication_choices = ContentNormalizer.publication_choices(raw_results)
         contextualized = ContentNormalizer.apply_search_context(
             raw_results,
             search_payload,
@@ -165,15 +166,16 @@ class HearApiClient:
             "session_key": data.get("session_key")
             if isinstance(data.get("session_key"), str) and data.get("session_key")
             else None,
+            "_publication_choices": publication_choices,
         }
 
     async def search(self, payload: dict | None = None, timeout_ms: int | None = None) -> dict:
-        payload = SearchFilterUtils.normalize_search_payload(payload)
+        payload = SearchPayload.with_pagination(payload, self._page_limit)
         query = payload["query"]
         body: dict[str, Any] = {
             "query": query,
-            "limit": payload.get("limit", self._page_limit),
-            "page": payload.get("page", 0),
+            "limit": payload["limit"],
+            "page": payload["page"],
         }
         for key in SearchConstants.SEARCH_API_FIELDS:
             if payload.get(key) is not None:
@@ -189,10 +191,12 @@ class HearApiClient:
         path = self._build_alexa_search_path()
         query_text = body.get("query") or ""
         HearApiSupport.logger.info(
-            "Hear API search request path=%s queryHash=%s queryChars=%s filterKeys=%s alexaUserIdPresent=%s",
+            "Hear API search request path=%s queryHash=%s queryChars=%s limit=%s page=%s filterKeys=%s alexaUserIdPresent=%s",
             path,
             HearApiSupport._hash_text(str(query_text)),
             len(str(query_text)),
+            body["limit"],
+            body["page"],
             sorted((body.get("filter") or {}).keys()),
             bool(body.get("alexaUserId")),
         )
@@ -202,7 +206,11 @@ class HearApiClient:
                 "Hear API search response attempt=%s status=%s", attempt + 1, status
             )
             if status == 200 and isinstance(data, dict):
-                return {**self._normalize_search_response(data, body), "failed": False}
+                return {
+                    **self._normalize_search_response(data, body),
+                    "failed": False,
+                    "_search_payload": dict(body),
+                }
             if attempt < self._retry_count and self._is_retryable(status):
                 await asyncio.sleep(settings.HEAR_API_RETRY_BACKOFF_MS / 1000.0 * 2**attempt)
             else:

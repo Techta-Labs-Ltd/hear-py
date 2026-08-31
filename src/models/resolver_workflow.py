@@ -38,7 +38,8 @@ class ResolverWorkflow:
         "AMAZON.StopIntent",
         "AMAZON.HelpIntent",
         "AMAZON.FallbackIntent",
-        "ShowMoreBrowseIntent",
+        "AMAZON.NextIntent", "AMAZON.PreviousIntent", "ShowMoreBrowseIntent",
+        "ShowPreviousBrowseIntent",
     }
     CANONICAL_ZERO_SLOT_DISCOVERY = {
         "PlayContentIntent": "play",
@@ -154,6 +155,7 @@ class ResolverWorkflow:
             **dict(pending.get("searchPayload") or {}),
             "query": "",
             "filter": filters,
+            "page": 0,
         }
         slots = {
             **dict(pending.get("slots") or {}),

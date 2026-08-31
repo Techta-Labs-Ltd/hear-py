@@ -120,6 +120,24 @@ def test_local_community_phrases_are_owned_by_local_intent():
     assert "play from my local community" in samples
 
 
+def test_publication_choice_navigation_has_forward_and_back_phrases():
+    intents = {
+        item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    assert "samples" not in intents["AMAZON.NextIntent"]
+    assert "samples" not in intents["AMAZON.PreviousIntent"]
+    assert {"next choices", "show next choices", "more choices"}.issubset(
+        set(intents["ShowMoreBrowseIntent"]["samples"])
+    )
+    assert {
+        "previous publication choices",
+        "show earlier publications",
+        "go back to previous choices",
+    }.issubset(
+        set(intents["ShowPreviousBrowseIntent"]["samples"])
+    )
+
+
 def test_search_query_is_the_only_slot_in_each_sample_that_uses_it():
     intents = _model()["interactionModel"]["languageModel"]["intents"]
     for intent in intents:

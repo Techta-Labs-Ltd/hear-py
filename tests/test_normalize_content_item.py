@@ -97,6 +97,51 @@ def test_publication_tracks_are_flattened_with_parent_metadata():
     assert renormalized[0]["publicationId"] == "publication-1"
 
 
+def test_multiple_publication_containers_preserve_choices_but_only_tracks_are_playable():
+    raw = [
+        {
+            "contentId": "container-content-1",
+            "publicationId": "publication-1",
+            "type": "publication",
+            "isPublication": True,
+            "title": "Buxton Talking Song",
+            "tracks": [
+                {
+                    "contentId": "track-1",
+                    "title": "Buxton track",
+                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                }
+            ],
+        },
+        {
+            "contentId": "container-content-2",
+            "publicationId": "publication-2",
+            "type": "publication",
+            "isPublication": True,
+            "title": "Daily Sermons",
+            "tracks": [
+                {
+                    "contentId": "track-2",
+                    "title": "Daily Sermons track",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                }
+            ],
+        },
+    ]
+
+    result = HearApiClient._normalize_search_response(
+        {"results": raw, "page": 0, "limit": 3, "total": 2},
+        {"query": "", "filter": {"organizationIds": ["org-tnf"]}, "limit": 3},
+    )
+
+    assert result["_publication_choices"] == [
+        {"type": "publication", "id": "publication-1", "name": "Buxton Talking Song"},
+        {"type": "publication", "id": "publication-2", "name": "Daily Sermons"},
+    ]
+    assert [item["contentId"] for item in result["results"]] == ["track-1", "track-2"]
+    assert "container-content-1" not in {item["contentId"] for item in result["results"]}
+
+
 def test_publication_id_filter_supplies_missing_publication_identity():
     raw = {
         "contentId": "container-1",
