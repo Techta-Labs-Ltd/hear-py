@@ -25,8 +25,12 @@ def _handler_input(*, token: str = "", status: str = "") -> HandlerInput:
             "request": {
                 "type": "SessionResumedRequest",
                 "locale": "en-GB",
-                "cause": {"token": token},
-                "result": {"status": status},
+                "cause": {
+                    "type": "ConnectionCompleted",
+                    "token": token,
+                    "status": {"code": "200", "message": "OK"},
+                    "result": {"status": status},
+                },
             },
         }
     )
@@ -61,6 +65,7 @@ def test_location_consent_directive_is_voice_forward_and_explains_value():
     assert directive["uri"] == PermissionConstants.CONNECTION_URI
     assert directive["token"] == PermissionConstants.LOCATION_PURPOSE
     assert len(directive["input"]["permissionScopes"]) == 2
+    assert "shouldEndSession" not in response
 
 
 @pytest.mark.asyncio

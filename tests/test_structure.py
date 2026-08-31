@@ -246,7 +246,7 @@ async def test_onboarding_yes_returns_permission_card(monkeypatch):
     assert [
         scope["permissionScope"] for scope in directive["input"]["permissionScopes"]
     ] == list(OnboardingConstants.LOCATION_VOICE_PERMISSIONS)
-    assert response["response"]["shouldEndSession"] is False
+    assert "shouldEndSession" not in response["response"]
 
 
 def test_feedback_service_owns_pending_feedback_policy():

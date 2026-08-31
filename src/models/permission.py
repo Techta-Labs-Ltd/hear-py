@@ -48,7 +48,7 @@ class PermissionPolicy:
         request = getattr(handler_input.request_envelope, "request", {}) or {}
         cause = request.get("cause", {}) if isinstance(request, dict) else getattr(request, "cause", {})
         token = cause.get("token", "") if isinstance(cause, dict) else getattr(cause, "token", "")
-        result = request.get("result", {}) if isinstance(request, dict) else getattr(request, "result", {})
+        result = cause.get("result", {}) if isinstance(cause, dict) else getattr(cause, "result", {})
         status = result.get("status", "") if isinstance(result, dict) else getattr(result, "status", "")
         return str(token or ""), str(status or "")
 
@@ -75,7 +75,6 @@ class Permission:
                     OnboardingConstants.LOCATION_VOICE_PERMISSIONS,
                 )
             )
-            .set_should_end_session(False)
             .response
         )
 
@@ -89,7 +88,6 @@ class Permission:
                     PermissionConstants.PROFILE_SCOPES,
                 )
             )
-            .set_should_end_session(False)
             .response
         )
 
