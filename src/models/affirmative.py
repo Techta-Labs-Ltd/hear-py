@@ -71,6 +71,12 @@ class Affirmative:
         return None
 
     async def _state_response(self, handler_input, store: dict):
+        if store.get("onboardingStage") == "confirm_town_for_community":
+            self._deps.user.update(
+                handler_input,
+                {"onboardingStage": None, "awaitingCommunityPlayback": True},
+            )
+            return self._deps.permission.start_location(handler_input)
         if store.get("awaitingProfilePermission"):
             return self._deps.permission.start_profile(handler_input)
         if store.get("listModeActive"):
@@ -123,13 +129,23 @@ class Affirmative:
                 .response
             )
         final_city = city
+        resume_community = bool(
+            store.get("awaitingCommunityPlayback")
+            or (session_attrs or {}).get("awaitingCommunityPlayback")
+        )
         self._deps.onboarding.complete_location(
             handler_input,
             pending,
-            offer_community_playback=False,
+            offer_community_playback=resume_community,
             preserve_postal_code=True,
         )
         DialogStateManager.clear(handler_input, "onboarding")
+        if resume_community:
+            return await self._handle_community_play_yes(
+                handler_input,
+                self._deps.user.snapshot(handler_input),
+                RequestContext.session(handler_input),
+            )
         self._deps.user.update(handler_input, {"awaitingProfilePermission": True})
         return (
             handler_input.response_builder.speak(

@@ -26,6 +26,8 @@ class Speech:
     COMMUNITY_NEEDS_TOWN = (
         "I'll need your city to find local content. Would you like to set that up?"
     )
+    COMMUNITY_LOCATION_DECLINED = "No problem. I can still play other Hear content, but I need a city to find content from your local area."
+    COMMUNITY_LOCATION_SKIPPED = "No problem. You can continue as a guest, but I need a city before I can play local content. What else would you like to hear?"
     WELCOME_REPROMPT = (
         "You can say play followed by a topic, or what's trending. What would you like?"
     )

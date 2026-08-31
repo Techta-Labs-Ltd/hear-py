@@ -1946,6 +1946,94 @@ async def test_location_follow_up_yes_executes_community_search(monkeypatch, moc
 
 
 @pytest.mark.asyncio
+async def test_local_setup_yes_retries_voice_location_permission(mock_handler_input):
+    from src.models.affirmative import Affirmative
+
+    handler_input = _town_request(mock_handler_input, "yes")
+    handler_input.request_envelope.request.intent.name = "AMAZON.YesIntent"
+    handler_input.response_builder = ResponseBuilder()
+    handler_input.attributes_manager.get_session_attributes = lambda: {}
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "onboardingStage": "confirm_town_for_community",
+    }
+    response = await Affirmative(deps=ApplicationContainer()).execute(handler_input)
+    store = User.snapshot(handler_input)
+    assert store["onboardingStage"] is None
+    assert store["awaitingCommunityPlayback"] is True
+    directive = response["directives"][0]
+    assert directive["type"] == "Connections.StartConnection"
+    assert directive["token"] == "onboarding_location"
+
+
+@pytest.mark.asyncio
+async def test_local_setup_no_keeps_guest_out_of_permission_flow(mock_handler_input):
+    from src.models.decline import Decline
+
+    handler_input = _town_request(mock_handler_input, "no")
+    handler_input.request_envelope.request.intent.name = "AMAZON.NoIntent"
+    handler_input.attributes_manager.get_session_attributes = lambda: {}
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "onboardingStage": "confirm_town_for_community",
+    }
+    await Decline(deps=ApplicationContainer()).execute(handler_input)
+    store = User.snapshot(handler_input)
+    assert store["onboardingStage"] is None
+    assert store["awaitingCommunityPlayback"] is False
+    handler_input.response_builder.add_directive.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_local_location_confirmation_resumes_original_playback(
+    monkeypatch, mock_handler_input
+):
+    from src.models.affirmative import Affirmative
+
+    handler_input = _town_request(mock_handler_input, "yes")
+    store = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "onboardingStage": "await_location_confirm",
+        "awaitingLocationConfirm": True,
+        "awaitingCommunityPlayback": True,
+        "pendingLocationConfirm": {
+            "city": "York",
+            "locality": "York",
+            "countryCode": "GB",
+            "latitude": 53.96,
+            "longitude": -1.08,
+        },
+    }
+    handler_input.attributes_manager.request_attributes["_store"] = store
+    discover = AsyncMock(
+        return_value={
+            "results": [
+                {
+                    "contentId": "local-1",
+                    "title": "York update",
+                    "audioUrl": "https://cdn.hear.media/local-1.mp3",
+                }
+            ]
+        }
+    )
+    play = AsyncMock(return_value={"response": "playing-local"})
+    monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
+    result = await Affirmative(deps=ApplicationContainer())._confirm_location(
+        handler_input, store
+    )
+    assert result == {"response": "playing-local"}
+    updated = User.snapshot(handler_input)
+    assert updated["userCity"] == "York"
+    assert updated["awaitingCommunityPlayback"] is False
+    assert updated["awaitingProfilePermission"] is False
+    discover.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_location_confirmation_finishes_onboarding_without_forcing_empty_search(
     monkeypatch, mock_handler_input
 ):

@@ -474,7 +474,22 @@ class Onboarding(OnboardingService):
     ):
         """Skip town capture and proceed without location."""
         d = Onboarding._dependencies(deps)
+        local_playback_pending = bool(store.get("awaitingCommunityPlayback"))
         d.onboarding.complete_without_location(handler_input)
+        if local_playback_pending:
+            d.user.update(
+                handler_input,
+                {"awaitingCommunityPlayback": False, "awaitingProfilePermission": False},
+            )
+            DialogStateManager.clear(handler_input, "onboarding")
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml(Speech.COMMUNITY_LOCATION_SKIPPED)
+                )
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
         d.user.update(handler_input, {"awaitingProfilePermission": True})
         DialogStateManager.clear(handler_input, "onboarding")
         Onboarding.logger.info("Hear: onboarding town skipped")
