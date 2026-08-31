@@ -4,6 +4,7 @@ import logging
 import re
 import time
 
+from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.constants.dialog import DialogConstants
@@ -14,6 +15,7 @@ from src.models.resolver import ResolverUnavailable
 from src.models.user import User
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters, SearchFilterUtils
+from src.utils.search_payload import SearchPayload
 
 
 class ResolverWorkflow:
@@ -38,7 +40,9 @@ class ResolverWorkflow:
         "AMAZON.StopIntent",
         "AMAZON.HelpIntent",
         "AMAZON.FallbackIntent",
-        "AMAZON.NextIntent", "AMAZON.PreviousIntent", "ShowMoreBrowseIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.PreviousIntent",
+        "ShowMoreBrowseIntent",
         "ShowPreviousBrowseIntent",
     }
     CANONICAL_ZERO_SLOT_DISCOVERY = {
@@ -139,14 +143,8 @@ class ResolverWorkflow:
     @staticmethod
     def _resolved_pending_candidate(pending: dict, candidate: dict) -> dict:
         entity_type = str(candidate["type"])
-        entity_id = str(candidate["id"])
-        name = str(candidate["name"])
+        entity_id, name = str(candidate["id"]), str(candidate["name"])
         filter_keys = SearchConstants.SEARCH_SOURCE_FILTERS
-        name_keys = {
-            "creator": "creatorName",
-            "organization": "organizationName",
-            "publication": "publicationName",
-        }
         filter_key = filter_keys.get(entity_type)
         filters = SearchFilters.replace_source(
             (pending.get("searchPayload") or {}).get("filter"), entity_type, entity_id
@@ -157,19 +155,21 @@ class ResolverWorkflow:
             "filter": filters,
             "page": 0,
         }
+        if entity_type == "publication":
+            payload = SearchPayload.for_publication(payload, [entity_id], settings.search_page_limit)
         slots = {
             **dict(pending.get("slots") or {}),
             "residualQuery": "",
             "ambiguousReferences": [],
         }
+        for source_key in (*filter_keys.values(), *SearchConstants.SEARCH_SOURCE_NAMES.values()):
+            slots.pop(source_key, None)
         if filter_key:
             slots[filter_key] = [entity_id]
-            slots[name_keys[entity_type]] = name
+            slots[SearchConstants.SEARCH_SOURCE_NAMES[entity_type]] = name
         return {
             "status": "resolved",
-            "intent": entity_type
-            if entity_type in filter_keys
-            else pending.get("intent", "search"),
+            "intent": entity_type if entity_type in filter_keys else pending.get("intent", "search"),
             "ambiguityResolution": True,
             "confirmationLabel": f"content from {name}",
             "searchPayload": payload,

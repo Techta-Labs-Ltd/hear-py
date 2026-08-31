@@ -293,6 +293,10 @@ class ConfirmationPolicy:
         return bool(
             ConfirmationPolicy.has_pending_ambiguity(nlp)
             or nlp.get("directDiscoveryRequest")
+            or (
+                nlp.get("ambiguityResolution")
+                and nlp.get("intent") == "publication"
+            )
             or (nlp.get("intent") == "creator" and slots.get("genericCreatorRequest"))
             or (nlp.get("intent") == "organization" and slots.get("genericOrganizationRequest"))
         )

@@ -16,7 +16,8 @@ from src.utils.browse import BrowseUtils
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
-from src.utils.filters import SearchFilterUtils, SearchPayload
+from src.utils.filters import SearchFilterUtils
+from src.utils.search_payload import SearchPayload
 
 
 class Browse:
