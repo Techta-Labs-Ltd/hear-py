@@ -370,6 +370,295 @@ def test_explicit_publication_uses_id_without_generic_publication_filter():
     assert result["slots"]["searchPlan"]["filter"] == {"publicationIds": ["publication-1"]}
 
 
+def test_resolved_fuzzy_publication_is_preserved_as_an_explicit_source():
+    payload = _response(intent="publication")
+    payload["entities"] = [
+        {
+            **payload["entities"][1],
+            "entityId": "7c5685a7-7ea6-47c3-8cfd-266cc65a43f6",
+            "canonicalValue": "Lover Notation",
+            "originalText": "lovers notati",
+            "confidence": 89,
+            "method": "fuzzy_bare",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["slots"]["publicationIds"] == [
+        "7c5685a7-7ea6-47c3-8cfd-266cc65a43f6"
+    ]
+    assert result["slots"]["publicationName"] == "Lover Notation"
+    assert result["searchPayload"]["filter"] == {
+        "publicationIds": ["7c5685a7-7ea6-47c3-8cfd-266cc65a43f6"]
+    }
+    assert result["entities"][0]["confidence"] == 89
+
+
+def test_partial_source_is_not_trusted_when_resolver_intent_does_not_select_it():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            **payload["entities"][1],
+            "confidence": 89,
+            "method": "fuzzy_bare",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert "publicationIds" not in result["slots"]
+    assert result["searchPayload"]["filter"] == {}
+
+
+def test_single_exact_tag_is_used_as_a_search_filter():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            **payload["entities"][3],
+            "entityId": "empire",
+            "canonicalValue": "#empire",
+            "originalText": "empire",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["slots"]["tags"] == ["empire"]
+    assert result["searchPayload"]["filter"] == {"tags": ["empire"]}
+
+
+def test_mixed_search_drops_partial_location_and_keeps_exact_tag():
+    payload = _response(intent="search")
+    payload["slots"].update({"residualQuery": "", "sort": "relevance"})
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-1826457934",
+            "canonicalValue": "Rhymney",
+            "originalText": "roman",
+            "confidence": 94,
+            "method": "phonetic_bare",
+            "start": 19,
+            "end": 24,
+            "latitude": 51.759,
+            "longitude": -3.283,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        },
+        {
+            "entityType": "tag",
+            "entityId": "empire",
+            "canonicalValue": "#empire",
+            "originalText": "empire",
+            "confidence": 100,
+            "method": "bare_match",
+            "start": 25,
+            "end": 31,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="find me content on roman empire"
+    )
+
+    assert result["resolverIntent"] == "search"
+    assert result["searchPayload"] == {
+        "query": "",
+        "filter": {"tags": ["empire"]},
+    }
+    assert [entity["entityType"] for entity in result["entities"]] == ["tag"]
+    for key in ("city", "placeName", "latitude", "longitude", "isLocal"):
+        assert key not in result["slots"]
+
+
+def test_search_accepts_exact_source_location():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-1826149980",
+            "canonicalValue": "York",
+            "originalText": "york",
+            "confidence": 100,
+            "method": "exact",
+            "start": 29,
+            "end": 33,
+            "latitude": 53.96,
+            "longitude": -1.08,
+            "countryCode": "gb",
+            "locationRole": "source",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["searchPayload"]["filter"] == {
+        "city": "York",
+        "countryCode": "gb",
+        "latitude": 53.96,
+        "longitude": -1.08,
+    }
+    assert result["slots"]["isLocal"] is True
+
+
+def test_search_drops_unspecified_location_even_at_full_confidence():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-reading",
+            "canonicalValue": "Reading",
+            "originalText": "reading",
+            "confidence": 100,
+            "method": "exact",
+            "start": 5,
+            "end": 12,
+            "latitude": 51.456,
+            "longitude": -0.971,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        }
+    ]
+    payload["slots"].update({"residualQuery": "", "sort": "relevance"})
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play reading skills"
+    )
+
+    assert result["searchPayload"] == {"query": "reading skills", "filter": {}}
+    assert result["entities"] == []
+
+
+@pytest.mark.parametrize("resolver_intent,entity_type", [("tag", "tag"), ("location", "location")])
+def test_resolver_facet_intents_are_canonicalized_to_dispatchable_search(
+    resolver_intent, entity_type
+):
+    payload = _response(intent=resolver_intent)
+    payload["entities"] = [
+        {
+            "entityType": entity_type,
+            "entityId": "empire" if entity_type == "tag" else "location-york",
+            "canonicalValue": "#empire" if entity_type == "tag" else "York",
+            "originalText": "empire" if entity_type == "tag" else "york",
+            "confidence": 89,
+            "method": "fuzzy_bare",
+            "start": 5,
+            "end": 11,
+            "latitude": None if entity_type == "tag" else 53.96,
+            "longitude": None if entity_type == "tag" else -1.08,
+            "countryCode": None if entity_type == "tag" else "gb",
+            "locationRole": None if entity_type == "tag" else "source",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["intent"] == "search"
+    assert result["resolverIntent"] == resolver_intent
+    assert result["searchPayload"]["filter"]
+
+
+def test_rejected_only_entity_falls_back_to_clean_original_query():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-rhymney",
+            "canonicalValue": "Rhymney",
+            "originalText": "roman",
+            "confidence": 94,
+            "method": "phonetic_bare",
+            "start": 19,
+            "end": 24,
+            "latitude": 51.759,
+            "longitude": -3.283,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        }
+    ]
+    payload["slots"].update({"residualQuery": "", "sort": "relevance"})
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="find me content on roman history"
+    )
+
+    assert result["searchPayload"] == {"query": "roman history", "filter": {}}
+    assert result["entities"] == []
+
+
+def test_latest_multiword_fallback_keeps_sort_out_of_query():
+    payload = _response(intent="search")
+    payload["entities"] = []
+    payload["slots"].update(
+        {"residualQuery": "", "latest": True, "sort": "latest"}
+    )
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="find me content on the latest sport news"
+    )
+
+    assert result["searchPayload"] == {
+        "query": "sport news",
+        "sort": "latest",
+        "filter": {},
+    }
+
+
+def test_one_hundred_multiword_fallback_combinations_remain_searchable():
+    topics = (
+        "roman history",
+        "local heritage",
+        "community sport",
+        "women's football",
+        "public health",
+        "mental wellbeing",
+        "assistive technology",
+        "local politics",
+        "classical music",
+        "railway memories",
+        "oral history",
+        "coastal news",
+        "blind veterans",
+        "gardening advice",
+        "community theatre",
+        "local business",
+        "school news",
+        "nature conservation",
+        "military history",
+        "council updates",
+    )
+    templates = (
+        "play {topic}",
+        "play content on {topic}",
+        "find me content on {topic}",
+        "give me something about {topic}",
+        "I want to hear something on {topic}",
+    )
+    combinations = [
+        (template.format(topic=topic), topic)
+        for topic in topics
+        for template in templates
+    ]
+    assert len(combinations) == 100
+
+    for utterance, expected_query in combinations:
+        payload = _response(intent="search")
+        payload["entities"] = []
+        payload["slots"].update({"residualQuery": "", "sort": "relevance"})
+
+        result = ResolverResult.from_payload(payload).to_alexa_payload(
+            original_utterance=utterance
+        )
+
+        assert result["searchPayload"]["query"].casefold() == expected_query.casefold()
+    assert result["entities"] == []
+
+
 def test_resolver_search_plan_normalizes_null_query_and_unsupported_sort():
     payload = _response()
     payload["slots"].update({"residualQuery": None, "sort": "relevance"})

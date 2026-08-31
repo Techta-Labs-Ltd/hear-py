@@ -20,6 +20,7 @@ class SearchFilterUtils:
             "^recordings\\s+(?:on|about|from|by)\\s+",
             "^(?:some|the)\\s+(?:content|recordings|audio)\\s+(?:on|about|from|by)\\s+",
             "^find\\s+(?:me\\s+)?(?:something\\s+)?(?:on|about|from|by)\\s+",
+            "^find\\s+(?:me\\s+)?(?:content|recordings|audio)\\s+(?:on|about)\\s+",
             "^do\\s+(?:you|we)\\s+have\\s+",
             "^(?:can|could)\\s+(?:you|we)\\s+(?:find|show|tell|get|play|read)\\s+(?:me\\s+)?(?:something\\s+)?(?:on|about|from|by)\\s+",
             "^(?:can|could)\\s+(?:you|we)\\s+(?:find|show|tell|get|play|read)\\s+(?:me\\s+)?",
@@ -81,6 +82,15 @@ class SearchFilterUtils:
             if stripped != q:
                 return stripped
         return q
+
+    @staticmethod
+    def strip_search_sort_prefix(raw: object) -> str:
+        return re.sub(
+            "^(?:the\\s+)?(?:latest|newest|most\\s+recent|recent)\\s+",
+            "",
+            str(raw or "").strip(),
+            flags=re.I,
+        ).strip()
 
     @staticmethod
     def _normalize_search_query_for_creator(raw) -> str:

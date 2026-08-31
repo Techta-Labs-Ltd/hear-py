@@ -13,6 +13,7 @@ from src.alexa.ssml import Ssml
 from src.clients.alexa import AlexaClient
 from src.clients.hear import HearApiClient
 from src.models.feedback import FeedbackService
+from src.models.playback_history import PlaybackHistory
 from src.models.playback_state import PlaybackQueue, PlaybackState
 from src.models.user import User
 from src.services.alexa_reminder import AlexaReminderService
@@ -79,6 +80,11 @@ class Playback:
                 )
                 return handler_input.response_builder.response
             content = result["results"][0]
+        content = PlaybackQueue.apply_publication_context(
+            User.snapshot(handler_input),
+            content,
+            queue_index=next_index,
+        )
         self.state.prepare_next(handler_input, content)
         playback_speeds = content.get("playbackSpeeds") or []
         audio_url = PlaybackUtils.resolve_audio_url(
@@ -167,7 +173,7 @@ class Playback:
             handler_input, content.get("publicationId")
         ):
             Playback._activate_best_feedback_candidate(handler_input)
-        return self._playback.start(
+        state = self._playback.start(
             handler_input,
             content,
             alexa_user_id=AlexaRequest.get_user_id(handler_input),
@@ -175,9 +181,11 @@ class Playback:
             queue_index=queue_index,
             offset_ms=offset_ms,
         )
+        PlaybackHistory.add(handler_input, content)
+        return state
 
     async def emit(self, handler_input, event_type: str, state: dict | None = None) -> bool:
-        active = state or self._playback.current(handler_input)
+        active = dict(state or self._playback.current(handler_input) or {})
         user_id = AlexaRequest.get_user_id(handler_input)
         if (
             self._events is None
@@ -187,12 +195,46 @@ class Playback:
             or not active.get("sessionId")
         ):
             return False
+        if active.get("publicationId"):
+            active.update(
+                FeedbackService.publication_listening_metrics(
+                    User.snapshot(handler_input),
+                    str(active["publicationId"]),
+                )
+            )
         return self._events.playback(
             alexa_user_id=user_id,
             listener_id=User.snapshot(handler_input).get("listenerId"),
             state=active,
             event_type=event_type,
         )
+
+    def observe(
+        self,
+        handler_input,
+        *,
+        offset_ms: int,
+        event_type: str,
+        status: str,
+        completed: bool = False,
+    ) -> dict | None:
+        state = self._playback.observe(
+            handler_input,
+            offset_ms=offset_ms,
+            event_type=event_type,
+            status=status,
+            completed=completed,
+        )
+        if not state:
+            return None
+        self._playback.save_position(handler_input, state["contentId"], state["offsetMs"])
+        PlaybackHistory.update(handler_input, state, completed=completed)
+        FeedbackService.update_publication_progress(
+            handler_input,
+            state,
+            completed=completed,
+        )
+        return state
 
     async def emit_user(
         self,
@@ -371,7 +413,7 @@ class Playback:
         repository.save_current_content(
             handler_input, content, title=title, creator=creator, offset_ms=offset_ms
         )
-        Playback.add_to_history(handler_input, content)
+        PlaybackHistory.add(handler_input, content)
         audio_url = PlaybackUtils.resolve_audio_url(content["audioUrl"], effective_speed, speeds)
         return {"state": state, "audioUrl": audio_url}
 
@@ -504,40 +546,13 @@ class Playback:
         return Playback._play_response(handler_input, intro_text, directive)
 
     @staticmethod
-    def add_to_history(handler_input, content_or_id, recording_id: str | None = None) -> dict:
-        """Insert an entry at the front of the play history, deduping and capping.
-
-        Accepts a full content dict (to store a playable snapshot) or a plain
-        content-id string/dict for backward compatibility.
-        """
-        store = User.snapshot(handler_input)
-        history = [PlaybackUtils.normalize_history_entry(e) for e in store.get("playHistory") or []]
-        history = [h for h in history if h is not None]
-        if isinstance(content_or_id, dict) and content_or_id.get("audioUrl"):
-            entry = PlaybackUtils.normalize_history_entry(content_or_id)
-            if not entry:
-                return store
-            cid = entry["id"]
-        else:
-            cid = str(content_or_id) if content_or_id is not None else None
-            entry = {"id": cid} if cid else None
-        if not cid:
-            return store
-        for i, h in enumerate(history):
-            if h["id"] == cid:
-                history.pop(i)
-                break
-        history.insert(0, entry)
-        cap = settings.max_history
-        return User.update(handler_input, {"playHistory": history[:cap]})
-
-    @staticmethod
     async def _resolve_content(
         handler_input, content_id: str, *, hear_client: HearApiClient
     ) -> dict | None:
-        cached = PlaybackQueue.cached_content(User.snapshot(handler_input), content_id)
+        store = User.snapshot(handler_input)
+        cached = PlaybackQueue.cached_content(store, content_id)
         if cached:
-            return cached
+            return PlaybackQueue.apply_publication_context(store, cached)
         result = await hear_client.search(
             {
                 "query": "",
@@ -548,7 +563,15 @@ class Playback:
             },
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
-        return result["results"][0] if result.get("results") else None
+        content = result["results"][0] if result.get("results") else None
+        return (
+            PlaybackQueue.apply_publication_context(
+                User.snapshot(handler_input),
+                content,
+            )
+            if content
+            else None
+        )
 
     @staticmethod
     async def play_next_queued_item(

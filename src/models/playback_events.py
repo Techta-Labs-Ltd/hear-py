@@ -27,15 +27,12 @@ class PlaybackEvents:
         self._warn_if_queue_stalled(handler_input, token)
 
     def _complete_state(self, handler_input, state: dict, offset_ms: int) -> dict:
-        duration_ms = int(state.get("durationMs") or 0)
-        listened_ms = max(int(state.get("listenedMs") or 0), offset_ms, duration_ms)
-        return self._deps.playback.state.merge(
+        return self._deps.playback.observe(
             handler_input,
-            {
-                "status": "completed",
-                "offsetMs": max(offset_ms, duration_ms),
-                "listenedMs": listened_ms,
-            },
+            offset_ms=offset_ms,
+            event_type="finished",
+            status="completed",
+            completed=True,
         )
 
     def _save_completed_source(self, handler_input, state: dict) -> None:

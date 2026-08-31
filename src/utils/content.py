@@ -299,3 +299,51 @@ class ContentUtils:
         if not t or ContentUtils.is_id_like_label(t):
             return None
         return t
+
+
+class ContentIdentity:
+    @staticmethod
+    def publication_id(item: dict | None) -> str | None:
+        value = item.get("publicationId") if isinstance(item, dict) else None
+        return ContentUtils.nullable_string(value)
+
+    @staticmethod
+    def content_id(item: dict | None) -> str | None:
+        if not isinstance(item, dict):
+            return None
+        return ContentUtils.nullable_string(
+            item.get("contentId") or item.get("trackContentId") or item.get("id")
+        )
+
+    @staticmethod
+    def is_publication(item: dict | None) -> bool:
+        return bool(ContentIdentity.publication_id(item))
+
+    @staticmethod
+    def subject_type(item: dict | None) -> str:
+        return "publication" if ContentIdentity.is_publication(item) else "content"
+
+    @staticmethod
+    def subject_id(item: dict | None) -> str | None:
+        return ContentIdentity.publication_id(item) or ContentIdentity.content_id(item)
+
+    @staticmethod
+    def subject_key(item: dict | None) -> str | None:
+        subject_id = ContentIdentity.subject_id(item)
+        if not subject_id:
+            return None
+        return (
+            f"publication:{subject_id}"
+            if ContentIdentity.is_publication(item)
+            else subject_id
+        )
+
+    @staticmethod
+    def subject_title(item: dict | None) -> str | None:
+        if not isinstance(item, dict):
+            return None
+        if ContentIdentity.is_publication(item):
+            return ContentUtils.nullable_string(item.get("publicationTitle")) or "that publication"
+        return ContentUtils.nullable_string(
+            item.get("title") or item.get("spokenTitle") or item.get("displayTitle")
+        )

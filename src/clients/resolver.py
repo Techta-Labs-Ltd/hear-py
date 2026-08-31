@@ -205,7 +205,10 @@ class ResolverClient:
         timeout_ms: int | None = None,
     ) -> dict[str, Any]:
         result = await self.resolve(utterance, alexa_user_id=alexa_user_id, timeout_ms=timeout_ms)
-        payload = result.to_alexa_payload(prefer_location=prefer_location)
+        payload = result.to_alexa_payload(
+            prefer_location=prefer_location,
+            original_utterance=utterance,
+        )
         ResolverClientSupport.logger.info(
             "Hear: resolver normalized response status=%s intent=%s slots=%s",
             payload.get("status"),

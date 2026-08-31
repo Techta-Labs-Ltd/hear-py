@@ -60,6 +60,163 @@ def test_sqs_client_sends_one_canonical_envelope():
         "event": "playback.finished",
         "data": {"contentId": "track-1"},
     }
+    assert sqs.messages[0]["MessageAttributes"] == {
+        "eventType": {"DataType": "String", "StringValue": "playback.finished"}
+    }
+
+
+@pytest.mark.asyncio
+async def test_publication_playback_event_reaches_sqs_as_publication(mock_handler_input):
+    sqs = SqsStub()
+    producer = SqsEventClient(
+        queue_url="https://sqs.eu-west-1.amazonaws.com/123/hear-events",
+        region="eu-west-1",
+        client=sqs,
+    )
+    playback = Playback(
+        AlexaClient(),
+        events=OutboundEventService(producer=producer),
+    )
+    state = {
+        "contentId": "track-2",
+        "publicationId": "publication-1",
+        "sessionId": "track-session-2",
+        "subjectSessionId": "publication:publication-1:queue-1",
+        "trackIndex": 1,
+        "trackCount": 3,
+        "offsetMs": 120000,
+        "durationMs": 180000,
+        "listenedMs": 120000,
+        "timeSpentMs": 900000,
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "publicationFeedbackProgress": {
+                "publication-1": {
+                    "publicationId": "publication-1",
+                    "timeSpentMs": 1800000,
+                    "tracks": {
+                        "track-1": {
+                            "trackIndex": 0,
+                            "durationMs": 900000,
+                            "listenedMs": 900000,
+                            "timeSpentMs": 900000,
+                            "completed": True,
+                        },
+                        "track-2": {
+                            "trackIndex": 1,
+                            "durationMs": 180000,
+                            "listenedMs": 120000,
+                            "timeSpentMs": 900000,
+                            "completed": False,
+                        },
+                    },
+                }
+            }
+        },
+    )
+
+    assert await playback.emit(mock_handler_input, "stopped", state)
+
+    message = sqs.messages[0]
+    envelope = json.loads(message["MessageBody"])
+    data = envelope["data"]
+    assert envelope["event"] == "playback.stopped"
+    assert data["subjectType"] == "publication"
+    assert data["subjectId"] == "publication-1"
+    assert data["publicationId"] == "publication-1"
+    assert data["trackContentId"] == "track-2"
+    assert data["timeSpentMs"] == 900000
+    assert data["timeSpentHours"] == 0.25
+    assert data["publicationTimeSpentMs"] == 1800000
+    assert data["publicationTimeSpentHours"] == 0.5
+    assert [track["contentId"] for track in data["trackListening"]] == [
+        "track-1",
+        "track-2",
+    ]
+    assert "contentId" not in data
+    assert message["MessageAttributes"] == {
+        "eventType": {"DataType": "String", "StringValue": "playback.stopped"},
+        "subjectType": {"DataType": "String", "StringValue": "publication"},
+        "subjectId": {"DataType": "String", "StringValue": "publication-1"},
+        "publicationId": {"DataType": "String", "StringValue": "publication-1"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_publication_feedback_event_reaches_sqs_as_publication(mock_handler_input):
+    sqs = SqsStub()
+    producer = SqsEventClient(
+        queue_url="https://sqs.eu-west-1.amazonaws.com/123/hear-events",
+        region="eu-west-1",
+        client=sqs,
+    )
+    service = FeedbackService(events=OutboundEventService(producer=producer))
+    User.update(
+        mock_handler_input,
+        {
+            "awaitingFeedback": True,
+            "pendingFeedback": {
+                "feedbackKey": "publication:publication-1",
+                "subjectType": "publication",
+                "publicationId": "publication-1",
+                "publicationTitle": "Weekly edition",
+                "contentIds": ["track-1", "track-2"],
+                "timeSpentMs": 1800000,
+                "timeSpentHours": 0.5,
+                "trackListening": [
+                    {"contentId": "track-1", "timeSpentMs": 900000},
+                    {"contentId": "track-2", "timeSpentMs": 900000},
+                ],
+                "completed": True,
+            },
+        },
+    )
+
+    await service.submit(mock_handler_input, "enjoyed")
+
+    message = sqs.messages[0]
+    data = json.loads(message["MessageBody"])["data"]
+    assert data["subjectType"] == "publication"
+    assert data["subjectId"] == "publication-1"
+    assert data["contentIds"] == ["track-1", "track-2"]
+    assert data["timeSpentMs"] == 1800000
+    assert data["timeSpentHours"] == 0.5
+    assert len(data["trackListening"]) == 2
+    assert "contentId" not in data
+    assert message["MessageAttributes"]["subjectType"]["StringValue"] == "publication"
+    assert message["MessageAttributes"]["subjectId"]["StringValue"] == "publication-1"
+
+
+def test_follow_notification_event_reaches_sqs_with_publication_unit():
+    sqs = SqsStub()
+    producer = SqsEventClient(
+        queue_url="https://sqs.eu-west-1.amazonaws.com/123/hear-events",
+        region="eu-west-1",
+        client=sqs,
+    )
+    service = OutboundEventService(producer=producer)
+
+    assert service.following(
+        followed=True,
+        alexa_user_id="alexa-user-1",
+        listener_id="listener-1",
+        source={
+            "type": "organization",
+            "id": "organization-1",
+            "name": "York Talking News",
+        },
+    )
+
+    message = sqs.messages[0]
+    envelope = json.loads(message["MessageBody"])
+    assert envelope["event"] == "user.followed_organization"
+    assert envelope["data"]["notificationSubjectType"] == "publication"
+    assert message["MessageAttributes"]["notificationSubjectType"] == {
+        "DataType": "String",
+        "StringValue": "publication",
+    }
 
 
 @pytest.mark.asyncio
@@ -149,7 +306,7 @@ async def test_sqs_consumer_reports_only_failed_backend_deliveries():
 
 
 @pytest.mark.asyncio
-async def test_playback_event_sends_the_track_with_publication_context(
+async def test_playback_event_uses_publication_as_subject_and_track_as_cursor(
     mock_handler_input,
 ):
     producer = EventProducerStub()
@@ -166,12 +323,41 @@ async def test_playback_event_sends_the_track_with_publication_context(
         "listenedMs": 120000,
     }
 
-    assert await playback.emit(mock_handler_input, "finished", state)
+    assert await playback.emit(mock_handler_input, "stopped", state)
 
     envelope = producer.envelopes[0]
-    assert envelope["event"] == "playback.finished"
-    assert envelope["data"]["contentId"] == "track-1"
-    assert envelope["data"]["publicationId"] == "publication-1"
+    assert envelope["event"] == "playback.stopped"
+    data = envelope["data"]
+    assert data["subjectType"] == "publication"
+    assert data["subjectId"] == "publication-1"
+    assert data["publicationId"] == "publication-1"
+    assert data["trackContentId"] == "track-1"
+    assert "contentId" not in data
+
+
+@pytest.mark.asyncio
+async def test_playback_event_keeps_standalone_content_as_subject(mock_handler_input):
+    producer = EventProducerStub()
+    playback = Playback(
+        AlexaClient(),
+        events=OutboundEventService(producer=producer),
+    )
+    state = {
+        "contentId": "track-1",
+        "sessionId": "session-1",
+        "offsetMs": 120000,
+        "durationMs": 180000,
+        "listenedMs": 120000,
+    }
+
+    assert await playback.emit(mock_handler_input, "stopped", state)
+
+    data = producer.envelopes[0]["data"]
+    assert data["subjectType"] == "content"
+    assert data["subjectId"] == "track-1"
+    assert data["contentId"] == "track-1"
+    assert "publicationId" not in data
+    assert "trackContentId" not in data
 
 
 @pytest.mark.asyncio
@@ -195,6 +381,7 @@ async def test_follow_action_sends_source_event_after_local_update(mock_handler_
     envelope = producer.envelopes[0]
     assert envelope["event"] == "user.followed_organization"
     assert envelope["data"]["sourceId"] == "organization-1"
+    assert envelope["data"]["notificationSubjectType"] == "publication"
     assert User.snapshot(mock_handler_input)["followedCreators"] == [
         {
             "id": "organization-1",

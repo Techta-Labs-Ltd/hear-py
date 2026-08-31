@@ -69,7 +69,12 @@ class LaunchWorkflow:
 
     def _unfinished_response(self, handler_input: HandlerInput, store: dict):
         active = self._deps.playback.state.from_store(store) or {}
-        title = Speech.escape_ssml_lite(active.get("title") or "your recording")
+        title = Speech.escape_ssml_lite(
+            active.get("publicationTitle") or "that publication"
+            if active.get("subjectType") == "publication" or active.get("publicationId")
+            else active.get("title")
+            or "your recording"
+        )
         self._deps.user.update(handler_input, {"awaitingResume": True})
         DialogStateManager.activate(handler_input, "resume", context=active)
         return (

@@ -22,6 +22,22 @@ class EventUtils:
         }
 
     @staticmethod
+    def sqs_message_attributes(envelope: dict) -> dict:
+        data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+        values = {
+            "eventType": envelope.get("event"),
+            "subjectType": data.get("subjectType"),
+            "subjectId": data.get("subjectId"),
+            "publicationId": data.get("publicationId"),
+            "notificationSubjectType": data.get("notificationSubjectType"),
+        }
+        return {
+            key: {"DataType": "String", "StringValue": str(value)}
+            for key, value in values.items()
+            if value is not None and str(value).strip()
+        }
+
+    @staticmethod
     def compact(values: dict) -> dict:
         return {key: value for key, value in values.items() if value is not None}
 
@@ -33,15 +49,10 @@ class EventUtils:
         pending: dict,
         value: str,
     ) -> dict | None:
-        publication_id = pending.get("publicationId")
-        content_id = pending.get("contentId")
-        is_publication = pending.get("subjectType") == EventConstants.PUBLICATION and bool(
-            publication_id
-        )
-        subject_type = EventConstants.PUBLICATION if is_publication else EventConstants.CONTENT
-        subject_id = publication_id if is_publication else content_id
-        if not subject_id:
+        subject = EventUtils._feedback_subject(pending)
+        if not subject:
             return None
+        subject_type, subject_id, is_publication = subject
         recorded_at = EventUtils.timestamp_ms()
         payload = EventUtils.compact(
             {
@@ -58,6 +69,11 @@ class EventUtils:
                 "organizationName": pending.get("organizationName"),
                 "category": pending.get("category"),
                 "listenedMs": pending.get("listenedMs"),
+                "timeSpentMs": pending.get("timeSpentMs"),
+                "timeSpentHours": pending.get("timeSpentHours"),
+                "trackListening": pending.get("trackListening")
+                if is_publication
+                else None,
                 "feedback": str(value),
                 "coverage": pending.get("coverage"),
                 "expectedTrackCount": pending.get("expectedTrackCount"),
@@ -68,20 +84,40 @@ class EventUtils:
                 ),
             }
         )
-        if is_publication:
-            payload["publicationId"] = str(publication_id)
-            payload["contentIds"] = list(
-                dict.fromkeys(
-                    str(item)
-                    for item in pending.get("contentIds") or []
-                    if item is not None and str(item).strip()
-                )
-            )
-        else:
-            payload["contentId"] = str(content_id)
-            if publication_id:
-                payload["parentPublicationId"] = str(publication_id)
+        payload.update(EventUtils._feedback_scope_fields(pending, is_publication))
         return payload
+
+    @staticmethod
+    def _feedback_subject(pending: dict) -> tuple[str, str, bool] | None:
+        publication_id = pending.get("publicationId")
+        content_id = pending.get("contentId")
+        is_publication = pending.get("subjectType") == EventConstants.PUBLICATION and bool(
+            publication_id
+        )
+        subject_type = EventConstants.PUBLICATION if is_publication else EventConstants.CONTENT
+        subject_id = publication_id if is_publication else content_id
+        return (subject_type, str(subject_id), is_publication) if subject_id else None
+
+    @staticmethod
+    def _feedback_scope_fields(pending: dict, is_publication: bool) -> dict:
+        publication_id = pending.get("publicationId")
+        if is_publication:
+            return {
+                "publicationId": str(publication_id),
+                "contentIds": list(
+                    dict.fromkeys(
+                        str(item)
+                        for item in pending.get("contentIds") or []
+                        if item is not None and str(item).strip()
+                    )
+                ),
+            }
+        return EventUtils.compact(
+            {
+                "contentId": str(pending["contentId"]),
+                "parentPublicationId": str(publication_id) if publication_id else None,
+            }
+        )
 
     @staticmethod
     def webhook_headers(

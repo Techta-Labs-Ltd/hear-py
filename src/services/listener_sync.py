@@ -7,6 +7,7 @@ from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.clients.hear import HearApiClient
 from src.models.user import User
+from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class ListenerSyncSupport:
@@ -21,10 +22,15 @@ class ListenerSyncSupport:
         system = RequestContext.get_system_context(handler_input)
         request = getattr(handler_input.request_envelope, "request", None)
         device = getattr(system, "device", None)
+        recent_plays = [
+            normalized
+            for item in store.get("playHistory") or []
+            if (normalized := PlaybackHistoryUtils.normalize(item))
+        ][:20]
         recent = [
-            item.get("contentId")
-            for item in store.get("recentTrackListens") or store.get("history") or []
-            if isinstance(item, dict) and item.get("contentId")
+            item.get("subjectId") or item.get("publicationId") or item.get("contentId")
+            for item in recent_plays
+            if item.get("subjectId") or item.get("publicationId") or item.get("contentId")
         ]
         registered = bool(
             store.get("userEmail")
@@ -44,7 +50,7 @@ class ListenerSyncSupport:
             "playCount": int(store.get("playCount") or 0),
             "lastPlayedAt": store.get("lastPlayedAt"),
             "recentPlayedIds": list(dict.fromkeys(recent))[-20:],
-            "recentPlays": list(store.get("recentTrackListens") or [])[-20:],
+            "recentPlays": recent_plays,
         }
         if registered:
             profile.update(

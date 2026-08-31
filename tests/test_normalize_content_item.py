@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+from src.clients.hear import HearApiClient
 from src.utils.content_normalizer import ContentNormalizer
 
 
@@ -92,3 +95,83 @@ def test_publication_tracks_are_flattened_with_parent_metadata():
     assert renormalized[0]["creatorName"] == "Reader One"
     assert renormalized[0]["organizationName"] == "York Talking News"
     assert renormalized[0]["publicationId"] == "publication-1"
+
+
+def test_publication_id_filter_supplies_missing_publication_identity():
+    raw = {
+        "contentId": "container-1",
+        "title": "Weekly publication",
+        "tracks": [
+            {
+                "contentId": "track-1",
+                "title": "First track",
+                "audioUrl": "https://cdn.hear.media/track-1.mp3",
+            },
+            {
+                "contentId": "track-2",
+                "title": "Second track",
+                "audioUrl": "https://cdn.hear.media/track-2.mp3",
+            },
+        ],
+    }
+
+    result = HearApiClient._normalize_search_response(
+        {"results": [raw]},
+        {"filter": {"publicationIds": ["publication-1"]}},
+    )
+
+    assert [item["contentId"] for item in result["results"]] == ["track-1", "track-2"]
+    assert all(item["subjectType"] == "publication" for item in result["results"])
+    assert all(item["publicationId"] == "publication-1" for item in result["results"])
+    assert all(item["publicationTitle"] == "Weekly publication" for item in result["results"])
+
+
+@pytest.mark.parametrize("is_publication", [True, None])
+def test_flat_publication_tracks_inherit_identity_only_from_filter(is_publication):
+    publication_id = "c9a03c82-394f-4e4c-822d-598169639395"
+    filters = {"publicationIds": [publication_id]}
+    if is_publication:
+        filters["isPublication"] = True
+    raw = [
+        {
+            "contentId": "track-1",
+            "title": "05_Glaucoma_UK_Survey",
+            "audioUrl": "https://cdn.hear.media/track-1.mp3",
+        },
+        {
+            "contentId": "track-2",
+            "title": "04_Mole_Valley_Life_Digital_Switch",
+            "audioUrl": "https://cdn.hear.media/track-2.mp3",
+        },
+    ]
+
+    result = HearApiClient._normalize_search_response(
+        {"results": raw, "page": 0, "limit": 20, "total": 5, "totalPages": 1},
+        {"filter": filters, "query": "", "sort": "trending"},
+    )
+
+    assert [item["contentId"] for item in result["results"]] == ["track-1", "track-2"]
+    assert all(item["publicationId"] == publication_id for item in result["results"])
+    assert all(item["subjectType"] == "publication" for item in result["results"])
+    assert all(item["subjectId"] == publication_id for item in result["results"])
+    assert all(item["publicationTitle"] is None for item in result["results"])
+    assert [item["trackIndex"] for item in result["results"]] == [0, 1]
+    assert all(item["trackCount"] == 5 for item in result["results"])
+
+
+def test_publication_filter_uses_container_id_as_publication_identity():
+    raw = {
+        "contentId": "publication-1",
+        "title": "Weekly publication",
+        "audioUrl": "https://cdn.hear.media/publication-1.mp3",
+    }
+
+    result = HearApiClient._normalize_search_response(
+        {"results": [raw]},
+        {"filter": {"isPublication": True}},
+    )
+
+    item = result["results"][0]
+    assert item["contentId"] == "publication-1"
+    assert item["publicationId"] == "publication-1"
+    assert item["isPublication"] is True

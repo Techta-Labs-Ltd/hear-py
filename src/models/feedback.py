@@ -7,7 +7,9 @@ from src.models.dialog import DialogStateManager
 from src.models.user import User
 from src.services.alexa_reminder import AlexaReminderService
 from src.services.events import OutboundEventService
+from src.utils.content import ContentIdentity
 from src.utils.playback import PlaybackUtils
+from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class FeedbackService:
@@ -116,7 +118,7 @@ class FeedbackService:
 
     @staticmethod
     def _feedback_key(state: dict) -> str | None:
-        return state.get("contentId")
+        return ContentIdentity.subject_key(state)
 
     @staticmethod
     def _candidate_recency(candidate: dict | None) -> int:
@@ -169,6 +171,59 @@ class FeedbackService:
         return (coverage, meaningful)
 
     @staticmethod
+    def publication_track_listening(progress: dict) -> list[dict]:
+        tracks = (progress.get("tracks") or {}) if isinstance(progress, dict) else {}
+        return [
+            {
+                "contentId": str(content_id),
+                "trackIndex": track.get("trackIndex"),
+                "durationMs": FeedbackService._safe_int(track.get("durationMs")),
+                "listenedMs": FeedbackService._safe_int(track.get("listenedMs")),
+                "timeSpentMs": FeedbackService._safe_int(track.get("timeSpentMs")),
+                "timeSpentHours": PlaybackUtils.hours(track.get("timeSpentMs")),
+                "completed": bool(track.get("completed")),
+            }
+            for content_id, track in tracks.items()
+            if isinstance(track, dict)
+        ]
+
+    @staticmethod
+    def publication_listening_metrics(store: dict, publication_id: str) -> dict:
+        progress = (store.get("publicationFeedbackProgress") or {}).get(
+            str(publication_id)
+        )
+        candidates = [
+            store.get("pendingFeedback"),
+            *(store.get("feedbackCandidates") or []),
+        ]
+        if not isinstance(progress, dict):
+            progress = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if isinstance(candidate, dict)
+                    and str(candidate.get("publicationId") or "")
+                    == str(publication_id)
+                ),
+                {},
+            )
+        track_listening = progress.get("trackListening")
+        if not isinstance(track_listening, list):
+            track_listening = FeedbackService.publication_track_listening(progress)
+        time_spent = FeedbackService._safe_int(progress.get("timeSpentMs"))
+        if not time_spent:
+            time_spent = sum(
+                FeedbackService._safe_int(track.get("timeSpentMs"))
+                for track in track_listening
+                if isinstance(track, dict)
+            )
+        return {
+            "publicationTimeSpentMs": time_spent,
+            "publicationTimeSpentHours": PlaybackUtils.hours(time_spent),
+            "trackListening": track_listening,
+        }
+
+    @staticmethod
     def update_publication_progress(
         handler_input, state: dict, *, completed: bool = False
     ) -> dict | None:
@@ -196,7 +251,15 @@ class FeedbackService:
             )
         tracks = dict(current.get("tracks") or {})
         existing_track = dict(tracks.get(str(content_id)) or {})
+        sessions = PlaybackHistoryUtils.session_ledger(existing_track, state)
+        track_time_spent = PlaybackHistoryUtils.accumulated_time(
+            existing_track,
+            state,
+            sessions,
+        )
         tracks[str(content_id)] = {
+            "contentId": str(content_id),
+            "trackIndex": state.get("trackIndex"),
             "listenedMs": max(
                 FeedbackService._safe_int(existing_track.get("listenedMs")),
                 FeedbackService._safe_int(state.get("listenedMs")),
@@ -206,8 +269,16 @@ class FeedbackService:
                 FeedbackService._safe_int(state.get("durationMs")),
             ),
             "completed": bool(existing_track.get("completed") or completed),
+            "timeSpentMs": track_time_spent,
+            "timeSpentHours": PlaybackUtils.hours(track_time_spent),
+            "sessions": sessions,
         }
         tracks = dict(list(tracks.items())[-100:])
+        publication_time_spent = sum(
+            FeedbackService._safe_int(track.get("timeSpentMs"))
+            for track in tracks.values()
+            if isinstance(track, dict)
+        )
         progress = {
             **current,
             "publicationId": str(publication_id),
@@ -225,6 +296,8 @@ class FeedbackService:
                 FeedbackService._safe_int(current.get("latestPlaybackStartedAt")),
                 FeedbackService._safe_int(state.get("startedAt")),
             ),
+            "timeSpentMs": publication_time_spent,
+            "timeSpentHours": PlaybackUtils.hours(publication_time_spent),
             "tracks": tracks,
             "updatedAt": int(time.time() * 1000),
         }
@@ -289,6 +362,11 @@ class FeedbackService:
                 if isinstance(track, dict)
             )
         )
+        track_listening = FeedbackService.publication_track_listening(progress)
+        time_spent_ms = sum(
+            FeedbackService._safe_int(track.get("timeSpentMs"))
+            for track in track_listening
+        )
         candidate = {
             "feedbackKey": key,
             "subjectType": "publication",
@@ -305,6 +383,9 @@ class FeedbackService:
             "expectedTrackCount": expected,
             "meaningfulTrackCount": meaningful,
             "listenedMs": listened_ms,
+            "timeSpentMs": time_spent_ms,
+            "timeSpentHours": PlaybackUtils.hours(time_spent_ms),
+            "trackListening": track_listening,
             "completed": True,
             "sessionId": key,
             "playbackStartedAt": FeedbackService._safe_int(progress.get("latestPlaybackStartedAt")),
@@ -361,6 +442,8 @@ class FeedbackService:
             "organizationName": state.get("organizationName"),
             "category": state.get("category"),
             "listenedMs": listened_ms,
+            "timeSpentMs": FeedbackService._safe_int(state.get("timeSpentMs")),
+            "timeSpentHours": PlaybackUtils.hours(state.get("timeSpentMs")),
             "completed": bool(completed),
             "sessionId": state.get("sessionId"),
             "playbackStartedAt": FeedbackService._safe_int(state.get("startedAt")),
@@ -449,6 +532,12 @@ class FeedbackService:
                 "creatorId": pending.get("creatorId"),
                 "organizationId": pending.get("organizationId"),
                 "coverage": pending.get("coverage"),
+                "listenedMs": pending.get("listenedMs"),
+                "timeSpentMs": pending.get("timeSpentMs"),
+                "timeSpentHours": pending.get("timeSpentHours"),
+                "trackListening": pending.get("trackListening")
+                if subject_type == "publication"
+                else None,
                 "recordedAt": int(time.time() * 1000),
             }
         )

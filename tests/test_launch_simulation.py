@@ -120,6 +120,29 @@ class TestIsNewUser:
     def test_with_onboarding_complete_is_not_new(self):
         assert OnboardingPolicy._is_new_user({"onboardingComplete": True}) is False
 
+    def test_resume_prompt_names_publication_not_current_track(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "track-2",
+                    "title": "Second track",
+                    "publicationId": "publication-1",
+                    "publicationTitle": "Weekly publication",
+                    "subjectType": "publication",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "Weekly publication" in speech
+        assert "Second track" not in speech
+
 
 class TestSpeechStrings:
     def test_onboarding_ask_permission(self):

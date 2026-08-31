@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from src.utils.content import ContentUtils
+from src.utils.content import ContentIdentity, ContentUtils
 
 
 class ContentNormalizer:
@@ -65,7 +65,11 @@ class ContentNormalizer:
         publication_id, publication_title = ContentNormalizer._extract_named_entity(
             item, "publication"
         )
-        is_publication = bool(item.get("isPublication") or item.get("type") == "publication")
+        is_publication = bool(
+            publication_id
+            or item.get("isPublication")
+            or item.get("type") == "publication"
+        )
         publication_id = (
             ContentUtils.nullable_string(item.get("publicationId"))
             or publication_id
@@ -74,10 +78,14 @@ class ContentNormalizer:
         publication_title = (
             ContentUtils.repair_mojibake(item.get("publicationTitle"))
             or publication_title
-            or (ContentUtils.repair_mojibake(item.get("title")) if is_publication else None)
+            or (
+                ContentUtils.repair_mojibake(item.get("title"))
+                if is_publication and publication_id == content_id
+                else None
+            )
         )
         duration_secs = ContentNormalizer._pick_duration_secs(item)
-        return {
+        normalized = {
             "contentId": content_id,
             "title": ContentUtils.repair_mojibake(item.get("title")),
             "displayTitle": ContentUtils.repair_mojibake(ContentUtils._pick_display_title(item)),
@@ -101,6 +109,9 @@ class ContentNormalizer:
             "durationMs": duration_secs * 1000 if duration_secs else None,
             "publishedAt": item.get("publishedAt"),
         }
+        normalized["subjectType"] = ContentIdentity.subject_type(normalized)
+        normalized["subjectId"] = ContentIdentity.subject_id(normalized)
+        return normalized
 
     @staticmethod
     def is_playable_content_item(item: dict) -> bool:
@@ -156,3 +167,58 @@ class ContentNormalizer:
                 expanded.append(merged)
         normalized = (ContentNormalizer.normalize_content_item(item) for item in expanded)
         return [i for i in normalized if ContentNormalizer.is_playable_content_item(i)]
+
+    @staticmethod
+    def apply_search_context(
+        items: list,
+        search_payload: dict | None,
+        response_data: dict | None = None,
+    ) -> list:
+        payload = search_payload if isinstance(search_payload, dict) else {}
+        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        response = response_data if isinstance(response_data, dict) else {}
+        raw_publication_ids = filters.get("publicationIds") or []
+        if isinstance(raw_publication_ids, str):
+            raw_publication_ids = [raw_publication_ids]
+        publication_ids = [
+            str(value).strip()
+            for value in raw_publication_ids
+            if str(value or "").strip()
+        ]
+        publication_only = bool(filters.get("isPublication"))
+        total = response.get("total")
+        total = int(total) if isinstance(total, (int, float)) and total > 0 else None
+        page = max(0, int(response.get("page") or payload.get("page") or 0))
+        limit = max(
+            1,
+            int(response.get("limit") or payload.get("limit") or len(items or []) or 1),
+        )
+        contextualized = []
+        for index, item in enumerate(items or []):
+            if not isinstance(item, dict):
+                continue
+            content = dict(item)
+            if len(publication_ids) == 1:
+                content["publicationId"] = content.get("publicationId") or publication_ids[0]
+                content["isPublication"] = True
+                content["type"] = content.get("type") or "publication_track"
+                content["trackIndex"] = content.get("trackIndex")
+                if content["trackIndex"] is None:
+                    content["trackIndex"] = page * limit + index
+                content["trackCount"] = content.get("trackCount") or total
+            elif content.get("contentId") in publication_ids:
+                content["publicationId"] = content.get("publicationId") or content.get(
+                    "contentId"
+                )
+                content["isPublication"] = True
+            elif publication_only:
+                content["publicationId"] = content.get("publicationId") or content.get("contentId")
+                content["isPublication"] = True
+            if (
+                content.get("isPublication")
+                and not content.get("publicationTitle")
+                and content.get("publicationId") == content.get("contentId")
+            ):
+                content["publicationTitle"] = content.get("title")
+            contextualized.append(content)
+        return contextualized

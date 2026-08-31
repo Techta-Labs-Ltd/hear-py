@@ -139,9 +139,14 @@ class HearApiClient:
         return status >= 500
 
     @staticmethod
-    def _normalize_search_response(data: dict) -> dict:
+    def _normalize_search_response(data: dict, search_payload: dict | None = None) -> dict:
         raw_results = data.get("results") or data.get("items") or []
-        results = ContentNormalizer.normalize_content_items(raw_results)
+        contextualized = ContentNormalizer.apply_search_context(
+            raw_results,
+            search_payload,
+            data,
+        )
+        results = ContentNormalizer.normalize_content_items(contextualized)
         return {
             "results": results,
             "total_hits": data.get("total")
@@ -197,7 +202,7 @@ class HearApiClient:
                 "Hear API search response attempt=%s status=%s", attempt + 1, status
             )
             if status == 200 and isinstance(data, dict):
-                return {**self._normalize_search_response(data), "failed": False}
+                return {**self._normalize_search_response(data, body), "failed": False}
             if attempt < self._retry_count and self._is_retryable(status):
                 await asyncio.sleep(settings.HEAR_API_RETRY_BACKOFF_MS / 1000.0 * 2**attempt)
             else:

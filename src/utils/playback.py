@@ -4,6 +4,7 @@ import re
 import time
 
 from config import settings
+from src.utils.content import ContentIdentity
 
 
 class PlaybackUtils:
@@ -103,26 +104,49 @@ class PlaybackUtils:
         return (hours * 3600 + minutes * 60 + seconds) * 1000
 
     @staticmethod
-    def normalize_history_entry(entry) -> dict | None:
-        if isinstance(entry, str):
-            return {"id": entry}
-        if isinstance(entry, dict) and entry.get("id"):
-            if entry.get("audioUrl"):
-                return {
-                    "id": str(entry["id"]),
-                    "title": entry.get("title"),
-                    "audioUrl": entry.get("audioUrl"),
-                    "durationSecs": entry.get("durationSecs") if "durationSecs" in entry else None,
-                    "tracks": entry.get("tracks") if entry.get("tracks") else None,
-                    "playback_speed": entry.get("playback_speed")
-                    if entry.get("playback_speed")
-                    else None,
-                    "creator": entry.get("creator"),
-                    "category": entry.get("category"),
-                    "summary": entry.get("summary"),
-                }
-            return {"id": str(entry["id"])}
-        return None
+    def hours(milliseconds) -> float:
+        return round(max(0, int(milliseconds or 0)) / 3600000, 6)
+
+    @staticmethod
+    def playback_observation(
+        state: dict,
+        *,
+        offset_ms: int,
+        observed_at_ms: int,
+        event_type: str,
+        status: str,
+    ) -> dict:
+        current_offset = max(0, int(offset_ms or 0))
+        previous_offset = max(
+            0,
+            int(
+                state.get("observationOffsetMs")
+                if state.get("observationOffsetMs") is not None
+                else state.get("offsetMs")
+                or 0
+            ),
+        )
+        previous_timestamp = max(0, int(state.get("observationTimestampMs") or 0))
+        offset_advance = max(0, current_offset - previous_offset)
+        elapsed = max(0, int(observed_at_ms or 0) - previous_timestamp)
+        countable = state.get("status") in {"starting", "playing"} and event_type != "started"
+        if not countable or offset_advance <= 0:
+            delta = 0
+        elif previous_timestamp > 0 and elapsed > 0:
+            delta = elapsed
+        else:
+            delta = offset_advance
+        time_spent = max(0, int(state.get("timeSpentMs") or 0)) + delta
+        return {
+            "status": status,
+            "offsetMs": current_offset,
+            "listenedMs": max(int(state.get("listenedMs") or 0), current_offset),
+            "timeSpentMs": time_spent,
+            "timeSpentHours": PlaybackUtils.hours(time_spent),
+            "lastListeningDeltaMs": delta,
+            "observationOffsetMs": current_offset,
+            "observationTimestampMs": max(0, int(observed_at_ms or 0)),
+        }
 
     @staticmethod
     def read_playback_queue(store: dict) -> dict | None:
@@ -144,22 +168,42 @@ class PlaybackUtils:
         listened = max(0, int(data.get("listenedMs") or 0))
         session_id = str(data["sessionId"])
         event_type = str(data["eventType"])
-        return {
-            "contentId": str(data["contentId"]),
+        publication_id = ContentIdentity.publication_id(data)
+        content_id = ContentIdentity.content_id(data)
+        subject_type = "publication" if publication_id else "content"
+        subject_id = publication_id or content_id
+        event = {
+            "subjectType": subject_type,
+            "subjectId": str(subject_id),
             "creatorId": data.get("creatorId"),
-            "publicationId": data.get("publicationId"),
             "queueId": data.get("queueId"),
             "sessionId": session_id,
+            "subjectSessionId": data.get("subjectSessionId") or session_id,
             "eventType": event_type,
             "positionMs": max(0, int(data.get("positionMs") or 0)),
             "durationMs": duration,
             "listenedMs": listened,
+            "timeSpentMs": max(0, int(data.get("timeSpentMs") or 0)),
+            "timeSpentHours": PlaybackUtils.hours(data.get("timeSpentMs")),
             "completionPercentage": min(100, round(listened / duration * 100))
             if duration > 0
             else None,
             "timestampMs": timestamp,
-            "clientEventId": f"{session_id}:{event_type}:{timestamp}",
+            "clientEventId": (
+                f"{data.get('subjectSessionId') or session_id}:{event_type}:{timestamp}"
+            ),
         }
+        if publication_id:
+            event["publicationId"] = publication_id
+            event["trackContentId"] = content_id
+            event["trackIndex"] = data.get("trackIndex")
+            event["trackCount"] = data.get("trackCount")
+            event["publicationTimeSpentMs"] = data.get("publicationTimeSpentMs")
+            event["publicationTimeSpentHours"] = data.get("publicationTimeSpentHours")
+            event["trackListening"] = data.get("trackListening")
+        else:
+            event["contentId"] = content_id
+        return event
 
     @staticmethod
     def normalize_playback_event(event: dict) -> dict:

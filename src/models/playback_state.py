@@ -9,10 +9,12 @@ from config import settings
 from src.alexa.request import AlexaRequest
 from src.constants.playback import PlaybackConstants
 from src.models.user import User
+from src.utils.content import ContentIdentity
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
 from src.utils.playback import PlaybackUtils
+from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class PlaybackStatus(StrEnum):
@@ -53,6 +55,14 @@ class PlaybackState:
         now = int(time.time() * 1000)
         event_timestamp = AlexaRequest.get_request_timestamp_ms(handler_input) or now
         content_id = content["contentId"]
+        subject_type = ContentIdentity.subject_type(content)
+        subject_id = ContentIdentity.subject_id(content)
+        track_session_id = f"{content_id}:{uuid.uuid4().hex}"
+        subject_session_id = (
+            f"publication:{subject_id}:{queue_id or uuid.uuid4().hex}"
+            if subject_type == "publication"
+            else track_session_id
+        )
         state = {
             "alexaUserId": alexa_user_id,
             "contentId": content_id,
@@ -67,6 +77,10 @@ class PlaybackState:
             "publicationId": content.get("publicationId"),
             "publicationTitle": content.get("publicationTitle"),
             "isPublication": bool(content.get("isPublication")),
+            "subjectType": subject_type,
+            "subjectId": subject_id,
+            "subjectTitle": ContentIdentity.subject_title(content),
+            "trackContentId": content_id if subject_type == "publication" else None,
             "trackIndex": content.get("trackIndex"),
             "trackCount": content.get("trackCount"),
             "category": content.get("category"),
@@ -76,7 +90,13 @@ class PlaybackState:
             "durationMs": content.get("durationMs"),
             "offsetMs": max(0, int(offset_ms or 0)),
             "listenedMs": 0,
-            "sessionId": f"{content_id}:{uuid.uuid4().hex}",
+            "timeSpentMs": 0,
+            "timeSpentHours": 0.0,
+            "lastListeningDeltaMs": 0,
+            "observationOffsetMs": max(0, int(offset_ms or 0)),
+            "observationTimestampMs": event_timestamp,
+            "sessionId": track_session_id,
+            "subjectSessionId": subject_session_id,
             "status": PlaybackStatus.STARTING.value,
             "startedAt": now,
             "updatedAt": now,
@@ -84,6 +104,34 @@ class PlaybackState:
         }
         self._user.update(handler_input, {"activePlayback": state})
         return state
+
+    def observe(
+        self,
+        handler_input,
+        *,
+        offset_ms: int,
+        event_type: str,
+        status: str,
+        completed: bool = False,
+    ) -> dict | None:
+        current = self.current(handler_input)
+        if not current:
+            return None
+        observed_at = AlexaRequest.get_request_timestamp_ms(handler_input) or int(
+            time.time() * 1000
+        )
+        changes = PlaybackUtils.playback_observation(
+            current,
+            offset_ms=offset_ms,
+            observed_at_ms=observed_at,
+            event_type=event_type,
+            status=status,
+        )
+        if completed:
+            duration_ms = max(0, int(current.get("durationMs") or 0))
+            changes["offsetMs"] = max(changes["offsetMs"], duration_ms)
+            changes["listenedMs"] = max(changes["listenedMs"], duration_ms)
+        return self.merge(handler_input, changes)
 
     def merge(self, handler_input, changes: dict) -> dict | None:
         if not isinstance(changes, dict):
@@ -293,6 +341,37 @@ class PlaybackQueue:
         return None
 
     @staticmethod
+    def apply_publication_context(
+        store: dict,
+        content: dict,
+        *,
+        queue_index: int | None = None,
+    ) -> dict:
+        queue = PlaybackQueue.read(store)
+        publication_id = queue.get("publicationId") if queue else None
+        if not publication_id or not isinstance(content, dict):
+            return content
+        contextualized = {
+            **content,
+            "publicationId": str(publication_id),
+            "publicationTitle": content.get("publicationTitle")
+            or queue.get("publicationTitle"),
+            "isPublication": True,
+            "type": "publication_track",
+            "subjectType": "publication",
+            "subjectId": str(publication_id),
+            "trackContentId": content.get("contentId"),
+            "trackCount": content.get("trackCount")
+            or queue.get("publicationTrackCount"),
+        }
+        if contextualized.get("trackIndex") is None:
+            index = queue_index
+            if index is None and content.get("contentId") in queue["orderedContentIds"]:
+                index = queue["orderedContentIds"].index(content["contentId"])
+            contextualized["trackIndex"] = index
+        return contextualized
+
+    @staticmethod
     def recent_content_ids(store: dict, limit: int | None = None) -> list:
         cap = limit or settings.HEAR_RECENT_EXCLUDE_LIMIT or settings.max_history or 20
         seen: set[str] = set()
@@ -310,9 +389,9 @@ class PlaybackQueue:
         push(active.get("contentId"))
         push(store.get("lastToken"))
         for entry in store.get("playHistory") or []:
-            n = PlaybackUtils.normalize_history_entry(entry)
-            if n:
-                push(n["id"])
+            n = PlaybackHistoryUtils.normalize(entry)
+            if n and n.get("subjectType") != "publication":
+                push(n.get("contentId") or n["id"])
             if len(out) >= cap:
                 return out[:cap]
         return out[:cap]

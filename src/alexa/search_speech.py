@@ -11,9 +11,11 @@ class SearchSpeech:
     def search_no_match(query) -> str:
         safe = Speech.escape_ssml_lite(query)
         return (
-            f"I couldn't find anything matching {safe}. Try another topic."
+            f"I couldn't find anything matching {safe}. Try saying play followed by "
+            "a different topic, creator, publication, or place."
             if safe
-            else "I couldn't find anything matching that. Try another topic."
+            else "I couldn't find anything matching that. Try saying play followed by "
+            "a topic, creator, publication, or place."
         )
 
     @staticmethod

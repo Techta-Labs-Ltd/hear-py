@@ -147,6 +147,12 @@ class ResolverResult:
             (entity for entity in self.entities_of_type(entity_type) if entity.confidence == 100)
         )
 
+    def selected_entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
+        entities = self.entities_of_type(entity_type)
+        if self.status == "resolved" and self.intent == entity_type:
+            return entities
+        return tuple(entity for entity in entities if entity.confidence == 100)
+
     def _ambiguity_payload(self) -> list[dict]:
         ambiguities = []
         for ambiguity in self.ambiguities:
@@ -178,13 +184,13 @@ class ResolverResult:
         }
         sources = []
         for entity_type, (ids_key, name_key) in facet_slots.items():
-            discovered = self.fully_matched_entities_of_type(entity_type)
+            discovered = self.selected_entities_of_type(entity_type)
             sources.extend(discovered)
             if discovered:
                 slots[ids_key] = [entity.entity_id for entity in discovered]
                 slots[name_key] = discovered[0].canonical_value
                 filters[ids_key] = list(slots[ids_key])
-        categories = self.fully_matched_entities_of_type("category")
+        categories = self.selected_entities_of_type("category")
         if categories:
             category_slugs = [entity.entity_id for entity in categories]
             slots.update(
@@ -195,8 +201,8 @@ class ResolverResult:
                 }
             )
             filters["categorySlugs"] = category_slugs
-        tags = self.fully_matched_entities_of_type("tag")
-        if not categories and len(tags) >= 2:
+        tags = self.selected_entities_of_type("tag")
+        if not categories and tags:
             slots["tags"] = [entity.entity_id for entity in tags]
             slots["tagNames"] = [entity.canonical_value for entity in tags]
             filters["tags"] = list(slots["tags"])
@@ -218,9 +224,18 @@ class ResolverResult:
         keys = ("city", "placeName", "countryCode", "latitude", "longitude", "isLocal")
         for key in keys:
             slots.pop(key, None)
-        all_locations = (
-            () if self.intent == "category" else self.fully_matched_entities_of_type("location")
-        )
+        if self.intent == "category":
+            all_locations = ()
+        elif self.intent == "location":
+            all_locations = self.selected_entities_of_type("location")
+        elif prefer_location:
+            all_locations = self.fully_matched_entities_of_type("location")
+        else:
+            all_locations = tuple(
+                entity
+                for entity in self.fully_matched_entities_of_type("location")
+                if entity.location_role and entity.location_role != "unspecified"
+            )
         locations = (
             all_locations
             if prefer_location
@@ -266,7 +281,7 @@ class ResolverResult:
         )
         return {"match": match, "candidates": []}
 
-    def _search_plan(self, slots: dict, filters: dict) -> dict:
+    def _search_plan(self, slots: dict, filters: dict, original_utterance: str) -> dict:
         for key in ("publishedFrom", "publishedTo"):
             if slots.get(key) is not None:
                 filters[key] = slots[key]
@@ -283,6 +298,14 @@ class ResolverResult:
         }
         for key, value in defaults.items():
             slots.setdefault(key, value)
+        if (
+            not filters
+            and not str(slots.get("residualQuery") or "").strip()
+            and self.intent in {"search", "tag", "location"}
+        ):
+            fallback_query = ResolverResult._fallback_query(original_utterance)
+            if fallback_query:
+                slots["residualQuery"] = fallback_query
         return SearchFilterUtils.normalize_search_payload(
             {
                 "query": slots["residualQuery"],
@@ -291,23 +314,41 @@ class ResolverResult:
             }
         )
 
-    def to_alexa_payload(self, *, prefer_location: bool = False) -> dict[str, Any]:
+    def to_alexa_payload(
+        self, *, prefer_location: bool = False, original_utterance: str = ""
+    ) -> dict[str, Any]:
         slots = dict(self.slots)
         ambiguities = self._ambiguity_payload()
         filters, sources = self._facet_payload(slots)
         resolution = self._location_payload(slots, filters, sources, prefer_location)
         slots["ambiguousReferences"] = list(ambiguities)
-        search_plan = self._search_plan(slots, filters)
+        search_plan = self._search_plan(slots, filters, original_utterance)
         slots["searchPlan"] = search_plan
+        accepted_entities = {
+            (entity.entity_type, entity.entity_id)
+            for entity_type in ("creator", "organization", "publication", "category", "tag")
+            for entity in self.selected_entities_of_type(entity_type)
+            if (
+                entity.entity_type != "tag"
+                or not self.selected_entities_of_type("category")
+            )
+        }
+        if resolution.get("match"):
+            accepted_entities.update(
+                (entity.entity_type, entity.entity_id)
+                for entity in self.selected_entities_of_type("location")
+                if entity.canonical_value == resolution["match"].get("city")
+            )
         entities = [
             entity.to_payload()
             for entity in self.entities
-            if entity.confidence == 100
-            and not (self.intent == "category" and entity.entity_type == "location")
+            if (entity.entity_type, entity.entity_id) in accepted_entities
         ]
+        intent = "search" if self.intent in {"tag", "location"} else self.intent
         return {
             "status": self.status,
-            "intent": self.intent,
+            "intent": intent,
+            "resolverIntent": self.intent,
             "entities": entities,
             "slots": slots,
             "ambiguities": list(ambiguities),
@@ -316,6 +357,16 @@ class ResolverResult:
             "confidence": "high",
             "searchPayload": search_plan,
         }
+
+    @staticmethod
+    def _fallback_query(original_utterance: str) -> str:
+        query = str(original_utterance or "").strip()
+        for _ in range(4):
+            stripped = SearchFilterUtils.strip_conversational_topic_prefix(query)
+            if stripped == query:
+                break
+            query = stripped
+        return SearchFilterUtils.strip_search_sort_prefix(query)
 
     @staticmethod
     def _optional_float(value: Any) -> float | None:

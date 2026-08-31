@@ -6,6 +6,9 @@ from copy import deepcopy
 from config import settings
 from src.constants.persistence import PersistenceConstants
 from src.constants.state import StateSchema
+from src.utils.content import ContentIdentity
+from src.utils.playback import PlaybackUtils
+from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class UserStateNormalizer:
@@ -217,6 +220,43 @@ class User:
                 "startedAt": int(time.time() * 1000),
                 "updatedAt": int(time.time() * 1000),
             }
+        active = store.get("activePlayback")
+        if isinstance(active, dict) and active.get("contentId"):
+            active["subjectType"] = ContentIdentity.subject_type(active)
+            active["subjectId"] = ContentIdentity.subject_id(active)
+            active["subjectTitle"] = ContentIdentity.subject_title(active)
+            active["trackContentId"] = (
+                active.get("contentId") if ContentIdentity.is_publication(active) else None
+            )
+            active["subjectSessionId"] = active.get("subjectSessionId") or active.get(
+                "sessionId"
+            )
+            active["timeSpentMs"] = max(
+                0,
+                int(active.get("timeSpentMs") or active.get("listenedMs") or 0),
+            )
+            active["timeSpentHours"] = PlaybackUtils.hours(active["timeSpentMs"])
+            active["lastListeningDeltaMs"] = max(
+                0, int(active.get("lastListeningDeltaMs") or 0)
+            )
+            active["observationOffsetMs"] = max(
+                0,
+                int(
+                    active.get("observationOffsetMs")
+                    if active.get("observationOffsetMs") is not None
+                    else active.get("offsetMs")
+                    or 0
+                ),
+            )
+            active["observationTimestampMs"] = max(
+                0,
+                int(
+                    active.get("observationTimestampMs")
+                    or active.get("eventTimestamp")
+                    or active.get("updatedAt")
+                    or 0
+                ),
+            )
         legacy_queue = store.get("upcomingQueue")
         if not store.get("playbackQueue") and isinstance(legacy_queue, list):
             content_ids = [
@@ -280,6 +320,11 @@ class User:
         merged["publicationFeedbackProgress"] = UserStateNormalizer.publication_progress(
             merged.get("publicationFeedbackProgress")
         )
+        merged["playHistory"] = [
+            normalized
+            for item in merged.get("playHistory") or []
+            if (normalized := PlaybackHistoryUtils.normalize(item))
+        ][: settings.max_history]
         for history_key in ("feedbackHistory", "reportHistory"):
             merged[history_key] = UserStateNormalizer.history(merged.get(history_key))
         UserStateNormalizer.feedback(merged)

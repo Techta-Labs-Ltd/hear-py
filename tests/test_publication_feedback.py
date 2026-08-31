@@ -120,6 +120,69 @@ def test_duplicate_and_out_of_order_progress_uses_maximum_per_track(mock_handler
     assert len(progress["tracks"]) == 1
 
 
+def test_publication_hours_sum_each_track_session_without_double_counting(
+    mock_handler_input,
+):
+    _store(mock_handler_input)
+    first = {
+        **_state(0, listened=60000),
+        "sessionId": "track-0-session-1",
+        "timeSpentMs": 1800000,
+    }
+    FeedbackService.update_publication_progress(mock_handler_input, first)
+    FeedbackService.update_publication_progress(mock_handler_input, first)
+    FeedbackService.update_publication_progress(
+        mock_handler_input,
+        {
+            **_state(0, listened=60000),
+            "sessionId": "track-0-session-2",
+            "timeSpentMs": 900000,
+        },
+    )
+    progress = FeedbackService.update_publication_progress(
+        mock_handler_input,
+        {
+            **_state(1, listened=60000),
+            "sessionId": "track-1-session-1",
+            "timeSpentMs": 900000,
+        },
+    )
+
+    assert progress["tracks"]["track-0"]["timeSpentMs"] == 2700000
+    assert progress["tracks"]["track-0"]["timeSpentHours"] == 0.75
+    assert progress["tracks"]["track-1"]["timeSpentMs"] == 900000
+    assert progress["timeSpentMs"] == 3600000
+    assert progress["timeSpentHours"] == 1.0
+    metrics = FeedbackService.publication_listening_metrics(
+        mock_handler_input.attributes_manager.request_attributes["_store"],
+        "publication-1",
+    )
+    assert metrics["publicationTimeSpentHours"] == 1.0
+    assert [track["contentId"] for track in metrics["trackListening"]] == [
+        "track-0",
+        "track-1",
+    ]
+
+
+def test_publication_total_survives_bounded_session_ledger(mock_handler_input):
+    _store(mock_handler_input)
+    progress = None
+    for index in range(25):
+        progress = FeedbackService.update_publication_progress(
+            mock_handler_input,
+            {
+                **_state(0, listened=60000),
+                "sessionId": f"track-0-session-{index}",
+                "timeSpentMs": 60000,
+            },
+        )
+
+    track = progress["tracks"]["track-0"]
+    assert len(track["sessions"]) == 20
+    assert track["timeSpentMs"] == 1500000
+    assert progress["timeSpentMs"] == 1500000
+
+
 def test_publication_track_never_creates_individual_candidate_mid_queue(
     mock_handler_input,
 ):

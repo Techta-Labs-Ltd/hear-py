@@ -127,6 +127,38 @@ def test_guest_sync_excludes_protected_profile_and_location_fields():
     }.intersection(payload)
 
 
+def test_listener_sync_uses_publication_history_subject_instead_of_track():
+    handler_input = _handler_input()
+    store = User.snapshot(handler_input)
+    store["playHistory"] = [
+        {
+            "contentId": "track-2",
+            "publicationId": "publication-1",
+            "publicationTitle": "Weekly publication",
+            "audioUrl": "https://cdn.hear.media/track-2.mp3",
+            "trackIndex": 1,
+            "trackCount": 2,
+            "timeSpentMs": 2700000,
+            "timeSpentHours": 0.75,
+            "tracks": {
+                "track-1": {"contentId": "track-1", "timeSpentMs": 1800000},
+                "track-2": {"contentId": "track-2", "timeSpentMs": 900000},
+            },
+        }
+    ]
+
+    payload = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
+
+    assert payload["recentPlayedIds"] == ["publication-1"]
+    assert payload["recentPlays"][0]["subjectType"] == "publication"
+    assert payload["recentPlays"][0]["subjectId"] == "publication-1"
+    assert payload["recentPlays"][0]["trackContentId"] == "track-2"
+    assert payload["recentPlays"][0]["timeSpentMs"] == 2700000
+    assert payload["recentPlays"][0]["timeSpentHours"] == 0.75
+    assert payload["recentPlays"][0]["tracks"]["track-1"]["timeSpentMs"] == 1800000
+    assert "contentId" not in payload["recentPlays"][0]
+
+
 def test_environment_specific_permission_guidance(monkeypatch):
     monkeypatch.setattr("src.models.permission.settings.STAGE", "production")
     assert "Hear service" in PermissionPolicy.app_guidance()

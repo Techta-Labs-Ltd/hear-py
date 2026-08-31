@@ -35,10 +35,12 @@ class SqsEventClient:
         try:
             if self._client is None:
                 self._client = boto3.client("sqs", region_name=self._region)
-            response = self._client.send_message(
-                QueueUrl=self._queue_url,
-                MessageBody=json.dumps(envelope, separators=(",", ":")),
-            )
+            message = {
+                "QueueUrl": self._queue_url,
+                "MessageBody": json.dumps(envelope, separators=(",", ":")),
+                "MessageAttributes": EventUtils.sqs_message_attributes(envelope),
+            }
+            response = self._client.send_message(**message)
             return bool(response.get("MessageId"))
         except Exception:
             self.logger.exception(

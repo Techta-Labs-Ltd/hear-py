@@ -240,6 +240,123 @@ async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypatch):
+    publication_id = "c9a03c82-394f-4e4c-822d-598169639395"
+    track_id = SECOND_CONTENT_ID
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": "publication",
+            "publicationId": publication_id,
+            "publicationTitle": None,
+            "publicationTrackCount": 5,
+            "orderedContentIds": [CONTENT_ID, track_id, THIRD_CONTENT_ID],
+            "currentIndex": 1,
+        },
+        "activePlayback": {
+            **_playback_state(status="playing", offset_ms=12000),
+            "contentId": track_id,
+            "token": track_id,
+            "title": "04_Mole_Valley_Life_Digital_Switch",
+            "publicationId": publication_id,
+            "publicationTitle": None,
+            "subjectType": "publication",
+            "subjectId": publication_id,
+            "trackContentId": track_id,
+            "trackIndex": 1,
+            "trackCount": 5,
+            "sessionId": f"{track_id}:session",
+            "subjectSessionId": f"publication:{publication_id}:queue-1",
+            "audioUrl": f"https://cdn.hear.media/audio/{track_id}.mp3",
+        },
+    }
+    search = _fake_search([_queued_content(THIRD_CONTENT_ID, "Next publication track")])
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
+    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStopped",
+                "token": track_id,
+                "offsetInMilliseconds": 73000,
+            }
+        ),
+        None,
+    )
+
+    paused = persistence._store[USER_ID]["activePlayback"]
+    assert paused["status"] == "paused"
+    assert paused["contentId"] == track_id
+    assert paused["trackContentId"] == track_id
+    assert paused["subjectId"] == publication_id
+    assert paused["offsetMs"] == 73000
+
+    launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
+    assert "that publication" in launch["response"]["outputSpeech"]["ssml"]
+    assert persistence._store[USER_ID]["awaitingResume"] is True
+
+    resumed = await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    stream = resumed["response"]["directives"][0]["audioItem"]["stream"]
+    assert stream["token"] == track_id
+    assert stream["offsetInMilliseconds"] == 73000
+    active = persistence._store[USER_ID]["activePlayback"]
+    assert active["subjectType"] == "publication"
+    assert active["subjectId"] == publication_id
+    assert active["trackContentId"] == track_id
+
+    enqueued = await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackNearlyFinished",
+                "token": track_id,
+                "offsetInMilliseconds": 170000,
+            }
+        ),
+        None,
+    )
+    next_stream = enqueued["response"]["directives"][0]["audioItem"]["stream"]
+    assert next_stream["token"] == THIRD_CONTENT_ID
+    prepared = persistence._store[USER_ID]["preparedNextContent"]
+    assert prepared["publicationId"] == publication_id
+    assert prepared["subjectType"] == "publication"
+    assert prepared["trackContentId"] == THIRD_CONTENT_ID
+    assert prepared["trackIndex"] == 2
+    assert prepared["trackCount"] == 5
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStarted",
+                "token": THIRD_CONTENT_ID,
+                "offsetInMilliseconds": 0,
+            }
+        ),
+        None,
+    )
+
+    continued = persistence._store[USER_ID]["activePlayback"]
+    assert continued["contentId"] == THIRD_CONTENT_ID
+    assert continued["publicationId"] == publication_id
+    assert continued["subjectId"] == publication_id
+    assert continued["trackContentId"] == THIRD_CONTENT_ID
+    assert continued["trackIndex"] == 2
+    assert continued["trackCount"] == 5
+
+
+@pytest.mark.asyncio
 async def test_resume_no_abandons_playback_and_offers_next_listening_options():
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
@@ -717,6 +834,53 @@ async def test_duplicate_playback_event_is_idempotent(monkeypatch):
     await skill.invoke(event, None)
     assert persistence._store[USER_ID]["activePlayback"]["offsetMs"] == 20000
     assert emit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_listening_time_uses_event_elapsed_time_and_does_not_count_seeks(
+    monkeypatch,
+):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": {
+            **_playback_state(status="starting", offset_ms=0),
+            "timeSpentMs": 0,
+            "observationOffsetMs": 0,
+            "observationTimestampMs": 0,
+        },
+    }
+    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
+    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+
+    events = [
+        ("AudioPlayer.PlaybackStarted", "2026-07-29T12:00:00Z", 0),
+        ("AudioPlayer.PlaybackProgressReportIntervalPassed", "2026-07-29T12:00:30Z", 30000),
+        ("AudioPlayer.PlaybackProgressReportIntervalPassed", "2026-07-29T12:00:35Z", 120000),
+        ("AudioPlayer.PlaybackProgressReportIntervalPassed", "2026-07-29T12:00:40Z", 60000),
+        ("AudioPlayer.PlaybackProgressReportIntervalPassed", "2026-07-29T12:00:50Z", 70000),
+    ]
+    for index, (request_type, timestamp, offset) in enumerate(events):
+        await skill.invoke(
+            _event(
+                {
+                    "type": request_type,
+                    "requestId": f"elapsed-listening-{index}",
+                    "timestamp": timestamp,
+                    "token": CONTENT_ID,
+                    "offsetInMilliseconds": offset,
+                }
+            ),
+            None,
+        )
+
+    state = persistence._store[USER_ID]["activePlayback"]
+    assert state["listenedMs"] == 120000
+    assert state["timeSpentMs"] == 45000
+    assert state["timeSpentHours"] == 0.0125
+    history = persistence._store[USER_ID]["playHistory"][0]
+    assert history["timeSpentMs"] == 45000
+    assert history["sessions"][state["sessionId"]]["timeSpentMs"] == 45000
 
 
 @pytest.mark.asyncio

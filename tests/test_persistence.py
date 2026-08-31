@@ -6,7 +6,7 @@ from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.middleware.persistence import SavePersistenceInterceptor
 from src.models.browse import Browse
-from src.models.playback import Playback
+from src.models.playback_history import PlaybackHistory
 from src.models.playback_state import PlaybackQueue
 from src.models.social import FollowingManager
 from src.models.user import User
@@ -110,8 +110,183 @@ class TestPersistence:
         mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
             StateSchema.DEFAULT_STORE
         )
-        store = Playback.add_to_history(mock_handler_input, "content_001")
+        store = PlaybackHistory.add(mock_handler_input, "content_001")
         assert any((h["id"] == "content_001" for h in store["playHistory"]))
+
+    def test_publication_history_is_one_subject_with_latest_track_cursor(
+        self, mock_handler_input
+    ):
+        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
+            StateSchema.DEFAULT_STORE
+        )
+        first = {
+            "contentId": "track-1",
+            "publicationId": "publication-1",
+            "publicationTitle": "Weekly publication",
+            "audioUrl": "https://cdn.hear.media/track-1.mp3",
+            "trackIndex": 0,
+            "trackCount": 2,
+        }
+        second = {
+            **first,
+            "contentId": "track-2",
+            "audioUrl": "https://cdn.hear.media/track-2.mp3",
+            "trackIndex": 1,
+        }
+
+        PlaybackHistory.add(mock_handler_input, first)
+        store = PlaybackHistory.add(mock_handler_input, second)
+
+        assert len(store["playHistory"]) == 1
+        entry = store["playHistory"][0]
+        assert entry["id"] == "publication-1"
+        assert entry["subjectType"] == "publication"
+        assert entry["subjectId"] == "publication-1"
+        assert entry["trackContentId"] == "track-2"
+        assert "contentId" not in entry
+
+    def test_standalone_history_remains_individual_content(self, mock_handler_input):
+        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
+            StateSchema.DEFAULT_STORE
+        )
+        PlaybackHistory.add(
+            mock_handler_input,
+            {
+                "contentId": "track-1",
+                "audioUrl": "https://cdn.hear.media/track-1.mp3",
+            },
+        )
+        store = PlaybackHistory.add(
+            mock_handler_input,
+            {
+                "contentId": "track-2",
+                "audioUrl": "https://cdn.hear.media/track-2.mp3",
+            },
+        )
+
+        assert [entry["subjectId"] for entry in store["playHistory"]] == [
+            "track-2",
+            "track-1",
+        ]
+        assert all(entry["subjectType"] == "content" for entry in store["playHistory"])
+
+    def test_publication_history_sums_track_sessions_and_keeps_track_breakdown(
+        self, mock_handler_input
+    ):
+        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
+            StateSchema.DEFAULT_STORE
+        )
+        first = {
+            "contentId": "track-1",
+            "publicationId": "publication-1",
+            "publicationTitle": "Weekly publication",
+            "sessionId": "session-1",
+            "trackIndex": 0,
+            "trackCount": 2,
+            "offsetMs": 1800000,
+            "listenedMs": 1800000,
+            "timeSpentMs": 1800000,
+        }
+        second = {
+            **first,
+            "contentId": "track-2",
+            "sessionId": "session-2",
+            "trackIndex": 1,
+            "offsetMs": 900000,
+            "listenedMs": 900000,
+            "timeSpentMs": 900000,
+        }
+
+        PlaybackHistory.update(mock_handler_input, first)
+        store = PlaybackHistory.update(mock_handler_input, second)
+        history = store["playHistory"][0]
+
+        assert history["subjectId"] == "publication-1"
+        assert history["tracks"]["track-1"]["timeSpentMs"] == 1800000
+        assert history["tracks"]["track-2"]["timeSpentMs"] == 900000
+        assert history["timeSpentMs"] == 2700000
+        assert history["timeSpentHours"] == 0.75
+
+    def test_publication_track_transition_keeps_subject_session_and_updates_cursor(
+        self, mock_handler_input
+    ):
+        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
+            StateSchema.DEFAULT_STORE
+        )
+        tracks = [
+            {
+                "contentId": "track-1",
+                "publicationId": "publication-1",
+                "publicationTitle": "Weekly publication",
+                "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                "trackIndex": 0,
+                "trackCount": 2,
+            },
+            {
+                "contentId": "track-2",
+                "publicationId": "publication-1",
+                "publicationTitle": "Weekly publication",
+                "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                "trackIndex": 1,
+                "trackCount": 2,
+            },
+        ]
+        playback = ApplicationContainer().playback
+
+        first = playback.start_session(
+            mock_handler_input,
+            tracks[0],
+            queue_id="queue-1",
+            queue_index=0,
+        )
+        second = playback.start_session(
+            mock_handler_input,
+            tracks[1],
+            queue_id="queue-1",
+            queue_index=1,
+        )
+
+        assert first["sessionId"] != second["sessionId"]
+        assert first["subjectSessionId"] == second["subjectSessionId"]
+        assert second["subjectId"] == "publication-1"
+        assert second["trackContentId"] == "track-2"
+        history = User.snapshot(mock_handler_input)["playHistory"]
+        assert len(history) == 1
+        assert history[0]["subjectId"] == "publication-1"
+        assert history[0]["trackContentId"] == "track-2"
+
+    def test_queue_restores_publication_identity_to_individually_fetched_track(
+        self, mock_handler_input
+    ):
+        store = {
+            **StateSchema.DEFAULT_STORE,
+            "playbackQueue": {
+                "queueId": "queue-1",
+                "source": "publication",
+                "publicationId": "publication-1",
+                "publicationTitle": None,
+                "publicationTrackCount": 5,
+                "orderedContentIds": ["track-1", "track-2", "track-3"],
+                "currentIndex": 1,
+            },
+        }
+        fetched = {
+            "contentId": "track-3",
+            "title": "Third track",
+            "audioUrl": "https://cdn.hear.media/track-3.mp3",
+            "subjectType": "content",
+            "subjectId": "track-3",
+        }
+
+        content = PlaybackQueue.apply_publication_context(store, fetched)
+
+        assert content["publicationId"] == "publication-1"
+        assert content["publicationTitle"] is None
+        assert content["subjectType"] == "publication"
+        assert content["subjectId"] == "publication-1"
+        assert content["trackContentId"] == "track-3"
+        assert content["trackIndex"] == 2
+        assert content["trackCount"] == 5
 
     def test_add_followed_creator(self, mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"] = dict(

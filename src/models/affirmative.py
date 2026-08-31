@@ -562,6 +562,11 @@ class Affirmative:
             content = result["results"][0]
         current_queue = PlaybackQueue.read(self._deps.user.snapshot(handler_input)) or {}
         current_index = int(current_queue.get("currentIndex") or 0)
+        content = PlaybackQueue.apply_publication_context(
+            self._deps.user.snapshot(handler_input),
+            content,
+            queue_index=current_index,
+        )
         total = len(queue["orderedContentIds"])
         intro = Speech.QUEUE_NEXT_ANNOUNCE(
             content.get("title"), content.get("creator"), current_index + 1, total

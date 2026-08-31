@@ -5,7 +5,6 @@ import logging
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
 from src.alexa.request import AlexaRequest
-from src.models.feedback import FeedbackService
 from src.models.playback_events import PlaybackEvents
 from src.models.playback_state import PlaybackQueue
 
@@ -45,17 +44,13 @@ class PlaybackStartedHandler(AbstractRequestHandler):
             )
             self._deps.playback.state.clear_prepared(handler_input)
         if state and state.get("contentId") == token:
-            state = self._deps.playback.state.merge(
+            state = self._deps.playback.observe(
                 handler_input,
-                {
-                    "status": "playing",
-                    "offsetMs": offset_ms,
-                    "listenedMs": max(int(state.get("listenedMs") or 0), offset_ms),
-                },
+                offset_ms=offset_ms,
+                event_type="started",
+                status="playing",
             )
-            self._deps.playback.state.save_position(handler_input, token, offset_ms)
             await self._deps.playback.emit(handler_input, "started", state)
-            FeedbackService.update_publication_progress(handler_input, state)
         return handler_input.response_builder.response
 
 
@@ -74,7 +69,15 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
             return handler_input.response_builder.response
         if not state or state.get("contentId") != token:
             return handler_input.response_builder.response
-        state = self._deps.playback.state.merge(handler_input, {})
+        offset_ms = AlexaRequest.get_audio_player_offset_ms(handler_input)
+        if offset_ms <= 0 and int(state.get("offsetMs") or 0) > 0:
+            offset_ms = int(state["offsetMs"])
+        state = self._deps.playback.observe(
+            handler_input,
+            offset_ms=offset_ms,
+            event_type="nearly_finished",
+            status="playing",
+        )
         await self._deps.playback.emit(handler_input, "nearly_finished", state)
         return await self._deps.playback.enqueue_next_queued_content(
             handler_input, token, self._deps.heara
@@ -110,16 +113,12 @@ class PlaybackStoppedHandler(AbstractRequestHandler):
         if state and not self._deps.playback.state.accepts_event(handler_input, state):
             return handler_input.response_builder.response
         if state and state.get("contentId") == token:
-            state = self._deps.playback.state.merge(
+            state = self._deps.playback.observe(
                 handler_input,
-                {
-                    "status": "paused",
-                    "offsetMs": offset_ms,
-                    "listenedMs": max(int(state.get("listenedMs") or 0), offset_ms),
-                },
+                offset_ms=offset_ms,
+                event_type="stopped",
+                status="paused",
             )
-            self._deps.playback.state.save_position(handler_input, token, offset_ms)
-            FeedbackService.update_publication_progress(handler_input, state)
             await self._deps.playback.emit(handler_input, "stopped", state)
         return handler_input.response_builder.response
 
@@ -140,8 +139,12 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         if state and not self._deps.playback.state.accepts_event(handler_input, state):
             return handler_input.response_builder.response
         if state and state.get("contentId") == token:
-            state = self._deps.playback.state.merge(handler_input, {"status": "failed"})
-            FeedbackService.update_publication_progress(handler_input, state)
+            state = self._deps.playback.observe(
+                handler_input,
+                offset_ms=int(state.get("offsetMs") or 0),
+                event_type="failed",
+                status="failed",
+            )
             await self._deps.playback.emit(handler_input, "failed", state)
             self._deps.playback.state.clear_prepared(handler_input)
         self.logger.warning("Hear audio playback failed contentId=%s", token)
@@ -169,12 +172,11 @@ class PlaybackProgressReportHandler(AbstractRequestHandler):
             and state.get("contentId") == token
             and (state.get("status") in {"starting", "playing", "paused"})
         ):
-            listened_ms = max(int(state.get("listenedMs") or 0), offset_ms)
-            state = self._deps.playback.state.merge(
+            state = self._deps.playback.observe(
                 handler_input,
-                {"offsetMs": offset_ms, "listenedMs": listened_ms, "status": "playing"},
+                offset_ms=offset_ms,
+                event_type="progress",
+                status="playing",
             )
-            self._deps.playback.state.save_position(handler_input, token, offset_ms)
-            FeedbackService.update_publication_progress(handler_input, state)
             await self._deps.playback.emit(handler_input, "progress", state)
         return handler_input.response_builder.response
