@@ -28,11 +28,15 @@ class AlexaProfilePolicy:
         )
 
     @staticmethod
-    def requests(active: dict) -> list[tuple[str, str]]:
+    def requests(handler_input, active: dict) -> list[tuple[str, str]]:
         requests = []
-        if not AlexaLocalitySupport.has_any_profile_name(active):
-            requests.extend((("fullName", "Profile.name"), ("givenName", "Profile.givenName")))
-        if not active.get("userEmail"):
+        if not AlexaLocalitySupport.has_any_profile_name(active) and RequestContext.has_permission(
+            handler_input, permission_scopes.PROFILE_NAME_READ
+        ):
+            requests.append(("fullName", "Profile.name"))
+        if not active.get("userEmail") and RequestContext.has_permission(
+            handler_input, permission_scopes.PROFILE_EMAIL_READ
+        ):
             requests.append(("userEmail", "Profile.email"))
         return requests
 
@@ -97,7 +101,7 @@ class ListenerProfileService:
             return {}
         if skip_until and now < skip_until:
             return {}
-        requests = AlexaProfilePolicy.requests(active)
+        requests = AlexaProfilePolicy.requests(handler_input, active)
         if not requests:
             patch = {}
             if not resolved_at or now - resolved_at >= AlexaProfileModule._PROFILE_TTL_MS:

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import config.permission_scopes as permission_scopes
 from src.alexa.runtime import AttrDict
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
@@ -426,6 +427,8 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
+        "fullName": "Alex Hear",
+        "userEmail": "alex@example.com",
         "userCity": "Manchester",
         "locality": "Manchester",
         "playCount": 3,
@@ -433,6 +436,10 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
             {"id": "creator-1", "name": "Reader", "type": "creator"},
             {"id": "org-1", "name": "York Talking News", "type": "organization"},
         ],
+    }
+    mock_handler_input.request_envelope.context.System.user.permissions.scopes = {
+        permission_scopes.PROFILE_NAME_READ: {"status": "GRANTED"},
+        permission_scopes.PROFILE_EMAIL_READ: {"status": "GRANTED"},
     }
     sync = AsyncMock(return_value={"listenerId": "listener-1"})
     service = ListenerSyncService(SimpleNamespace(sync_listener=sync))

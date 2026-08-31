@@ -4,6 +4,15 @@ from src.utils.content import ContentUtils
 
 
 class Speech:
+    ONBOARDING_LOCATION_REASON = "Your location helps Hear find nearby news, sport, publications, and talking newspapers. Alexa will now ask whether you give Hear permission to use your location."
+    LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say the name of your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say the name of your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check your device location right now. Please say the name of your city, or say skip to continue as a guest."
+    PROFILE_PERMISSION_OFFER = "Would you like to share your name and email so I can setup your Hear listener profile? You can say yes or skip."
+    PROFILE_PERMISSION_REASON = "Your name lets me personalise Hear, and your email identifies your listener account. Alexa will now ask whether you give Hear permission to share them."
+    PROFILE_PERMISSION_SKIPPED = "No problem. You can continue using Hear as a guest. What would you like to listen to?"
+    PROFILE_PERMISSION_FAILED = "I couldn't complete your listener account setup, so I'll keep you as a guest. You can say set up my account later. What would you like to listen to?"
+    PROFILE_PERMISSION_COMPLETE = "Thanks. Your Hear listener account is ready. What would you like to listen to?"
     TOWN_SKIPPED = "Okay. What would you like to listen to?"
     TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say the full city name, or say skip to continue without one."
     TOWN_LOOKUP_UNAVAILABLE_RETRY = (

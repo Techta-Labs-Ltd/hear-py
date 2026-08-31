@@ -119,6 +119,45 @@ class AlexaSettingsClient:
             )
             return {"_status": "temporary_error"}
 
+    async def get_device_country_postal(self, handler_input) -> dict:
+        system = RequestContext.get_system_context(handler_input)
+        if not system or not system.apiEndpoint or system.apiAccessToken is None:
+            return {"_status": "unavailable"}
+        if not system.device or not system.device.deviceId:
+            return {"_status": "unavailable"}
+        try:
+            timeout = DeadlineBudget.outbound_timeout_ms(
+                handler_input, settings.HEAR_ALEXA_API_TIMEOUT_MS
+            ) / 1000.0
+            response = await self._pool.get().get(
+                f"{system.apiEndpoint}/v1/devices/{system.device.deviceId}/settings/address/countryAndPostalCode",
+                headers={
+                    "Authorization": f"Bearer {system.apiAccessToken}",
+                    "Accept": "application/json",
+                },
+                timeout=timeout,
+            )
+            if response.status_code == 403:
+                return {"_status": "permission_denied"}
+            if response.status_code == 401:
+                return {"_status": "unauthorized"}
+            if response.status_code == 404:
+                return {"_status": "not_found"}
+            if response.status_code == 204:
+                return {"_status": "empty"}
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "_status": "granted",
+                "postalCode": data.get("postalCode"),
+                "countryCode": data.get("countryCode"),
+            }
+        except Exception as error:
+            AlexaSettingsSupport.logger.warning(
+                "Hear: device postal API failed error=%s", type(error).__name__
+            )
+            return {"_status": "temporary_error"}
+
     async def get_profile_setting(
         self, handler_input, setting_path: str, *, label: str = ""
     ) -> dict:

@@ -1051,6 +1051,18 @@
             "change where I am",
             "update where I live"
           ]
+        },
+        {
+          "name": "SetUpAccountIntent",
+          "slots": [],
+          "samples": [
+            "set up my account",
+            "create my account",
+            "create my listener account",
+            "finish my account setup",
+            "personalise my account",
+            "sign me up"
+          ]
         }
       ],
       "types": [

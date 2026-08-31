@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from config.permission_scopes import DEVICE_ADDRESS
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.application import Application
 from src.clients.alexa import AlexaClient
 from src.clients.hear import HearApiClient
 from src.clients.resolver import ResolverClient, ResolverOptions
+from src.constants.onboarding import OnboardingConstants
 from src.container import ApplicationContainer
 from src.database.persistence import MemoryPersistenceAdapter
 from src.models.feedback import FeedbackService
@@ -240,11 +240,13 @@ async def test_onboarding_yes_returns_permission_card(monkeypatch):
     }
     await skill.invoke(launch, None)
     response = await skill.invoke(yes, None)
-    assert response["response"]["card"] == {
-        "type": "AskForPermissionsConsent",
-        "permissions": [DEVICE_ADDRESS],
-    }
-    assert response["response"]["shouldEndSession"] is True
+    directive = response["response"]["directives"][0]
+    assert directive["type"] == "Connections.StartConnection"
+    assert directive["token"] == "onboarding_location"
+    assert [
+        scope["permissionScope"] for scope in directive["input"]["permissionScopes"]
+    ] == list(OnboardingConstants.LOCATION_VOICE_PERMISSIONS)
+    assert response["response"]["shouldEndSession"] is False
 
 
 def test_feedback_service_owns_pending_feedback_policy():

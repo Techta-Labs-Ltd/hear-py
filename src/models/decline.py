@@ -116,6 +116,23 @@ class Decline:
         return None
 
     async def _state_response(self, handler_input, store: dict):
+        if store.get("awaitingProfilePermission"):
+            self._deps.user.update(
+                handler_input,
+                {"awaitingProfilePermission": False, "listenerType": "guest"},
+            )
+            try:
+                await self._deps.listener_sync.sync_for_launch(handler_input)
+            except Exception:
+                pass
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml(Speech.PROFILE_PERMISSION_SKIPPED)
+                )
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
         if store.get("listModeActive"):
             return self._handle_list_mode_no(handler_input, store)
         if store.get("awaitingStillListening"):

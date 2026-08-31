@@ -26,23 +26,17 @@ class ListenerSyncSupport:
             for item in store.get("recentTrackListens") or store.get("history") or []
             if isinstance(item, dict) and item.get("contentId")
         ]
-        return {
+        registered = bool(
+            store.get("userEmail")
+            and (store.get("userName") or store.get("fullName") or store.get("givenName"))
+        )
+        profile = {
             "alexaUserId": alexa_user_id,
             "deviceId": getattr(device, "deviceId", None),
             "apiEndpoint": getattr(system, "apiEndpoint", None),
             "locale": getattr(request, "locale", None),
-            "userName": store.get("userName") or store.get("fullName") or store.get("givenName"),
-            "userEmail": store.get("userEmail"),
-            "address": store.get("address"),
-            "city": store.get("userCity") or store.get("city"),
-            "state": store.get("state"),
-            "country": store.get("country"),
-            "countryCode": store.get("deviceCountryCode") or store.get("countryCode"),
-            "postalCode": store.get("devicePostalCode") or store.get("postalCode"),
-            "latitude": store.get("latitude"),
-            "longitude": store.get("longitude"),
+            "listenerType": "registered" if registered else "guest",
             "clientVersion": ListenerSyncSupport._CLIENT_VERSION,
-            "locality": store.get("locality"),
             "listeningPattern": store.get("listeningPattern"),
             "followedCreatorIds": ListenerSyncSupport._followed_ids(store, "creator"),
             "followedOrganizationIds": ListenerSyncSupport._followed_ids(store, "organization"),
@@ -52,6 +46,26 @@ class ListenerSyncSupport:
             "recentPlayedIds": list(dict.fromkeys(recent))[-20:],
             "recentPlays": list(store.get("recentTrackListens") or [])[-20:],
         }
+        if registered:
+            profile.update(
+                {
+                    "userName": store.get("userName")
+                    or store.get("fullName")
+                    or store.get("givenName"),
+                    "userEmail": store.get("userEmail"),
+                    "address": store.get("address"),
+                    "city": store.get("userCity") or store.get("city"),
+                    "state": store.get("state"),
+                    "country": store.get("country"),
+                    "countryCode": store.get("deviceCountryCode")
+                    or store.get("countryCode"),
+                    "postalCode": store.get("devicePostalCode") or store.get("postalCode"),
+                    "latitude": store.get("latitude"),
+                    "longitude": store.get("longitude"),
+                    "locality": store.get("locality"),
+                }
+            )
+        return profile
 
     @staticmethod
     def _followed_ids(store: dict, source_type: str) -> list[str]:

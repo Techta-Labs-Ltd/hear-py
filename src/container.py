@@ -13,6 +13,7 @@ from src.models.browse import Browse
 from src.models.feedback import FeedbackService
 from src.models.listener import Listener
 from src.models.onboarding import Onboarding
+from src.models.permission import Permission
 from src.models.playback import Playback
 from src.models.playback_state import PlaybackQueue, PlaybackState
 from src.models.report import Report
@@ -48,6 +49,7 @@ class ApplicationContainer:
             "heara",
             "resolver",
             "progressive",
+            "permission",
             "error_reporter",
         }
     )
@@ -70,6 +72,7 @@ class ApplicationContainer:
         "resolver",
         "progressive",
         "error_reporter",
+        "permission",
     )
 
     def __init__(self, **components) -> None:
@@ -114,6 +117,7 @@ class ApplicationContainer:
             ResolverOptions(api_key=settings.HEAR_API_KEY)
         )
         self.progressive = components.get("progressive") or ProgressiveResponseClient()
+        self.permission = components.get("permission") or Permission(deps=self)
         self.error_reporter = components.get("error_reporter") or ErrorReporter()
 
     def create(self, component_type):

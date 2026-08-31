@@ -18,7 +18,14 @@ class AlexaLocalityService:
         self._settings = settings
 
     async def detect_device_location(self, handler_input) -> dict:
-        fetched = await self._settings.get_device_address(handler_input)
+        if RequestContext.has_permission(handler_input, permission_scopes.DEVICE_ADDRESS):
+            fetched = await self._settings.get_device_address(handler_input)
+        elif RequestContext.has_permission(
+            handler_input, permission_scopes.DEVICE_COUNTRY_POSTAL
+        ):
+            fetched = await self._settings.get_device_country_postal(handler_input)
+        else:
+            fetched = {"_status": "permission_denied"}
         address_status = fetched.get("_status")
         address = fetched if address_status == "granted" else None
         geolocation = (
@@ -31,7 +38,7 @@ class AlexaLocalityService:
             or (address or {}).get("addressLine3")
             or (address or {}).get("districtOrCounty")
         )
-        if not city and (not geolocation):
+        if not city and not (address or {}).get("postalCode") and (not geolocation):
             return {"_status": address_status or "unavailable"}
         return {
             "_status": "resolved",

@@ -454,10 +454,13 @@ class Onboarding(OnboardingService):
         if not match:
             return await Onboarding.stage_town_confirmation(handler_input, store, phrase, deps=d)
         d.onboarding.complete_location(handler_input, {**match, "source": "manual"})
+        d.user.update(handler_input, {"awaitingProfilePermission": True})
         DialogStateManager.clear(handler_input, "onboarding")
         return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.TOWN_GOT_IT(match["city"])))
-            .reprompt(Ssml.ssml(Speech.REPROMPT_CITY))
+            handler_input.response_builder.speak(
+                Ssml.ssml(f"{Speech.TOWN_GOT_IT(match['city'])} {Speech.PROFILE_PERMISSION_OFFER}")
+            )
+            .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
             .set_should_end_session(False)
             .response
         )
@@ -472,11 +475,12 @@ class Onboarding(OnboardingService):
         """Skip town capture and proceed without location."""
         d = Onboarding._dependencies(deps)
         d.onboarding.complete_without_location(handler_input)
+        d.user.update(handler_input, {"awaitingProfilePermission": True})
         DialogStateManager.clear(handler_input, "onboarding")
         Onboarding.logger.info("Hear: onboarding town skipped")
         return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.TOWN_SKIPPED))
-            .reprompt(Ssml.ssml(Speech.REPROMPT_NO_CITY))
+            handler_input.response_builder.speak(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
+            .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
             .set_should_end_session(False)
             .response
         )
@@ -509,20 +513,40 @@ class Onboarding(OnboardingService):
         store: Dict[str, Any],
         *,
         deps: object | None = None,
+        after_consent: bool = False,
     ):
         d = Onboarding._dependencies(deps)
         match = await d.locality.detect_device_location(handler_input)
         if not match or match.get("_status") == "permission_denied":
+            if after_consent:
+                return d.permission.location_fallback(handler_input, denied=True)
             return Onboarding.ask_for_permission(handler_input, store, deps=d)
         if match.get("_status") != "resolved":
-            return Onboarding.handle_location_not_found(handler_input, store, deps=d)
-        if not match.get("city"):
-            d.onboarding.cache_coordinates(handler_input, match)
-            return Onboarding.handle_location_not_found(handler_input, store, deps=d)
+            d.onboarding.location_not_found(handler_input)
+            speech = (
+                Speech.LOCATION_PERMISSION_EMPTY
+                if match.get("_status") in {"empty", "not_found"}
+                else Speech.LOCATION_PERMISSION_UNAVAILABLE
+            )
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(speech))
+                .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
+                .set_should_end_session(False)
+                .response
+            )
+        lookup = match.get("city") or match.get("postalCode")
+        if not lookup:
+            d.onboarding.location_not_found(handler_input)
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_PERMISSION_EMPTY))
+                .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
+                .set_should_end_session(False)
+                .response
+            )
         if match.get("latitude") is None or match.get("longitude") is None:
             try:
                 response = await d.resolver.resolve_utterance(
-                    match["city"],
+                    str(lookup),
                     alexa_user_id=AlexaRequest.get_user_id(handler_input),
                     prefer_location=True,
                     timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input),
@@ -537,7 +561,7 @@ class Onboarding(OnboardingService):
             if not resolved:
                 Onboarding.logger.info(
                     "Hear: device-address city could not be resolved to coordinates city=%s",
-                    match.get("city"),
+                    lookup,
                 )
                 return Onboarding.handle_location_not_found(handler_input, store, deps=d)
             match = {

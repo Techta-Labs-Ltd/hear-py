@@ -1974,19 +1974,19 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     assert updated["onboardingComplete"] is True
     assert updated["userCity"] == "Swindon"
     assert updated["locationSource"] == "manual"
-    assert updated["awaitingCommunityPlayback"] is True
+    assert updated["awaitingCommunityPlayback"] is False
+    assert updated["awaitingProfilePermission"] is True
     assert updated["_requiresReliableSave"] is True
     session = handler_input.attributes_manager.set_session_attributes.call_args.args[0]
     assert session["onboardingStage"] is None
     assert session["onboardingComplete"] is True
     assert session["awaitingLocationConfirm"] is False
-    assert session["awaitingCommunityPlayback"] is True
+    assert session.get("awaitingCommunityPlayback", False) is False
     assert session["userCity"] == "Swindon"
     spoken = handler_input.response_builder.speak.call_args.args[0]
     assert "I've set your location to Swindon" in spoken
-    assert "What would you like to hear?" in spoken
-    assert "Would you like to hear the latest from Swindon" in spoken
-    sync.assert_awaited_once()
+    assert "share your name and email" in spoken
+    sync.assert_not_awaited()
 
 
 @pytest.mark.asyncio

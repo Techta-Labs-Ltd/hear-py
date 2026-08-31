@@ -11,7 +11,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
-from src.models.onboarding import Onboarding
+from src.models.onboarding import Onboarding, TownCapture
 
 
 class OnboardingPolicy:
@@ -149,13 +149,18 @@ class OnboardingGateHandler(AbstractRequestHandler):
                 return redirect
         if stage == "ask_permission" or not stage:
             if intent == "AMAZON.YesIntent":
-                return Onboarding.handle_permission_yes(handler_input, store, deps=self._deps)
+                return self._deps.permission.start_location(handler_input)
             if intent == "AMAZON.NoIntent":
                 return Onboarding.handle_permission_no(handler_input, store, deps=self._deps)
+            if intent in {"SkipFeedbackIntent", "AMAZON.CancelIntent"}:
+                return Onboarding.finalize_town_skipped(handler_input, store, deps=self._deps)
+            if intent in {"TownCaptureIntent", "SetLocationIntent"}:
+                self._deps.onboarding.start_town_capture(handler_input)
+                return await TownCapture(deps=self._deps).execute(handler_input)
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(
-                    "Please answer yes to use your device location, or no to enter your city manually."
+                    "Please say yes to use your device location, say your city, or say skip to continue as a guest."
                 )
             )
             .set_should_end_session(False)

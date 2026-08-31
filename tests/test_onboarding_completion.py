@@ -128,9 +128,8 @@ async def test_empty_device_address_explains_missing_saved_city_and_allows_manua
         deps=ApplicationContainer(locality=locality),
     )
     speech = result["outputSpeech"]["ssml"]
-    assert "Welcome back to Hear" in speech
-    assert "I don't have a city for this Echo yet" in speech
-    assert "Alexa gave Hear permission" not in speech
+    assert "permission is enabled" in speech
+    assert "couldn't find a location saved for this device" in speech
     assert "say skip" in result["outputSpeech"]["ssml"]
     assert User.snapshot(mock_handler_input)["onboardingStage"] == "ask_town"
 

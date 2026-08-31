@@ -82,6 +82,8 @@ class StateSchema:
         "pendingLocationConfirm": None,
         "awaitingLocationConfirm": False,
         "awaitingCommunityPlayback": False,
+        "awaitingProfilePermission": False,
+        "listenerType": "guest",
         "locationSource": None,
         "awaitingSearchConfirmation": False,
         "pendingResolution": None,

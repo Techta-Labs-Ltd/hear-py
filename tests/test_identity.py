@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import config.permission_scopes as permission_scopes
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AttrDict
 from src.clients.events import SqsEventClient
@@ -35,11 +36,16 @@ async def test_listener_profile_fetches_independent_settings_concurrently(
         return {"value": values[setting_path], "status": 200}
 
     User.hydrate(mock_handler_input, {})
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.context.System.user.permissions.scopes = {
+        permission_scopes.PROFILE_NAME_READ: {"status": "GRANTED"},
+        permission_scopes.PROFILE_EMAIL_READ: {"status": "GRANTED"},
+    }
     settings_client = SimpleNamespace(get_profile_setting=AsyncMock(side_effect=fetch))
     result = await ListenerProfileService(settings_client, Listener(User())).apply_listener_profile(
         mock_handler_input
     )
-    assert maximum == 3
+    assert maximum == 2
     assert result["userName"] == "Alex Hear"
     assert result["userEmail"] == "alex@example.com"
 

@@ -18,6 +18,7 @@ from src.controllers.feedback import (
 )
 from src.controllers.intent_dispatch import IntentDispatchGateHandler
 from src.controllers.launch import LaunchRequestHandler, TownCaptureHandler
+from src.controllers.permission import PermissionResumeHandler, SetUpAccountHandler
 from src.controllers.play import (
     PlayByCreatorHandler,
     PlayByOrganizationHandler,
@@ -100,7 +101,9 @@ class RouteRegistry:
     )
     RESPONSE_INTERCEPTORS = (SavePersistenceInterceptor,)
     REQUEST_CONTROLLERS = (
+        PermissionResumeHandler,
         LaunchRequestHandler,
+        SetUpAccountHandler,
         WhatsTrendingHandler,
         BrowseContentHandler,
         PlayByCreatorHandler,

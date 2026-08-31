@@ -4,9 +4,10 @@
   "title": "Listener sync payload",
   "description": "Profile payload sent to the listener sync endpoint (src/services/listeners.py).",
   "type": "object",
-  "required": ["alexaUserId", "clientVersion"],
+  "required": ["alexaUserId", "clientVersion", "listenerType"],
   "properties": {
     "alexaUserId": { "type": "string" },
+    "listenerType": { "enum": ["guest", "registered"] },
     "deviceId": { "type": ["string", "null"] },
     "apiEndpoint": { "type": ["string", "null"] },
     "locale": { "type": ["string", "null"] },

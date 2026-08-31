@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import config.permission_scopes as permission_scopes
 from src.alexa.runtime import AttrDict
 from src.clients.alexa_settings import AlexaSettingsClient
 from src.services.alexa_locality import AlexaLocalityService
@@ -37,7 +38,7 @@ def _handler_input(*, scopes=None):
 
 
 @pytest.mark.asyncio
-async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent(caplog):
+async def test_address_api_is_used_only_with_full_address_permission(caplog):
     response = SimpleNamespace(
         status_code=200,
         raise_for_status=lambda: None,
@@ -52,7 +53,11 @@ async def test_address_api_is_authoritative_when_deprecated_scopes_are_absent(ca
     pool = _Pool(response)
     client = AlexaLocalityService(AlexaSettingsClient(pool=pool))
     with caplog.at_level(logging.INFO, logger="src.clients.alexa_settings"):
-        result = await client.detect_device_location(_handler_input())
+        result = await client.detect_device_location(
+            _handler_input(
+                scopes={permission_scopes.DEVICE_ADDRESS: {"status": "GRANTED"}}
+            )
+        )
     assert result["_status"] == "resolved"
     assert result["city"] == "Burnley"
     call = pool.client.get.await_args
@@ -96,7 +101,9 @@ async def test_address_uses_district_when_city_is_empty():
     )
     result = await AlexaLocalityService(
         AlexaSettingsClient(pool=_Pool(response))
-    ).detect_device_location(_handler_input())
+    ).detect_device_location(
+        _handler_input(scopes={permission_scopes.DEVICE_ADDRESS: {"status": "GRANTED"}})
+    )
     assert result["city"] == "Pendle"
 
 
@@ -108,6 +115,16 @@ async def test_address_uses_district_when_city_is_empty():
 async def test_address_api_preserves_non_permission_failure(status_code, expected):
     pool = _Pool(SimpleNamespace(status_code=status_code))
     result = await AlexaLocalityService(AlexaSettingsClient(pool=pool)).detect_device_location(
-        _handler_input()
+        _handler_input(scopes={permission_scopes.DEVICE_ADDRESS: {"status": "GRANTED"}})
     )
     assert result == {"_status": expected}
+
+
+@pytest.mark.asyncio
+async def test_address_api_is_not_called_without_permission():
+    pool = _Pool(SimpleNamespace(status_code=200))
+    result = await AlexaLocalityService(AlexaSettingsClient(pool=pool)).detect_device_location(
+        _handler_input()
+    )
+    assert result == {"_status": "permission_denied"}
+    pool.client.get.assert_not_awaited()

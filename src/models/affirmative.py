@@ -71,6 +71,8 @@ class Affirmative:
         return None
 
     async def _state_response(self, handler_input, store: dict):
+        if store.get("awaitingProfilePermission"):
+            return self._deps.permission.start_profile(handler_input)
         if store.get("listModeActive"):
             return await self._handle_list_mode_yes(handler_input, store)
         if store.get("awaitingStillListening"):
@@ -120,43 +122,20 @@ class Affirmative:
                 .set_should_end_session(False)
                 .response
             )
-        user_id = AlexaRequest.get_user_id(handler_input)
         final_city = city
         self._deps.onboarding.complete_location(
             handler_input,
             pending,
-            offer_community_playback=True,
+            offer_community_playback=False,
             preserve_postal_code=True,
         )
         DialogStateManager.clear(handler_input, "onboarding")
-        confirmed = self._deps.user.snapshot(handler_input)
-        if user_id:
-            try:
-                await self._deps.heara.sync_listener(
-                    {
-                        "alexaUserId": user_id,
-                        "deviceId": confirmed.get("deviceId"),
-                        "locale": getattr(handler_input.request_envelope.request, "locale", None),
-                        "userName": confirmed.get("userName"),
-                        "userEmail": confirmed.get("userEmail"),
-                        "city": final_city,
-                        "locality": confirmed.get("locality"),
-                        "countryCode": confirmed.get("deviceCountryCode"),
-                        "latitude": confirmed.get("latitude"),
-                        "longitude": confirmed.get("longitude"),
-                        "clientVersion": "alexa-skill",
-                    },
-                    timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
-                )
-            except Exception as err:
-                self.logger.warning("Hear: listener sync failed error=%s", type(err).__name__)
+        self._deps.user.update(handler_input, {"awaitingProfilePermission": True})
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml(
-                    f"{Speech.LOCATION_CONFIRMED(final_city)} {Speech.COMMUNITY_PLAYBACK_OFFER(final_city)}"
-                )
+                Ssml.ssml(f"{Speech.LOCATION_CONFIRMED(final_city)} {Speech.PROFILE_PERMISSION_OFFER}")
             )
-            .reprompt(Ssml.ssml(Speech.COMMUNITY_PLAYBACK_OFFER(final_city)))
+            .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
             .set_should_end_session(False)
             .response
         )

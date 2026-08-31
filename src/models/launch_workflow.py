@@ -24,7 +24,6 @@ class LaunchWorkflow:
     async def execute(self, handler_input: HandlerInput):
         store = self._initial_store(handler_input)
         user_name = self._user_name(store)
-        store = await self._sync_listener_for_launch(handler_input, store)
         pending_response = await self._pending_response(handler_input, store, user_name)
         if pending_response is not None:
             return pending_response
@@ -32,6 +31,7 @@ class LaunchWorkflow:
             store = await self._ensure_listener_data_for_launch(handler_input, store)
         except Exception:
             pass
+        store = await self._sync_listener_for_launch(handler_input, store)
         self._schedule_launch_background_work(handler_input, store)
         return self._welcome_response(handler_input, store)
 
