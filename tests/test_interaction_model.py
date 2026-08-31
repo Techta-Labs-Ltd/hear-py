@@ -111,6 +111,15 @@ def test_content_discovery_intents_accept_date_constraints():
         assert all(("{dateQuery}" not in sample for sample in intents[intent_name]["samples"]))
 
 
+def test_local_community_phrases_are_owned_by_local_intent():
+    intents = {
+        item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    samples = intents["PlayLocalIntent"]["samples"]
+    assert "play something from my local community" in samples
+    assert "play from my local community" in samples
+
+
 def test_search_query_is_the_only_slot_in_each_sample_that_uses_it():
     intents = _model()["interactionModel"]["languageModel"]["intents"]
     for intent in intents:

@@ -238,6 +238,13 @@ class ResolverWorkflow:
         """Return discovery requests whose meaning Alexa has already supplied."""
         AlexaRequest.get_resolved_slot_value(intent_slots.get("topic"))
         date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
+        normalized_raw = SearchFilterUtils.normalize_discovery_phrase(raw)
+        if normalized_raw in DiscoveryConstants.LOCAL_HINTS:
+            return ResolverWorkflow._direct_discovery_result(
+                alexa_intent,
+                "local",
+                "latest",
+            )
         direct: dict[str, tuple[str, str]] = {
             "WhatsTrendingIntent": ("trending", "trending"),
             "PlayRecommendationIntent": ("trending", "trending"),
@@ -259,28 +266,7 @@ class ResolverWorkflow:
             )
         ):
             intent_name, sort = direct[alexa_intent]
-            return {
-                "status": "resolved",
-                "intent": intent_name,
-                "alexaIntent": DiscoveryConstants.ALEXA_TO_NLP.get(alexa_intent, intent_name),
-                "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": True,
-                "needsRedirect": False,
-                "localResolved": True,
-                "directDiscoveryRequest": True,
-                "searchPayload": {
-                    "query": "",
-                    "filter": {},
-                    "sort": sort,
-                    "page": 0,
-                    "limit": 20,
-                },
-                "slots": {
-                    "residualQuery": "",
-                    "isRecommended": intent_name == "trending",
-                    "sort": sort,
-                },
-            }
+            return ResolverWorkflow._direct_discovery_result(alexa_intent, intent_name, sort)
         if alexa_intent == "PlayByCreatorIntent" and (
             not SearchFilterUtils.is_meaningful_creator_source(raw)
         ):
@@ -351,6 +337,21 @@ class ResolverWorkflow:
                 "slots": {"residualQuery": ""},
             }
         return None
+
+    @staticmethod
+    def _direct_discovery_result(alexa_intent: str, intent_name: str, sort: str) -> dict:
+        return {
+            "status": "resolved",
+            "intent": intent_name,
+            "alexaIntent": DiscoveryConstants.ALEXA_TO_NLP.get(alexa_intent, intent_name),
+            "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": alexa_intent == "PlayLocalIntent" or intent_name != "local",
+            "needsRedirect": alexa_intent != "PlayLocalIntent" and intent_name == "local",
+            "localResolved": True,
+            "directDiscoveryRequest": True,
+            "searchPayload": {"query": "", "filter": {}, "sort": sort, "page": 0, "limit": 20},
+            "slots": {"residualQuery": "", "isRecommended": intent_name == "trending", "sort": sort},
+        }
 
 
 class ResolverWorkflowRunner:

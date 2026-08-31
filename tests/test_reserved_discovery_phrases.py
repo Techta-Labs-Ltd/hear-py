@@ -210,3 +210,31 @@ async def test_complete_zero_slot_discovery_stays_out_of_resolver(
     assert (
         mock_handler_input.attributes_manager.request_attributes.get("_pendingConfirmation") is None
     )
+
+
+@pytest.mark.asyncio
+async def test_misrouted_local_community_phrase_is_redirected_without_resolver(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayByCreatorIntent",
+                "slots": {"creatorQuery": {"name": "creatorQuery", "value": "my local community"}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "local"
+    assert nlp["needsRedirect"] is True
