@@ -21,7 +21,8 @@ from src.utils.browse import BrowseUtils
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
-from src.utils.filters import SearchFilterUtils, SearchPayload
+from src.utils.filters import SearchFilters, SearchFilterUtils
+from src.utils.search_payload import SearchPayload
 
 
 class Search:
@@ -340,25 +341,35 @@ class Search:
         special = special or Search._unresolved_response(slots)
         if special:
             return special
-        query = SearchFilterUtils.normalize_search_query(opts.get("q"))
+        resolved_payload = SearchPayload.selected_resolution(nlp)
+        query = SearchFilterUtils.normalize_search_query(
+            resolved_payload.get("query") if resolved_payload else opts.get("q")
+        )
         residual = slots.get("residualQuery")
-        if isinstance(residual, str) and (
+        if not resolved_payload and isinstance(residual, str) and (
             not query or query == Search._raw_search_phrase(handler_input)
         ):
             query = residual
-        filters = SearchPayload.resolution_filter(
-            slots,
-            opts.get("filter"),
-            AlexaRequest.get_intent_name(handler_input) == "PlayPublicationIntent",
+        filters = (
+            SearchFilters.clean(resolved_payload.get("filter"))
+            if resolved_payload
+            else SearchPayload.resolution_filter(
+                slots,
+                opts.get("filter"),
+                AlexaRequest.get_intent_name(handler_input) == "PlayPublicationIntent",
+            )
         )
         intent = opts.get("intent") or nlp.get("intent") or "general"
         payload = SearchPayload.build(
             user_id,
             store,
             q=query,
-            limit=opts.get("limit") or settings.search_page_limit,
-            page=opts.get("page", 0),
-            sort=Search._search_sort(handler_input, slots, filters),
+            limit=resolved_payload.get("limit")
+            or opts.get("limit")
+            or settings.search_page_limit,
+            page=resolved_payload.get("page", opts.get("page", 0)),
+            sort=resolved_payload.get("sort")
+            or Search._search_sort(handler_input, slots, filters),
             nlp_filter=filters,
         )
         logged_payload = {key: value for key, value in payload.items() if key != "alexaUserId"}

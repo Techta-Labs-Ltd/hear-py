@@ -1224,6 +1224,78 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
 
 
 @pytest.mark.asyncio
+async def test_yes_searches_selected_publication_with_minimal_filter(
+    monkeypatch, mock_handler_input
+):
+    from src.controllers.confirmation import YesIntentHandler
+
+    publication_id = "de232766-3cb2-48dd-8521-7628fbce249b"
+    resolution = {
+        "requestId": "resolved-buxton",
+        "intent": "publication",
+        "confirmationLabel": "content from Buxton Talking Song",
+        "searchPayload": {
+            "query": "stale query",
+            "filter": {
+                "organizationIds": ["706cb68b-8059-407e-a696-0651018066cd"],
+                "publicationIds": [publication_id],
+                "isPublication": True,
+                "tags": ["stale-tag"],
+            },
+            "sort": "trending",
+            "limit": 3,
+            "page": 2,
+        },
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "AMAZON.YesIntent", "slots": {}}}
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": resolution,
+        "activeDialog": {
+            "type": "search_confirmation",
+            "context": resolution,
+            "expiresAt": 4102444800,
+        },
+    }
+    search = AsyncMock(
+        return_value={
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "00733525-e097-4273-a5e0-7e376e65fecf",
+                    "audioUrl": "https://cdn.hear.media/buxton-track.mp3",
+                }
+            ],
+        }
+    )
+    play = AsyncMock(return_value={"shouldEndSession": True})
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
+
+    response = await YesIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    search.assert_awaited_once_with(
+        {
+            "query": "",
+            "filter": {"publicationIds": [publication_id]},
+            "limit": 3,
+            "page": 0,
+            "alexaUserId": "amzn1.ask.account.TEST",
+        },
+        timeout_ms=8000,
+    )
+    play.assert_awaited_once()
+    assert response == {"shouldEndSession": True}
+
+
+@pytest.mark.asyncio
 async def test_confirmed_source_with_multiple_publications_asks_for_publication(
     monkeypatch, mock_handler_input
 ):
@@ -1775,13 +1847,21 @@ async def test_dynamic_entity_id_selects_pending_candidate_without_resolver(
 async def test_publication_choice_replaces_source_filter_with_publication_filter(
     monkeypatch, mock_handler_input
 ):
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.models.play import PlayContent
+
     pending = {
         "intent": "organization",
         "searchPayload": {
             "query": "",
-            "filter": {"organizationIds": ["org-tnf"]},
+            "filter": {
+                "organizationIds": ["org-tnf"],
+                "isPublication": True,
+                "tags": ["stale-tag"],
+            },
             "limit": 3,
             "page": 0,
+            "sort": "trending",
         },
         "slots": {"organizationIds": ["org-tnf"]},
         "candidates": [
@@ -1804,7 +1884,7 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
             "type": "IntentRequest",
             "intent": {
                 "name": "ClarifySelectionIntent",
-                "slots": {"selection": {"name": "selection", "value": "second"}},
+                "slots": {"selection": {"name": "selection", "value": "first"}},
             },
         }
     )
@@ -1814,17 +1894,59 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
         "activeDialog": {"type": "ambiguity", "context": pending},
     }
     resolve = AsyncMock()
+    search = AsyncMock(
+        return_value={
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-buxton",
+                    "audioUrl": "https://cdn.hear.media/track-buxton.mp3",
+                }
+            ],
+            "total_hits": 1,
+        }
+    )
+    play = AsyncMock(return_value={"shouldEndSession": True})
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr("src.models.search.Search.auto_play_first_from_search", play)
 
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
 
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "publication"
-    assert nlp["searchPayload"]["filter"] == {
-        "publicationIds": ["publication-sermons"]
+    assert nlp["searchPayload"] == {
+        "query": "",
+        "filter": {"publicationIds": ["publication-buxton"]},
+        "limit": 3,
+        "page": 0,
     }
-    assert nlp["searchPayload"]["limit"] == 3
+    assert nlp["slots"]["publicationIds"] == ["publication-buxton"]
+    assert "organizationIds" not in nlp["slots"]
+    ConfirmationMiddleware().process(mock_handler_input)
+    assert (
+        mock_handler_input.attributes_manager.request_attributes.get("_pendingConfirmation")
+        is None
+    )
+
+    response = await PlayContent(deps=ApplicationContainer()).execute(mock_handler_input)
+
+    search.assert_awaited_once_with(
+        {
+            "alexaUserId": "amzn1.ask.account.TEST",
+            "query": "",
+            "isLocal": False,
+            "isRecommended": False,
+            "limit": 3,
+            "page": 0,
+            "filter": {"publicationIds": ["publication-buxton"]},
+        },
+        timeout_ms=8000,
+    )
+    play.assert_awaited_once()
+    assert response == {"shouldEndSession": True}
+    assert User.snapshot(mock_handler_input)["awaitingSearchConfirmation"] is False
 
 
 @pytest.mark.asyncio

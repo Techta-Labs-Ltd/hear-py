@@ -20,7 +20,8 @@ from src.models.social import FollowCreator
 from src.models.suggestion import SuggestionConfirmation
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
-from src.utils.filters import SearchFilters, SearchPayload
+from src.utils.filters import SearchFilters
+from src.utils.search_payload import SearchPayload
 
 
 class Affirmative:
@@ -437,9 +438,7 @@ class Affirmative:
             return self._missing_resolution_response(handler_input)
         if int(resolution.get("expiresAt") or 0) < int(time.time()):
             return self._expired_resolution_response(handler_input)
-        payload = SearchPayload.with_pagination(
-            resolution["searchPayload"], settings.search_page_limit
-        )
+        payload = SearchPayload.from_resolution(resolution, settings.search_page_limit)
         user_id = AlexaRequest.get_user_id(handler_input)
         if user_id:
             payload["alexaUserId"] = user_id

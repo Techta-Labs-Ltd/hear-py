@@ -11,7 +11,7 @@ from config import settings
 from src.clients.pool import HttpPool
 from src.constants.search import SearchConstants
 from src.utils.content_normalizer import ContentNormalizer
-from src.utils.filters import SearchPayload
+from src.utils.search_payload import SearchPayload
 
 
 class HearApiSupport:

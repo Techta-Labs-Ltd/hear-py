@@ -1,4 +1,4 @@
-from src.utils.filters import SearchPayload
+from src.utils.search_payload import SearchPayload
 
 
 def test_saved_city_uses_registered_listener_radius(mock_handler_input):
