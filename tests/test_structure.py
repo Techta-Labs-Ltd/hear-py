@@ -141,7 +141,8 @@ def test_template_owns_and_wires_durable_persistence_table():
 
 def test_template_has_scaling_guards_and_operational_alarms():
     template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
-    assert "ReservedConcurrentExecutions: !Ref ReservedConcurrency" in template
+    assert "HasReservedConcurrency: !Not" in template
+    assert "ReservedConcurrentExecutions: !If" in template
     assert "ProvisionedConcurrencyConfig: !If" in template
     assert "HearSkillErrorAlarm:" in template
     assert "HearSkillThrottleAlarm:" in template

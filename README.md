@@ -93,7 +93,6 @@ stages:
 | Variable | `HEAR_API_PATH_PREFIX_DEV` | `alexa` | `HEAR_API_PATH_PREFIX_PROD` | `alexa` |
 | Variable | `WEBHOOK_OUTBOUND_URL_DEV` | development event endpoint | `WEBHOOK_OUTBOUND_URL_PROD` | production event endpoint |
 | Variable | `POWERTOOLS_LOG_LEVEL_DEV` | `DEBUG` | `POWERTOOLS_LOG_LEVEL_PROD` | `INFO` |
-| Variable | `RESERVED_CONCURRENCY_DEV` | `10` | `RESERVED_CONCURRENCY_PROD` | `20` |
 | Variable | `PROVISIONED_CONCURRENCY_DEV` | `0` | `PROVISIONED_CONCURRENCY_PROD` | `0` |
 | Variable | `SSM_PARAMETER_PREFIX_DEV` | `/hear/development` | None | production secrets come from GitHub |
 

@@ -43,8 +43,8 @@ Parameters:
     AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
   ReservedConcurrency:
     Type: Number
-    Default: 20
-    MinValue: 1
+    Default: 0
+    MinValue: 0
   ProvisionedConcurrency:
     Type: Number
     Default: 0
@@ -52,6 +52,7 @@ Parameters:
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
+  HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
   HasProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
 
 Globals:
@@ -126,7 +127,10 @@ Resources:
       FunctionName: !Sub Hear-Python-${ShortStage}
       PackageType: Image
       ImageUri: !Ref ImageUri
-      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      ReservedConcurrentExecutions: !If
+        - HasReservedConcurrency
+        - !Ref ReservedConcurrency
+        - !Ref AWS::NoValue
       AutoPublishAlias: live
       ProvisionedConcurrencyConfig: !If
         - HasProvisionedConcurrency

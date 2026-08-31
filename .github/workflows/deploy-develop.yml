@@ -59,7 +59,7 @@ jobs:
       HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_DEV || 'alexa' }}
       WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_DEV || 'https://alexa.hear.media/api/v1/alexa/events' }}
       POWERTOOLS_LOG_LEVEL: ${{ vars.POWERTOOLS_LOG_LEVEL_DEV || 'DEBUG' }}
-      RESERVED_CONCURRENCY: ${{ vars.RESERVED_CONCURRENCY_DEV || '10' }}
+      RESERVED_CONCURRENCY: '0'
       PROVISIONED_CONCURRENCY: ${{ vars.PROVISIONED_CONCURRENCY_DEV || '0' }}
       SSM_PARAMETER_PREFIX: ${{ vars.SSM_PARAMETER_PREFIX_DEV || '/hear/development' }}
     steps:
