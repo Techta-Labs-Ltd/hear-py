@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 
 from src.clients.alexa import AlexaClient
-from src.clients.events import SqsEventClient
+from src.clients.events import SqsEventClient, WebhookEventClient
+from src.clients.pool import HttpCircuitOpen
 from src.container import ApplicationContainer
 from src.models.feedback import FeedbackService
 from src.models.playback import Playback
@@ -47,6 +49,14 @@ class WebhookStub:
         return envelope.get("event") not in self.failed_events
 
 
+class OpenCircuitPoolStub:
+    def get(self):
+        return self
+
+    async def post(self, url, **kwargs):
+        raise HttpCircuitOpen("HTTP dependency circuit is open")
+
+
 def test_sqs_client_sends_one_canonical_envelope():
     sqs = SqsStub()
     client = SqsEventClient(
@@ -63,6 +73,23 @@ def test_sqs_client_sends_one_canonical_envelope():
     assert sqs.messages[0]["MessageAttributes"] == {
         "eventType": {"DataType": "String", "StringValue": "playback.finished"}
     }
+
+
+@pytest.mark.asyncio
+async def test_webhook_open_circuit_is_a_deferred_delivery_without_exception_log(caplog):
+    client = WebhookEventClient(
+        url="https://backend.hear.media/events",
+        secret="secret",
+        api_key="api-key",
+        pool=OpenCircuitPoolStub(),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="src.clients.events"):
+        delivered = await client.send({"event": "playback.stopped", "data": {}})
+
+    assert delivered is False
+    assert "reason=circuit_open" in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 @pytest.mark.asyncio

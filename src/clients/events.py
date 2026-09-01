@@ -6,7 +6,7 @@ import logging
 import boto3
 
 from config import settings
-from src.clients.pool import HttpPool
+from src.clients.pool import HttpCircuitOpen, HttpPool
 from src.utils.events import EventUtils
 
 
@@ -92,6 +92,12 @@ class WebhookEventClient:
                 "Hear outbound webhook rejected event=%s status=%s",
                 envelope.get("event"),
                 response.status_code,
+            )
+            return False
+        except HttpCircuitOpen:
+            self.logger.warning(
+                "Hear outbound webhook deferred event=%s reason=circuit_open",
+                envelope.get("event"),
             )
             return False
         except Exception:
