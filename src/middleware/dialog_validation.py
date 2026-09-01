@@ -52,7 +52,7 @@ class DialogValidationPolicy:
         "PlaybackController.PauseCommandIssued",
         "PlaybackController.PlayCommandIssued",
     }
-    _BINARY_DIALOGS = {"search_confirmation", "resume", "latest_source"}
+    _BINARY_DIALOGS = {"search_confirmation", "resume", "latest_source", "asr_repair"}
     _LOCATION_ONBOARDING_INTENTS = _BINARY_INTENTS | {
         "TownCaptureIntent",
         "SetLocationIntent",

@@ -9,6 +9,7 @@ from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
+from src.constants.resolver import ResolverConstants
 from src.constants.search import SearchConstants
 from src.models.dialog import DialogStateManager
 from src.models.resolver import ResolverUnavailable
@@ -57,30 +58,6 @@ class ResolverWorkflow:
         "PlayLocalIntent": "play local content",
         "PlayRecommendationIntent": "recommend something",
     }
-    RAW_SLOT_PRIORITY = {
-        "TownCaptureIntent": ("townName", "selection"),
-        "SetLocationIntent": ("location", "townName", "selection"),
-        "PlayLocalIntent": ("localQuery", "topic", "category"),
-        "PlayRecommendationIntent": ("recommendationQuery", "topic", "category"),
-        "PlayByCreatorIntent": ("creatorQuery", "topic"),
-        "PlayByOrganizationIntent": ("organizationQuery", "topic"),
-        "PlayPublicationIntent": ("publicationSourceQuery", "topic"),
-        "BrowseByCategoryIntent": ("category", "topic"),
-    }
-    DEFAULT_RAW_SLOT_PRIORITY = (
-        "selection",
-        "townName",
-        "location",
-        "topic",
-        "category",
-        "creatorQuery",
-        "organizationQuery",
-        "publicationSourceQuery",
-        "listPickPhrase",
-        "feedbackPhrase",
-        "query",
-    )
-
     @staticmethod
     def _normalize_ordinal(value: object) -> str:
         raw = str(value or "").strip().casefold()
@@ -201,8 +178,8 @@ class ResolverWorkflow:
                 for value in ("play", date_text, requested_sort, "publication", suffix)
                 if value
             )
-        ordered = ResolverWorkflow.RAW_SLOT_PRIORITY.get(
-            alexa_intent, ResolverWorkflow.DEFAULT_RAW_SLOT_PRIORITY
+        ordered = ResolverConstants.RAW_SLOT_PRIORITY.get(
+            alexa_intent, ResolverConstants.DEFAULT_RAW_SLOT_PRIORITY
         )
         raw = next(
             (
@@ -282,15 +259,23 @@ class ResolverWorkflow:
                 "localResolved": True,
                 "slots": {"creatorQuery": "", "genericCreatorRequest": True},
             }
+        organization_request_kind = SearchFilterUtils.organization_request_kind(
+            raw,
+            organization_intent=alexa_intent == "PlayByOrganizationIntent",
+        )
         generic_organization = (
             alexa_intent == "PlayByOrganizationIntent"
-            and (not SearchFilterUtils.is_meaningful_organization_source(raw))
-            or (
-                alexa_intent == "PlayContentIntent"
-                and SearchFilterUtils.is_generic_organization_request(raw)
-            )
+            and organization_request_kind != "specific"
+            or alexa_intent == "PlayContentIntent"
+            and organization_request_kind in {"generic", "repair"}
         )
         if generic_organization:
+            organization_slots = {
+                "organizationQuery": "",
+                "genericOrganizationRequest": True,
+            }
+            if organization_request_kind == "repair":
+                organization_slots["talkingNewspaperRepairCandidate"] = True
             return {
                 "status": "resolved",
                 "intent": "organization",
@@ -299,7 +284,7 @@ class ResolverWorkflow:
                 "nlpMatchesAlexa": alexa_intent == "PlayByOrganizationIntent",
                 "needsRedirect": alexa_intent != "PlayByOrganizationIntent",
                 "localResolved": True,
-                "slots": {"organizationQuery": "", "genericOrganizationRequest": True},
+                "slots": organization_slots,
             }
         if alexa_intent == "PlayPublicationIntent":
             source = AlexaRequest.get_resolved_slot_value(
@@ -422,7 +407,7 @@ class ResolverWorkflowRunner:
         return True
 
     async def _resolver_result(self, handler_input, raw: str, alexa_intent: str | None = None) -> dict:
-        carrier = DiscoveryConstants.RESOLVER_CARRIERS.get(alexa_intent, "")
+        carrier = ResolverConstants.CARRIERS.get(alexa_intent, "")
         normalized = SearchFilterUtils.normalize_discovery_phrase(raw)
         has_carrier = not carrier or normalized == carrier or normalized.startswith(f"{carrier} ")
         utterance = raw if has_carrier else f"{carrier} {raw}"
@@ -521,11 +506,12 @@ class ResolverWorkflowRunner:
                 },
             )
             return True
+        dialog_type = (DialogStateManager.active_from_store(store) or {}).get("type")
         follow_up = (
             ("creator", "creatorQuery", "PlayByCreatorIntent")
-            if store.get("awaitingCreatorName")
+            if store.get("awaitingCreatorName") or dialog_type == "creator_name"
             else ("organization", "organizationQuery", "PlayByOrganizationIntent")
-            if store.get("awaitingOrganizationName")
+            if store.get("awaitingOrganizationName") or dialog_type == "organization_name"
             else None
         )
         if not follow_up:
@@ -535,6 +521,8 @@ class ResolverWorkflowRunner:
         result["intent"] = intent_name
         result.setdefault("slots", {})[slot_name] = raw
         result["slots"][f"{intent_name}FollowUp"] = True
+        if result.get("status") == "resolved":
+            DialogStateManager.clear(handler_input, f"{intent_name}_name")
         ResolverWorkflow._set_nlp(
             handler_input,
             {

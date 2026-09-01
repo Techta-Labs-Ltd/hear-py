@@ -59,6 +59,16 @@ class Decline:
                 .set_should_end_session(False)
                 .response
             )
+        if dialog_type == "asr_repair":
+            DialogStateManager.clear(handler_input, "asr_repair")
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml("No problem. What would you like to listen to?")
+                )
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
         if dialog_type == "latest_source":
             self._deps.user.update(handler_input, {"pendingLatestSource": None})
             DialogStateManager.clear(handler_input, "latest_source")

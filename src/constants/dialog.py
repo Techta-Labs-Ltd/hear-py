@@ -7,7 +7,9 @@ class DialogConstants:
         "report_decision": "awaitingReportDecision",
         "resume": "awaitingResume",
     }
-    TRANSIENT_DISCOVERY_DIALOGS = frozenset({"search_confirmation", "ambiguity"})
+    TRANSIENT_DISCOVERY_DIALOGS = frozenset(
+        {"search_confirmation", "ambiguity", "asr_repair", "organization_name", "creator_name"}
+    )
     DEFERRED_DISCOVERY_INTENTS = frozenset(
         {
             "PlayContentIntent",

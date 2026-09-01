@@ -10,6 +10,10 @@ from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.resolver import ResolverInterceptor
+from src.models.affirmative import Affirmative
+from src.models.decline import Decline
+from src.models.play import PlayOrganization
+from src.models.user import User
 from src.utils.filters import SearchFilterUtils
 
 
@@ -48,6 +52,8 @@ def test_meaningful_discovery_phrases_are_not_reserved(phrase):
         "play from a talking news paper",
         "play from a talking a talking newspaper",
         "play something from the talking talking newspaper",
+        "play from an audio newspaper",
+        "play from talking news",
     ],
 )
 def test_generic_talking_newspaper_phrases_need_a_name(phrase):
@@ -60,6 +66,24 @@ def test_generic_talking_newspaper_phrases_need_a_name(phrase):
 )
 def test_named_talking_newspapers_are_not_generic(phrase):
     assert not SearchFilterUtils.is_generic_organization_request(phrase)
+
+
+@pytest.mark.parametrize("phrase", ["talking", "news paper", "newspaper", "paper"])
+def test_underspecified_organization_phrases_need_a_name(phrase):
+    assert SearchFilterUtils.organization_request_kind(phrase, organization_intent=True) == "generic"
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    ["top English paper", "play from top English paper", "talk English paper"],
+)
+def test_known_talking_newspaper_asr_corruptions_need_targeted_repair(phrase):
+    assert SearchFilterUtils.organization_request_kind(phrase, organization_intent=True) == "repair"
+
+
+@pytest.mark.parametrize("phrase", ["Mole Valley Talking", "York Talking News", "TNF"])
+def test_specific_organization_names_are_preserved(phrase):
+    assert SearchFilterUtils.organization_request_kind(phrase, organization_intent=True) == "specific"
 
 
 @pytest.mark.asyncio
@@ -121,6 +145,178 @@ async def test_meaningful_news_still_calls_resolver(monkeypatch, mock_handler_in
     resolve.assert_awaited_once_with(
         "play news", alexa_user_id="amzn1.ask.account.TEST", timeout_ms=5000
     )
+
+
+@pytest.mark.asyncio
+async def test_truncated_talking_organization_request_never_reaches_resolver(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayByOrganizationIntent",
+                "slots": {
+                    "organizationQuery": {
+                        "name": "organizationQuery",
+                        "value": "talking",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "organization"
+    assert nlp["slots"]["genericOrganizationRequest"] is True
+    assert "talkingNewspaperRepairCandidate" not in nlp["slots"]
+
+
+@pytest.mark.asyncio
+async def test_talking_newspaper_asr_corruption_uses_targeted_repair_without_resolver(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayByOrganizationIntent",
+                "slots": {
+                    "organizationQuery": {
+                        "name": "organizationQuery",
+                        "value": "top English paper",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    await PlayOrganization(deps=ApplicationContainer()).execute(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["slots"]["genericOrganizationRequest"] is True
+    assert nlp["slots"]["talkingNewspaperRepairCandidate"] is True
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "Did you mean a talking newspaper" in spoken
+    assert "top English paper" not in spoken
+    active = User.snapshot(mock_handler_input)["activeDialog"]
+    assert active["type"] == "asr_repair"
+
+
+@pytest.mark.asyncio
+async def test_accepting_talking_newspaper_asr_repair_asks_for_the_source_name(
+    mock_handler_input,
+):
+    mock_handler_input.attributes_manager.get_session_attributes.return_value = {}
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "activeDialog": {
+            "type": "asr_repair",
+            "context": {"repair": "talking_newspaper"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await Affirmative(deps=ApplicationContainer()).execute(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "Which talking newspaper would you like" in spoken
+    active = User.snapshot(mock_handler_input)["activeDialog"]
+    assert active["type"] == "organization_name"
+
+
+@pytest.mark.asyncio
+async def test_declining_talking_newspaper_asr_repair_clears_the_dialog(mock_handler_input):
+    mock_handler_input.attributes_manager.get_session_attributes.return_value = {}
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "activeDialog": {
+            "type": "asr_repair",
+            "context": {"repair": "talking_newspaper"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await Decline(deps=ApplicationContainer()).execute(mock_handler_input)
+
+    assert User.snapshot(mock_handler_input)["activeDialog"] is None
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "What would you like to listen to" in spoken
+
+
+@pytest.mark.asyncio
+async def test_repaired_source_name_follow_up_is_forced_to_organization_resolution(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayContentIntent",
+                "slots": {"topic": {"name": "topic", "value": "Mole Valley Talking"}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "activeDialog": {
+            "type": "organization_name",
+            "context": {"sourceKind": "talking_newspaper"},
+            "expiresAt": 4102444800,
+        },
+    }
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "organization",
+            "slots": {
+                "organizationIds": ["org-mole-valley"],
+                "organizationName": "Mole Valley Talking",
+                "residualQuery": "",
+            },
+            "ambiguities": [],
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        "play from Mole Valley Talking",
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "organization"
+    assert nlp["slots"]["organizationIds"] == ["org-mole-valley"]
+    assert User.snapshot(mock_handler_input)["activeDialog"] is None
 
 
 @pytest.mark.asyncio

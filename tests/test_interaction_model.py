@@ -120,6 +120,30 @@ def test_local_community_phrases_are_owned_by_local_intent():
     assert "play from my local community" in samples
 
 
+def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms():
+    language_model = _model()["interactionModel"]["languageModel"]
+    intents = {item["name"]: item for item in language_model["intents"]}
+    types = {item["name"]: item for item in language_model["types"]}
+    organization_samples = set(intents["PlayByOrganizationIntent"]["samples"])
+    newspaper = next(
+        item
+        for item in types["ContentFormat"]["values"]
+        if item["name"]["value"] == "newspaper"
+    )
+    assert {
+        "play from talking news",
+        "play from a talking paper",
+        "play from an audio newspaper",
+    }.issubset(organization_samples)
+    assert {
+        "talking newspaper",
+        "talking news",
+        "talking paper",
+        "audio newspaper",
+    }.issubset(set(newspaper["name"]["synonyms"]))
+    assert "top english paper" not in newspaper["name"]["synonyms"]
+
+
 def test_publication_choice_navigation_has_forward_and_back_phrases():
     intents = {
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]

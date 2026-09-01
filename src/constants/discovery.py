@@ -153,15 +153,6 @@ class DiscoveryConstants:
         "ClarifySelectionIntent": "general",
         "AMAZON.FallbackIntent": "general",
     }
-    RESOLVER_CARRIERS = {
-        "PlayContentIntent": "play",
-        "PlayByCreatorIntent": "play from",
-        "PlayByOrganizationIntent": "play from",
-        "BrowseByCategoryIntent": "play",
-        "PlayLocalIntent": "play local",
-        "PlayRecommendationIntent": "recommend",
-        "WhatsTrendingIntent": "what's trending",
-    }
     RESERVED_DISCOVERY_PHRASES = frozenset(
         {
             "",
@@ -240,6 +231,11 @@ class DiscoveryConstants:
         {
             "talking newspaper",
             "talking news paper",
+            "talking news",
+            "talking paper",
+            "audio newspaper",
+            "an audio newspaper",
+            "local talking newspaper",
             "a talking newspaper",
             "a talking news paper",
             "the talking newspaper",
@@ -252,6 +248,14 @@ class DiscoveryConstants:
             "play something from a talking news paper",
             "play me a talking newspaper",
             "play me a talking news paper",
+        }
+    )
+    ORGANIZATION_ASR_REPAIR_PHRASES = frozenset(
+        {
+            "top english paper",
+            "top english newspaper",
+            "talk english paper",
+            "talk english newspaper",
         }
     )
     GENERIC_ORGANIZATION_WORDS = frozenset(

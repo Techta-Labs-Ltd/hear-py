@@ -48,6 +48,10 @@ class Speech:
     )
     BROWSE_EXHAUSTED = "That's everything I found."
     ASK_TALKING_NEWSPAPER = "Which talking newspaper would you like?"
+    TALKING_NEWSPAPER_ASR_REPAIR = "Did you mean a talking newspaper?"
+    TALKING_NEWSPAPER_ASR_REPAIR_REPROMPT = (
+        "Say yes if you meant a talking newspaper, or no to try another request."
+    )
     ASK_TALKING_NEWSPAPER_REPROMPT = "Please say its name, for example York Talking News."
     NO_CONTENT_AVAILABLE = "There's no content available at the moment. You can try again shortly."
     CONTENT_NOT_READY = "That one isn't ready to play yet. Try another number."

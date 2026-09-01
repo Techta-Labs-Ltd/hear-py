@@ -7,6 +7,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.models.dialog import DialogStateManager
 from src.models.resolver import ResolutionBuilder
 from src.models.search import Search
 from src.models.user import User
@@ -258,6 +259,23 @@ class PlayOrganization:
         generic_request = bool(nlp_slots.get("genericOrganizationRequest")) or bool(
             nlp_slots.get("unresolvedGenericOrganization")
         )
+        if nlp_slots.get("talkingNewspaperRepairCandidate"):
+            DialogStateManager.activate(
+                handler_input,
+                "asr_repair",
+                context={
+                    "repair": "talking_newspaper",
+                    "question": Speech.TALKING_NEWSPAPER_ASR_REPAIR,
+                },
+            )
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml(Speech.TALKING_NEWSPAPER_ASR_REPAIR)
+                )
+                .reprompt(Ssml.ssml(Speech.TALKING_NEWSPAPER_ASR_REPAIR_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
         if generic_request or (not org_query and (not resolved_org)):
             User.update(handler_input, {"awaitingOrganizationName": True})
             return (

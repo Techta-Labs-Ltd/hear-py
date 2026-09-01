@@ -53,6 +53,8 @@ class Affirmative:
     ):
         if dialog_type == "ambiguity":
             return Affirmative._ambiguity_response(handler_input)
+        if dialog_type == "asr_repair":
+            return self._handle_asr_repair_yes(handler_input, store)
         if dialog_type == "latest_source":
             return await self._handle_latest_source_yes(handler_input, store)
         search_pending = bool(
@@ -71,6 +73,30 @@ class Affirmative:
         if dialog_type == "resume" or not dialog_type and store.get("awaitingResume"):
             return await self._handle_resume_yes(handler_input, store)
         return None
+
+    def _handle_asr_repair_yes(self, handler_input, store: dict):
+        active = DialogStateManager.active_from_store(store) or {}
+        repair = (active.get("context") or {}).get("repair")
+        DialogStateManager.clear(handler_input, "asr_repair")
+        if repair != "talking_newspaper":
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        self._deps.user.update(handler_input, {"awaitingOrganizationName": True})
+        DialogStateManager.activate(
+            handler_input,
+            "organization_name",
+            context={"sourceKind": "talking_newspaper"},
+        )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
+            .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
 
     async def _state_response(self, handler_input, store: dict):
         if store.get("onboardingStage") == "confirm_town_for_community":

@@ -398,8 +398,12 @@
           "samples": [
             "play from a talking newspaper",
             "play from a talking news paper",
+            "play from talking news",
+            "play from a talking paper",
+            "play from an audio newspaper",
             "play something from a talking newspaper",
             "play something from a talking news paper",
+            "play something from talking news",
             "play me a talking newspaper",
             "play from the {organizationQuery}",
             "play content from {organizationQuery}",
@@ -1208,7 +1212,11 @@
                 "value": "newspaper",
                 "synonyms": [
                   "talking newspaper",
-                  "news paper"
+                  "news paper",
+                  "talking news",
+                  "talking paper",
+                  "audio newspaper",
+                  "audio news paper"
                 ]
               }
             },

@@ -195,27 +195,51 @@ class SearchFilterUtils:
 
     @staticmethod
     def is_meaningful_organization_source(value: object) -> bool:
-        normalized = SearchFilterUtils.normalize_discovery_phrase(value)
-        return bool(
-            normalized
-            and normalized not in DiscoveryConstants.RESERVED_DISCOVERY_PHRASES
-            and (not SearchFilterUtils.is_generic_organization_request(normalized))
+        return (
+            SearchFilterUtils.organization_request_kind(value, organization_intent=True)
+            == "specific"
         )
 
     @staticmethod
-    def is_generic_organization_request(value: object) -> bool:
+    def organization_request_kind(
+        value: object, *, organization_intent: bool = False
+    ) -> str:
         normalized = SearchFilterUtils.normalize_discovery_phrase(value)
-        if normalized in DiscoveryConstants.ORGANIZATION_SOURCE_PLACEHOLDERS:
-            return True
+        repair_phrase = re.sub(
+            "^(?:play\\s+)?(?:something\\s+)?from\\s+(?:a\\s+|an\\s+|the\\s+)?",
+            "",
+            normalized,
+        ).strip()
+        if repair_phrase in DiscoveryConstants.ORGANIZATION_ASR_REPAIR_PHRASES:
+            return "repair"
+        if (
+            normalized in DiscoveryConstants.ORGANIZATION_SOURCE_PLACEHOLDERS
+            or repair_phrase in DiscoveryConstants.ORGANIZATION_SOURCE_PLACEHOLDERS
+        ):
+            return "generic"
         tokens = re.findall("[a-z]+", normalized)
         has_talking_newspaper = "talking" in tokens and (
             "newspaper" in tokens or ("news" in tokens and "paper" in tokens)
         )
-        return bool(
+        generic_talking_newspaper = bool(
             has_talking_newspaper
             and tokens
             and all((token in DiscoveryConstants.GENERIC_ORGANIZATION_WORDS for token in tokens))
         )
+        under_specified = bool(
+            organization_intent
+            and (
+                not tokens
+                or all(
+                    (token in DiscoveryConstants.GENERIC_ORGANIZATION_WORDS for token in tokens)
+                )
+            )
+        )
+        return "generic" if generic_talking_newspaper or under_specified else "specific"
+
+    @staticmethod
+    def is_generic_organization_request(value: object) -> bool:
+        return SearchFilterUtils.organization_request_kind(value) == "generic"
 
 
 class SearchFilters:
