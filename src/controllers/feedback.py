@@ -7,9 +7,24 @@ from src.alexa.request import AlexaRequest
 from src.models.feedback_response import (
     EnjoyedFeedback,
     NotEnjoyedFeedback,
+    RatingRequest,
     SkipFeedback,
     SomewhatFeedback,
 )
+
+
+class RateContentHandler(AbstractRequestHandler):
+    def __init__(self, *, deps: object | None = None):
+        self._action = RatingRequest(deps=deps)
+
+    def can_handle(self, handler_input: HandlerInput) -> bool:
+        return (
+            AlexaRequest.get_request_type(handler_input) == "IntentRequest"
+            and AlexaRequest.get_intent_name(handler_input) == "RateContentIntent"
+        )
+
+    async def handle(self, handler_input: HandlerInput):
+        return await self._action.execute(handler_input)
 
 
 class FeedbackEnjoyedHandler(AbstractRequestHandler):

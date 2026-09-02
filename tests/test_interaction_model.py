@@ -196,3 +196,18 @@ def test_playback_speed_type_has_all_six_named_levels():
     ]
     assert "first speed" in values[0]["name"]["synonyms"]
     assert "sixth speed" in values[-1]["name"]["synonyms"]
+
+
+def test_active_audio_commands_include_natural_speed_and_rating_phrases():
+    intents = {
+        item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    assert {"play fast", "play this fast"}.issubset(
+        set(intents["IncreaseSpeedIntent"]["samples"])
+    )
+    assert {"play slow", "play this slow"}.issubset(
+        set(intents["DecreaseSpeedIntent"]["samples"])
+    )
+    assert {"rate this content", "rate this recording", "give feedback"}.issubset(
+        set(intents["RateContentIntent"]["samples"])
+    )

@@ -2,15 +2,33 @@ from __future__ import annotations
 
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.feedback import AlexaFeedback
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DeferredIntentManager, DialogStateManager
 from src.models.feedback import FeedbackService
+from src.models.playback_controls import PlaybackControls
 from src.models.report import Report
 from src.models.social import FollowingManager, ListeningTracker
 from src.models.user import User
 from src.utils.content import ContentUtils
+
+
+class RatingRequest:
+    def __init__(self, *, deps: object | None = None):
+        self._deps = Feedback._dependencies(deps)
+
+    async def execute(self, handler_input: HandlerInput):
+        pending = self._deps.feedback.request_current_rating(handler_input)
+        if pending:
+            return AlexaFeedback.present_requested_feedback(handler_input)
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(Speech.RATE_CONTENT_NOTHING))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
 
 
 class EnjoyedFeedback:
@@ -35,6 +53,13 @@ class EnjoyedFeedback:
             creator=selected_source.get("name"),
             liked=True,
         )
+        if pending.get("requested"):
+            await self._deps.feedback.clear(handler_input)
+            return await PlaybackControls.restart_active(
+                handler_input,
+                speech=Speech.RATE_CONTENT_SAVED_RESUMING,
+                deps=self._deps,
+            )
         creator_id = selected_source.get("id")
         creator_name = selected_source.get("name")
         source_type = selected_source.get("kind") or "creator"
@@ -186,8 +211,15 @@ class SkipFeedback:
                 .set_should_end_session(False)
                 .response
             )
+        requested = bool((store.get("pendingFeedback") or {}).get("requested"))
         await self._deps.feedback.submit(handler_input, "skipped")
         await self._deps.feedback.clear(handler_input)
+        if requested:
+            return await PlaybackControls.restart_active(
+                handler_input,
+                speech=Speech.RATE_CONTENT_SKIPPED_RESUMING,
+                deps=self._deps,
+            )
         if DeferredIntentManager.has(handler_input):
             return await DeferredIntentManager.resume(handler_input)
         return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SKIP_INTRO)

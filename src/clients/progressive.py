@@ -51,7 +51,12 @@ class ProgressiveResponseClient:
                 json=body,
             )
             delivered = response.status_code == 204
-            if not delivered:
+            if delivered:
+                ProgressiveResponseSupport.logger.info(
+                    "Hear: progressive response sent requestId=%s",
+                    request_id,
+                )
+            else:
                 ProgressiveResponseSupport.logger.info(
                     "Hear: progressive response rejected status=%s requestId=%s",
                     response.status_code,

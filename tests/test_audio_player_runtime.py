@@ -495,6 +495,160 @@ async def test_increase_speed_restarts_paused_track_at_saved_offset():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "starting_speed", "expected_speed", "expected_url"),
+    [
+        (
+            "IncreaseSpeedIntent",
+            1.0,
+            1.5,
+            "https://cdn.hear.media/faster.mp3",
+        ),
+        (
+            "DecreaseSpeedIntent",
+            1.5,
+            1.0,
+            "https://cdn.hear.media/audio/monthly-bulletin.mp3",
+        ),
+    ],
+)
+async def test_speed_control_bypasses_pending_feedback(
+    intent_name, starting_speed, expected_speed, expected_url
+):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playbackSpeed": starting_speed,
+        "currentPlaybackSpeeds": [
+            {"speed": 1.0, "audioUrl": "https://cdn.hear.media/normal.mp3"},
+            {"speed": 1.5, "audioUrl": "https://cdn.hear.media/faster.mp3"},
+        ],
+        "activePlayback": _playback_state(status="playing", offset_ms=42000),
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "older-content",
+            "contentId": "older-content",
+            "completed": True,
+        },
+        "activeDialog": {
+            "type": "feedback",
+            "context": {"contentId": "older-content"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    result = await Application.build_skill(
+        persistence,
+        deps=ApplicationContainer(),
+    ).invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": intent_name, "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    response = result["response"]
+    assert persistence._store[USER_ID]["playbackSpeed"] == expected_speed
+    assert response["directives"][0]["type"] == "AudioPlayer.Play"
+    assert response["directives"][0]["audioItem"]["stream"]["url"] == expected_url
+    assert "feedback question" not in response["outputSpeech"]["ssml"]
+    assert persistence._store[USER_ID]["awaitingFeedback"] is True
+
+
+@pytest.mark.asyncio
+async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=42000),
+    }
+
+    result = await Application.build_skill(
+        persistence,
+        deps=ApplicationContainer(),
+    ).invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "RateContentIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    response = result["response"]
+    state = persistence._store[USER_ID]
+    assert "Did you enjoy this?" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
+    assert state["awaitingFeedback"] is True
+    assert state["pendingFeedback"]["contentId"] == CONTENT_ID
+    assert state["pendingFeedback"]["requested"] is True
+
+    follow_up = await Application.build_skill(
+        persistence,
+        deps=ApplicationContainer(),
+    ).invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    assert follow_up["response"]["outputSpeech"]
+    assert follow_up["response"]["directives"][0]["type"] == "AudioPlayer.Play"
+    assert (
+        follow_up["response"]["directives"][0]["audioItem"]["stream"][
+            "offsetInMilliseconds"
+        ]
+        == 42000
+    )
+    assert persistence._store[USER_ID]["feedbackHistory"][-1]["value"] == "enjoyed"
+    assert persistence._store[USER_ID]["awaitingFeedback"] is False
+    assert persistence._store[USER_ID].get("awaitingFollow") is not True
+
+
+@pytest.mark.asyncio
+async def test_skipping_requested_rating_resumes_active_audio():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=42000),
+    }
+    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "RateContentIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    result = await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "SkipFeedbackIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    response = result["response"]
+    assert response["directives"][0]["type"] == "AudioPlayer.Play"
+    assert response["directives"][0]["audioItem"]["stream"]["offsetInMilliseconds"] == 42000
+    assert persistence._store[USER_ID]["feedbackHistory"][-1]["value"] == "skipped"
+    assert persistence._store[USER_ID]["awaitingFeedback"] is False
+
+
+@pytest.mark.asyncio
 async def test_bare_normal_speed_resets_to_base_audio_without_speed_slot():
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {

@@ -36,6 +36,8 @@ class ContentNormalizer:
 
     @staticmethod
     def _pick_playback_speeds(item: dict) -> list | None:
+        if isinstance(item.get("playbackSpeeds"), list) and item["playbackSpeeds"]:
+            return item["playbackSpeeds"]
         if isinstance(item.get("playback_speed"), list) and item["playback_speed"]:
             return item["playback_speed"]
         if isinstance(item.get("playbackSpeed"), list) and item["playbackSpeed"]:

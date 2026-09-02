@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -1276,11 +1277,20 @@ async def test_yes_searches_selected_publication_with_minimal_filter(
         }
     )
     play = AsyncMock(return_value={"shouldEndSession": True})
+    progressive = AsyncMock(return_value=True)
     monkeypatch.setattr(HearApiClient, "search", search)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
 
-    response = await YesIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    response = await YesIntentHandler(
+        deps=ApplicationContainer(
+            progressive=SimpleNamespace(send=progressive),
+        )
+    ).handle(mock_handler_input)
 
+    progressive.assert_awaited_once_with(
+        mock_handler_input,
+        "One moment while I search the Hear catalogue.",
+    )
     search.assert_awaited_once_with(
         {
             "query": "",

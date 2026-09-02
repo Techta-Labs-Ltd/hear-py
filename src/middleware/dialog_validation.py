@@ -33,6 +33,7 @@ class DialogValidationPolicy:
         "FeedbackEnjoyedIntent",
         "FeedbackSomewhatIntent",
         "FeedbackNotEnjoyedIntent",
+        "RateContentIntent",
         "SkipFeedbackIntent",
         "AMAZON.YesIntent",
         "AMAZON.NoIntent",
@@ -45,6 +46,9 @@ class DialogValidationPolicy:
         "AMAZON.PreviousIntent",
         "AMAZON.PauseIntent",
         "AMAZON.ResumeIntent",
+        "SetPlaybackSpeedIntent",
+        "IncreaseSpeedIntent",
+        "DecreaseSpeedIntent",
     }
     _TRANSPORT_REQUEST_TYPES = {
         "PlaybackController.NextCommandIssued",

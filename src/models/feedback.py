@@ -27,6 +27,7 @@ class FeedbackService:
         "FeedbackEnjoyedIntent",
         "FeedbackSomewhatIntent",
         "FeedbackNotEnjoyedIntent",
+        "RateContentIntent",
         "SkipFeedbackIntent",
     }
     replay_intents = {"AMAZON.RepeatIntent", "AMAZON.StartOverIntent"}
@@ -38,6 +39,9 @@ class FeedbackService:
         "AMAZON.PreviousIntent",
         "AMAZON.PauseIntent",
         "AMAZON.ResumeIntent",
+        "SetPlaybackSpeedIntent",
+        "IncreaseSpeedIntent",
+        "DecreaseSpeedIntent",
     }
     transport_request_types = {
         "PlaybackController.NextCommandIssued",
@@ -67,7 +71,11 @@ class FeedbackService:
             return False
         store = User.snapshot(handler_input)
         pending = store.get("pendingFeedback") or {}
-        if store.get("awaitingFeedback") and pending.get("completed") is False:
+        if (
+            store.get("awaitingFeedback")
+            and pending.get("completed") is False
+            and not pending.get("requested")
+        ):
             User.update(
                 handler_input,
                 {
@@ -91,6 +99,49 @@ class FeedbackService:
             | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
         )
         return intent_name not in allowed
+
+    @staticmethod
+    def request_current_rating(handler_input) -> dict | None:
+        store = User.snapshot(handler_input)
+        state = store.get("activePlayback")
+        if not isinstance(state, dict) or not state.get("contentId"):
+            pending = store.get("pendingFeedback")
+            if not isinstance(pending, dict) or not pending.get("feedbackKey"):
+                return None
+            selected = {**pending, "requested": True}
+        else:
+            content_id = str(state["contentId"])
+            selected = {
+                "feedbackKey": content_id,
+                "subjectType": "content",
+                "contentId": content_id,
+                "publicationId": state.get("publicationId"),
+                "title": state.get("title") or state.get("publicationTitle"),
+                "publicationTitle": state.get("publicationTitle"),
+                "creatorId": state.get("creatorId"),
+                "creatorName": state.get("creatorName"),
+                "organizationId": state.get("organizationId"),
+                "organizationName": state.get("organizationName"),
+                "category": state.get("category"),
+                "listenedMs": FeedbackService._safe_int(state.get("listenedMs")),
+                "timeSpentMs": FeedbackService._safe_int(state.get("timeSpentMs")),
+                "timeSpentHours": PlaybackUtils.hours(state.get("timeSpentMs")),
+                "completed": state.get("status") == "completed",
+                "requested": True,
+                "sessionId": state.get("sessionId"),
+                "playbackStartedAt": FeedbackService._safe_int(state.get("startedAt")),
+                "createdAt": int(time.time() * 1000),
+            }
+        User.update(
+            handler_input,
+            {
+                "pendingFeedback": selected,
+                "awaitingFeedback": True,
+                "_requiresReliableSave": True,
+            },
+        )
+        DialogStateManager.activate(handler_input, "feedback", context=selected)
+        return selected
 
     def clear_stale_state(self, handler_input) -> None:
         if AlexaRequest.get_request_type(handler_input) != "IntentRequest":

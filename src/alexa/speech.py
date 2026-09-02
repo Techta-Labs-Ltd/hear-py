@@ -46,6 +46,9 @@ class Speech:
     SEARCH_UNAVAILABLE = (
         "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."
     )
+    SEARCH_PROGRESSIVE = "One moment while I search the Hear catalogue."
+    SEARCH_MORE_PROGRESSIVE = "One moment while I find more choices."
+    SEARCH_LATEST_PROGRESSIVE = "One moment while I find the latest recording."
     BROWSE_EXHAUSTED = "That's everything I found."
     ASK_TALKING_NEWSPAPER = "Which talking newspaper would you like?"
     TALKING_NEWSPAPER_ASR_REPAIR = "Did you mean a talking newspaper?"
@@ -69,6 +72,12 @@ class Speech:
     FEEDBACK_AWAITING_REPROMPT = (
         "Did you enjoy that track? Say enjoyed, it was okay, not enjoyed, or skip."
     )
+    RATE_CONTENT_PROMPT = (
+        "Did you enjoy this? Say enjoyed, it was okay, not enjoyed, or skip."
+    )
+    RATE_CONTENT_NOTHING = "There isn't any content to rate right now."
+    RATE_CONTENT_SAVED_RESUMING = "Thanks for the feedback. Resuming."
+    RATE_CONTENT_SKIPPED_RESUMING = "No problem. Resuming."
     FEEDBACK_REPORT_REPROMPT = "Say report this content, or skip to continue."
     FOLLOW_CREATOR_REPROMPT = (
         "Say next to hear something else, or unfollow this creator to stop following."

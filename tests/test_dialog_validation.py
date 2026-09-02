@@ -122,7 +122,15 @@ def test_feedback_allows_ratings_and_transport_but_rejects_search(mock_handler_i
             "activeDialog": {"type": "feedback", "context": {}},
         },
     )
-    for allowed in ("FeedbackEnjoyedIntent", "AMAZON.YesIntent", "AMAZON.NextIntent"):
+    for allowed in (
+        "FeedbackEnjoyedIntent",
+        "RateContentIntent",
+        "AMAZON.YesIntent",
+        "AMAZON.NextIntent",
+        "SetPlaybackSpeedIntent",
+        "IncreaseSpeedIntent",
+        "DecreaseSpeedIntent",
+    ):
         _intent(mock_handler_input, allowed)
         assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
     _intent(mock_handler_input, "PlayContentIntent")

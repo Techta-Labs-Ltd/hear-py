@@ -12,7 +12,7 @@ from src.utils.playback import PlaybackUtils
 
 class PlaybackControls:
     @staticmethod
-    async def _restart_active(
+    async def restart_active(
         handler_input: HandlerInput,
         *,
         offset_ms: int | None = None,
@@ -52,7 +52,7 @@ class PlaybackControls:
             return Playback.open_queue_response(
                 handler_input, Speech.PLAYBACK_SPEED_SET_IDLE(speed)
             )
-        return await PlaybackControls._restart_active(
+        return await PlaybackControls.restart_active(
             handler_input,
             offset_ms=state.get("offsetMs", 0),
             speech=Speech.PLAYBACK_SPEED_SET(speed),
@@ -95,6 +95,6 @@ class PlaybackControls:
         duration = state.get("durationMs")
         if isinstance(duration, (int, float)):
             target = min(target, max(0, int(duration) - 1000))
-        return await PlaybackControls._restart_active(
+        return await PlaybackControls.restart_active(
             handler_input, offset_ms=target, speech=speech, deps=d
         )

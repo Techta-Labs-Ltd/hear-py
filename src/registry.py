@@ -14,6 +14,7 @@ from src.controllers.feedback import (
     FeedbackEnjoyedHandler,
     FeedbackNotEnjoyedHandler,
     FeedbackSomewhatHandler,
+    RateContentHandler,
     SkipFeedbackHandler,
 )
 from src.controllers.intent_dispatch import IntentDispatchGateHandler
@@ -132,6 +133,7 @@ class RouteRegistry:
         PlaybackFinishedHandler,
         PlaybackStoppedHandler,
         PlaybackFailedHandler,
+        RateContentHandler,
         FeedbackEnjoyedHandler,
         FeedbackSomewhatHandler,
         FeedbackNotEnjoyedHandler,

@@ -53,6 +53,7 @@ class IntentDispatcher:
             "UnfollowCreatorIntent",
             "WhoIsCreatorIntent",
             "WhatsThisAboutIntent",
+            "RateContentIntent",
             "AMAZON.YesIntent",
             "AMAZON.NoIntent",
             "NavigateHomeIntent",

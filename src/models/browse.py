@@ -94,6 +94,10 @@ class Browse:
         user_id = AlexaRequest.get_user_id(handler_input)
         if user_id:
             payload["alexaUserId"] = user_id
+        await self.dependencies.progressive.send(
+            handler_input,
+            Speech.SEARCH_MORE_PROGRESSIVE,
+        )
         result = await self.dependencies.heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),

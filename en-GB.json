@@ -632,6 +632,8 @@
             "can you play it faster",
             "play it faster",
             "play this faster",
+            "play fast",
+            "play this fast",
             "speak faster"
           ]
         },
@@ -652,6 +654,8 @@
             "can you slow it down",
             "play it slower",
             "play this slower",
+            "play slow",
+            "play this slow",
             "speak slower"
           ]
         },
@@ -733,6 +737,18 @@
             "jump ahead {number} seconds",
             "forward {number} minutes",
             "skip {number} minutes"
+          ]
+        },
+        {
+          "name": "RateContentIntent",
+          "slots": [],
+          "samples": [
+            "rate this content",
+            "rate this recording",
+            "rate this",
+            "give feedback",
+            "give feedback on this content",
+            "review this content"
           ]
         },
         {

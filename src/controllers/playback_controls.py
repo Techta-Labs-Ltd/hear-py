@@ -102,7 +102,7 @@ class ResumeIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._restart_active(handler_input, deps=self._deps)
+        return await PlaybackControls.restart_active(handler_input, deps=self._deps)
 
 
 class NextIntentHandler(AbstractRequestHandler):
@@ -153,7 +153,7 @@ class RepeatIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._restart_active(
+        return await PlaybackControls.restart_active(
             handler_input, offset_ms=0, speech=Speech.REPLAYING, deps=self._deps
         )
 

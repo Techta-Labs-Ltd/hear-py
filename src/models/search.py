@@ -378,7 +378,7 @@ class Search:
             intent,
             json.dumps(logged_payload, sort_keys=True, separators=(",", ":")),
         )
-        await d.progressive.send(handler_input, "One moment while I find that for you.")
+        await d.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await d.heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )

@@ -210,6 +210,7 @@ class Affirmative:
         user_id = AlexaRequest.get_user_id(handler_input)
         if user_id:
             payload["alexaUserId"] = user_id
+        await self._deps.progressive.send(handler_input, Speech.SEARCH_LATEST_PROGRESSIVE)
         result = await self._deps.heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
@@ -340,6 +341,7 @@ class Affirmative:
                 separators=(",", ":"),
             ),
         )
+        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._deps.heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),

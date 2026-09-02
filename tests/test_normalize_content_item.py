@@ -95,6 +95,7 @@ def test_publication_tracks_are_flattened_with_parent_metadata():
     assert renormalized[0]["creatorName"] == "Reader One"
     assert renormalized[0]["organizationName"] == "York Talking News"
     assert renormalized[0]["publicationId"] == "publication-1"
+    assert renormalized[0]["playbackSpeeds"] == raw["tracks"][0]["playbackSpeed"]
 
 
 def test_multiple_publication_containers_preserve_choices_but_only_tracks_are_playable():
