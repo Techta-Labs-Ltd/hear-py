@@ -8,6 +8,7 @@ from ask_sdk_core.dispatch_components import (
 )
 
 from src.alexa.context import RequestContext
+from src.alexa.feedback import AlexaFeedback
 from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
@@ -104,7 +105,11 @@ class DialogValidationPolicy:
         if active.get("type") == "search_confirmation" and original:
             speech = f"Did you want me to play {Speech.escape_ssml_lite(original)}? Please say yes or no."
         elif active.get("type") == "resume":
-            speech = "Would you like to continue that recording? Please say yes or no."
+            title = Speech.escape_ssml_lite(
+                AlexaFeedback.subject_title(context, {"activePlayback": context})
+            )
+            speech = f"Would you like to continue {title}? Please say yes or no."
+            return (speech, f"Would you like to continue {title}? Please say yes or no.")
         elif original:
             speech = f"{Speech.escape_ssml_lite(original)} Please say yes or no."
         else:
@@ -163,10 +168,9 @@ class DialogValidationPolicy:
             dialog_type == "feedback"
             and intent_name not in DialogValidationPolicy._FEEDBACK_INTENTS
         ):
-            speech = (
-                "Please answer the feedback question first. " + Speech.FEEDBACK_AWAITING_REPROMPT
-            )
-            reprompt = Speech.FEEDBACK_AWAITING_REPROMPT
+            title = AlexaFeedback.subject_title(context)
+            reprompt = AlexaFeedback.feedback_question(title)
+            speech = "Please answer the feedback question first. " + reprompt
         else:
             return None
         return {"dialogType": dialog_type, "speech": speech, "reprompt": reprompt}

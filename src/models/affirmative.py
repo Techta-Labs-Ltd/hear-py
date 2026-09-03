@@ -8,6 +8,7 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.feedback import AlexaFeedback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -116,7 +117,10 @@ class Affirmative:
             self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": False})
             return await PlaybackControls.restart_active(
                 handler_input,
-                speech=Speech.FLAGGED_CONTINUE_YES_ACK,
+                speech=AlexaFeedback.continuing_speech(
+                    store.get("activePlayback"),
+                    store,
+                ),
                 deps=self._deps,
             )
         if store.get("awaitingFeedback"):

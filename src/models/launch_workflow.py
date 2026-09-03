@@ -53,9 +53,12 @@ class LaunchWorkflow:
         if self._deps.playback.state.has_unfinished(store):
             return self._unfinished_response(handler_input, store)
         if store.get("awaitingContinueAfterFlag"):
+            subject = store.get("activePlayback") or store.get("reportContext") or {}
+            question = AlexaFeedback.keep_listening_question(subject, store)
+            reprompt = AlexaFeedback.keep_listening_reprompt(subject, store)
             return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.LAUNCH_RESUME_FLAGGED_PROMPT))
-                .reprompt(Speech.FLAGGED_CONTINUE_REPROMPT)
+                handler_input.response_builder.speak(Ssml.ssml(question))
+                .reprompt(Ssml.ssml(reprompt))
                 .set_should_end_session(False)
                 .response
             )
@@ -69,19 +72,14 @@ class LaunchWorkflow:
 
     def _unfinished_response(self, handler_input: HandlerInput, store: dict):
         active = self._deps.playback.state.from_store(store) or {}
-        title = Speech.escape_ssml_lite(
-            active.get("publicationTitle") or "that publication"
-            if active.get("subjectType") == "publication" or active.get("publicationId")
-            else active.get("title")
-            or "your recording"
-        )
+        title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(active, store))
         self._deps.user.update(handler_input, {"awaitingResume": True})
         DialogStateManager.activate(handler_input, "resume", context=active)
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(f"You did not finish {title}. Would you like to continue?")
             )
-            .reprompt(Ssml.ssml("Would you like to continue listening?"))
+            .reprompt(Ssml.ssml(f"Would you like to continue {title}?"))
             .set_should_end_session(False)
             .response
         )

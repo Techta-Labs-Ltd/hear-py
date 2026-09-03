@@ -143,6 +143,31 @@ class TestIsNewUser:
         assert "Weekly publication" in speech
         assert "Second track" not in speech
 
+    def test_resume_prompt_uses_persisted_subject_title_in_speech_and_reprompt(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "track-2",
+                    "title": "Second track",
+                    "publicationId": "publication-1",
+                    "subjectTitle": "Weekly publication",
+                    "subjectType": "publication",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        reprompt = hi.response_builder.speak.return_value.reprompt.call_args.args[0]
+        assert "Weekly publication" in speech
+        assert "Weekly publication" in reprompt
+        assert "Second track" not in speech
+
 
 class TestSpeechStrings:
     def test_onboarding_ask_permission(self):

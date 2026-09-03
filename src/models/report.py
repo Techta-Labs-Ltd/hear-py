@@ -49,6 +49,15 @@ class Report:
             "contentId": context["contentId"],
             "publicationId": saved.get("publicationId") or context.get("publicationId"),
             "title": saved.get("title") or pending.get("title") or active.get("title"),
+            "publicationTitle": saved.get("publicationTitle")
+            or pending.get("publicationTitle")
+            or active.get("publicationTitle"),
+            "subjectTitle": saved.get("subjectTitle")
+            or pending.get("subjectTitle")
+            or active.get("subjectTitle"),
+            "subjectType": saved.get("subjectType")
+            or pending.get("subjectType")
+            or active.get("subjectType"),
             "creatorId": saved.get("creatorId")
             or pending.get("creatorId")
             or active.get("creatorId"),

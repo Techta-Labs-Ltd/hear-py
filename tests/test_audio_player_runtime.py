@@ -587,7 +587,7 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
 
     response = result["response"]
     state = persistence._store[USER_ID]
-    assert "Did you enjoy this?" in response["outputSpeech"]["ssml"]
+    assert "Did you enjoy Sheffield monthly bulletin?" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
     assert response["directives"] == [{"type": "AudioPlayer.Stop"}]
     assert state["awaitingFeedback"] is True
@@ -620,6 +620,56 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
     assert persistence._store[USER_ID]["feedbackHistory"][-1]["value"] == "enjoyed"
     assert persistence._store[USER_ID]["awaitingFeedback"] is False
     assert persistence._store[USER_ID].get("awaitingFollow") is not True
+
+
+@pytest.mark.asyncio
+async def test_publication_rating_names_publication_when_prompting_and_resuming():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": {
+            **_playback_state(status="playing", offset_ms=42000),
+            "title": "Track seven",
+            "publicationId": "publication-1",
+            "publicationTitle": "The Weekly Edition",
+            "subjectType": "publication",
+            "subjectTitle": "The Weekly Edition",
+        },
+    }
+    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+
+    prompted = await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "RateContentIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    assert "Did you enjoy The Weekly Edition?" in prompted["response"]["outputSpeech"]["ssml"]
+    assert "Track seven" not in prompted["response"]["outputSpeech"]["ssml"]
+    assert persistence._store[USER_ID]["pendingFeedback"]["subjectType"] == "publication"
+    assert (
+        persistence._store[USER_ID]["pendingFeedback"]["feedbackKey"]
+        == "publication:publication-1"
+    )
+
+    answered = await Application.build_skill(
+        persistence,
+        deps=ApplicationContainer(),
+    ).invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    assert "Resuming The Weekly Edition" in answered["response"]["outputSpeech"]["ssml"]
 
 
 @pytest.mark.asyncio
@@ -741,6 +791,56 @@ async def test_report_command_pauses_audio_and_yes_resumes_from_current_offset()
     assert directive["type"] == "AudioPlayer.Play"
     assert directive["audioItem"]["stream"]["offsetInMilliseconds"] == 63000
     assert persistence._store[USER_ID]["awaitingContinueAfterFlag"] is False
+
+
+@pytest.mark.asyncio
+async def test_report_publication_names_publication_when_asking_and_continuing():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": {
+            **_playback_state(status="playing", offset_ms=42000),
+            "title": "Track seven",
+            "publicationId": "publication-1",
+            "publicationTitle": "The Weekly Edition",
+            "subjectType": "publication",
+            "subjectTitle": "The Weekly Edition",
+        },
+    }
+    report_event = _event(
+        {
+            "type": "IntentRequest",
+            "intent": {"name": "ReportContentIntent", "slots": {}},
+        }
+    )
+    report_event["context"]["AudioPlayer"] = {
+        "playerActivity": "PLAYING",
+        "token": CONTENT_ID,
+        "offsetInMilliseconds": 63000,
+    }
+
+    reported = await Application.build_skill(
+        persistence,
+        deps=ApplicationContainer(),
+    ).invoke(report_event, None)
+
+    assert "keep listening to The Weekly Edition" in reported["response"]["outputSpeech"]["ssml"]
+    assert "Track seven" not in reported["response"]["outputSpeech"]["ssml"]
+
+    continued = await Application.build_skill(
+        persistence,
+        deps=ApplicationContainer(),
+    ).invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    assert "continuing The Weekly Edition" in continued["response"]["outputSpeech"]["ssml"]
 
 
 @pytest.mark.asyncio

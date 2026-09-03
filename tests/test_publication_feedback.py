@@ -257,6 +257,38 @@ def test_publication_prompt_uses_publication_wording(mock_handler_input):
     assert "Did you enjoy this publication" in spoken
 
 
+def test_publication_feedback_prefers_publication_title_in_speech_and_reprompt(
+    mock_handler_input,
+):
+    _store(
+        mock_handler_input,
+        awaitingFeedback=True,
+        pendingFeedback={
+            "feedbackKey": "publication:publication-1",
+            "subjectType": "publication",
+            "publicationId": "publication-1",
+            "publicationTitle": "The Weekly Edition",
+            "title": "Track seven",
+            "completed": True,
+        },
+    )
+    from src.alexa.feedback import AlexaFeedback
+
+    AlexaFeedback.present_pending_feedback(
+        mock_handler_input,
+        mock_handler_input.attributes_manager.request_attributes["_store"],
+    )
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    reprompt = (
+        mock_handler_input.response_builder.speak.return_value.reprompt.call_args.args[0]
+    )
+    assert "The Weekly Edition" in spoken
+    assert "The Weekly Edition" in reprompt
+    assert "Track seven" not in spoken
+    assert "that track" not in reprompt
+
+
 def test_publication_queue_records_expected_count_and_duration(mock_handler_input):
     _store(mock_handler_input)
     queue = PlaybackQueue(User()).initialize(

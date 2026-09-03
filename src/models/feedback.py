@@ -111,12 +111,13 @@ class FeedbackService:
             selected = {**pending, "requested": True}
         else:
             content_id = str(state["contentId"])
+            subject_type = ContentIdentity.subject_type(state)
             selected = {
-                "feedbackKey": content_id,
-                "subjectType": "content",
+                "feedbackKey": ContentIdentity.subject_key(state) or content_id,
+                "subjectType": subject_type,
                 "contentId": content_id,
                 "publicationId": state.get("publicationId"),
-                "title": state.get("title") or state.get("publicationTitle"),
+                "title": ContentIdentity.subject_title(state) or state.get("title"),
                 "publicationTitle": state.get("publicationTitle"),
                 "creatorId": state.get("creatorId"),
                 "creatorName": state.get("creatorName"),

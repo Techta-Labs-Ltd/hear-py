@@ -113,6 +113,31 @@ def test_search_confirmation_rejects_new_search(mock_handler_input):
     assert "yes or no" in failure["speech"]
 
 
+def test_resume_validation_repeats_publication_title(mock_handler_input):
+    context = {
+        "contentId": "track-2",
+        "title": "Second track",
+        "publicationId": "publication-1",
+        "subjectTitle": "Weekly publication",
+        "subjectType": "publication",
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "awaitingResume": True,
+            "activePlayback": context,
+            "activeDialog": {"type": "resume", "context": context},
+        },
+    )
+    _intent(mock_handler_input, "PlayContentIntent")
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert "Weekly publication" in failure["speech"]
+    assert "Weekly publication" in failure["reprompt"]
+    assert "that recording" not in failure["speech"]
+
+
 def test_feedback_allows_ratings_and_transport_but_rejects_search(mock_handler_input):
     User.update(
         mock_handler_input,
@@ -138,6 +163,31 @@ def test_feedback_allows_ratings_and_transport_but_rejects_search(mock_handler_i
         DialogValidationPolicy.dialog_validation_failure(mock_handler_input)["dialogType"]
         == "feedback"
     )
+
+
+def test_feedback_validation_repeats_publication_title(mock_handler_input):
+    pending = {
+        "feedbackKey": "publication:publication-1",
+        "subjectType": "publication",
+        "publicationId": "publication-1",
+        "publicationTitle": "Weekly publication",
+        "completed": True,
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "awaitingFeedback": True,
+            "pendingFeedback": pending,
+            "activeDialog": {"type": "feedback", "context": pending},
+        },
+    )
+    _intent(mock_handler_input, "PlayContentIntent")
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert "Weekly publication" in failure["speech"]
+    assert "Weekly publication" in failure["reprompt"]
+    assert "that track" not in failure["speech"]
 
 
 def test_report_decision_allows_report_and_skip(mock_handler_input):

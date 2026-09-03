@@ -5,6 +5,7 @@ import logging
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.feedback import AlexaFeedback
 from src.alexa.playback_context import PlaybackContext
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
@@ -58,20 +59,7 @@ class ReportContentHandler(AbstractRequestHandler):
             DialogStateManager.clear(handler_input, "report_decision")
             if DeferredIntentManager.has(handler_input):
                 return await DeferredIntentManager.resume(handler_input)
-            self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": True})
-            directive = await PlaybackControls.pause_active(
-                handler_input,
-                deps=self._deps,
-            )
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.REPORT_CONTENT_THEN_ASK_CONTINUE)
-                )
-                .reprompt(Speech.FLAGGED_CONTINUE_REPROMPT)
-                .add_directive(directive)
-                .set_should_end_session(False)
-                .response
-            )
+            return await self._present_continue_question(handler_input, report, store)
         except Exception as err:
             ReportModule.logger.warning("Report content error: %s", err)
             return (
@@ -80,6 +68,26 @@ class ReportContentHandler(AbstractRequestHandler):
                 .set_should_end_session(False)
                 .response
             )
+
+    async def _present_continue_question(
+        self,
+        handler_input: HandlerInput,
+        report: dict,
+        store: dict,
+    ):
+        self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": True})
+        directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
+        question = AlexaFeedback.keep_listening_question(report, store)
+        reprompt = AlexaFeedback.keep_listening_reprompt(report, store)
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(f"{Speech.REPORT_CONTENT_CONFIRM} {question}")
+            )
+            .reprompt(Ssml.ssml(reprompt))
+            .add_directive(directive)
+            .set_should_end_session(False)
+            .response
+        )
 
 
 class ReportCreatorHandler(AbstractRequestHandler):
