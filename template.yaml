@@ -61,11 +61,16 @@ Parameters:
     Type: Number
     Default: 0
     MinValue: 0
+  ProactiveReservedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
   HasProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
+  HasProactiveReservedConcurrency: !Not [!Equals [!Ref ProactiveReservedConcurrency, 0]]
 
 Globals:
   Function:
@@ -232,7 +237,10 @@ Resources:
         Command: ["main.notification_handler"]
       MemorySize: 512
       Timeout: 30
-      ReservedConcurrentExecutions: 5
+      ReservedConcurrentExecutions: !If
+        - HasProactiveReservedConcurrency
+        - !Ref ProactiveReservedConcurrency
+        - !Ref AWS::NoValue
       Environment:
         Variables:
           ALEXA_PROACTIVE_CLIENT_ID: !Ref AlexaProactiveClientId

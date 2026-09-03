@@ -62,6 +62,7 @@ jobs:
       CANONICAL_IDENTITY_ENABLED: ${{ vars.CANONICAL_IDENTITY_ENABLED_PROD || '1' }}
       RESERVED_CONCURRENCY: '0'
       PROVISIONED_CONCURRENCY: ${{ vars.PROVISIONED_CONCURRENCY_PROD || '0' }}
+      PROACTIVE_RESERVED_CONCURRENCY: ${{ vars.PROACTIVE_RESERVED_CONCURRENCY_PROD || '0' }}
       HEAR_API_KEY: ${{ secrets.HEAR_API_KEY_PROD }}
       WEBHOOK_OUTBOUND_SECRET: ${{ secrets.WEBHOOK_OUTBOUND_SECRET_PROD }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN_PROD }}
@@ -125,7 +126,8 @@ jobs:
               WebhookOutboundUrl="$WEBHOOK_OUTBOUND_URL" WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
               SentryDsn="$SENTRY_DSN" PowerToolsLogLevel="$POWERTOOLS_LOG_LEVEL" \
               CanonicalIdentityEnabled="$CANONICAL_IDENTITY_ENABLED" \
-              ReservedConcurrency="$RESERVED_CONCURRENCY" ProvisionedConcurrency="$PROVISIONED_CONCURRENCY"
+              ReservedConcurrency="$RESERVED_CONCURRENCY" ProvisionedConcurrency="$PROVISIONED_CONCURRENCY" \
+              ProactiveReservedConcurrency="$PROACTIVE_RESERVED_CONCURRENCY"
       - name: Show production stack outputs
         if: steps.cloudformation.outcome == 'success'
         run: |

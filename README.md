@@ -114,6 +114,7 @@ stages:
 | Variable | `POWERTOOLS_LOG_LEVEL_DEV` | `DEBUG` | `POWERTOOLS_LOG_LEVEL_PROD` | `INFO` |
 | Variable | `CANONICAL_IDENTITY_ENABLED_DEV` | `0` until the backend resolve endpoint is live, then `1` | `CANONICAL_IDENTITY_ENABLED_PROD` | `0` until the backend resolve endpoint is live, then `1` |
 | Variable | `PROVISIONED_CONCURRENCY_DEV` | `0` | `PROVISIONED_CONCURRENCY_PROD` | `0` |
+| Variable | `PROACTIVE_RESERVED_CONCURRENCY_DEV` | `0` unless the regional quota has spare capacity | `PROACTIVE_RESERVED_CONCURRENCY_PROD` | `0` unless the regional quota has spare capacity |
 | Variable | `SSM_PARAMETER_PREFIX_DEV` | `/hear/development` | None | production secrets come from GitHub |
 
 Development reads sensitive configuration from encrypted SSM parameters:

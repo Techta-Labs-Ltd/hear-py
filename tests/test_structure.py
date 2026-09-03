@@ -161,6 +161,9 @@ def test_template_has_scaling_guards_and_operational_alarms():
     assert "HasReservedConcurrency: !Not" in template
     assert "ReservedConcurrentExecutions: !If" in template
     assert "ProvisionedConcurrencyConfig: !If" in template
+    assert "HasProactiveReservedConcurrency: !Not" in template
+    assert "ProactiveReservedConcurrency:" in template
+    assert "ReservedConcurrentExecutions: 5" not in template
     assert "HearSkillErrorAlarm:" in template
     assert "HearSkillThrottleAlarm:" in template
     assert "HearSkillDurationAlarm:" in template
