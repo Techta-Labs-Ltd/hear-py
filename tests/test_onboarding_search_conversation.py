@@ -37,6 +37,72 @@ def _town_request(mock_handler_input, value: str):
 
 
 @pytest.mark.asyncio
+async def test_external_resolver_call_sends_interpretation_progressive(mock_handler_input):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "search",
+                "slots": {"residualQuery": "gardening"},
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayContentIntent",
+                "slots": {"topic": {"name": "topic", "value": "gardening"}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+
+    await ResolverInterceptor(
+        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
+    ).process(mock_handler_input)
+
+    progressive.send.assert_awaited_once_with(
+        mock_handler_input,
+        "One moment while I work that out for you.",
+    )
+    resolver.resolve_utterance.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_local_resolver_result_does_not_send_interpretation_progressive(
+    mock_handler_input,
+):
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock())
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "WhatsTrendingIntent", "slots": {}},
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+
+    await ResolverInterceptor(
+        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
+    ).process(mock_handler_input)
+
+    progressive.send.assert_not_awaited()
+    resolver.resolve_utterance.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_playback_location_is_search_filter_not_saved_location(
     monkeypatch, mock_handler_input
 ):

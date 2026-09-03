@@ -6,6 +6,7 @@ import time
 from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
+from src.alexa.speech import Speech
 from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.resolver import ResolverConstants
@@ -377,6 +378,7 @@ class ResolverWorkflowRunner:
         listener_id = User.snapshot(handler_input).get("listenerId")
         if listener_id:
             options["listener_id"] = listener_id
+        await self._deps.progressive.send(handler_input, Speech.RESOLVER_PROGRESSIVE)
         return await self._deps.resolver.resolve_utterance(utterance, **options)
 
     async def _resolve_ambiguity(

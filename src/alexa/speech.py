@@ -46,6 +46,7 @@ class Speech:
     SEARCH_UNAVAILABLE = (
         "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."
     )
+    RESOLVER_PROGRESSIVE = "One moment while I work that out for you."
     SEARCH_PROGRESSIVE = "Just a moment while I find that for you."
     SEARCH_MORE_PROGRESSIVE = "Just a moment while I find a few more options."
     SEARCH_LATEST_PROGRESSIVE = "Just a moment while I find the latest for you."
