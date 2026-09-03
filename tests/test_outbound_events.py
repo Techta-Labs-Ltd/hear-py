@@ -150,6 +150,8 @@ async def test_publication_playback_event_reaches_sqs_as_publication(mock_handle
     envelope = json.loads(message["MessageBody"])
     data = envelope["data"]
     assert envelope["event"] == "playback.stopped"
+    assert envelope["schemaVersion"] == 2
+    assert envelope["eventId"] == data["clientEventId"]
     assert data["subjectType"] == "publication"
     assert data["subjectId"] == "publication-1"
     assert data["publicationId"] == "publication-1"
@@ -165,6 +167,8 @@ async def test_publication_playback_event_reaches_sqs_as_publication(mock_handle
     assert "contentId" not in data
     assert message["MessageAttributes"] == {
         "eventType": {"DataType": "String", "StringValue": "playback.stopped"},
+        "eventId": {"DataType": "String", "StringValue": envelope["eventId"]},
+        "schemaVersion": {"DataType": "String", "StringValue": "2"},
         "subjectType": {"DataType": "String", "StringValue": "publication"},
         "subjectId": {"DataType": "String", "StringValue": "publication-1"},
         "publicationId": {"DataType": "String", "StringValue": "publication-1"},
@@ -240,10 +244,36 @@ def test_follow_notification_event_reaches_sqs_with_publication_unit():
     envelope = json.loads(message["MessageBody"])
     assert envelope["event"] == "user.followed_organization"
     assert envelope["data"]["notificationSubjectType"] == "publication"
+    assert envelope["data"]["clientEventId"].startswith("follow:listener-1:")
+    assert "userId" not in envelope["data"]
     assert message["MessageAttributes"]["notificationSubjectType"] == {
         "DataType": "String",
         "StringValue": "publication",
     }
+    assert message["MessageAttributes"]["listenerId"] == {
+        "DataType": "String",
+        "StringValue": "listener-1",
+    }
+
+
+def test_notification_preference_event_is_backend_owned_and_repeatable():
+    producer = EventProducerStub()
+    service = OutboundEventService(producer=producer)
+
+    assert service.notification_preference(
+        enabled=False,
+        permission_granted=True,
+        alexa_user_id="alexa-user-1",
+        listener_id="listener-1",
+    )
+
+    envelope = producer.envelopes[0]
+    assert envelope["event"] == "notifications.disabled"
+    assert envelope["data"]["enabled"] is False
+    assert envelope["data"]["permissionGranted"] is True
+    assert envelope["data"]["clientEventId"].startswith(
+        "notifications:listener-1:disabled:"
+    )
 
 
 @pytest.mark.asyncio
@@ -437,3 +467,4 @@ async def test_report_model_sends_the_recorded_backend_event(mock_handler_input)
     envelope = producer.envelopes[0]
     assert envelope["event"] == "user.reported_content"
     assert envelope["data"]["contentId"] == "track-1"
+    assert "userId" not in envelope["data"]

@@ -220,6 +220,8 @@ class DynamoTable:
         map_name: str,
         fields: dict[str, Any],
         *,
+        sort_value: Any = None,
+        removes: list[str] | tuple[str, ...] | None = None,
         updates: dict[str, Any],
         condition: list[dict] | None = None,
     ) -> None:
@@ -232,6 +234,11 @@ class DynamoTable:
             names[name_key] = field
             values[value_key] = DynamoExpressions.encode_value(raw)
             clauses.append(f"#document.{name_key} = {value_key}")
+        remove_clauses = []
+        for index, field in enumerate(removes or [], start=len(fields)):
+            name_key = f"#r{index}"
+            names[name_key] = field
+            remove_clauses.append(f"#document.{name_key}")
         offset = len(fields)
         for index, (field, raw) in enumerate(updates.items(), start=offset):
             name_key = f"#u{index}"
@@ -239,10 +246,15 @@ class DynamoTable:
             names[name_key] = field
             values[value_key] = DynamoExpressions.encode_value(raw)
             clauses.append(f"{name_key} = {value_key}")
+        expression_parts = []
+        if clauses:
+            expression_parts.append(f"SET {', '.join(clauses)}")
+        if remove_clauses:
+            expression_parts.append(f"REMOVE {', '.join(remove_clauses)}")
         params: dict[str, Any] = {
             "TableName": self.table_name,
-            "Key": self._key(partition_value),
-            "UpdateExpression": f"SET {', '.join(clauses)}",
+            "Key": self._key(partition_value, sort_value),
+            "UpdateExpression": " ".join(expression_parts),
             "ExpressionAttributeNames": names,
             "ExpressionAttributeValues": values,
         }
@@ -283,22 +295,21 @@ class DynamoTable:
         exclusive_start_key = options.get("exclusive_start_key")
         consistent = bool(options.get("consistent"))
         ascending = options.get("ascending")
+        index_name = options.get("index_name")
+        partition_key = options.get("partition_key") or self.partition_key
         params: dict[str, Any] = {
             "TableName": self.table_name,
-            "KeyConditionExpression": f"{self.partition_key} = :pk",
+            "KeyConditionExpression": "#partitionKey = :pk",
+            "ExpressionAttributeNames": {"#partitionKey": partition_key},
             "ExpressionAttributeValues": {":pk": DynamoExpressions.encode_value(partition_value)},
             "ConsistentRead": consistent,
         }
-        if self.sort_key:
-            params["ExpressionAttributeNames"] = {f"#{self.partition_key}": self.partition_key}
-            params["KeyConditionExpression"] = f"#{self.partition_key} = :pk"
+        if index_name:
+            params["IndexName"] = str(index_name)
         if filters:
             filter_expression, names, values = DynamoExpressions.build_condition(filters)
             params["FilterExpression"] = filter_expression
-            params["ExpressionAttributeNames"] = {
-                **(params.get("ExpressionAttributeNames") or {}),
-                **names,
-            }
+            params["ExpressionAttributeNames"].update(names)
             params["ExpressionAttributeValues"] = {
                 **params["ExpressionAttributeValues"],
                 **values,

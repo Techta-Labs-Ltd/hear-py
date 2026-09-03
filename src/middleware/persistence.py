@@ -10,6 +10,7 @@ from ask_sdk_core.dispatch_components import (
 
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
+from src.models.listener import Listener
 from src.models.user import User
 from src.utils.deadline import DeadlineBudget
 
@@ -17,16 +18,37 @@ from src.utils.deadline import DeadlineBudget
 class PersistenceMiddlewareSupport:
     logger = logging.getLogger(__name__)
 
+    @staticmethod
+    def apply_identity(handler_input) -> None:
+        identity = Listener.identity(handler_input)
+        store = User.snapshot(handler_input)
+        updates = {}
+        if identity and identity.listener_id:
+            updates["listenerId"] = identity.listener_id
+        if (
+            identity
+            and identity.user_email
+            and store.get("userEmail") != identity.user_email
+        ):
+            updates["userEmail"] = identity.user_email
+        if updates:
+            User.update(handler_input, updates)
+
+    @staticmethod
+    def hydrate_unavailable(handler_input) -> None:
+        User.hydrate_unavailable(handler_input)
+        PersistenceMiddlewareSupport.apply_identity(handler_input)
+
 
 class LoadPersistenceInterceptor(AbstractRequestInterceptor):
     async def process(self, handler_input) -> None:
         request_type = AlexaRequest.get_request_type(handler_input)
         if request_type == "CanFulfillIntentRequest":
-            User.hydrate_unavailable(handler_input)
+            PersistenceMiddlewareSupport.hydrate_unavailable(handler_input)
             return
         remaining_ms = DeadlineBudget.get_lambda_remaining_ms(handler_input)
         if DeadlineBudget.should_skip_persistence_load(request_type, remaining_ms):
-            User.hydrate_unavailable(handler_input)
+            PersistenceMiddlewareSupport.hydrate_unavailable(handler_input)
             return
         reliable_load = DeadlineBudget.requires_reliable_persistence_load(request_type)
         budget_ms = 0 if reliable_load else DeadlineBudget.persistence_load_budget_ms(handler_input)
@@ -42,7 +64,7 @@ class LoadPersistenceInterceptor(AbstractRequestInterceptor):
                         or {}
                     )
                 except asyncio.TimeoutError:
-                    User.hydrate_unavailable(handler_input)
+                    PersistenceMiddlewareSupport.hydrate_unavailable(handler_input)
                     AlexaMetrics.increment("PersistenceLoadTimeout")
                     PersistenceMiddlewareSupport.logger.warning(
                         "Hear: persistence load timed out degraded=true"
@@ -56,9 +78,19 @@ class LoadPersistenceInterceptor(AbstractRequestInterceptor):
                 "Hear: persistence load failed error=%s degraded=true",
                 type(exc).__name__,
             )
-            User.hydrate_unavailable(handler_input)
+            PersistenceMiddlewareSupport.hydrate_unavailable(handler_input)
             return
         User.hydrate(handler_input, stored)
+        used_alias = bool(
+            getattr(
+                handler_input.attributes_manager,
+                "used_alias_persistence",
+                False,
+            )
+        )
+        PersistenceMiddlewareSupport.apply_identity(handler_input)
+        if used_alias:
+            AlexaMetrics.increment("PersistenceAliasCopied")
 
 
 class SavePersistenceInterceptor(AbstractResponseInterceptor):

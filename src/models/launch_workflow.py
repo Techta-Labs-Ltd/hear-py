@@ -24,14 +24,25 @@ class LaunchWorkflow:
     async def execute(self, handler_input: HandlerInput):
         store = self._initial_store(handler_input)
         user_name = self._user_name(store)
-        pending_response = await self._pending_response(handler_input, store, user_name)
-        if pending_response is not None:
-            return pending_response
+        protected_response = self._protected_response(handler_input, store, user_name)
+        if protected_response is not None:
+            return protected_response
         try:
             store = await self._ensure_listener_data_for_launch(handler_input, store)
         except Exception:
             pass
         store = await self._sync_listener_for_launch(handler_input, store)
+        notification_response = await self._deps.notifications.offer(handler_input)
+        if notification_response is not None:
+            return notification_response
+        store = self._deps.user.snapshot(handler_input)
+        pending_response = await self._pending_response(
+            handler_input,
+            store,
+            self._user_name(store),
+        )
+        if pending_response is not None:
+            return pending_response
         self._schedule_launch_background_work(handler_input, store)
         return self._welcome_response(handler_input, store)
 
@@ -45,13 +56,11 @@ class LaunchWorkflow:
             return self._deps.user.snapshot(handler_input)
         return store
 
-    async def _pending_response(
+    def _protected_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
         if store.get("onboardingStage") == "confirm_town_for_community":
             return Onboarding.start_town_capture(handler_input, store, user_name, deps=self._deps)
-        if self._deps.playback.state.has_unfinished(store):
-            return self._unfinished_response(handler_input, store)
         if store.get("awaitingContinueAfterFlag"):
             subject = store.get("activePlayback") or store.get("reportContext") or {}
             question = AlexaFeedback.keep_listening_question(subject, store)
@@ -62,6 +71,13 @@ class LaunchWorkflow:
                 .set_should_end_session(False)
                 .response
             )
+        return None
+
+    async def _pending_response(
+        self, handler_input: HandlerInput, store: dict, user_name: str | None
+    ):
+        if self._deps.playback.state.has_unfinished(store):
+            return self._unfinished_response(handler_input, store)
         if store.get("awaitingFeedback") and store.get("pendingFeedback"):
             return AlexaFeedback.present_pending_feedback(handler_input, store)
         if store.get("awaitingFeedback") and (

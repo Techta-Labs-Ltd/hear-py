@@ -2,13 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hear-py/resolver-request.schema.json",
   "title": "Resolver request",
-  "description": "Request body sent to POST /resolve by src/services/resolver_client.py.",
+  "description": "Request body sent to POST /resolve by src/clients/resolver.py.",
   "type": "object",
   "required": ["utterance", "timezone", "country_code"],
   "properties": {
     "utterance": { "type": "string", "maxLength": 256 },
     "timezone": { "type": "string" },
     "country_code": { "type": "string" },
+    "listenerId": { "type": "string", "minLength": 1 },
     "alexaUserId": { "type": "string" }
-  }
+  },
+  "additionalProperties": false
 }

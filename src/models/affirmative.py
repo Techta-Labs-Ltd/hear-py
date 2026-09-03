@@ -59,6 +59,8 @@ class Affirmative:
             return self._handle_asr_repair_yes(handler_input, store)
         if dialog_type == "latest_source":
             return await self._handle_latest_source_yes(handler_input, store)
+        if dialog_type == "notification":
+            return await self._deps.notifications.accept(handler_input)
         search_pending = bool(
             dialog_type == "search_confirmation"
             or not dialog_type
@@ -123,6 +125,8 @@ class Affirmative:
                 ),
                 deps=self._deps,
             )
+        if store.get("awaitingNotificationChoice"):
+            return await self._deps.notifications.accept(handler_input)
         if store.get("awaitingFeedback"):
             return await EnjoyedFeedback(deps=self._deps).execute(handler_input)
         if store.get("awaitingFollow"):
@@ -211,9 +215,11 @@ class Affirmative:
             "page": 0,
             "limit": 3,
         }
-        user_id = AlexaRequest.get_user_id(handler_input)
-        if user_id:
-            payload["alexaUserId"] = user_id
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
         await self._deps.progressive.send(handler_input, Speech.SEARCH_LATEST_PROGRESSIVE)
         result = await self._deps.heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
@@ -340,7 +346,11 @@ class Affirmative:
             resolution.get("requestId"),
             label,
             json.dumps(
-                {key: value for key, value in payload.items() if key != "alexaUserId"},
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key not in {"alexaUserId", "listenerId"}
+                },
                 sort_keys=True,
                 separators=(",", ":"),
             ),
@@ -471,9 +481,11 @@ class Affirmative:
         if int(resolution.get("expiresAt") or 0) < int(time.time()):
             return self._expired_resolution_response(handler_input)
         payload = SearchPayload.from_resolution(resolution, settings.search_page_limit)
-        user_id = AlexaRequest.get_user_id(handler_input)
-        if user_id:
-            payload["alexaUserId"] = user_id
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
         label = str(resolution.get("confirmationLabel") or "that request")
         self._clear_confirmed_resolution(handler_input, resolution)
         result, response = await self._confirmed_search_result(
@@ -533,9 +545,11 @@ class Affirmative:
             "page": 0,
             "limit": 1,
         }
-        user_id = AlexaRequest.get_user_id(handler_input)
-        if user_id:
-            payload["alexaUserId"] = user_id
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
         result = await self._deps.heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
@@ -584,9 +598,11 @@ class Affirmative:
             "page": 0,
             "limit": 1,
         }
-        user_id = AlexaRequest.get_user_id(handler_input)
-        if user_id:
-            payload["alexaUserId"] = user_id
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
         content = PlaybackQueue.cached_content(self._deps.user.snapshot(handler_input), next_id)
         if not content:
             result = await self._deps.heara.search(

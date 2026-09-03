@@ -16,6 +16,7 @@ class PermissionConstants:
     CONNECTION_URI = "connection://AMAZON.AskForPermissionsConsent/2"
     LOCATION_PURPOSE = "onboarding_location"
     PROFILE_PURPOSE = "listener_profile"
+    NOTIFICATION_PURPOSE = "notifications"
     PROFILE_SCOPES = (
         permission_scopes.PROFILE_NAME_READ,
         permission_scopes.PROFILE_EMAIL_READ,
@@ -91,6 +92,20 @@ class Permission:
             .response
         )
 
+    def start_notifications(self, handler_input):
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(Speech.NOTIFICATION_PERMISSION_REASON)
+            )
+            .add_directive(
+                PermissionPolicy.connection_directive(
+                    PermissionConstants.NOTIFICATION_PURPOSE,
+                    (permission_scopes.NOTIFICATIONS_WRITE,),
+                )
+            )
+            .response
+        )
+
     async def resume(self, handler_input):
         purpose, status = PermissionPolicy.resume_result(handler_input)
         accepted = status.upper() == "ACCEPTED"
@@ -103,6 +118,14 @@ class Permission:
             )
         if purpose == PermissionConstants.PROFILE_PURPOSE and accepted:
             return await self._complete_profile(handler_input)
+        if purpose == PermissionConstants.NOTIFICATION_PURPOSE and accepted:
+            return self._deps.notifications.enable_after_permission(handler_input)
+        if purpose == PermissionConstants.NOTIFICATION_PURPOSE:
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                "No problem. Notifications will stay off.",
+                Speech.WELCOME_REPROMPT,
+            )
         if purpose == PermissionConstants.PROFILE_PURPOSE:
             self._deps.user.update(handler_input, {"awaitingProfilePermission": False})
             return AlexaResponse.present_idle_next(

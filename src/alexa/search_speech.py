@@ -8,6 +8,14 @@ from src.alexa.speech import Speech
 
 class SearchSpeech:
     @staticmethod
+    def _with_more_options(message: str, has_more: bool) -> str:
+        return (
+            f"{message} There are more options. Say show more to hear them."
+            if has_more
+            else message
+        )
+
+    @staticmethod
     def search_no_match(query) -> str:
         safe = Speech.escape_ssml_lite(query)
         return (
@@ -53,7 +61,12 @@ class SearchSpeech:
         return " ".join(common)
 
     @staticmethod
-    def ambiguous_reference_message(phrase: str, candidates: list[dict]) -> str:
+    def ambiguous_reference_message(
+        phrase: str,
+        candidates: list[dict],
+        *,
+        has_more: bool = False,
+    ) -> str:
         raw_names, names = SearchSpeech._candidate_names(candidates)
         if not names:
             return SearchSpeech.unresolved_reference_message(phrase, [])
@@ -64,15 +77,22 @@ class SearchSpeech:
             if len(suffixes) == len(raw_names):
                 choices = f"{', '.join(suffixes[:-1])}, or {suffixes[-1]}"
                 safe_prefix = Speech.escape_ssml_lite(prefix)
-                return (
+                message = (
                     f"I found several matches beginning {safe_prefix}. "
                     f"Please say the distinguishing part: {choices}."
                 )
+                return SearchSpeech._with_more_options(message, has_more)
         choices = names[0] if len(names) == 1 else f"{', '.join(names[:-1])}, or {names[-1]}"
-        return f"I found more than one match for that name. Did you mean {choices}?"
+        message = f"I found more than one match for that name. Did you mean {choices}?"
+        return SearchSpeech._with_more_options(message, has_more)
 
     @staticmethod
-    def _publication_choice_message(candidates: list[dict], introduction: str) -> str:
+    def _publication_choice_message(
+        candidates: list[dict],
+        introduction: str,
+        *,
+        has_more: bool = False,
+    ) -> str:
         _, names = SearchSpeech._candidate_names(candidates)
         if not names:
             return f"{introduction} Which publication would you like?"
@@ -80,33 +100,58 @@ class SearchSpeech:
         ordinals = "first" if len(names) == 1 else "first or second"
         if len(names) >= 3:
             ordinals = "first, second, or third"
-        return (
+        message = (
             f"{introduction} Which publication would you like: {choices}? "
             f"You can say the publication name, or say {ordinals}."
         )
+        return SearchSpeech._with_more_options(message, has_more)
 
     @staticmethod
-    def publication_ambiguity_message(candidates: list[dict]) -> str:
+    def publication_ambiguity_message(
+        candidates: list[dict],
+        *,
+        has_more: bool = False,
+    ) -> str:
         return SearchSpeech._publication_choice_message(
-            candidates, "I found more than one publication."
+            candidates,
+            "I found more than one publication.",
+            has_more=has_more,
         )
 
     @staticmethod
-    def more_publication_choices_message(candidates: list[dict]) -> str:
+    def more_publication_choices_message(
+        candidates: list[dict],
+        *,
+        has_more: bool = False,
+    ) -> str:
         return SearchSpeech._publication_choice_message(
-            candidates, "Here are more publication choices."
+            candidates,
+            "Here are more publication choices.",
+            has_more=has_more,
         )
 
     @staticmethod
-    def previous_publication_choices_message(candidates: list[dict]) -> str:
+    def previous_publication_choices_message(
+        candidates: list[dict],
+        *,
+        has_more: bool = False,
+    ) -> str:
         return SearchSpeech._publication_choice_message(
-            candidates, "Here are the previous publication choices."
+            candidates,
+            "Here are the previous publication choices.",
+            has_more=has_more,
         )
 
     @staticmethod
-    def first_publication_choices_message(candidates: list[dict]) -> str:
+    def first_publication_choices_message(
+        candidates: list[dict],
+        *,
+        has_more: bool = False,
+    ) -> str:
         return SearchSpeech._publication_choice_message(
-            candidates, "You are already at the first publication choices."
+            candidates,
+            "You are already at the first publication choices.",
+            has_more=has_more,
         )
 
     @staticmethod

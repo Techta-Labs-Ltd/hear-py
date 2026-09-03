@@ -64,17 +64,30 @@ class Settings(BaseSettings):
 
     HEAR_DDB_TABLE: str = ""
     HEAR_DDB_PARTITION_KEY: str = "id"
+    HEAR_DDB_SORT_KEY: str = "scope"
     HEAR_PERSISTENCE_DRIVER: str = "dynamodb"
     HEAR_PERSISTENCE_CONDITIONAL: bool = True
     HEAR_PERSISTENCE_CONFLICT_RETRIES: int = 3
     HEAR_PERSISTENCE_CONFLICT_BACKOFF_MS: int = 20
     HEAR_PERSISTENCE_TTL_DAYS: int = 180
+    HEAR_PLAYBACK_STATE_TTL_DAYS: int = 30
+    HEAR_LISTENER_CACHE_TTL_DAYS: int = 90
+    HEAR_DIALOG_STATE_TTL_SECONDS: int = 86400
     HEAR_DDB_REGION: str = "eu-west-1"
     AWS_REGION: str = "eu-west-1"
     SQS_OUT_QUEUE_URL: str = ""
     WEBHOOK_OUTBOUND_URL: str = ""
     WEBHOOK_OUTBOUND_SECRET: str = ""
+    HEAR_NOTIFICATION_TABLE: str = ""
+    HEAR_NOTIFICATION_LIMIT: int = 5
+    HEAR_PROACTIVE_TIMEOUT_MS: int = 5000
+    ALEXA_PROACTIVE_CLIENT_ID: str = ""
+    ALEXA_PROACTIVE_CLIENT_SECRET: str = ""
     HEAR_LISTENER_SYNC_ON_LAUNCH: bool = False
+    HEAR_CANONICAL_IDENTITY_ENABLED: bool = True
+    HEAR_IDENTITY_TIMEOUT_MS: int = 1500
+    HEAR_IDENTITY_CACHE_TTL_MS: int = 300000
+    HEAR_IDENTITY_CACHE_MAX_ITEMS: int = 512
     HEAR_DDB_ITEM_SIZE_WARN_BYTES: int = 65536
     HEAR_DDB_ITEM_SIZE_MAX_BYTES: int = 350000
     HEAR_PERSISTED_COLLECTION_LIMIT: int = 100
@@ -144,6 +157,10 @@ class Settings(BaseSettings):
     @cached_property
     def search_page_limit(self) -> int:
         return max(self.HEAR_SEARCH_PAGE_LIMIT, 1)
+
+    @cached_property
+    def identity_timeout_ms(self) -> int:
+        return max(self.HEAR_IDENTITY_TIMEOUT_MS, 100)
 
 
 settings = Settings()

@@ -46,9 +46,28 @@ class Speech:
     SEARCH_UNAVAILABLE = (
         "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."
     )
-    SEARCH_PROGRESSIVE = "One moment while I search the Hear catalogue."
-    SEARCH_MORE_PROGRESSIVE = "One moment while I find more choices."
-    SEARCH_LATEST_PROGRESSIVE = "One moment while I find the latest recording."
+    SEARCH_PROGRESSIVE = "Just a moment while I find that for you."
+    SEARCH_MORE_PROGRESSIVE = "Just a moment while I find a few more options."
+    SEARCH_LATEST_PROGRESSIVE = "Just a moment while I find the latest for you."
+    NOTIFICATION_LOADING = "Just a moment while I get that ready."
+    NO_NOTIFICATIONS = "You don't have any new updates from the sources you follow."
+    NOTIFICATIONS_UNAVAILABLE = (
+        "I can't check your updates right now. Please try again in a moment."
+    )
+    NOTIFICATION_LOOKUP_FAILED = (
+        "I found the update, but I can't load it right now. Please try again shortly."
+    )
+    NOTIFICATION_CONTENT_UNAVAILABLE = (
+        "That update is no longer available. What would you like to listen to instead?"
+    )
+    NOTIFICATION_DECLINED = "No problem. I'll leave that update for now."
+    NOTIFICATION_PERMISSION_REASON = "Hear can let you know when sources you follow publish something new. Alexa will now ask whether you want to allow notifications."
+    NOTIFICATIONS_ENABLED = (
+        "Notifications are on. Hear can now let you know when followed sources publish."
+    )
+    NOTIFICATIONS_DISABLED = (
+        "Hear notifications are off. I won't send alerts for new publications."
+    )
     BROWSE_EXHAUSTED = "That's everything I found."
     ASK_TALKING_NEWSPAPER = "Which talking newspaper would you like?"
     TALKING_NEWSPAPER_ASR_REPAIR = "Did you mean a talking newspaper?"
@@ -395,3 +414,45 @@ class Speech:
     @staticmethod
     def LATEST_SOURCE_REPROMPT(source):
         return f"Say yes to hear the latest from {Speech.escape_ssml_lite(source)}, or no to choose something else."
+
+    @staticmethod
+    def NOTIFICATION_OFFER(item, additional=0):
+        title = Speech.humanize_spoken_title(item.get("title"))
+        source = Speech.escape_ssml_lite(
+            item.get("organizationName") or item.get("creatorName") or "a source you follow"
+        )
+        if item.get("notificationType") == "publication":
+            subject = (
+                f"a new edition of {title}, from {source}"
+                if title
+                else f"a new publication from {source}"
+            )
+        else:
+            subject = (
+                f"a new recording called {title}, from {source}"
+                if title
+                else f"a new recording from {source}"
+            )
+        more = f" You also have {additional} more updates." if additional else ""
+        return f"You have {subject}.{more} Would you like to listen now?"
+
+    @staticmethod
+    def NOTIFICATION_OFFER_REPROMPT(item):
+        title = Speech.humanize_spoken_title(item.get("title"))
+        subject = title or "the new update"
+        return f"Would you like to listen to {Speech.escape_ssml_lite(subject)}? Say yes or no."
+
+    @staticmethod
+    def NOTIFICATION_PLAYING(item):
+        title = Speech.humanize_spoken_title(item.get("title"))
+        if item.get("notificationType") == "publication":
+            return (
+                f"Here is {Speech.escape_ssml_lite(title)}."
+                if title
+                else "Here is the new publication."
+            )
+        return (
+            f"Here is {Speech.escape_ssml_lite(title)}."
+            if title
+            else "Here is the new recording."
+        )

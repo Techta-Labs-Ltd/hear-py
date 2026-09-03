@@ -13,6 +13,8 @@ param(
     [string] $HearApiUrl = "https://alexa.hear.media/api/v1",
     [string] $HearApiPathPrefix = "alexa",
     [string] $WebhookOutboundUrl = "https://alexa.hear.media/api/v1/alexa/events",
+    [ValidateSet("0", "1")]
+    [string] $CanonicalIdentityEnabled = "1",
     [switch] $ConfirmProduction
 )
 
@@ -78,6 +80,8 @@ if ($LASTEXITCODE -ne 0) { throw "Docker build failed." }
 if ($LASTEXITCODE -ne 0) { throw "Docker push failed." }
 
 $hearApiKey = Get-SsmParameter "$parameterPrefix/HEAR_API_KEY"
+$alexaProactiveClientId = Get-SsmParameter "$parameterPrefix/ALEXA_PROACTIVE_CLIENT_ID"
+$alexaProactiveClientSecret = Get-SsmParameter "$parameterPrefix/ALEXA_PROACTIVE_CLIENT_SECRET"
 $webhookOutboundSecret = Get-SsmParameter "$parameterPrefix/WEBHOOK_OUTBOUND_SECRET" -Optional
 $sentryDsn = Get-SsmParameter "$parameterPrefix/SENTRY_DSN" -Optional
 
@@ -89,10 +93,13 @@ $parameterOverrides = @(
     "HearApiUrl=$HearApiUrl",
     "HearApiPathPrefix=$HearApiPathPrefix",
     "HearApiKey=$hearApiKey",
+    "AlexaProactiveClientId=$alexaProactiveClientId",
+    "AlexaProactiveClientSecret=$alexaProactiveClientSecret",
     "WebhookOutboundUrl=$WebhookOutboundUrl",
     "WebhookOutboundSecret=$webhookOutboundSecret",
     "SentryDsn=$sentryDsn",
-    "PowerToolsLogLevel=$logLevel"
+    "PowerToolsLogLevel=$logLevel",
+    "CanonicalIdentityEnabled=$CanonicalIdentityEnabled"
 )
 
 $samArgs = @(

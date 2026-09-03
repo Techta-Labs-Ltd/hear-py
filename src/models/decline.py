@@ -78,6 +78,8 @@ class Decline:
                 .set_should_end_session(False)
                 .response
             )
+        if dialog_type == "notification":
+            return await self._deps.notifications.decline(handler_input)
         search_pending = bool(
             dialog_type == "search_confirmation"
             or not dialog_type
@@ -157,6 +159,8 @@ class Decline:
             return self._handle_list_mode_no(handler_input, store)
         if store.get("awaitingStillListening"):
             return self._handle_still_listening_no(handler_input)
+        if store.get("awaitingNotificationChoice"):
+            return await self._deps.notifications.decline(handler_input)
         if store.get("awaitingContinueAfterFlag"):
             self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": False})
             return await Playback.play_queue_delta(

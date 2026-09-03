@@ -106,13 +106,16 @@ class OutboundEventService:
         payload = EventUtils.compact(
             {
                 "alexaUserId": alexa_user_id,
-                "userId": alexa_user_id,
                 "listenerId": listener_id,
                 "sourceType": "organization" if organization else "creator",
                 "sourceId": str(source_id),
                 "sourceName": source_name,
                 "notificationSubjectType": EventConstants.PUBLICATION,
                 "timestamp": EventUtils.timestamp_ms(),
+                "clientEventId": (
+                    f"follow:{listener_id or alexa_user_id}:"
+                    f"{'follow' if followed else 'unfollow'}:{source_type}:{source_id}"
+                ),
             }
         )
         return self.publish(event_type, payload)
@@ -133,14 +136,43 @@ class OutboundEventService:
         payload = {
             **report,
             "alexaUserId": alexa_user_id,
-            "userId": alexa_user_id,
             "listenerId": listener_id,
             "reason": "reported_via_alexa",
             "clientEventId": (
-                f"alexa-report:{alexa_user_id}:{subject_type}:{report.get('subjectId')}"
+                f"alexa-report:{listener_id or alexa_user_id}:"
+                f"{subject_type}:{report.get('subjectId')}"
             ),
         }
         return self.publish(event_type, EventUtils.compact(payload))
+
+    def notification_preference(
+        self,
+        *,
+        enabled: bool,
+        alexa_user_id: str,
+        listener_id: str | None,
+        permission_granted: bool,
+    ) -> bool:
+        event_type = (
+            EventConstants.NOTIFICATIONS_ENABLED
+            if enabled
+            else EventConstants.NOTIFICATIONS_DISABLED
+        )
+        timestamp = EventUtils.timestamp_ms()
+        payload = EventUtils.compact(
+            {
+                "alexaUserId": alexa_user_id,
+                "listenerId": listener_id,
+                "enabled": enabled,
+                "permissionGranted": permission_granted,
+                "timestamp": timestamp,
+                "clientEventId": (
+                    f"notifications:{listener_id or alexa_user_id}:"
+                    f"{'enabled' if enabled else 'disabled'}:{timestamp}"
+                ),
+            }
+        )
+        return self.publish(event_type, payload)
 
     async def consume(self, records: list[dict]) -> dict:
         failures = []

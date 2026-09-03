@@ -373,12 +373,14 @@ class Onboarding(OnboardingService):
             phrase,
         )
         try:
-            response = await d.resolver.resolve_utterance(
-                phrase,
-                alexa_user_id=AlexaRequest.get_user_id(handler_input),
-                prefer_location=True,
-                timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input),
-            )
+            options = {
+                "alexa_user_id": AlexaRequest.get_user_id(handler_input),
+                "prefer_location": True,
+                "timeout_ms": DeadlineBudget.resolver_timeout_ms(handler_input),
+            }
+            if store.get("listenerId"):
+                options["listener_id"] = store["listenerId"]
+            response = await d.resolver.resolve_utterance(phrase, **options)
             resolution = response.get("resolution") or {}
         except ResolverUnavailable as exc:
             Onboarding.logger.warning("Hear: town resolver unavailable reason=%s", exc)
@@ -439,12 +441,14 @@ class Onboarding(OnboardingService):
     ):
         d = Onboarding._dependencies(deps)
         try:
-            response = await d.resolver.resolve_utterance(
-                phrase,
-                alexa_user_id=AlexaRequest.get_user_id(handler_input),
-                prefer_location=True,
-                timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input),
-            )
+            options = {
+                "alexa_user_id": AlexaRequest.get_user_id(handler_input),
+                "prefer_location": True,
+                "timeout_ms": DeadlineBudget.resolver_timeout_ms(handler_input),
+            }
+            if store.get("listenerId"):
+                options["listener_id"] = store["listenerId"]
+            response = await d.resolver.resolve_utterance(phrase, **options)
             resolution = response.get("resolution") or {}
         except ResolverUnavailable as exc:
             Onboarding.logger.warning("Hear: town resolver unavailable reason=%s", exc)
@@ -560,12 +564,14 @@ class Onboarding(OnboardingService):
             )
         if match.get("latitude") is None or match.get("longitude") is None:
             try:
-                response = await d.resolver.resolve_utterance(
-                    str(lookup),
-                    alexa_user_id=AlexaRequest.get_user_id(handler_input),
-                    prefer_location=True,
-                    timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input),
-                )
+                options = {
+                    "alexa_user_id": AlexaRequest.get_user_id(handler_input),
+                    "prefer_location": True,
+                    "timeout_ms": DeadlineBudget.resolver_timeout_ms(handler_input),
+                }
+                if store.get("listenerId"):
+                    options["listener_id"] = store["listenerId"]
+                response = await d.resolver.resolve_utterance(str(lookup), **options)
                 resolved = (response.get("resolution") or {}).get("match")
             except ResolverUnavailable as exc:
                 Onboarding.logger.warning(

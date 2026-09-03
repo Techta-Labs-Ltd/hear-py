@@ -83,6 +83,12 @@ class PlaybackHistoryUtils:
         prior_total = existing.get("timeSpentMs")
         if prior_total is None:
             prior_total = PlaybackHistoryUtils._sum_time(previous_sessions)
+        if not previous_sessions:
+            return max(
+                0,
+                int(prior_total or 0),
+                int(current_session.get("timeSpentMs") or 0),
+            )
         session_delta = max(
             0,
             int(current_session.get("timeSpentMs") or 0)

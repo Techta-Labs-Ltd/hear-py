@@ -31,6 +31,35 @@ class TestPersistence:
         assert merged["playbackSpeed"] == 2.0
         assert merged["userCity"] == "London"
 
+    def test_default_state_serializes_to_an_empty_sparse_document(self):
+        assert User.persisted_snapshot(dict(StateSchema.DEFAULT_STORE)) == {}
+
+    def test_backend_owned_history_and_profile_pii_are_not_persisted(self):
+        snapshot = User.persisted_snapshot(
+            {
+                **StateSchema.DEFAULT_STORE,
+                "listenerId": "listener-1",
+                "userEmail": "listener@example.com",
+                "userName": "Listener",
+                "feedbackHistory": [{"value": "enjoyed"}],
+                "reportHistory": [{"subjectId": "content-1"}],
+                "playHistory": [
+                    {
+                        "contentId": "content-1",
+                        "timeSpentMs": 1000,
+                        "sessions": {"session-1": {"timeSpentMs": 1000}},
+                    }
+                ],
+            }
+        )
+
+        assert "listenerId" not in snapshot
+        assert "userEmail" not in snapshot
+        assert "userName" not in snapshot
+        assert "feedbackHistory" not in snapshot
+        assert "reportHistory" not in snapshot
+        assert "sessions" not in snapshot["playHistory"][0]
+
     def test_merge_initial_store_clears_legacy_publication_track_feedback(self):
         merged = User.merge_persisted(
             {
@@ -66,11 +95,10 @@ class TestPersistence:
     def test_hydration_retains_version_and_tracks_only_changed_fields(self, mock_handler_input):
         User.hydrate(
             mock_handler_input,
-            {"playCount": 2, "userCity": "London", "_persistenceVersion": 7},
+            {"playCount": 2, "userCity": "London"},
         )
         User.update(mock_handler_input, {"playCount": 3, "_requiresReliableSave": True})
         attrs = mock_handler_input.attributes_manager.request_attributes
-        assert attrs["_persistenceVersion"] == 7
         assert User.changed_fields(mock_handler_input) == ("playCount",)
         assert attrs["_persistenceBaseline"]["playCount"] == 2
 

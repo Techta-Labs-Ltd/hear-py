@@ -84,9 +84,6 @@ class Report:
             "status": "pending",
         }
         store = User.snapshot(handler_input)
-        history = list(store.get("reportHistory") or [])
-        history.append(report)
-        User.update(handler_input, {"reportHistory": history[-100:]})
         user_id = AlexaRequest.get_user_id(handler_input)
         if self._events is not None and user_id:
             self._events.report(

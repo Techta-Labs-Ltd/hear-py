@@ -59,6 +59,7 @@ jobs:
       HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_DEV || 'alexa' }}
       WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_DEV || 'https://alexa.hear.media/api/v1/alexa/events' }}
       POWERTOOLS_LOG_LEVEL: ${{ vars.POWERTOOLS_LOG_LEVEL_DEV || 'DEBUG' }}
+      CANONICAL_IDENTITY_ENABLED: ${{ vars.CANONICAL_IDENTITY_ENABLED_DEV || '1' }}
       RESERVED_CONCURRENCY: '0'
       PROVISIONED_CONCURRENCY: ${{ vars.PROVISIONED_CONCURRENCY_DEV || '0' }}
       SSM_PARAMETER_PREFIX: ${{ vars.SSM_PARAMETER_PREFIX_DEV || '/hear/development' }}
@@ -104,9 +105,13 @@ jobs:
               --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null || true
           }
           HEAR_API_KEY=$(get_required HEAR_API_KEY)
+          ALEXA_PROACTIVE_CLIENT_ID=$(get_required ALEXA_PROACTIVE_CLIENT_ID)
+          ALEXA_PROACTIVE_CLIENT_SECRET=$(get_required ALEXA_PROACTIVE_CLIENT_SECRET)
           WEBHOOK_OUTBOUND_SECRET=$(get_optional WEBHOOK_OUTBOUND_SECRET)
           SENTRY_DSN=$(get_optional SENTRY_DSN)
           echo "::add-mask::$HEAR_API_KEY"
+          echo "::add-mask::$ALEXA_PROACTIVE_CLIENT_ID"
+          echo "::add-mask::$ALEXA_PROACTIVE_CLIENT_SECRET"
           [[ -z "$WEBHOOK_OUTBOUND_SECRET" ]] || echo "::add-mask::$WEBHOOK_OUTBOUND_SECRET"
           [[ -z "$SENTRY_DSN" ]] || echo "::add-mask::$SENTRY_DSN"
           aws cloudformation deploy \
@@ -119,8 +124,10 @@ jobs:
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
+              AlexaProactiveClientId="$ALEXA_PROACTIVE_CLIENT_ID" AlexaProactiveClientSecret="$ALEXA_PROACTIVE_CLIENT_SECRET" \
               WebhookOutboundUrl="$WEBHOOK_OUTBOUND_URL" WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
               SentryDsn="$SENTRY_DSN" PowerToolsLogLevel="$POWERTOOLS_LOG_LEVEL" \
+              CanonicalIdentityEnabled="$CANONICAL_IDENTITY_ENABLED" \
               ReservedConcurrency="$RESERVED_CONCURRENCY" ProvisionedConcurrency="$PROVISIONED_CONCURRENCY"
       - name: Show development stack outputs
         if: steps.cloudformation.outcome == 'success'

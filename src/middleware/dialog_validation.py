@@ -14,7 +14,9 @@ from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.dialog import DialogConstants
-from src.models.dialog import DialogStateManager
+from src.constants.notifications import NotificationConstants
+from src.constants.playback import PlaybackConstants
+from src.models.dialog import DialogSelection, DialogStateManager
 
 
 class DialogValidationPolicy:
@@ -30,7 +32,7 @@ class DialogValidationPolicy:
         "SkipFeedbackIntent",
         "AMAZON.NoIntent",
     }
-    _FEEDBACK_INTENTS = _EXIT_INTENTS | {
+    _FEEDBACK_INTENTS = _EXIT_INTENTS | NotificationConstants.INTENTS | {
         "FeedbackEnjoyedIntent",
         "FeedbackSomewhatIntent",
         "FeedbackNotEnjoyedIntent",
@@ -38,26 +40,16 @@ class DialogValidationPolicy:
         "SkipFeedbackIntent",
         "AMAZON.YesIntent",
         "AMAZON.NoIntent",
-        "AMAZON.RepeatIntent",
-        "AMAZON.StartOverIntent",
         "ReportCreatorIntent",
         "ReportContentIntent",
-        "AMAZON.NextIntent",
-        "AMAZON.SkipIntent",
-        "AMAZON.PreviousIntent",
-        "AMAZON.PauseIntent",
-        "AMAZON.ResumeIntent",
-        "SetPlaybackSpeedIntent",
-        "IncreaseSpeedIntent",
-        "DecreaseSpeedIntent",
+    } | PlaybackConstants.TRANSPORT_INTENTS
+    _BINARY_DIALOGS = {
+        "search_confirmation",
+        "resume",
+        "latest_source",
+        "asr_repair",
     }
-    _TRANSPORT_REQUEST_TYPES = {
-        "PlaybackController.NextCommandIssued",
-        "PlaybackController.PreviousCommandIssued",
-        "PlaybackController.PauseCommandIssued",
-        "PlaybackController.PlayCommandIssued",
-    }
-    _BINARY_DIALOGS = {"search_confirmation", "resume", "latest_source", "asr_repair"}
+    _NOTIFICATION_INTENTS = _BINARY_INTENTS | PlaybackConstants.TRANSPORT_INTENTS
     _LOCATION_ONBOARDING_INTENTS = _BINARY_INTENTS | {
         "TownCaptureIntent",
         "SetLocationIntent",
@@ -74,22 +66,36 @@ class DialogValidationPolicy:
     @staticmethod
     def _ambiguity_prompt(active: dict) -> tuple[str, str]:
         context = active.get("context") or {}
+        choices = list(context.get("choiceCandidates") or context.get("candidates") or [])
         candidates = list(
             context.get("displayedCandidates")
-            or context.get("choiceCandidates")
-            or context.get("candidates")
+            or choices
             or []
         )[:3]
-        publication_picker = (context.get("candidatePagination") or {}).get("kind") == "publication"
+        pagination = context.get("candidatePagination") or {}
+        has_more = DialogSelection.has_more_choices(context, choices, len(candidates))
+        publication_picker = pagination.get("kind") == "publication"
         message = (
-            SearchSpeech.publication_ambiguity_message(candidates)
+            SearchSpeech.publication_ambiguity_message(candidates, has_more=has_more)
             if publication_picker
-            else SearchSpeech.ambiguous_reference_message("that name", candidates)
+            else SearchSpeech.ambiguous_reference_message(
+                "that name",
+                candidates,
+                has_more=has_more,
+            )
         )
-        ordinal = " You can say the first one, the second one, or show more."
+        ordinals = "first"
+        if len(candidates) == 2:
+            ordinals = "first or second"
+        elif len(candidates) >= 3:
+            ordinals = "first, second, or third"
+        ordinal = "" if publication_picker else f" You can also say {ordinals}."
+        reprompt = f"Say a name, or say {ordinals}"
+        if has_more:
+            reprompt += ", or say show more"
         return (
             message + ordinal,
-            "Say a name, the first one, the second one, or show more.",
+            f"{reprompt}.",
         )
 
     @staticmethod
@@ -151,8 +157,15 @@ class DialogValidationPolicy:
         elif (
             dialog_type == "ambiguity"
             and intent_name not in DialogValidationPolicy._AMBIGUITY_INTENTS
+            and DialogSelection.request_candidate(handler_input, context)
+            is None
         ):
             speech, reprompt = DialogValidationPolicy._ambiguity_prompt(active)
+        elif (
+            dialog_type == "notification"
+            and intent_name not in DialogValidationPolicy._NOTIFICATION_INTENTS
+        ):
+            speech, reprompt = DialogValidationPolicy._binary_prompt(active)
         elif (
             dialog_type in DialogValidationPolicy._BINARY_DIALOGS
             and intent_name not in DialogValidationPolicy._BINARY_INTENTS
@@ -180,7 +193,7 @@ class DialogValidationInterceptor(AbstractRequestInterceptor):
     def process(self, handler_input) -> None:
         if (
             AlexaRequest.get_request_type(handler_input)
-            in DialogValidationPolicy._TRANSPORT_REQUEST_TYPES
+            in PlaybackConstants.TRANSPORT_REQUEST_TYPES
         ):
             return
         failure = DialogValidationPolicy.dialog_validation_failure(handler_input)

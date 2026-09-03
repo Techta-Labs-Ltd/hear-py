@@ -127,16 +127,33 @@ def test_template_has_no_dedicated_resolver_configuration():
 
 def test_template_owns_and_wires_durable_persistence_table():
     template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
-    assert "HearPersistenceTable:" in template
+    assert "HearListenerStateTable:" in template
     assert "Type: AWS::DynamoDB::Table" in template
     assert "DeletionPolicy: Retain" in template
     assert "UpdateReplacePolicy: Retain" in template
     assert "BillingMode: PAY_PER_REQUEST" in template
     assert "PointInTimeRecoveryEnabled: true" in template
     assert "AttributeName: expiresAt" in template
-    assert "HEAR_DDB_TABLE: !Ref HearPersistenceTable" in template
-    assert "DynamoDBCrudPolicy: { TableName: !Ref HearPersistenceTable }" in template
+    assert "HEAR_DDB_TABLE: !Ref HearListenerStateTable" in template
+    assert "HEAR_DDB_SORT_KEY: scope" in template
+    assert "DynamoDBCrudPolicy: { TableName: !Ref HearListenerStateTable }" in template
+    assert "HearPersistenceTable:" not in template
+    assert "HEAR_DDB_LEGACY_TABLE" not in template
     assert "HEAR_DDB_TABLE: hear-service" not in template
+
+
+def test_backend_contract_schemas_match_v2_ownership():
+    root = Path(__file__).resolve().parents[1]
+    listener_sync = json.loads((root / "schemas/listener-sync.schema.json").read_text())
+    backend_event = json.loads((root / "schemas/backend-event.schema.json").read_text())
+
+    sync_fields = listener_sync["properties"]
+    assert "listenerId" in sync_fields
+    assert "recentPlays" not in sync_fields
+    assert "followedCreatorIds" not in sync_fields
+    assert "feedbackHistory" not in sync_fields
+    assert backend_event["properties"]["schemaVersion"]["const"] == 2
+    assert {"eventId", "schemaVersion", "data"}.issubset(backend_event["required"])
 
 
 def test_template_has_scaling_guards_and_operational_alarms():
@@ -162,6 +179,26 @@ def test_template_owns_outbound_event_delivery_pipeline():
     assert "SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }" in template
     assert "SQSPollerPolicy: { QueueName: !GetAtt OutboundQueue.QueueName }" in template
     assert "FunctionResponseTypes: [ReportBatchItemFailures]" in template
+
+
+def test_template_owns_backend_written_notification_inbox_and_delivery_worker():
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "template.yaml").read_text(encoding="utf-8")
+    schema = json.loads(
+        (root / "schemas" / "notification-inbox-item.schema.json").read_text()
+    )
+    assert "HearNotificationInboxTable:" in template
+    assert "IndexName: ActiveByListener" in template
+    assert "StreamViewType: NEW_AND_OLD_IMAGES" in template
+    assert "ProactiveNotificationFunction:" in template
+    assert 'Command: ["main.notification_handler"]' in template
+    assert "ALEXA_PROACTIVE_CLIENT_ID" in template
+    assert "ALEXA_PROACTIVE_CLIENT_SECRET" in template
+    assert "AMAZON.MediaContent.Available" not in template
+    assert schema["properties"]["schemaVersion"]["const"] == 1
+    assert {"content", "publication"} == set(
+        schema["properties"]["notificationType"]["enum"]
+    )
 
 
 def test_deployment_role_can_manage_table_recovery_configuration():

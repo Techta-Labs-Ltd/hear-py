@@ -104,6 +104,7 @@ async def test_client_sends_documented_request_and_api_key(caplog):
         result = await client.resolve(
             "latest sport by adeshina",
             alexa_user_id="amzn-user",
+            listener_id="listener-1",
             timezone="Europe/London",
         )
     request = captured["request"]
@@ -111,17 +112,19 @@ async def test_client_sends_documented_request_and_api_key(caplog):
     assert request.headers["x-api-key"] == "secret"
     assert (
         request.read()
-        == b'{"utterance":"latest sport by adeshina","timezone":"Europe/London","country_code":"gb","alexaUserId":"amzn-user"}'
+        == b'{"utterance":"latest sport by adeshina","timezone":"Europe/London","country_code":"gb","alexaUserId":"amzn-user","listenerId":"listener-1"}'
     )
     assert isinstance(result, ResolverResult)
     assert '"utterance":"latest sport by adeshina"' in caplog.text
     assert '"alexaUserId":"<present>"' in caplog.text
+    assert '"listenerId":"<present>"' in caplog.text
     assert "resolver response httpStatus=200" in caplog.text
     assert '"intent":"publication"' in caplog.text
     assert '"timingMs":12.464' in caplog.text
     assert '"latitude"' not in caplog.text
     assert '"longitude"' not in caplog.text
     assert "amzn-user" not in caplog.text
+    assert "listener-1" not in caplog.text
     assert "secret" not in caplog.text
 
 

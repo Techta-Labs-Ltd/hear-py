@@ -33,6 +33,14 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ""
+  AlexaProactiveClientId:
+    Type: String
+    NoEcho: true
+    Default: ""
+  AlexaProactiveClientSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
   SentryDsn:
     Type: String
     NoEcho: true
@@ -41,6 +49,10 @@ Parameters:
     Type: String
     Default: INFO
     AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+  CanonicalIdentityEnabled:
+    Type: String
+    Default: "1"
+    AllowedValues: ["0", "1"]
   ReservedConcurrency:
     Type: Number
     Default: 0
@@ -71,13 +83,18 @@ Globals:
         HEAR_API_KEY: !Ref HearApiKey
         HEAR_CLIENT_VERSION: alexa-skill
         HEAR_DDB_REGION: eu-west-1
-        HEAR_DDB_TABLE: !Ref HearPersistenceTable
+        HEAR_DDB_TABLE: !Ref HearListenerStateTable
+        HEAR_NOTIFICATION_TABLE: !Ref HearNotificationInboxTable
         HEAR_DDB_PARTITION_KEY: id
+        HEAR_DDB_SORT_KEY: scope
         HEAR_PERSISTENCE_DRIVER: dynamodb
         HEAR_PERSISTENCE_CONDITIONAL: "1"
         HEAR_PERSISTENCE_CONFLICT_RETRIES: "3"
         HEAR_PERSISTENCE_CONFLICT_BACKOFF_MS: "20"
         HEAR_PERSISTENCE_TTL_DAYS: "180"
+        HEAR_PLAYBACK_STATE_TTL_DAYS: "30"
+        HEAR_LISTENER_CACHE_TTL_DAYS: "90"
+        HEAR_DIALOG_STATE_TTL_SECONDS: "86400"
         HEAR_DDB_ITEM_SIZE_WARN_BYTES: "65536"
         HEAR_DDB_ITEM_SIZE_MAX_BYTES: "350000"
         HEAR_PERSISTED_COLLECTION_LIMIT: "100"
@@ -87,6 +104,10 @@ Globals:
         HEAR_HTTP_CIRCUIT_RECOVERY_MS: "30000"
         HEAR_EVENT_WEBHOOK_TIMEOUT_MS: "10000"
         HEAR_LISTENER_SYNC_ON_LAUNCH: "1"
+        HEAR_CANONICAL_IDENTITY_ENABLED: !Ref CanonicalIdentityEnabled
+        HEAR_IDENTITY_TIMEOUT_MS: "1500"
+        HEAR_IDENTITY_CACHE_TTL_MS: "300000"
+        HEAR_IDENTITY_CACHE_MAX_ITEMS: "512"
         SQS_OUT_QUEUE_URL: !Ref OutboundQueue
         WEBHOOK_OUTBOUND_URL: !Ref WebhookOutboundUrl
         WEBHOOK_OUTBOUND_SECRET: !Ref WebhookOutboundSecret
@@ -96,7 +117,7 @@ Globals:
         HEAR_METRICS_NAMESPACE: HearAlexa
 
 Resources:
-  HearPersistenceTable:
+  HearListenerStateTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
@@ -105,9 +126,13 @@ Resources:
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
+        - AttributeName: scope
+          AttributeType: S
       KeySchema:
         - AttributeName: id
           KeyType: HASH
+        - AttributeName: scope
+          KeyType: RANGE
       SSESpecification:
         SSEEnabled: true
       PointInTimeRecoverySpecification:
@@ -120,6 +145,55 @@ Resources:
           Value: hear-alexa-skill
         - Key: Stage
           Value: !Ref Stage
+        - Key: SchemaVersion
+          Value: "2"
+
+  HearNotificationInboxTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub hear-notification-inbox-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: listenerId
+          AttributeType: S
+        - AttributeName: notificationId
+          AttributeType: S
+        - AttributeName: activeListenerId
+          AttributeType: S
+        - AttributeName: activePublishedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: listenerId
+          KeyType: HASH
+        - AttributeName: notificationId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: ActiveByListener
+          KeySchema:
+            - AttributeName: activeListenerId
+              KeyType: HASH
+            - AttributeName: activePublishedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Application
+          Value: hear-alexa-skill
+        - Key: Stage
+          Value: !Ref Stage
+        - Key: SchemaVersion
+          Value: "1"
 
   HearSkillFunction:
     Type: AWS::Serverless::Function
@@ -137,8 +211,56 @@ Resources:
         - ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
         - !Ref AWS::NoValue
       Policies:
-        - DynamoDBCrudPolicy: { TableName: !Ref HearPersistenceTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref HearListenerStateTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref HearNotificationInboxTable }
         - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+
+  ProactiveNotificationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-proactive-notifications-${Stage}-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ProactiveNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Proactive-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: ["main.notification_handler"]
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          ALEXA_PROACTIVE_CLIENT_ID: !Ref AlexaProactiveClientId
+          ALEXA_PROACTIVE_CLIENT_SECRET: !Ref AlexaProactiveClientSecret
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref HearNotificationInboxTable }
+        - DynamoDBStreamReadPolicy:
+            TableName: !Ref HearNotificationInboxTable
+            StreamName: !Select [3, !Split ["/", !GetAtt HearNotificationInboxTable.StreamArn]]
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ProactiveNotificationDeadLetterQueue.QueueName
+      Events:
+        NotificationWrites:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt HearNotificationInboxTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1
+            BisectBatchOnFunctionError: true
+            MaximumRetryAttempts: 5
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt ProactiveNotificationDeadLetterQueue.Arn
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName":["INSERT"]}'
 
   OutboundDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -300,6 +422,23 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
 
+  ProactiveNotificationDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear proactive notifications reached the dead-letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ProactiveNotificationDeadLetterQueue.QueueName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
   AlexaInvokePermission:
     Type: AWS::Lambda::Permission
     Condition: HasAlexaSkillId
@@ -312,7 +451,13 @@ Resources:
 Outputs:
   PersistenceTableName:
     Description: DynamoDB table used for durable Alexa listener state.
-    Value: !Ref HearPersistenceTable
+    Value: !Ref HearListenerStateTable
+  NotificationInboxTableName:
+    Description: Backend-owned DynamoDB inbox for listener content notifications.
+    Value: !Ref HearNotificationInboxTable
+  NotificationInboxTableArn:
+    Description: Grant the Hear backend PutItem access to this ARN.
+    Value: !GetAtt HearNotificationInboxTable.Arn
   SkillFunctionArn:
     Description: Set this as the skill's Default Endpoint in the Alexa console.
     Value: !GetAtt HearSkillFunction.Arn
@@ -322,3 +467,6 @@ Outputs:
   OutboundDeadLetterQueueUrl:
     Description: Failed outbound events retained for investigation.
     Value: !Ref OutboundDeadLetterQueue
+  ProactiveNotificationDeadLetterQueueUrl:
+    Description: Failed proactive deliveries retained for investigation.
+    Value: !Ref ProactiveNotificationDeadLetterQueue

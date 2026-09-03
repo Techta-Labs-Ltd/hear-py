@@ -53,6 +53,33 @@ class ResolverClientSupport:
             "timingMs": payload.get("timingMs"),
         }
 
+    @staticmethod
+    def request_body(
+        utterance: str,
+        timezone: str,
+        country_code: str,
+        alexa_user_id: str | None,
+        listener_id: str | None,
+    ) -> dict[str, Any]:
+        body = {
+            "utterance": utterance,
+            "timezone": timezone,
+            "country_code": country_code,
+        }
+        if alexa_user_id:
+            body["alexaUserId"] = alexa_user_id
+        if listener_id:
+            body["listenerId"] = listener_id
+        return body
+
+    @staticmethod
+    def request_log(body: dict, alexa_user_id: str | None, listener_id: str | None) -> dict:
+        return {
+            **body,
+            **({"alexaUserId": "<present>"} if alexa_user_id else {}),
+            **({"listenerId": "<present>"} if listener_id else {}),
+        }
+
 
 class ResolverCache:
     __slots__ = ("_values", "_ttl_seconds", "_max_items")
@@ -123,6 +150,7 @@ class ResolverClient:
         utterance: str,
         *,
         alexa_user_id: str | None = None,
+        listener_id: str | None = None,
         timezone: str | None = None,
         country_code: str | None = None,
         timeout_ms: int | None = None,
@@ -136,17 +164,14 @@ class ResolverClient:
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return cached
-        body: dict[str, Any] = {
-            "utterance": utterance,
-            "timezone": timezone or self._timezone,
-            "country_code": country_code or self._default_country,
-        }
-        if alexa_user_id:
-            body["alexaUserId"] = alexa_user_id
-        logged_body = {
-            **body,
-            **({"alexaUserId": "<present>"} if alexa_user_id else {}),
-        }
+        body = ResolverClientSupport.request_body(
+            utterance,
+            timezone or self._timezone,
+            country_code or self._default_country,
+            alexa_user_id,
+            listener_id,
+        )
+        logged_body = ResolverClientSupport.request_log(body, alexa_user_id, listener_id)
         ResolverClientSupport.logger.info(
             "Hear: resolver request payload=%s",
             json.dumps(logged_body, sort_keys=True, separators=(",", ":")),
@@ -201,10 +226,16 @@ class ResolverClient:
         utterance: str,
         *,
         alexa_user_id: str | None = None,
+        listener_id: str | None = None,
         prefer_location: bool = False,
         timeout_ms: int | None = None,
     ) -> dict[str, Any]:
-        result = await self.resolve(utterance, alexa_user_id=alexa_user_id, timeout_ms=timeout_ms)
+        result = await self.resolve(
+            utterance,
+            alexa_user_id=alexa_user_id,
+            listener_id=listener_id,
+            timeout_ms=timeout_ms,
+        )
         payload = result.to_alexa_payload(
             prefer_location=prefer_location,
             original_utterance=utterance,

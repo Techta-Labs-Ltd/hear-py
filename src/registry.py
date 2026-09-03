@@ -19,6 +19,11 @@ from src.controllers.feedback import (
 )
 from src.controllers.intent_dispatch import IntentDispatchGateHandler
 from src.controllers.launch import LaunchRequestHandler, TownCaptureHandler
+from src.controllers.notifications import (
+    DisableNotificationsHandler,
+    EnableNotificationsHandler,
+    HearNotificationsHandler,
+)
 from src.controllers.permission import PermissionResumeHandler, SetUpAccountHandler
 from src.controllers.play import (
     PlayByCreatorHandler,
@@ -94,9 +99,9 @@ class RouteRegistry:
     )
     REQUEST_INTERCEPTORS = (
         LambdaDeadlineInterceptor,
+        IdentityInterceptor,
         LoadPersistenceInterceptor,
         DialogValidationInterceptor,
-        IdentityInterceptor,
         ResolverInterceptor,
         ConfirmationMiddleware,
     )
@@ -105,6 +110,9 @@ class RouteRegistry:
         PermissionResumeHandler,
         LaunchRequestHandler,
         SetUpAccountHandler,
+        HearNotificationsHandler,
+        EnableNotificationsHandler,
+        DisableNotificationsHandler,
         WhatsTrendingHandler,
         BrowseContentHandler,
         PlayByCreatorHandler,

@@ -19,6 +19,7 @@ from src.controllers.report import ReportContentHandler
 from src.middleware.feedback_gate import FeedbackGateHandler
 from src.models.feedback import FeedbackService
 from src.models.playback import Playback
+from src.models.user import User
 from src.services.listener_sync import ListenerSyncService
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
@@ -48,6 +49,29 @@ def test_pending_feedback_does_not_block_transport_intents(mock_handler_input, i
     mock_handler_input.request_envelope.request = AttrDict(
         {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
     )
+    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
+
+
+def test_pending_feedback_does_not_block_an_explicit_notification_request(
+    mock_handler_input,
+):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-1",
+            "contentId": "completed-1",
+            "completed": True,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {"name": "HearNotificationsIntent", "slots": {}},
+        }
+    )
+
     assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
@@ -235,6 +259,113 @@ def test_delayed_old_completion_cannot_replace_newer_pending_feedback(
     assert store["feedbackCandidates"] == []
 
 
+def test_starting_new_playback_discards_only_temporary_feedback_state(mock_handler_input):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-old",
+            "contentId": "completed-old",
+            "completed": True,
+        },
+        "feedbackCandidates": [
+            {
+                "feedbackKey": "candidate-old",
+                "contentId": "candidate-old",
+                "completed": True,
+            }
+        ],
+        "activeDialog": {"type": "feedback", "context": {"contentId": "completed-old"}},
+        "answeredFeedbackKeys": ["already-rated"],
+        "feedbackHistory": [{"feedbackKey": "already-rated", "value": "enjoyed"}],
+    }
+
+    ApplicationContainer().playback.start_session(
+        mock_handler_input,
+        {
+            "contentId": "new-content",
+            "title": "New recording",
+            "audioUrl": "https://cdn.hear.media/new.mp3",
+        },
+    )
+
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingFeedback"] is False
+    assert store["pendingFeedback"] is None
+    assert store["feedbackCandidates"] == []
+    assert store["activeDialog"] is None
+    assert store["answeredFeedbackKeys"] == ["already-rated"]
+    assert store["feedbackHistory"] == [
+        {"feedbackKey": "already-rated", "value": "enjoyed"}
+    ]
+
+
+def test_answered_feedback_requires_reliable_persistence(mock_handler_input):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-content",
+            "contentId": "completed-content",
+            "completed": True,
+        },
+    }
+
+    FeedbackService.mark_answered(mock_handler_input)
+
+    store = User.snapshot(mock_handler_input)
+    assert store["answeredFeedbackKeys"] == ["completed-content"]
+    assert store["_requiresReliableSave"] is True
+
+
+@pytest.mark.asyncio
+async def test_previous_publication_track_recovers_queue_subject_context(
+    monkeypatch, mock_handler_input
+):
+    tracks = [
+        {
+            "contentId": "track-one",
+            "title": "First track",
+            "audioUrl": "https://cdn.hear.media/one.mp3",
+        },
+        {
+            "contentId": "track-two",
+            "title": "Second track",
+            "audioUrl": "https://cdn.hear.media/two.mp3",
+        },
+    ]
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "playbackQueue": {
+            "queueId": "publication-queue",
+            "source": "publication",
+            "publicationId": "publication-one",
+            "publicationTitle": "The Weekly Review",
+            "publicationTrackCount": 2,
+            "orderedContentIds": ["track-one", "track-two"],
+            "currentIndex": 1,
+        },
+        "browseCatalog": {"items": tracks},
+        "answeredFeedbackKeys": ["publication:publication-one"],
+    }
+    start = AsyncMock(return_value={"shouldEndSession": True})
+    monkeypatch.setattr(Playback, "start_playback", start)
+    deps = ApplicationContainer()
+
+    await Playback.play_queue_delta(
+        mock_handler_input,
+        -1,
+        "Playing the previous recording.",
+        deps=deps,
+    )
+
+    content = start.await_args.args[1]
+    assert content["publicationId"] == "publication-one"
+    assert content["publicationTitle"] == "The Weekly Review"
+    assert content["subjectType"] == "publication"
+    assert content["trackIndex"] == 0
+
+
 @pytest.mark.asyncio
 async def test_queue_resolves_next_item_from_cached_catalog_without_api(
     monkeypatch, mock_handler_input
@@ -329,10 +460,9 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
         mock_handler_input.attributes_manager.request_attributes["_store"].get("deferredIntent")
         is None
     )
-    report = mock_handler_input.attributes_manager.request_attributes["_store"]["reportHistory"][-1]
-    assert report["subjectType"] == "content"
-    assert report["contentId"] == "old-content"
-    assert report["status"] == "pending"
+    store = mock_handler_input.attributes_manager.request_attributes["_store"]
+    assert store["reportHistory"] == []
+    assert store["awaitingReportDecision"] is False
 
 
 @pytest.mark.asyncio
@@ -429,6 +559,7 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
         **StateSchema.DEFAULT_STORE,
         "fullName": "Alex Hear",
         "userEmail": "alex@example.com",
+        "listenerId": "listener-existing",
         "userCity": "Manchester",
         "locality": "Manchester",
         "playCount": 3,
@@ -446,8 +577,10 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
     assert await service.sync_for_launch(mock_handler_input)
     profile = sync.await_args.args[0]
     assert profile["alexaUserId"]
-    assert profile["followedCreatorIds"] == ["creator-1"]
-    assert profile["followedOrganizationIds"] == ["org-1"]
+    assert profile["listenerId"] == "listener-existing"
+    assert "followedCreatorIds" not in profile
+    assert "followedOrganizationIds" not in profile
+    assert "playCount" not in profile
     assert profile["city"] == "Manchester"
     assert profile["locality"] == "Manchester"
     assert sync.await_args.kwargs["timeout_ms"] == 2500

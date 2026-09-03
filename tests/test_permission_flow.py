@@ -68,6 +68,25 @@ def test_location_consent_directive_is_voice_forward_and_explains_value():
     assert "shouldEndSession" not in response
 
 
+def test_notification_consent_uses_alexa_permission_without_account_linking():
+    handler_input = _handler_input()
+    deps = _deps()
+
+    response = Permission(deps=deps).start_notifications(handler_input)
+
+    directive = response["directives"][0]
+    assert directive["type"] == "Connections.StartConnection"
+    assert directive["uri"] == PermissionConstants.CONNECTION_URI
+    assert directive["token"] == PermissionConstants.NOTIFICATION_PURPOSE
+    assert directive["input"]["permissionScopes"] == [
+        {
+            "permissionScope": "alexa::devices:all:notifications:write",
+            "consentLevel": "ACCOUNT",
+        }
+    ]
+    assert "LinkAccount" not in str(response)
+
+
 @pytest.mark.asyncio
 async def test_denied_location_consent_explains_denial_and_voice_fallback():
     handler_input = _handler_input(
@@ -149,14 +168,10 @@ def test_listener_sync_uses_publication_history_subject_instead_of_track():
 
     payload = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
 
-    assert payload["recentPlayedIds"] == ["publication-1"]
-    assert payload["recentPlays"][0]["subjectType"] == "publication"
-    assert payload["recentPlays"][0]["subjectId"] == "publication-1"
-    assert payload["recentPlays"][0]["trackContentId"] == "track-2"
-    assert payload["recentPlays"][0]["timeSpentMs"] == 2700000
-    assert payload["recentPlays"][0]["timeSpentHours"] == 0.75
-    assert payload["recentPlays"][0]["tracks"]["track-1"]["timeSpentMs"] == 1800000
-    assert "contentId" not in payload["recentPlays"][0]
+    assert "recentPlayedIds" not in payload
+    assert "recentPlays" not in payload
+    assert "playCount" not in payload
+    assert "listeningPattern" not in payload
 
 
 def test_environment_specific_permission_guidance(monkeypatch):

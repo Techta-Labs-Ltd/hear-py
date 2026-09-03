@@ -66,7 +66,9 @@ class PlaybackControls:
         d = deps
         store = d.user.snapshot(handler_input)
         state = d.playback.state.current(handler_input)
-        variants = store.get("currentPlaybackSpeeds") or []
+        variants = (state or {}).get("playbackSpeeds") or store.get(
+            "currentPlaybackSpeeds"
+        ) or []
         if (
             speed != settings.default_speed
             and variants
@@ -94,7 +96,10 @@ class PlaybackControls:
     ):
         d = deps
         store = d.user.snapshot(handler_input)
-        variants = store.get("currentPlaybackSpeeds") or []
+        state = d.playback.state.current(handler_input)
+        variants = (state or {}).get("playbackSpeeds") or store.get(
+            "currentPlaybackSpeeds"
+        ) or []
         if not variants:
             return Playback.open_queue_response(handler_input, Speech.PLAYBACK_SPEED_NOT_SUPPORTED)
         value = PlaybackUtils.get_next_speed(

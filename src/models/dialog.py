@@ -1,13 +1,198 @@
 from __future__ import annotations
 
+import re
 import time
 from copy import deepcopy
+from difflib import SequenceMatcher
 
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AttrDict
 from src.constants.dialog import DialogConstants
+from src.constants.discovery import DiscoveryConstants
 from src.models.user import User
+
+
+class DialogSelection:
+    __slots__ = ()
+
+    @staticmethod
+    def normalize(value: object) -> str:
+        raw = str(value or "").strip().casefold()
+        raw = raw.replace("&", " and ")
+        for apostrophe in ("'", "’", "‘", "ʼ", "`"):
+            raw = raw.replace(apostrophe, "")
+        return re.sub(r"[^a-z0-9]+", " ", raw).strip()
+
+    @staticmethod
+    def normalize_ordinal(value: object) -> str:
+        raw = DialogSelection.normalize(value)
+        raw = raw.replace("1st", "first").replace("2nd", "second").replace("3rd", "third")
+        raw = raw.replace("4th", "fourth").replace("5th", "fifth").replace("6th", "sixth")
+        raw = re.sub("^(?:the\\s+)", "", raw)
+        return re.sub("\\s+(?:one|option|choice)$", "", raw)
+
+    @staticmethod
+    def unique_candidates(candidates: list[dict]) -> list[dict]:
+        seen: set[str] = set()
+        unique = []
+        for candidate in candidates:
+            name = str(candidate.get("name") or "").strip()
+            key = name.casefold()
+            if name and key not in seen:
+                seen.add(key)
+                unique.append(candidate)
+        return unique
+
+    @staticmethod
+    def request_slots(handler_input) -> dict:
+        request = AlexaRequest.read(handler_input.request_envelope, "request")
+        intent = AlexaRequest.read(request, "intent")
+        if not intent:
+            return {}
+        slots = intent.get("slots") if hasattr(intent, "get") else None
+        return slots or AlexaRequest.read(intent, "slots") or {}
+
+    @staticmethod
+    def _selection_slot(handler_input):
+        return AlexaRequest.read(DialogSelection.request_slots(handler_input), "selection")
+
+    @staticmethod
+    def _resolved_candidate(handler_input, candidates: list[dict]) -> dict | None:
+        resolved_id = AlexaRequest.get_resolved_slot_id(
+            DialogSelection._selection_slot(handler_input)
+        )
+        if not resolved_id:
+            return None
+        return next(
+            (candidate for candidate in candidates if candidate.get("id") == resolved_id),
+            None,
+        )
+
+    @staticmethod
+    def choices(pending: dict) -> list[dict]:
+        return list(
+            pending.get("choiceCandidates")
+            or DialogSelection.unique_candidates(list(pending.get("candidates") or []))
+        )
+
+    @staticmethod
+    def _selection_text(value: object) -> str:
+        text = DialogSelection.normalize_ordinal(value)
+        text = re.sub(
+            r"^(?:(?:please\s+)?(?:play|choose|select|pick)|i\s+meant)\s+",
+            "",
+            text,
+        )
+        return re.sub(r"\s+(?:please|one)$", "", text).strip()
+
+    @staticmethod
+    def _common_prefix_words(candidate_names: list[str]) -> list[str]:
+        if not candidate_names:
+            return []
+        words = [name.split() for name in candidate_names]
+        prefix: list[str] = []
+        for values in zip(*words):
+            if len(set(values)) != 1:
+                break
+            prefix.append(values[0])
+        return prefix
+
+    @staticmethod
+    def closest_candidate(raw: object, candidates: list[dict]) -> dict | None:
+        """Return one confident ASR-tolerant match, never an arbitrary nearest item."""
+        choices = DialogSelection.unique_candidates(candidates)
+        raw_key = DialogSelection._selection_text(raw)
+        if not raw_key or not choices:
+            return None
+        names = [DialogSelection.normalize(choice.get("name")) for choice in choices]
+        exact = [
+            choice
+            for choice, name in zip(choices, names)
+            if raw_key == name
+            or (len(raw_key) >= 3 and raw_key in name)
+            or (len(name) >= 3 and name in raw_key)
+        ]
+        if len(exact) == 1:
+            return exact[0]
+
+        prefix_words = DialogSelection._common_prefix_words(names)
+        raw_words = raw_key.split()
+        if prefix_words and len(raw_words) <= len(prefix_words):
+            prefix_score = SequenceMatcher(
+                None, "".join(raw_words), "".join(prefix_words)
+            ).ratio()
+            if prefix_score >= 0.78:
+                return None
+
+        raw_suffix = raw_words
+        if prefix_words and len(raw_words) > len(prefix_words):
+            spoken_prefix = raw_words[: len(prefix_words)]
+            prefix_score = SequenceMatcher(
+                None, "".join(spoken_prefix), "".join(prefix_words)
+            ).ratio()
+            if prefix_score >= 0.72:
+                raw_suffix = raw_words[len(prefix_words) :]
+
+        scores: list[tuple[float, dict]] = []
+        compact_raw = "".join(raw_words)
+        compact_suffix = "".join(raw_suffix)
+        for choice, name in zip(choices, names):
+            full_score = SequenceMatcher(None, compact_raw, name.replace(" ", "")).ratio()
+            candidate_suffix = name.split()[len(prefix_words) :]
+            suffix_score = (
+                SequenceMatcher(None, compact_suffix, "".join(candidate_suffix)).ratio()
+                if compact_suffix and candidate_suffix
+                else 0.0
+            )
+            scores.append((max(full_score, suffix_score), choice))
+        scores.sort(key=lambda item: item[0], reverse=True)
+        best_score, best = scores[0]
+        next_score = scores[1][0] if len(scores) > 1 else 0.0
+        threshold = 0.68 if len(compact_raw) >= 5 else 0.80
+        if best_score >= threshold and best_score - next_score >= 0.08:
+            return best
+        return None
+
+    @staticmethod
+    def match_pending_candidate(handler_input, pending: dict, raw: str) -> dict | None:
+        candidates = list(pending.get("candidates") or [])
+        resolved = DialogSelection._resolved_candidate(handler_input, candidates)
+        if resolved:
+            return resolved
+        choices = DialogSelection.choices(pending)
+        displayed = list(pending.get("displayedCandidates") or choices[:3])
+        raw_key = DialogSelection.normalize_ordinal(raw)
+        ordinal = DiscoveryConstants.ORDINAL_INDEX.get(raw_key)
+        if ordinal is not None and ordinal < len(displayed):
+            return displayed[ordinal]
+        return DialogSelection.closest_candidate(raw_key, choices)
+
+    @staticmethod
+    def request_candidate(handler_input, pending: dict) -> dict | None:
+        candidates = DialogSelection.choices(pending)
+        resolved = DialogSelection._resolved_candidate(handler_input, candidates)
+        if resolved:
+            return resolved
+        for slot in DialogSelection.request_slots(handler_input).values():
+            value = AlexaRequest.get_resolved_slot_value(slot)
+            if not value:
+                continue
+            candidate = DialogSelection.closest_candidate(value, candidates)
+            if candidate:
+                return candidate
+        return None
+
+    @staticmethod
+    def has_more_pages(pending: dict) -> bool:
+        pagination = pending.get("candidatePagination") or {}
+        current_page = max(0, int(pagination.get("currentPage") or 0))
+        total_pages = max(0, int(pagination.get("totalPages") or 0))
+        return total_pages > 0 and current_page + 1 < total_pages
+
+    @staticmethod
+    def has_more_choices(pending: dict, candidates: list[dict], next_offset: int) -> bool:
+        return next_offset < len(candidates) or DialogSelection.has_more_pages(pending)
 
 
 class DialogStateManager:

@@ -10,7 +10,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DialogStateManager
+from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.user import User
 from src.utils.browse import BrowseUtils
 from src.utils.content import ContentUtils
@@ -42,13 +42,18 @@ class Browse:
         return isinstance(pending, dict) and bool(pending.get("candidates"))
 
     @staticmethod
-    def _has_more_ambiguity_pages(pending: dict) -> bool:
-        pagination = pending.get("candidatePagination")
-        if not isinstance(pagination, dict) or pagination.get("kind") != "publication":
-            return False
-        current_page = max(0, int(pagination.get("currentPage") or 0))
-        total_pages = max(0, int(pagination.get("totalPages") or 0))
-        return total_pages > 0 and current_page + 1 < total_pages
+    def _ambiguity_reprompt(publication_picker: bool, has_more: bool) -> str:
+        if publication_picker:
+            navigation = "show more or previous" if has_more else "previous"
+            return (
+                "Which publication would you like? Say its name, first, second, or third. "
+                f"You can also say {navigation}."
+            )
+        return (
+            "Please say one of the names I just offered, or say show more."
+            if has_more
+            else "Please say one of the names I just offered."
+        )
 
     @staticmethod
     def _merge_ambiguity_candidates(existing: list[dict], incoming: list[dict]) -> list[dict]:
@@ -91,9 +96,11 @@ class Browse:
         next_page = max(0, int(pagination.get("currentPage") or 0)) + 1
         payload = SearchPayload.with_pagination(pending.get("searchPayload"), limit)
         payload["page"] = next_page
-        user_id = AlexaRequest.get_user_id(handler_input)
-        if user_id:
-            payload["alexaUserId"] = user_id
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=User.snapshot(handler_input).get("listenerId"),
+        )
         await self.dependencies.progressive.send(
             handler_input,
             Speech.SEARCH_MORE_PROGRESSIVE,
@@ -412,69 +419,77 @@ class Browse:
         )
         return response or self.dependencies.search._build_no_content_response(handler_input)
 
+    async def _more_ambiguity(self, handler_input: HandlerInput, pending: dict):
+        candidates = list(pending.get("choiceCandidates") or pending["candidates"])
+        offset = max(3, int(pending.get("spokenCandidateOffset") or 3))
+        next_candidates = candidates[offset : offset + 3]
+        load_failed = False
+        if not next_candidates and DialogSelection.has_more_pages(pending):
+            pending, load_failed = await self._fetch_next_ambiguity_page(handler_input, pending)
+            candidates = list(
+                pending.get("choiceCandidates") or pending.get("candidates") or []
+            )
+            next_candidates = candidates[offset : offset + 3]
+            if not load_failed:
+                User.update(handler_input, {"pendingAmbiguity": pending})
+                DialogStateManager.activate(handler_input, "ambiguity", context=pending)
+        if load_failed:
+            message = SearchSpeech.publication_choices_unavailable_message()
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(message))
+                .reprompt(Ssml.ssml("Say one of the earlier names, or say show more."))
+                .set_should_end_session(False)
+                .response
+            )
+        if not next_candidates:
+            next_candidates = list(pending.get("displayedCandidates") or candidates[:3])
+            publication_picker = (pending.get("candidatePagination") or {}).get(
+                "kind"
+            ) == "publication"
+            message = (
+                SearchSpeech.publication_choices_exhausted_message(next_candidates)
+                if publication_picker
+                else SearchSpeech.ambiguity_exhausted_message(next_candidates)
+            )
+        else:
+            pagination = pending.get("candidatePagination") or {}
+            next_offset = offset + len(next_candidates)
+            has_more = DialogSelection.has_more_choices(pending, candidates, next_offset)
+            message = (
+                SearchSpeech.more_publication_choices_message(
+                    next_candidates,
+                    has_more=has_more,
+                )
+                if pagination.get("kind") == "publication"
+                else SearchSpeech.ambiguous_reference_message(
+                    "that name",
+                    next_candidates,
+                    has_more=has_more,
+                )
+            )
+            pending = {
+                **pending,
+                "displayedCandidates": next_candidates,
+                "spokenCandidateOffset": next_offset,
+            }
+            User.update(handler_input, {"pendingAmbiguity": pending})
+            DialogStateManager.activate(handler_input, "ambiguity", context=pending)
+        publication_picker = (pending.get("candidatePagination") or {}).get(
+            "kind"
+        ) == "publication"
+        has_more = bool(next_candidates) and DialogSelection.has_more_choices(
+            pending,
+            candidates,
+            int(pending.get("spokenCandidateOffset") or len(next_candidates)),
+        )
+        reprompt = Browse._ambiguity_reprompt(publication_picker, has_more)
+        return Browse._choice_navigation_response(handler_input, candidates, message, reprompt)
+
     async def more(self, handler_input: HandlerInput):
         store = User.snapshot(handler_input)
         pending = store.get("pendingAmbiguity")
         if isinstance(pending, dict) and pending.get("candidates"):
-            candidates = list(pending.get("choiceCandidates") or pending["candidates"])
-            offset = max(3, int(pending.get("spokenCandidateOffset") or 3))
-            next_candidates = candidates[offset : offset + 3]
-            load_failed = False
-            if not next_candidates and Browse._has_more_ambiguity_pages(pending):
-                pending, load_failed = await self._fetch_next_ambiguity_page(
-                    handler_input, pending
-                )
-                candidates = list(
-                    pending.get("choiceCandidates") or pending.get("candidates") or []
-                )
-                next_candidates = candidates[offset : offset + 3]
-                if not load_failed:
-                    User.update(handler_input, {"pendingAmbiguity": pending})
-                    DialogStateManager.activate(handler_input, "ambiguity", context=pending)
-            if load_failed:
-                message = SearchSpeech.publication_choices_unavailable_message()
-                return (
-                    handler_input.response_builder.speak(Ssml.ssml(message))
-                    .reprompt(Ssml.ssml("Say one of the earlier names, or say show more."))
-                    .set_should_end_session(False)
-                    .response
-                )
-            if not next_candidates:
-                next_candidates = list(pending.get("displayedCandidates") or candidates[:3])
-                publication_picker = (pending.get("candidatePagination") or {}).get(
-                    "kind"
-                ) == "publication"
-                message = (
-                    SearchSpeech.publication_choices_exhausted_message(next_candidates)
-                    if publication_picker
-                    else SearchSpeech.ambiguity_exhausted_message(next_candidates)
-                )
-            else:
-                pagination = pending.get("candidatePagination") or {}
-                message = (
-                    SearchSpeech.more_publication_choices_message(next_candidates)
-                    if pagination.get("kind") == "publication"
-                    else SearchSpeech.ambiguous_reference_message("that name", next_candidates)
-                )
-                pending = {
-                    **pending,
-                    "displayedCandidates": next_candidates,
-                    "spokenCandidateOffset": offset + len(next_candidates),
-                }
-                User.update(handler_input, {"pendingAmbiguity": pending})
-                DialogStateManager.activate(handler_input, "ambiguity", context=pending)
-            publication_picker = (pending.get("candidatePagination") or {}).get(
-                "kind"
-            ) == "publication"
-            reprompt = (
-                "Which publication would you like? Say its name, first, second, or third. "
-                "You can also say show more or previous."
-                if publication_picker
-                else "Please say one of the names I just offered."
-            )
-            return Browse._choice_navigation_response(
-                handler_input, candidates, message, reprompt
-            )
+            return await self._more_ambiguity(handler_input, pending)
         catalog = self.dependencies.browse.get_catalog(store)
         if not catalog or not catalog.get("items"):
             return (
@@ -547,15 +562,25 @@ class Browse:
         current_start = max(0, offset - len(displayed))
         previous_start = max(0, current_start - 3)
         previous_candidates = candidates[previous_start : previous_start + 3]
+        has_more = DialogSelection.has_more_choices(
+            pending,
+            candidates,
+            previous_start + len(previous_candidates),
+        )
         publication_picker = (pending.get("candidatePagination") or {}).get(
             "kind"
         ) == "publication"
         if current_start == 0:
             message = (
-                SearchSpeech.first_publication_choices_message(previous_candidates)
+                SearchSpeech.first_publication_choices_message(
+                    previous_candidates,
+                    has_more=has_more,
+                )
                 if publication_picker
                 else SearchSpeech.ambiguous_reference_message(
-                    "that name", previous_candidates
+                    "that name",
+                    previous_candidates,
+                    has_more=has_more,
                 )
             )
         else:
@@ -567,18 +592,18 @@ class Browse:
             User.update(handler_input, {"pendingAmbiguity": pending})
             DialogStateManager.activate(handler_input, "ambiguity", context=pending)
             message = (
-                SearchSpeech.previous_publication_choices_message(previous_candidates)
+                SearchSpeech.previous_publication_choices_message(
+                    previous_candidates,
+                    has_more=has_more,
+                )
                 if publication_picker
                 else SearchSpeech.ambiguous_reference_message(
-                    "that name", previous_candidates
+                    "that name",
+                    previous_candidates,
+                    has_more=has_more,
                 )
             )
-        reprompt = (
-            "Which publication would you like? Say its name, first, second, or third. "
-            "You can also say show more or previous."
-            if publication_picker
-            else "Please say one of the names I just offered."
-        )
+        reprompt = Browse._ambiguity_reprompt(publication_picker, has_more)
         return Browse._choice_navigation_response(
             handler_input, candidates, message, reprompt
         )

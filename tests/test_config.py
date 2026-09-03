@@ -54,7 +54,9 @@ def test_env_example_documents_every_application_setting():
     required = {
         name
         for name in Settings.model_fields
-        if name.startswith(("HEAR_", "SENTRY_", "POWERTOOLS_", "SQS_", "WEBHOOK_"))
+        if name.startswith(
+            ("ALEXA_", "HEAR_", "SENTRY_", "POWERTOOLS_", "SQS_", "WEBHOOK_")
+        )
         or name in {"STAGE", "NODE_ENV", "DEBUG_HEAR", "AWS_REGION"}
     }
     assert required == documented

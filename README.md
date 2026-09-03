@@ -15,18 +15,20 @@ Python Alexa skill backend deployed to AWS Lambda as a container image.
 - `src/database/` - DynamoDB and persistence middleware
 - `src/constants/` and `src/utils/` - focused values, filters, and deadline helpers
 - `src/alexa/runtime.py` - async Alexa dispatch runtime
-- `template.yaml` - Alexa Lambda, DynamoDB, and outbound SQS deployment
+- `template.yaml` - Alexa Lambdas, listener state, notification inbox, and outbound SQS deployment
 
 Search utterances are resolved by `POST https://resolver.hear.media/resolve`.
 Canonical resolver entities are converted into Hear search filters before the
 Alexa skill calls the catalog API. Playback, feedback, follow, unfollow, and
 report events are published to SQS and forwarded by the outbound worker to the
-Hear backend. This repository does not host a resolver, taxonomy runtime,
-inbound webhooks, or notification ingestion.
+Hear backend. The Hear backend writes content/publication notifications directly
+to the stack-owned notification inbox; a DynamoDB stream worker sends Alexa
+proactive events and the skill offers the same updates by voice. This repository
+does not host a resolver, taxonomy runtime, or inbound webhook.
 
 ## Backend contracts
 
-- [Backend event and feedback contract](docs/backend-events-and-feedback.md)
+- [Backend identity, registration, and event contract](docs/backend-events-and-feedback.md)
 - [Alexa permission flow](docs/alexa-permissions.md)
 
 ## Configuration
@@ -41,6 +43,8 @@ The `.env` flags are grouped by responsibility:
 - `HEAR_RESOLVER_*` configures the resolver endpoint, timeout, country, and timezone.
 - `HEAR_HTTP_*`, `HEAR_ALEXA_API_TIMEOUT_MS`, and `HEAR_PROGRESSIVE_*` configure outbound HTTP behavior.
 - `HEAR_DDB_*` and `HEAR_PERSISTENCE_*` configure durable User persistence.
+- `HEAR_NOTIFICATION_*` and `ALEXA_PROACTIVE_*` configure the backend-owned notification inbox and proactive delivery worker.
+- `HEAR_CANONICAL_IDENTITY_*` configures pre-persistence listener resolution and caching.
 - `SQS_OUT_QUEUE_URL`, `WEBHOOK_OUTBOUND_*`, and `HEAR_EVENT_WEBHOOK_TIMEOUT_MS` configure backend event delivery.
 - `HEAR_FEEDBACK_*`, `HEAR_PLAYBACK_*`, `HEAR_SEEK_STEP_MS`, queue, browse, search, and history flags configure application behavior.
 - `SENTRY_*`, `STAGE`, `NODE_ENV`, and `POWERTOOLS_*` configure runtime diagnostics.
@@ -48,15 +52,23 @@ The `.env` flags are grouped by responsibility:
 Use `.env.example` as the complete non-secret configuration contract. Keep real
 API keys and DSNs only in `.env` locally or encrypted SSM parameters in AWS.
 
-The deployment stack creates and owns an encrypted DynamoDB table for durable
-listener state, with point-in-time recovery, TTL, and retained deletion policy.
-`HEAR_DDB_TABLE` selects the table outside the stack. Memory persistence is
+The deployment stack creates an encrypted V2 DynamoDB table with `id` and
+`scope` keys for sparse `CORE`, `PLAYBACK`, `DIALOG`, and `CACHE` state. Each
+scope has independent optimistic concurrency and retention. `HEAR_DDB_TABLE`
+selects this sole listener-state table outside the stack. Memory persistence is
 intended for local development only.
 
 The deployment stack also creates an encrypted outbound SQS queue, a dead-letter
-queue, and a batch consumer. Publication feedback identifies the publication as
-its subject and includes all listened content IDs. Content feedback identifies
-one complete track as its subject.
+queue, and a batch consumer. Event envelope V2 includes `schemaVersion` and a
+stable `eventId`. Complete listening history, feedback, follows, and reports are
+backend-owned event projections and are not duplicated in listener sync or
+DynamoDB history arrays.
+
+Notifications use a separate encrypted `HearNotificationInboxTable`, keyed by
+canonical `listenerId` and `notificationId`. The Hear backend writes the inbox
+item once; the Alexa skill only reads and advances its user-consumption status.
+The table stream invokes the proactive notification Lambda. Notification rows
+must never be written into `HearListenerStateTable`.
 
 ## Local checks
 
@@ -89,6 +101,8 @@ stages:
 | Secret | SSM `/hear/development/HEAR_API_KEY` | development API key | `HEAR_API_KEY_PROD` | production API key |
 | Secret | SSM `/hear/development/WEBHOOK_OUTBOUND_SECRET` | development webhook secret | `WEBHOOK_OUTBOUND_SECRET_PROD` | production webhook secret |
 | Secret | SSM `/hear/development/SENTRY_DSN` | development Sentry DSN | `SENTRY_DSN_PROD` | production Sentry DSN |
+| Secret | SSM `/hear/development/ALEXA_PROACTIVE_CLIENT_ID` | development LWA client ID | `ALEXA_PROACTIVE_CLIENT_ID_PROD` | production LWA client ID |
+| Secret | SSM `/hear/development/ALEXA_PROACTIVE_CLIENT_SECRET` | development LWA client secret | `ALEXA_PROACTIVE_CLIENT_SECRET_PROD` | production LWA client secret |
 | Variable | `STACK_NAME_DEV` | `hear-py-development` | `STACK_NAME_PROD` | `hear-py-prod` |
 | Variable | `SHORT_STAGE_DEV` | `dev` | `SHORT_STAGE_PROD` | `prod` |
 | Variable | `ALEXA_SKILL_ID_DEV` | development skill ID | `ALEXA_SKILL_ID_PROD` | production skill ID |
@@ -98,6 +112,7 @@ stages:
 | Variable | `HEAR_API_PATH_PREFIX_DEV` | `alexa` | `HEAR_API_PATH_PREFIX_PROD` | `alexa` |
 | Variable | `WEBHOOK_OUTBOUND_URL_DEV` | development event endpoint | `WEBHOOK_OUTBOUND_URL_PROD` | production event endpoint |
 | Variable | `POWERTOOLS_LOG_LEVEL_DEV` | `DEBUG` | `POWERTOOLS_LOG_LEVEL_PROD` | `INFO` |
+| Variable | `CANONICAL_IDENTITY_ENABLED_DEV` | `0` until the backend resolve endpoint is live, then `1` | `CANONICAL_IDENTITY_ENABLED_PROD` | `0` until the backend resolve endpoint is live, then `1` |
 | Variable | `PROVISIONED_CONCURRENCY_DEV` | `0` | `PROVISIONED_CONCURRENCY_PROD` | `0` |
 | Variable | `SSM_PARAMETER_PREFIX_DEV` | `/hear/development` | None | production secrets come from GitHub |
 
@@ -107,13 +122,17 @@ Development reads sensitive configuration from encrypted SSM parameters:
 /hear/development/HEAR_API_KEY
 /hear/development/WEBHOOK_OUTBOUND_SECRET
 /hear/development/SENTRY_DSN
+/hear/development/ALEXA_PROACTIVE_CLIENT_ID
+/hear/development/ALEXA_PROACTIVE_CLIENT_SECRET
 ```
 
-Production reads `HEAR_API_KEY_PROD`, `WEBHOOK_OUTBOUND_SECRET_PROD`, and
-`SENTRY_DSN_PROD` directly from the protected GitHub `production` environment
-on every deployment. `HEAR_API_KEY_PROD` is required. The other two secrets are
-optional; event signing falls back to the API key when the dedicated secret is
-absent. Changing a GitHub secret takes effect on the next push to `main` or a
+Production reads `HEAR_API_KEY_PROD`, `WEBHOOK_OUTBOUND_SECRET_PROD`,
+`SENTRY_DSN_PROD`, `ALEXA_PROACTIVE_CLIENT_ID_PROD`, and
+`ALEXA_PROACTIVE_CLIENT_SECRET_PROD` directly from the protected GitHub
+`production` environment on every deployment. `HEAR_API_KEY_PROD` and both
+proactive credential secrets are required; `WEBHOOK_OUTBOUND_SECRET_PROD` and
+`SENTRY_DSN_PROD` remain optional. Event signing falls back to the API key when
+the dedicated webhook secret is absent. Changing a GitHub secret takes effect on the next push to `main` or a
 manual run of the production workflow. Configure required
 reviewers and prevent self-review on the `production` GitHub environment for a
 production approval gate. Run `scripts/setup-github-oidc.sh` once with IAM
@@ -148,5 +167,6 @@ change-set confirmation:
 ```
 
 Pass `-AwsProfile profile-name` when not using the AWS CLI's default profile.
-The TOML contains no secrets; the helper reads `/hear/<environment>/HEAR_API_KEY`
-and the optional `SENTRY_DSN` from encrypted SSM parameters.
+The TOML contains no secrets; the helper reads `/hear/<environment>/HEAR_API_KEY`,
+the proactive LWA credentials, and the optional `SENTRY_DSN` from encrypted SSM
+parameters.

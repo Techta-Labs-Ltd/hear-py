@@ -120,8 +120,42 @@ class OutboundLambdaApplication:
             }
 
 
+class NotificationLambdaApplication:
+    logger = Logger(service="hear-proactive-notifications")
+    tracer = Tracer(service="hear-proactive-notifications")
+
+    def __init__(self) -> None:
+        self._runtime = LambdaRuntime()
+        self._dependencies: ApplicationContainer | None = None
+
+    def dependencies(self) -> ApplicationContainer:
+        if self._dependencies is None:
+            self._dependencies = ApplicationContainer()
+        return self._dependencies
+
+    def handle(self, event: dict, context) -> dict:
+        del context
+        records = (event or {}).get("Records") or []
+        try:
+            return self._runtime.run(self.dependencies().notification_delivery.consume(records))
+        except Exception:
+            self.logger.exception("Proactive notification batch failed")
+            return {
+                "batchItemFailures": [
+                    {
+                        "itemIdentifier": str(
+                            (record.get("dynamodb") or {}).get("SequenceNumber") or ""
+                        )
+                    }
+                    for record in records
+                    if (record.get("dynamodb") or {}).get("SequenceNumber")
+                ]
+            }
+
+
 _application = LambdaApplication()
 _outbound_application = OutboundLambdaApplication()
+_notification_application = NotificationLambdaApplication()
 
 
 @_application.logger.inject_lambda_context
@@ -135,3 +169,9 @@ def handler(event: dict, context) -> dict:
 @_outbound_application.tracer.capture_lambda_handler
 def outbound_handler(event: dict, context) -> dict:
     return _outbound_application.handle(event, context)
+
+
+@_notification_application.logger.inject_lambda_context
+@_notification_application.tracer.capture_lambda_handler
+def notification_handler(event: dict, context) -> dict:
+    return _notification_application.handle(event, context)

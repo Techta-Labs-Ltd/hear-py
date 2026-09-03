@@ -740,6 +740,53 @@
           ]
         },
         {
+          "name": "HearNotificationsIntent",
+          "slots": [],
+          "samples": [
+            "hear my updates",
+            "play my updates",
+            "check my updates",
+            "check for updates",
+            "what are my updates",
+            "what's new from sources I follow",
+            "what is new from sources I follow",
+            "anything new from people I follow",
+            "do I have any updates",
+            "do I have any notifications",
+            "read my notifications",
+            "play my notifications"
+          ]
+        },
+        {
+          "name": "EnableNotificationsIntent",
+          "slots": [],
+          "samples": [
+            "enable notifications",
+            "turn on notifications",
+            "switch on notifications",
+            "enable new content alerts",
+            "turn on new content alerts",
+            "notify me about new content",
+            "tell me when there is something new",
+            "let me know when followed sources publish",
+            "send me new publication alerts"
+          ]
+        },
+        {
+          "name": "DisableNotificationsIntent",
+          "slots": [],
+          "samples": [
+            "disable notifications",
+            "turn off notifications",
+            "switch off notifications",
+            "stop notifications",
+            "disable new content alerts",
+            "turn off new content alerts",
+            "stop sending publication alerts",
+            "do not notify me about new content"
+          ]
+        },
+        {
           "name": "RateContentIntent",
           "slots": [],
           "samples": [
@@ -1089,7 +1136,10 @@
           "samples": [
             "{selection}",
             "I meant {selection}",
-            "the {selection} one"
+            "the {selection} one",
+            "choose {selection}",
+            "select {selection}",
+            "{selection} please"
           ]
         },
         {

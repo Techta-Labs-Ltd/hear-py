@@ -9,9 +9,9 @@ from src.registry import RouteRegistry
 def test_pipeline_declarations_preserve_behavioral_order():
     assert [item.__name__ for item in RouteRegistry.REQUEST_INTERCEPTORS] == [
         "LambdaDeadlineInterceptor",
+        "IdentityInterceptor",
         "LoadPersistenceInterceptor",
         "DialogValidationInterceptor",
-        "IdentityInterceptor",
         "ResolverInterceptor",
         "ConfirmationMiddleware",
     ]

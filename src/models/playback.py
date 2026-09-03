@@ -23,6 +23,7 @@ from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
 from src.utils.playback import PlaybackUtils
+from src.utils.search_payload import SearchPayload
 
 
 class Playback:
@@ -60,13 +61,16 @@ class Playback:
             return handler_input.response_builder.response
         content = PlaybackQueue.cached_content(store, next_id)
         if not content:
-            payload = {
-                "query": "",
-                "filter": SearchFilters.content(next_id),
-                "page": 0,
-                "limit": 1,
-                "alexaUserId": AlexaRequest.get_user_id(handler_input),
-            }
+            payload = SearchPayload.with_identity(
+                {
+                    "query": "",
+                    "filter": SearchFilters.content(next_id),
+                    "page": 0,
+                    "limit": 1,
+                },
+                alexa_user_id=AlexaRequest.get_user_id(handler_input),
+                listener_id=store.get("listenerId"),
+            )
             result = await hear_client.search(
                 payload,
                 timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
@@ -173,10 +177,10 @@ class Playback:
             handler_input, content.get("publicationId")
         ):
             Playback._activate_best_feedback_candidate(handler_input)
+        FeedbackService.dismiss(handler_input)
         state = self._playback.start(
             handler_input,
             content,
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
             queue_id=queue_id,
             queue_index=queue_index,
             offset_ms=offset_ms,
@@ -295,14 +299,18 @@ class Playback:
     async def _find_queue_content(
         handler_input: HandlerInput, content_id: str, *, deps
     ) -> dict | None:
-        result = await deps.heara.search(
+        payload = SearchPayload.with_identity(
             {
                 "query": "",
                 "filter": SearchFilters.content(content_id),
                 "page": 0,
                 "limit": 1,
-                "alexaUserId": AlexaRequest.get_user_id(handler_input),
             },
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=User.snapshot(handler_input).get("listenerId"),
+        )
+        result = await deps.heara.search(
+            payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
         return next(
@@ -330,6 +338,13 @@ class Playback:
         if not content:
             deps.playback.queue.move(handler_input, -delta)
             return Playback.open_queue_response(handler_input, Speech.NO_CONTENT_AVAILABLE)
+        store = deps.user.snapshot(handler_input)
+        queue = PlaybackQueue.read(store)
+        content = PlaybackQueue.apply_publication_context(
+            store,
+            content,
+            queue_index=int(queue.get("currentIndex") or 0) if queue else None,
+        )
         return await deps.playback.start(handler_input, content, speech)
 
     @staticmethod
@@ -353,10 +368,10 @@ class Playback:
             handler_input, content.get("publicationId")
         ):
             Playback._activate_best_feedback_candidate(handler_input)
+        FeedbackService.dismiss(handler_input)
         return PlaybackState(User()).start(
             handler_input,
             content,
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
             queue_id=queue_id,
             queue_index=queue_index,
             offset_ms=offset_ms,
@@ -400,10 +415,10 @@ class Playback:
             handler_input, content.get("publicationId")
         ):
             Playback._activate_best_feedback_candidate(handler_input)
+        FeedbackService.dismiss(handler_input)
         state = repository.start(
             handler_input,
             content,
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
             queue_id=queue_id,
             queue_index=queue_index,
             offset_ms=offset_ms,
@@ -497,7 +512,9 @@ class Playback:
             "publicationId": state.get("publicationId"),
             "publicationTitle": state.get("publicationTitle"),
             "durationMs": state.get("durationMs"),
-            "playbackSpeeds": User.snapshot(handler_input).get("currentPlaybackSpeeds") or [],
+            "playbackSpeeds": state.get("playbackSpeeds")
+            or User.snapshot(handler_input).get("currentPlaybackSpeeds")
+            or [],
         }
         if not ContentNormalizer.is_playable_content_item(content):
             return (
@@ -553,14 +570,18 @@ class Playback:
         cached = PlaybackQueue.cached_content(store, content_id)
         if cached:
             return PlaybackQueue.apply_publication_context(store, cached)
-        result = await hear_client.search(
+        payload = SearchPayload.with_identity(
             {
                 "query": "",
                 "filter": SearchFilters.content(content_id),
                 "page": 0,
                 "limit": 1,
-                "alexaUserId": AlexaRequest.get_user_id(handler_input),
             },
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
+        result = await hear_client.search(
+            payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
         content = result["results"][0] if result.get("results") else None

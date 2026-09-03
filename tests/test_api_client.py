@@ -99,6 +99,44 @@ async def test_search_sends_and_returns_effective_pagination(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_forwards_canonical_listener_id(monkeypatch):
+    sent = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        sent.update(body)
+        return (200, {"results": [], "total": 0})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    await HearApiClient().search(
+        {"query": "news", "listenerId": "listener-1", "alexaUserId": "alexa-1"}
+    )
+    assert sent["listenerId"] == "listener-1"
+    assert sent["alexaUserId"] == "alexa-1"
+
+
+@pytest.mark.asyncio
+async def test_identity_resolution_uses_dedicated_endpoint(monkeypatch):
+    captured = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        captured.update(
+            {"method": method, "path": path, "body": body}
+        )
+        return (200, {"listenerId": "listener-1"})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    result = await HearApiClient(HearApiOptions(path_prefix="alexa")).resolve_listener_identity(
+        {"alexaUserId": "alexa-1"},
+        timeout_ms=500,
+    )
+
+    assert result == {"listenerId": "listener-1"}
+    assert captured["method"] == "POST"
+    assert captured["path"] == "/listeners/resolve"
+    assert captured["body"] == {"alexaUserId": "alexa-1"}
+
+
+@pytest.mark.asyncio
 async def test_search_normalizes_legacy_top_level_dates_into_filter(monkeypatch):
     sent = {}
 

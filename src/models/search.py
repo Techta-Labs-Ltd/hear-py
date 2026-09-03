@@ -14,7 +14,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DialogStateManager
+from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.playback_state import PlaybackQueue
 from src.models.user import User
 from src.utils.browse import BrowseUtils
@@ -51,18 +51,6 @@ class Search:
         if deps is None:
             raise RuntimeError("Search requires injected dependencies")
         return deps
-
-    @staticmethod
-    def _unique_ambiguity_choices(candidates: list[dict]) -> list[dict]:
-        seen: set[str] = set()
-        choices = []
-        for candidate in candidates:
-            name = str(candidate.get("name") or "").strip()
-            key = name.casefold()
-            if name and key not in seen:
-                seen.add(key)
-                choices.append(candidate)
-        return choices
 
     @staticmethod
     def _summarize_intent_slots(handler_input: HandlerInput) -> Dict[str, Any]:
@@ -175,7 +163,7 @@ class Search:
         reference = ambiguous[0]
         existing = store.get("pendingAmbiguity") or {}
         candidates = list(existing.get("candidates") or reference.get("candidates") or [])
-        choices = Search._unique_ambiguity_choices(candidates)
+        choices = DialogSelection.unique_candidates(candidates)
         displayed = choices[:3]
         ambiguity_context = nlp.get("ambiguityContext")
         ambiguity_context = ambiguity_context if isinstance(ambiguity_context, dict) else {}
@@ -212,6 +200,11 @@ class Search:
         )
         DialogStateManager.activate(handler_input, "ambiguity", context=pending)
         message_candidates = list(pending.get("displayedCandidates") or candidates[:3])
+        has_more = DialogSelection.has_more_choices(
+            pending,
+            choices,
+            len(message_candidates),
+        )
         directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(choices)
         if directive:
             handler_input.response_builder.add_directive(directive)
@@ -219,7 +212,9 @@ class Search:
             SearchSpeech.ambiguity_retry_message(message_candidates)
             if nlp.get("ambiguityRetry")
             else SearchSpeech.ambiguous_reference_message(
-                str(reference.get("phrase") or ""), message_candidates
+                str(reference.get("phrase") or ""),
+                message_candidates,
+                has_more=has_more,
             )
         )
         return {"results": [], "total_hits": 0, "failed": False, "client_message": message}
@@ -232,7 +227,7 @@ class Search:
         intent: str,
         request_label: str | None = None,
     ) -> dict:
-        choices = Search._unique_ambiguity_choices(
+        choices = DialogSelection.unique_candidates(
             list(search_result.get("_publication_choices") or [])
         )
         payload = dict(search_result.get("_search_payload") or {})
@@ -291,7 +286,12 @@ class Search:
             {
                 "_search_payload": payload,
                 "_request_label": phrase,
-                "client_message": SearchSpeech.publication_ambiguity_message(choices[:3]),
+                "client_message": SearchSpeech.publication_ambiguity_message(
+                    choices[:3],
+                    has_more=DialogSelection.has_more_choices(
+                        {"candidatePagination": candidate_pagination}, choices, 3
+                    ),
+                ),
             }
         )
         return special
@@ -372,7 +372,7 @@ class Search:
             or Search._search_sort(handler_input, slots, filters),
             nlp_filter=filters,
         )
-        logged_payload = {key: value for key, value in payload.items() if key != "alexaUserId"}
+        logged_payload = {key: value for key, value in payload.items() if key not in {"alexaUserId", "listenerId"}}
         Search.logger.info(
             "Hear: search request intent=%s payload=%s",
             intent,

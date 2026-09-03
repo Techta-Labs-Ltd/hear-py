@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/backend-event.schema.json",
+  "title": "Hear Alexa backend event envelope v2",
+  "type": "object",
+  "required": ["event", "schemaVersion", "eventId", "timestamp", "data"],
+  "properties": {
+    "event": {
+      "enum": [
+        "playback.started",
+        "playback.progress",
+        "playback.nearly_finished",
+        "playback.paused",
+        "playback.resumed",
+        "playback.stopped",
+        "playback.finished",
+        "playback.failed",
+        "playback.cancelled",
+        "feedback.given",
+        "user.followed_creator",
+        "user.unfollowed_creator",
+        "user.followed_organization",
+        "user.unfollowed_organization",
+        "notifications.enabled",
+        "notifications.disabled",
+        "user.reported_content",
+        "user.reported_creator"
+      ]
+    },
+    "schemaVersion": { "const": 2 },
+    "eventId": { "type": "string", "minLength": 1 },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object",
+      "required": ["alexaUserId", "clientEventId"],
+      "properties": {
+        "alexaUserId": { "type": "string", "minLength": 1 },
+        "listenerId": { "type": "string", "minLength": 1 },
+        "clientEventId": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" },
+        "permissionGranted": { "type": "boolean" },
+        "subjectType": { "enum": ["content", "publication"] },
+        "subjectId": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "integer", "minimum": 0 },
+        "timestampMs": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

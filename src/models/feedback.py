@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 
 from src.alexa.request import AlexaRequest
+from src.constants.notifications import NotificationConstants
+from src.constants.playback import PlaybackConstants
 from src.models.dialog import DialogStateManager
 from src.models.user import User
 from src.services.alexa_reminder import AlexaReminderService
@@ -30,25 +32,8 @@ class FeedbackService:
         "RateContentIntent",
         "SkipFeedbackIntent",
     }
-    replay_intents = {"AMAZON.RepeatIntent", "AMAZON.StartOverIntent"}
     follow_intents = {"FollowCreatorIntent", "UnfollowCreatorIntent"}
     report_intents = {"ReportCreatorIntent", "ReportContentIntent"}
-    transport_intents = {
-        "AMAZON.NextIntent",
-        "AMAZON.SkipIntent",
-        "AMAZON.PreviousIntent",
-        "AMAZON.PauseIntent",
-        "AMAZON.ResumeIntent",
-        "SetPlaybackSpeedIntent",
-        "IncreaseSpeedIntent",
-        "DecreaseSpeedIntent",
-    }
-    transport_request_types = {
-        "PlaybackController.NextCommandIssued",
-        "PlaybackController.PreviousCommandIssued",
-        "PlaybackController.PauseCommandIssued",
-        "PlaybackController.PlayCommandIssued",
-    }
 
     def should_evaluate(self, handler_input) -> bool:
         request_type = AlexaRequest.get_request_type(handler_input)
@@ -67,7 +52,7 @@ class FeedbackService:
         if not self.should_evaluate(handler_input):
             return False
         request_type = AlexaRequest.get_request_type(handler_input)
-        if request_type in self.transport_request_types:
+        if request_type in PlaybackConstants.TRANSPORT_REQUEST_TYPES:
             return False
         store = User.snapshot(handler_input)
         pending = store.get("pendingFeedback") or {}
@@ -93,9 +78,9 @@ class FeedbackService:
         intent_name = AlexaRequest.get_intent_name(handler_input)
         allowed = (
             self.rating_intents
-            | self.replay_intents
             | self.report_intents
-            | self.transport_intents
+            | PlaybackConstants.TRANSPORT_INTENTS
+            | NotificationConstants.INTENTS
             | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
         )
         return intent_name not in allowed
@@ -561,7 +546,7 @@ class FeedbackService:
                 "pendingFeedback": None,
                 "awaitingFeedback": False,
                 "activeDialog": None,
-                "_requiresReliableSave": False,
+                "_requiresReliableSave": True,
                 "deferredIntent": None,
                 "pendingFollowSource": None,
             },
@@ -570,30 +555,6 @@ class FeedbackService:
     async def submit(self, handler_input, value: str) -> dict:
         store = User.snapshot(handler_input)
         pending = dict(store.get("pendingFeedback") or {})
-        history = list(store.get("feedbackHistory") or [])
-        subject_type = pending.get("subjectType") or "content"
-        history.append(
-            {
-                "feedbackKey": pending.get("feedbackKey"),
-                "subjectType": subject_type,
-                "value": str(value),
-                "contentId": pending.get("contentId") if subject_type == "content" else None,
-                "contentIds": pending.get("contentIds") if subject_type == "publication" else None,
-                "publicationId": pending.get("publicationId"),
-                "title": pending.get("title"),
-                "creatorId": pending.get("creatorId"),
-                "organizationId": pending.get("organizationId"),
-                "coverage": pending.get("coverage"),
-                "listenedMs": pending.get("listenedMs"),
-                "timeSpentMs": pending.get("timeSpentMs"),
-                "timeSpentHours": pending.get("timeSpentHours"),
-                "trackListening": pending.get("trackListening")
-                if subject_type == "publication"
-                else None,
-                "recordedAt": int(time.time() * 1000),
-            }
-        )
-        User.update(handler_input, {"feedbackHistory": history[-100:]})
         user_id = AlexaRequest.get_user_id(handler_input)
         if self._events is not None and user_id:
             self._events.feedback(
@@ -635,14 +596,16 @@ class FeedbackService:
 
     @staticmethod
     def dismiss(handler_input) -> dict:
-        return User.update(
-            handler_input,
-            {
-                "awaitingFeedback": False,
-                "pendingFeedback": None,
-                "feedbackPromptText": None,
-                "feedbackAskedForToken": None,
-                "feedbackReminderAlertToken": None,
-                "deferredIntent": None,
-            },
+        active = User.snapshot(handler_input).get("activeDialog")
+        if isinstance(active, dict) and active.get("type") == "feedback":
+            active = None
+        reset_keys = (
+            "pendingFollowSource pendingFeedback feedbackContentId feedbackCategory feedbackCreator feedbackCreatorId "
+            "feedbackContentTitle feedbackPromptText feedbackAskedForToken feedbackReminderAlertToken playbackDurationEstimateMs deferredIntent"
         )
+        return User.update(handler_input, {
+            **dict.fromkeys(reset_keys.split()),
+            "activeDialog": active, "feedbackCandidates": [],
+            "awaitingFeedback": False, "awaitingFollow": False,
+            "_requiresReliableSave": True,
+        })

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/notification-inbox-item.schema.json",
+  "title": "Hear backend new notification inbox item v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "listenerId",
+    "notificationId",
+    "notificationType",
+    "title",
+    "alexaUserId",
+    "locale",
+    "publishedAt",
+    "status",
+    "deliveryStatus",
+    "activeListenerId",
+    "activePublishedAt",
+    "expiresAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "listenerId": { "type": "string", "minLength": 1 },
+    "notificationId": { "type": "string", "minLength": 1 },
+    "notificationType": { "enum": ["content", "publication"] },
+    "contentId": { "type": "string", "minLength": 1 },
+    "publicationId": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "creatorId": { "type": "string", "minLength": 1 },
+    "creatorName": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "organizationId": { "type": "string", "minLength": 1 },
+    "organizationName": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "alexaUserId": { "type": "string", "minLength": 1 },
+    "locale": { "type": "string", "minLength": 2 },
+    "publishedAt": { "type": "integer", "minimum": 0 },
+    "status": { "const": "pending" },
+    "deliveryStatus": { "const": "pending" },
+    "sendProactive": { "type": "boolean" },
+    "activeListenerId": { "type": "string", "minLength": 1 },
+    "activePublishedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{20}#.+$"
+    },
+    "expiresAt": { "type": "integer", "minimum": 0 }
+  },
+  "oneOf": [
+    {
+      "properties": { "notificationType": { "const": "content" } },
+      "required": ["contentId"],
+      "not": { "required": ["publicationId"] }
+    },
+    {
+      "properties": { "notificationType": { "const": "publication" } },
+      "required": ["publicationId"],
+      "not": { "required": ["contentId"] }
+    }
+  ],
+  "additionalProperties": false
+}

@@ -7,11 +7,14 @@ from src.clients.alexa import AlexaClient
 from src.clients.alexa_settings import AlexaSettingsClient
 from src.clients.events import SqsEventClient, WebhookEventClient
 from src.clients.hear import HearApiClient
+from src.clients.proactive import ProactiveEventsClient
 from src.clients.progressive import ProgressiveResponseClient
 from src.clients.resolver import ResolverClient, ResolverOptions
+from src.database.notification_inbox import NotificationInboxFactory
 from src.models.browse import Browse
 from src.models.feedback import FeedbackService
 from src.models.listener import Listener
+from src.models.notifications import Notification
 from src.models.onboarding import Onboarding
 from src.models.permission import Permission
 from src.models.playback import Playback
@@ -23,7 +26,9 @@ from src.services.alexa_locality import AlexaLocalityService
 from src.services.alexa_profile import ListenerProfileService
 from src.services.alexa_reminder import AlexaReminderService
 from src.services.events import OutboundEventService
+from src.services.listener_identity import ListenerIdentityService
 from src.services.listener_sync import ListenerSyncService
+from src.services.notification_delivery import NotificationDeliveryService
 from src.services.observability import ErrorReporter
 
 
@@ -33,6 +38,7 @@ class ApplicationContainer:
             "locality",
             "listener_profile",
             "listener_sync",
+            "listener_identity",
             "events",
             "feedback",
             "browse",
@@ -50,6 +56,10 @@ class ApplicationContainer:
             "resolver",
             "progressive",
             "permission",
+            "notification_inbox",
+            "proactive_events",
+            "notification_delivery",
+            "notifications",
             "error_reporter",
         }
     )
@@ -57,6 +67,7 @@ class ApplicationContainer:
         "locality",
         "listener_profile",
         "listener_sync",
+        "listener_identity",
         "events",
         "feedback",
         "browse",
@@ -73,6 +84,10 @@ class ApplicationContainer:
         "progressive",
         "error_reporter",
         "permission",
+        "notification_inbox",
+        "proactive_events",
+        "notification_delivery",
+        "notifications",
     )
 
     def __init__(self, **components) -> None:
@@ -108,6 +123,29 @@ class ApplicationContainer:
             self.events,
         )
         self.heara = components.get("heara") or HearApiClient()
+        self.listener_identity = components.get("listener_identity") or ListenerIdentityService(
+            self.heara,
+            settings_client,
+            enabled=settings.HEAR_CANONICAL_IDENTITY_ENABLED,
+            timeout_ms=settings.identity_timeout_ms,
+        )
+        self.notification_inbox = components.get(
+            "notification_inbox"
+        ) or NotificationInboxFactory.build(
+            settings.HEAR_NOTIFICATION_TABLE,
+            region=settings.ddb_region,
+        )
+        self.proactive_events = components.get("proactive_events") or ProactiveEventsClient(
+            client_id=settings.ALEXA_PROACTIVE_CLIENT_ID,
+            client_secret=settings.ALEXA_PROACTIVE_CLIENT_SECRET,
+            stage=settings.STAGE,
+        )
+        self.notification_delivery = components.get(
+            "notification_delivery"
+        ) or NotificationDeliveryService(
+            self.notification_inbox,
+            self.proactive_events,
+        )
         self.listener_sync = components.get("listener_sync") or ListenerSyncService(
             self.heara,
             enabled=settings.HEAR_LISTENER_SYNC_ON_LAUNCH,
@@ -118,6 +156,7 @@ class ApplicationContainer:
         )
         self.progressive = components.get("progressive") or ProgressiveResponseClient()
         self.permission = components.get("permission") or Permission(deps=self)
+        self.notifications = components.get("notifications") or Notification(deps=self)
         self.error_reporter = components.get("error_reporter") or ErrorReporter()
 
     def create(self, component_type):

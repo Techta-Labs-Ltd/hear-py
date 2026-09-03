@@ -2,17 +2,41 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hear-py/search-request.schema.json",
   "title": "Hear search request",
-  "description": "Search body POSTed to the Hear backend by src/services/api/client.py.",
+  "description": "Search body POSTed to POST /alexa/search by src/clients/hear.py.",
   "type": "object",
   "required": ["query", "limit", "page"],
   "properties": {
     "query": { "type": "string" },
     "limit": { "type": "integer" },
     "page": { "type": "integer" },
+    "listenerId": { "type": "string", "minLength": 1 },
     "alexaUserId": { "type": "string" },
-    "filter": { "type": "object" },
+    "filter": {
+      "type": "object",
+      "properties": {
+        "contentIds": { "type": "array", "items": { "type": "string" } },
+        "creatorIds": { "type": "array", "items": { "type": "string" } },
+        "organizationIds": { "type": "array", "items": { "type": "string" } },
+        "publicationIds": { "type": "array", "items": { "type": "string" } },
+        "categorySlugs": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "city": { "type": "string" },
+        "countryCode": { "type": "string" },
+        "isPublication": { "type": "boolean" },
+        "isLocal": { "type": "boolean" },
+        "isRecommended": { "type": "boolean" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "publishedFrom": { "type": ["string", "null"] },
+        "publishedTo": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "isLocal": { "type": "boolean" },
     "isRecommended": { "type": "boolean" },
-    "sort": { "type": "string" }
-  }
+    "sort": {
+      "enum": ["recommended", "nearest", "popular", "latest", "trending"]
+    }
+  },
+  "additionalProperties": false
 }

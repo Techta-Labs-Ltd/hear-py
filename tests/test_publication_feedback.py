@@ -379,7 +379,9 @@ async def test_independent_publication_offers_creator(mock_handler_input):
 
 
 @pytest.mark.asyncio
-async def test_feedback_value_and_publication_subject_are_persisted(mock_handler_input):
+async def test_feedback_value_and_publication_subject_are_not_duplicated_locally(
+    mock_handler_input,
+):
     pending = {
         "feedbackKey": "publication:publication-1",
         "subjectType": "publication",
@@ -391,7 +393,6 @@ async def test_feedback_value_and_publication_subject_are_persisted(mock_handler
     }
     _store(mock_handler_input, awaitingFeedback=True, pendingFeedback=pending)
     await FeedbackService().submit(mock_handler_input, "enjoyed")
-    history = mock_handler_input.attributes_manager.request_attributes["_store"]["feedbackHistory"]
-    assert history[-1]["value"] == "enjoyed"
-    assert history[-1]["subjectType"] == "publication"
-    assert history[-1]["publicationId"] == "publication-1"
+    store = mock_handler_input.attributes_manager.request_attributes["_store"]
+    assert store["feedbackHistory"] == []
+    assert "publication:publication-1" in store["answeredFeedbackKeys"]

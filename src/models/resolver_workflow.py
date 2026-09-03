@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 
 from config import settings
@@ -11,7 +10,7 @@ from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.resolver import ResolverConstants
 from src.constants.search import SearchConstants
-from src.models.dialog import DialogStateManager
+from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.resolver import ResolverUnavailable
 from src.models.user import User
 from src.utils.deadline import DeadlineBudget
@@ -58,64 +57,10 @@ class ResolverWorkflow:
         "PlayLocalIntent": "play local content",
         "PlayRecommendationIntent": "recommend something",
     }
+
     @staticmethod
     def _normalize_ordinal(value: object) -> str:
-        raw = str(value or "").strip().casefold()
-        raw = raw.replace("1st", "first").replace("2nd", "second").replace("3rd", "third")
-        raw = raw.replace("4th", "fourth").replace("5th", "fifth").replace("6th", "sixth")
-        raw = re.sub("^(?:the\\s+)", "", raw)
-        raw = re.sub("\\s+(?:one|option|choice)$", "", raw)
-        return raw
-
-    @staticmethod
-    def _unique_candidates(candidates: list[dict]) -> list[dict]:
-        seen: set[str] = set()
-        unique = []
-        for candidate in candidates:
-            name = str(candidate.get("name") or "").strip()
-            key = name.casefold()
-            if name and key not in seen:
-                seen.add(key)
-                unique.append(candidate)
-        return unique
-
-    @staticmethod
-    def _selection_slot(handler_input):
-        request = handler_input.request_envelope.request
-        intent = getattr(request, "intent", None)
-        slots = intent.get("slots") if intent else None
-        return slots.get("selection") if slots else None
-
-    @staticmethod
-    def _match_pending_candidate(handler_input, pending: dict, raw: str) -> dict | None:
-        candidates = list(pending.get("candidates") or [])
-        resolved_id = AlexaRequest.get_resolved_slot_id(
-            ResolverWorkflow._selection_slot(handler_input)
-        )
-        if resolved_id:
-            matched = next(
-                (candidate for candidate in candidates if candidate.get("id") == resolved_id),
-                None,
-            )
-            if matched:
-                return matched
-        choices = list(
-            pending.get("choiceCandidates") or ResolverWorkflow._unique_candidates(candidates)
-        )
-        displayed = list(pending.get("displayedCandidates") or choices[:3])
-        raw_key = ResolverWorkflow._normalize_ordinal(raw)
-        ordinal = DiscoveryConstants.ORDINAL_INDEX.get(raw_key)
-        if ordinal is not None and ordinal < len(displayed):
-            return displayed[ordinal]
-        matches = [
-            candidate
-            for candidate in choices
-            if raw_key == str(candidate.get("name") or "").strip().casefold()
-            or (
-                len(raw_key) >= 3 and raw_key in str(candidate.get("name") or "").strip().casefold()
-            )
-        ]
-        return matches[0] if len(matches) == 1 else None
+        return DialogSelection.normalize_ordinal(value)
 
     @staticmethod
     def _resolved_pending_candidate(pending: dict, candidate: dict) -> dict:
@@ -156,10 +101,23 @@ class ResolverWorkflow:
         }
 
     @staticmethod
+    def _unmatched_ambiguity_result(pending: dict, raw: str) -> dict:
+        candidates = DialogSelection.choices(pending)
+        reference = {"phrase": raw, "candidates": candidates}
+        return {
+            "status": "ambiguous",
+            "intent": pending.get("intent", "search"),
+            "slots": {
+                **dict(pending.get("slots") or {}),
+                "ambiguousReferences": [reference],
+            },
+            "ambiguities": [reference],
+            "followUpMatched": True,
+        }
+
+    @staticmethod
     def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | None:
-        request = handler_input.request_envelope.request if handler_input.request_envelope else None
-        intent = request.intent if request else None
-        slots = intent.get("slots") if intent else None
+        slots = DialogSelection.request_slots(handler_input)
         if not slots:
             return None
         date_text = AlexaRequest.get_resolved_slot_value(slots.get("dateQuery")) or ""
@@ -349,13 +307,14 @@ class ResolverWorkflowRunner:
     def _request(handler_input) -> dict | None:
         if RequestContext.request(handler_input).get(DialogConstants.VALIDATION_FAILURE):
             return None
-        request = handler_input.request_envelope.request if handler_input.request_envelope else None
-        if not request or request.type != "IntentRequest" or not request.intent:
+        request = AlexaRequest.read(handler_input.request_envelope, "request")
+        intent = AlexaRequest.read(request, "intent")
+        if not request or AlexaRequest.read(request, "type") != "IntentRequest" or not intent:
             return None
-        alexa_intent = request.intent.name
+        alexa_intent = AlexaRequest.read(intent, "name")
         if not alexa_intent:
             return None
-        slots = request.intent.get("slots") or {}
+        slots = AlexaRequest.read(intent, "slots") or {}
         store = User.snapshot(handler_input)
         dialog = DialogStateManager.active_from_store(store)
         ambiguity_active = bool(
@@ -411,7 +370,14 @@ class ResolverWorkflowRunner:
         normalized = SearchFilterUtils.normalize_discovery_phrase(raw)
         has_carrier = not carrier or normalized == carrier or normalized.startswith(f"{carrier} ")
         utterance = raw if has_carrier else f"{carrier} {raw}"
-        return await self._deps.resolver.resolve_utterance(utterance, alexa_user_id=AlexaRequest.get_user_id(handler_input), timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input))
+        options = {
+            "alexa_user_id": AlexaRequest.get_user_id(handler_input),
+            "timeout_ms": DeadlineBudget.resolver_timeout_ms(handler_input),
+        }
+        listener_id = User.snapshot(handler_input).get("listenerId")
+        if listener_id:
+            options["listener_id"] = listener_id
+        return await self._deps.resolver.resolve_utterance(utterance, **options)
 
     async def _resolve_ambiguity(
         self,
@@ -429,12 +395,15 @@ class ResolverWorkflowRunner:
         alexa_intent = context["alexa_intent"]
         if alexa_intent in ResolverWorkflow.AMBIGUITY_CONTROL_INTENTS:
             return False
-        candidate = ResolverWorkflow._match_pending_candidate(handler_input, pending, raw)
-        result = (
-            ResolverWorkflow._resolved_pending_candidate(pending, candidate)
-            if candidate
-            else await self._resolver_result(handler_input, raw, alexa_intent)
-        )
+        candidate = DialogSelection.request_candidate(handler_input, pending)
+        if not candidate:
+            candidate = DialogSelection.match_pending_candidate(handler_input, pending, raw)
+        if candidate:
+            result = ResolverWorkflow._resolved_pending_candidate(pending, candidate)
+        elif alexa_intent == "ClarifySelectionIntent":
+            result = ResolverWorkflow._unmatched_ambiguity_result(pending, raw)
+        else:
+            result = await self._resolver_result(handler_input, raw, alexa_intent)
         replace = bool(
             alexa_intent in ResolverWorkflow.SEARCH_INTENTS
             and result.get("status") != "resolved"

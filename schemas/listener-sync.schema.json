@@ -2,11 +2,33 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hear-py/listener-sync.schema.json",
   "title": "Listener sync payload",
-  "description": "Profile payload sent to the listener sync endpoint (src/services/listeners.py).",
+  "description": "Profile payload sent to POST /alexa/listeners/sync by src/services/listener_sync.py.",
   "type": "object",
-  "required": ["alexaUserId", "clientVersion", "listenerType"],
+  "required": [
+    "alexaUserId",
+    "listenerId",
+    "skillId",
+    "environment",
+    "principalType",
+    "deviceId",
+    "apiEndpoint",
+    "locale",
+    "clientVersion",
+    "listenerType",
+    "playbackSpeed"
+  ],
   "properties": {
     "alexaUserId": { "type": "string" },
+    "listenerId": { "type": ["string", "null"] },
+    "skillId": { "type": ["string", "null"] },
+    "environment": { "type": "string" },
+    "principalType": {
+      "enum": [
+        "recognized_person",
+        "skill_user",
+        null
+      ]
+    },
     "listenerType": { "enum": ["guest", "registered"] },
     "deviceId": { "type": ["string", "null"] },
     "apiEndpoint": { "type": ["string", "null"] },
@@ -23,12 +45,7 @@
     "longitude": { "type": ["number", "null"] },
     "clientVersion": { "type": "string" },
     "locality": { "type": ["string", "null"] },
-    "listeningPattern": { "type": "object" },
-    "followedCreatorIds": { "type": "array", "items": { "type": "string" } },
-    "playbackSpeed": { "type": ["number", "null"] },
-    "playCount": { "type": ["integer", "null"] },
-    "lastPlayedAt": { "type": ["number", "null"] },
-    "recentPlayedIds": { "type": "array", "items": { "type": "string" } },
-    "recentPlays": { "type": "array", "items": { "type": "object" } }
-  }
+    "playbackSpeed": { "type": ["number", "null"] }
+  },
+  "additionalProperties": false
 }

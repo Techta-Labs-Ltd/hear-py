@@ -90,6 +90,26 @@ class AttributesManager:
         self._request_attributes: dict = {}
         self._persistent: dict | None = None
         self._persistent_loaded = False
+        self._persistence_key: str | None = None
+        self._fallback_persistence_key: str | None = None
+        self._used_alias_persistence = False
+
+    def configure_persistence(
+        self,
+        *,
+        primary_key: str | None,
+        fallback_key: str | None = None,
+    ) -> None:
+        if self._persistent_loaded:
+            raise RuntimeError("persistence identity must be configured before loading state")
+        self._persistence_key = str(primary_key).strip() if primary_key else None
+        self._fallback_persistence_key = (
+            str(fallback_key).strip() if fallback_key else None
+        )
+
+    @property
+    def used_alias_persistence(self) -> bool:
+        return self._used_alias_persistence
 
     @property
     def request_attributes(self) -> dict:
@@ -130,13 +150,33 @@ class AttributesManager:
         if self._adapter is None:
             self._persistent = {}
         else:
-            self._persistent = await self._adapter.get_attributes(self._envelope) or {}
+            self._persistent = await self._adapter.get_attributes(
+                self._envelope,
+                persistence_key=self._persistence_key,
+            ) or {}
+            if (
+                not self._persistent
+                and self._fallback_persistence_key
+                and self._fallback_persistence_key != self._persistence_key
+            ):
+                self._persistent = await self._adapter.get_attributes(
+                    self._envelope,
+                    persistence_key=self._fallback_persistence_key,
+                ) or {}
+                if self._persistent:
+                    self._persistent["_persistenceVersions"] = {}
+                    self._persistent["_persistenceNeedsCanonicalCopy"] = True
+                    self._used_alias_persistence = True
         self._persistent_loaded = True
         return self._persistent
 
     async def save_persistent_attributes(self) -> None:
         if self._adapter is not None and self._persistent is not None:
-            await self._adapter.save_attributes(self._envelope, self._persistent)
+            await self._adapter.save_attributes(
+                self._envelope,
+                self._persistent,
+                persistence_key=self._persistence_key,
+            )
 
 
 class ResponseBuilder:

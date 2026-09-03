@@ -51,6 +51,7 @@ class PlaybackStartedHandler(AbstractRequestHandler):
                 status="playing",
             )
             await self._deps.playback.emit(handler_input, "started", state)
+            await self._deps.notifications.playback_started(handler_input, token)
         return handler_input.response_builder.response
 
 
@@ -146,6 +147,7 @@ class PlaybackFailedHandler(AbstractRequestHandler):
                 status="failed",
             )
             await self._deps.playback.emit(handler_input, "failed", state)
+            await self._deps.notifications.playback_failed(handler_input, token)
             self._deps.playback.state.clear_prepared(handler_input)
         self.logger.warning("Hear audio playback failed contentId=%s", token)
         return handler_input.response_builder.response

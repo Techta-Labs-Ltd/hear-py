@@ -28,5 +28,11 @@ class SearchConstants:
         "organization": "organizationName",
         "publication": "publicationName",
     }
-    SEARCH_API_FIELDS = ("alexaUserId", "filter", "isLocal", "isRecommended")
+    SEARCH_API_FIELDS = (
+        "listenerId",
+        "alexaUserId",
+        "filter",
+        "isLocal",
+        "isRecommended",
+    )
     SEARCH_DATE_FILTER_KEYS = ("publishedFrom", "publishedTo")

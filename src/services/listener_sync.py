@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import logging
-import time
 
+from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.clients.hear import HearApiClient
+from src.models.listener import Listener
 from src.models.user import User
-from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class ListenerSyncSupport:
     logger = logging.getLogger(__name__)
-    _CLIENT_VERSION = "hear-alexa-python"
+    _CLIENT_VERSION = settings.HEAR_CLIENT_VERSION
 
     @staticmethod
     def build_listener_sync_profile(handler_input, store: dict) -> dict | None:
@@ -22,35 +22,24 @@ class ListenerSyncSupport:
         system = RequestContext.get_system_context(handler_input)
         request = getattr(handler_input.request_envelope, "request", None)
         device = getattr(system, "device", None)
-        recent_plays = [
-            normalized
-            for item in store.get("playHistory") or []
-            if (normalized := PlaybackHistoryUtils.normalize(item))
-        ][:20]
-        recent = [
-            item.get("subjectId") or item.get("publicationId") or item.get("contentId")
-            for item in recent_plays
-            if item.get("subjectId") or item.get("publicationId") or item.get("contentId")
-        ]
         registered = bool(
             store.get("userEmail")
             and (store.get("userName") or store.get("fullName") or store.get("givenName"))
         )
+        identity = Listener.identity(handler_input)
         profile = {
             "alexaUserId": alexa_user_id,
+            "listenerId": store.get("listenerId")
+            or (identity.listener_id if identity else None),
+            "skillId": identity.skill_id if identity else None,
+            "environment": settings.STAGE,
+            "principalType": identity.principal_type.value if identity else None,
             "deviceId": getattr(device, "deviceId", None),
             "apiEndpoint": getattr(system, "apiEndpoint", None),
             "locale": getattr(request, "locale", None),
             "listenerType": "registered" if registered else "guest",
             "clientVersion": ListenerSyncSupport._CLIENT_VERSION,
-            "listeningPattern": store.get("listeningPattern"),
-            "followedCreatorIds": ListenerSyncSupport._followed_ids(store, "creator"),
-            "followedOrganizationIds": ListenerSyncSupport._followed_ids(store, "organization"),
             "playbackSpeed": store.get("playbackSpeed"),
-            "playCount": int(store.get("playCount") or 0),
-            "lastPlayedAt": store.get("lastPlayedAt"),
-            "recentPlayedIds": list(dict.fromkeys(recent))[-20:],
-            "recentPlays": recent_plays,
         }
         if registered:
             profile.update(
@@ -59,10 +48,10 @@ class ListenerSyncSupport:
                     or store.get("fullName")
                     or store.get("givenName"),
                     "userEmail": store.get("userEmail"),
-                    "address": store.get("address"),
+                    "address": store.get("userAddress") or store.get("address"),
                     "city": store.get("userCity") or store.get("city"),
-                    "state": store.get("state"),
-                    "country": store.get("country"),
+                    "state": store.get("userState") or store.get("state"),
+                    "country": store.get("userCountry") or store.get("country"),
                     "countryCode": store.get("deviceCountryCode")
                     or store.get("countryCode"),
                     "postalCode": store.get("devicePostalCode") or store.get("postalCode"),
@@ -72,17 +61,6 @@ class ListenerSyncSupport:
                 }
             )
         return profile
-
-    @staticmethod
-    def _followed_ids(store: dict, source_type: str) -> list[str]:
-        return [
-            str(item["id"])
-            for item in store.get("followedCreators") or []
-            if isinstance(item, dict)
-            and item.get("id")
-            and (item.get("type", "creator") == source_type)
-        ]
-
 
 class ListenerSyncService:
     __slots__ = ("_hear_api", "_enabled")
@@ -99,23 +77,17 @@ class ListenerSyncService:
         if not profile:
             return False
         ListenerSyncSupport.logger.info(
-            "Hear: listener sync request fields=%s hasLocation=%s playCount=%s",
+            "Hear: listener sync request fields=%s hasLocation=%s hasProfile=%s",
             sorted((key for key, value in profile.items() if value not in (None, [], {}))),
             bool(profile.get("locality") or profile.get("city")),
-            profile.get("playCount", 0),
+            bool(profile.get("userEmail") or profile.get("userName")),
         )
         result = await self._hear_api.sync_listener(profile, timeout_ms=2500)
         if not result:
             ListenerSyncSupport.logger.warning("Hear: listener sync failed")
             return False
-        listener_id = result.get("listenerId") or result.get("id")
-        User.update(
-            handler_input,
-            {
-                "listenerId": listener_id or store.get("listenerId"),
-                "listenerSyncedAt": int(time.time() * 1000),
-            },
-        )
+        listener_id = result.get("listenerId")
+        User.update(handler_input, {"listenerId": listener_id or store.get("listenerId")})
         ListenerSyncSupport.logger.info(
             "Hear: listener sync success hasListenerId=%s",
             bool(listener_id or store.get("listenerId")),

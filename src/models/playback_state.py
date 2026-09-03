@@ -15,6 +15,7 @@ from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
 from src.utils.playback import PlaybackUtils
 from src.utils.playback_history import PlaybackHistoryUtils
+from src.utils.search_payload import SearchPayload
 
 
 class PlaybackStatus(StrEnum):
@@ -48,7 +49,6 @@ class PlaybackState:
         content: dict,
         **options,
     ) -> dict:
-        alexa_user_id = options.get("alexa_user_id")
         queue_id = options.get("queue_id")
         queue_index = options.get("queue_index", 0)
         offset_ms = options.get("offset_ms", 0)
@@ -64,7 +64,6 @@ class PlaybackState:
             else track_session_id
         )
         state = {
-            "alexaUserId": alexa_user_id,
             "contentId": content_id,
             "token": content_id,
             "title": content.get("spokenTitle")
@@ -74,6 +73,7 @@ class PlaybackState:
             "creatorName": content.get("creatorName") or content.get("creator"),
             "organizationId": content.get("organizationId"),
             "organizationName": content.get("organizationName"),
+            "playbackSpeeds": content.get("playbackSpeeds") or [],
             "publicationId": content.get("publicationId"),
             "publicationTitle": content.get("publicationTitle"),
             "isPublication": bool(content.get("isPublication")),
@@ -498,10 +498,15 @@ class PlaybackQueue:
                 "limit": int(pagination.get("limit") or payload.get("limit") or 3),
             }
         )
-        user_id = AlexaRequest.get_user_id(handler_input)
-        if user_id:
-            payload["alexaUserId"] = user_id
-        return payload, next_page
+        store = User.snapshot(handler_input)
+        return (
+            SearchPayload.with_identity(
+                payload,
+                alexa_user_id=AlexaRequest.get_user_id(handler_input),
+                listener_id=store.get("listenerId"),
+            ),
+            next_page,
+        )
 
     @staticmethod
     def _merge_page(queue: dict, pagination: dict, result: dict, next_page: int) -> int:

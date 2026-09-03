@@ -191,7 +191,7 @@ class HearApiClient:
         path = self._build_alexa_search_path()
         query_text = body.get("query") or ""
         HearApiSupport.logger.info(
-            "Hear API search request path=%s queryHash=%s queryChars=%s limit=%s page=%s filterKeys=%s alexaUserIdPresent=%s",
+            "Hear API search request path=%s queryHash=%s queryChars=%s limit=%s page=%s filterKeys=%s alexaUserIdPresent=%s listenerIdPresent=%s",
             path,
             HearApiSupport._hash_text(str(query_text)),
             len(str(query_text)),
@@ -199,6 +199,7 @@ class HearApiClient:
             body["page"],
             sorted((body.get("filter") or {}).keys()),
             bool(body.get("alexaUserId")),
+            bool(body.get("listenerId")),
         )
         for attempt in range(self._retry_count + 1):
             status, data = await self._raw_request("POST", path, body, timeout_ms)
@@ -216,6 +217,22 @@ class HearApiClient:
             else:
                 break
         return dict(HearApiSupport._EMPTY_SEARCH_RESULT)
+
+    async def resolve_listener_identity(
+        self,
+        identity: dict,
+        *,
+        timeout_ms: int | None = None,
+    ) -> dict | None:
+        if not isinstance(identity, dict) or not identity.get("alexaUserId"):
+            return None
+        status, data = await self._raw_request(
+            "POST",
+            self._build_alexa_relative_path("listeners/resolve"),
+            identity,
+            timeout_ms,
+        )
+        return data if status == 200 and isinstance(data, dict) else None
 
     async def sync_listener(self, profile: dict, *, timeout_ms: int | None = None) -> dict | None:
         alexa_user_id = profile.get("alexaUserId") if isinstance(profile, dict) else None

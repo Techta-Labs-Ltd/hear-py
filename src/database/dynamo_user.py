@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from copy import deepcopy
@@ -10,32 +9,18 @@ from dataclasses import dataclass
 from botocore.exceptions import ClientError
 
 from config import settings
+from src.constants.state import StateSchema
+from src.database.dynamo_merge import DynamoConflictMerge
 from src.database.dynamodb import DynamoExpressions, DynamoTable
 from src.models.user import User
 
 
 class DynamoUserSupport:
     logger = logging.getLogger(__name__)
-    _VERSION_FIELD = "_persistenceVersion"
+    _VERSIONS_FIELD = "_persistenceVersions"
     _CHANGED_FIELDS = "_persistenceChangedFields"
     _ORIGINAL_FIELDS = "_persistenceOriginal"
-    _COUNTER_FIELDS = frozenset(
-        {
-            "launchCount",
-            "playCount",
-            "onboardingRetries",
-            "onboardingTownAttempts",
-            "onboardingTownResolverFailures",
-        }
-    )
-    _HISTORY_LIMITS = {
-        "answeredFeedbackKeys": 100,
-        "feedbackAskedTokens": 100,
-        "feedbackGivenTokens": 100,
-        "feedbackHistory": 100,
-        "playHistory": 100,
-        "reportHistory": 100,
-    }
+    _CANONICAL_COPY_FIELD = "_persistenceNeedsCanonicalCopy"
 
     @staticmethod
     def _is_invalid_key(user_id: str) -> bool:
@@ -55,6 +40,7 @@ class DynamoUserSupport:
             table_name=table_name or settings.dynamo_table,
             region=region or settings.ddb_region,
             partition_key_name=partition_key_name or settings.HEAR_DDB_PARTITION_KEY or "id",
+            sort_key_name=settings.HEAR_DDB_SORT_KEY or "scope",
             ttl_days=settings.HEAR_PERSISTENCE_TTL_DAYS,
             conditional_writes=settings.HEAR_PERSISTENCE_CONDITIONAL,
         )
@@ -63,53 +49,6 @@ class DynamoUserSupport:
     @staticmethod
     def is_conditional_failure(error: ClientError) -> bool:
         return error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException"
-
-    @staticmethod
-    def merge_conflict(
-        latest: dict, requested: dict, original: dict, changed_fields: list[str]
-    ) -> dict:
-        merged = deepcopy(latest)
-        active_incoming = requested.get("activePlayback")
-        active_latest = latest.get("activePlayback")
-        incoming_playback_is_newer = (
-            not isinstance(active_latest, dict)
-            or not isinstance(active_incoming, dict)
-            or int(active_incoming.get("eventTimestamp") or active_incoming.get("updatedAt") or 0)
-            >= int(active_latest.get("eventTimestamp") or active_latest.get("updatedAt") or 0)
-        )
-        for field in changed_fields:
-            incoming = deepcopy(requested.get(field))
-            previous = original.get(field)
-            current = latest.get(field)
-            if (
-                field in DynamoUserSupport._COUNTER_FIELDS
-                and isinstance(incoming, int)
-                and not isinstance(incoming, bool)
-                and isinstance(previous, int)
-                and not isinstance(previous, bool)
-            ):
-                merged[field] = max(0, int(current or 0) + incoming - previous)
-            elif field in DynamoUserSupport._HISTORY_LIMITS and isinstance(incoming, list):
-                combined = list(current) if isinstance(current, list) else []
-                known = {json.dumps(item, sort_keys=True, default=str) for item in combined}
-                for item in incoming:
-                    key = json.dumps(item, sort_keys=True, default=str)
-                    if key not in known:
-                        combined.append(deepcopy(item))
-                        known.add(key)
-                merged[field] = combined[-DynamoUserSupport._HISTORY_LIMITS[field] :]
-            elif field == "activePlayback" and not incoming_playback_is_newer:
-                continue
-            elif (
-                field == "lastOffsetMs"
-                and "activePlayback" in changed_fields
-                and not incoming_playback_is_newer
-            ):
-                continue
-            else:
-                merged[field] = incoming
-        return merged
-
 
 class InvalidPersistenceKey(ValueError):
     pass
@@ -123,6 +62,7 @@ class PersistenceItemTooLarge(ValueError):
 class DynamoUserOptions:
     table_name: str
     partition_key_name: str = "id"
+    sort_key_name: str = "scope"
     attributes_name: str = "attributes"
     region: str | None = None
     ttl_attribute: str = "expiresAt"
@@ -136,57 +76,87 @@ class DynamoDbPersistenceAdapter:
             raise ValueError("DynamoDbPersistenceAdapter: table_name is required")
         self.table_name = options.table_name
         self.partition_key_name = options.partition_key_name
+        self.sort_key_name = options.sort_key_name
         self.attributes_name = options.attributes_name
         self.ttl_attribute = options.ttl_attribute
         self.ttl_days = options.ttl_days or settings.HEAR_PERSISTENCE_TTL_DAYS
         self.conditional_writes = options.conditional_writes
+        region = options.region or settings.ddb_region
         self._table = DynamoTable(
             table_name=options.table_name,
             partition_key=options.partition_key_name,
-            region=options.region or settings.ddb_region,
+            sort_key=options.sort_key_name,
+            region=region,
         )
 
-    def _user_id(self, request_envelope: dict) -> str:
-        user_id = User.persistence_key(request_envelope)
+    def _user_id(self, request_envelope: dict, persistence_key: str | None = None) -> str:
+        user_id = persistence_key or User.persistence_key(request_envelope)
         if DynamoUserSupport._is_invalid_key(user_id):
             raise InvalidPersistenceKey(f"invalid persistence key {user_id!r}")
         return user_id
 
-    async def get_attributes(self, request_envelope: dict) -> dict:
-        user_id = self._user_id(request_envelope)
-        item = await self._table.get_item(user_id)
-        if not item:
+    async def _scope_item(self, user_id: str, scope: str) -> dict | None:
+        consistent = scope in {StateSchema.PLAYBACK_SCOPE, StateSchema.DIALOG_SCOPE}
+        return await self._table.get_item(user_id, scope, consistent=consistent)
+
+    async def get_attributes(
+        self, request_envelope: dict, *, persistence_key: str | None = None
+    ) -> dict:
+        user_id = self._user_id(request_envelope, persistence_key)
+        items = await asyncio.gather(
+            *(self._scope_item(user_id, scope) for scope in StateSchema.SCOPES)
+        )
+        if not any(items):
             return {}
-        attributes = item.get(self.attributes_name) or {}
-        if not isinstance(attributes, dict):
-            attributes = {}
-        attributes[DynamoUserSupport._VERSION_FIELD] = int(item.get("stateVersion") or 0)
+        attributes: dict = {}
+        versions: dict[str, int] = {}
+        for scope, item in zip(StateSchema.SCOPES, items):
+            if not isinstance(item, dict):
+                versions[scope] = 0
+                continue
+            document = item.get(self.attributes_name) or {}
+            if isinstance(document, dict):
+                attributes.update(document)
+            versions[scope] = max(0, int(item.get("stateVersion") or 0))
+        attributes[DynamoUserSupport._VERSIONS_FIELD] = versions
         return attributes
 
     @staticmethod
-    def _payload(attributes: dict) -> tuple[dict, int, list[str], dict]:
+    def _payload(attributes: dict) -> tuple[dict, dict, list[str], dict]:
         requested = dict(attributes or {})
-        version = max(0, int(requested.pop(DynamoUserSupport._VERSION_FIELD, 0) or 0))
-        changed_fields = [
-            field
-            for field in requested.pop(DynamoUserSupport._CHANGED_FIELDS, [])
-            if field in requested
-        ]
+        versions = requested.pop(DynamoUserSupport._VERSIONS_FIELD, {})
+        requested.pop(DynamoUserSupport._CANONICAL_COPY_FIELD, None)
+        changed = requested.pop(DynamoUserSupport._CHANGED_FIELDS, None)
+        changed_fields = (
+            [field for field in changed if field in StateSchema.PERSISTED_FIELDS]
+            if isinstance(changed, (list, tuple, set))
+            else list(requested)
+        )
         original = requested.pop(DynamoUserSupport._ORIGINAL_FIELDS, {})
         return (
             requested,
-            version,
-            changed_fields or list(requested),
+            versions if isinstance(versions, dict) else {},
+            changed_fields,
             original if isinstance(original, dict) else {},
         )
 
-    def _validate_document(self, document: dict) -> None:
-        size = DynamoExpressions.item_bytes(DynamoExpressions.encode_value(document))
+    def _validate_document(self, scope: str, document: dict) -> None:
+        item = {
+            self.partition_key_name: "listener",
+            self.sort_key_name: scope,
+            self.attributes_name: document,
+        }
+        size = DynamoExpressions.item_bytes(DynamoExpressions.encode_value(item))
         if size > settings.HEAR_DDB_ITEM_SIZE_MAX_BYTES:
-            raise PersistenceItemTooLarge(f"DynamoDB state item is {size} bytes")
+            raise PersistenceItemTooLarge(
+                f"DynamoDB {scope} state item is {size} bytes"
+            )
         if size > settings.HEAR_DDB_ITEM_SIZE_WARN_BYTES:
             DynamoUserSupport.logger.warning(
-                "DynamoDB state item oversized bytes=%s table=%s", size, self.table_name
+                "DynamoDB state item oversized scope=%s bytes=%s table=%s",
+                scope,
+                size,
+                self.table_name,
             )
 
     def _condition(self, version: int) -> list[dict] | None:
@@ -196,75 +166,144 @@ class DynamoDbPersistenceAdapter:
             return [DynamoExpressions.not_exists("stateVersion")]
         return [DynamoExpressions.eq("stateVersion", version)]
 
+    def _expires_at(self, scope: str, document: dict) -> int:
+        now = int(time.time())
+        if scope == StateSchema.DIALOG_SCOPE:
+            active = document.get("activeDialog") or {}
+            active_expiry = int(active.get("expiresAt") or 0) if isinstance(active, dict) else 0
+            return max(active_expiry, now + settings.HEAR_DIALOG_STATE_TTL_SECONDS)
+        days = {
+            StateSchema.CORE_SCOPE: self.ttl_days,
+            StateSchema.PLAYBACK_SCOPE: settings.HEAR_PLAYBACK_STATE_TTL_DAYS,
+            StateSchema.CACHE_SCOPE: settings.HEAR_LISTENER_CACHE_TTL_DAYS,
+        }.get(scope, self.ttl_days)
+        return now + max(1, int(days or self.ttl_days)) * 86400
+
+    @staticmethod
+    def _scope_document(document: dict, scope: str) -> dict:
+        fields = StateSchema.fields_for_scope(scope)
+        return {field: deepcopy(document[field]) for field in fields if field in document}
+
+    @staticmethod
+    def _scope_values(document: dict, fields: list[str]) -> dict:
+        return {
+            field: deepcopy(document.get(field, StateSchema.default_for(field)))
+            for field in fields
+        }
+
     async def _write(self, operation: dict) -> None:
         version = operation["version"]
+        document = operation["document"]
+        if version == 0 and not document:
+            return
         top_level = {
             self.ttl_attribute: operation["expiresAt"],
+            "schemaVersion": StateSchema.SCHEMA_VERSION,
             "stateVersion": version + 1,
         }
         condition = self._condition(version)
-        if self.conditional_writes and version > 0:
-            changed = {
-                field: operation["document"].get(field) for field in operation["changedFields"]
-            }
-            await self._table.update_map_fields(
+        if version == 0:
+            await self._table.update_item(
                 operation["userId"],
-                self.attributes_name,
-                changed,
-                updates=top_level,
+                operation["scope"],
+                updates={self.attributes_name: document, **top_level},
                 condition=condition,
             )
             return
-        await self._table.update_item(
+        changed_values = {
+            field: document[field]
+            for field in operation["changedFields"]
+            if field in document
+        }
+        removed = [
+            field for field in operation["changedFields"] if field not in document
+        ]
+        await self._table.update_map_fields(
             operation["userId"],
-            updates={self.attributes_name: operation["document"], **top_level},
+            self.attributes_name,
+            changed_values,
+            sort_value=operation["scope"],
+            removes=removed,
+            updates=top_level,
             condition=condition,
         )
 
-    async def _merge_after_conflict(
-        self, request_envelope: dict, operation: dict, attempt: int
-    ) -> None:
+    async def _merge_after_conflict(self, operation: dict, attempt: int) -> None:
         DynamoUserSupport.logger.warning(
-            "DynamoDB persistence conflict table=%s retry=%s",
+            "DynamoDB persistence conflict table=%s scope=%s retry=%s",
             self.table_name,
+            operation["scope"],
             attempt + 1,
         )
-        latest = await self.get_attributes(request_envelope)
-        operation["version"] = max(0, int(latest.pop(DynamoUserSupport._VERSION_FIELD, 0) or 0))
-        operation["document"] = DynamoUserSupport.merge_conflict(
+        item = await self._scope_item(operation["userId"], operation["scope"])
+        latest = (item or {}).get(self.attributes_name) or {}
+        if not isinstance(latest, dict):
+            latest = {}
+        operation["version"] = max(0, int((item or {}).get("stateVersion") or 0))
+        operation["document"] = DynamoConflictMerge.resolve(
             latest,
             operation["requested"],
             operation["original"],
             operation["changedFields"],
         )
+        operation["expiresAt"] = self._expires_at(
+            operation["scope"], operation["document"]
+        )
         backoff_ms = max(0, settings.HEAR_PERSISTENCE_CONFLICT_BACKOFF_MS) * 2**attempt
         if backoff_ms:
             await asyncio.sleep(backoff_ms / 1000.0)
 
-    async def save_attributes(self, request_envelope: dict, attributes: dict) -> None:
-        requested, version, changed_fields, original = self._payload(attributes)
-        operation = {
-            "userId": self._user_id(request_envelope),
-            "expiresAt": int(time.time()) + (self.ttl_days or 180) * 86400,
-            "requested": requested,
-            "document": dict(requested),
-            "version": version,
-            "changedFields": changed_fields,
-            "original": original,
-        }
+    async def _save_scope(self, operation: dict) -> None:
         retries = (
-            max(0, settings.HEAR_PERSISTENCE_CONFLICT_RETRIES) if self.conditional_writes else 0
+            max(0, settings.HEAR_PERSISTENCE_CONFLICT_RETRIES)
+            if self.conditional_writes
+            else 0
         )
         for attempt in range(retries + 1):
-            self._validate_document(operation["document"])
+            self._validate_document(operation["scope"], operation["document"])
             try:
                 await self._write(operation)
                 return
             except ClientError as error:
                 if not DynamoUserSupport.is_conditional_failure(error) or attempt >= retries:
                     raise
-                await self._merge_after_conflict(request_envelope, operation, attempt)
+                await self._merge_after_conflict(operation, attempt)
 
-    async def delete_attributes(self, request_envelope: dict) -> None:
-        user_id = self._user_id(request_envelope)
-        await self._table.delete_item(user_id)
+    async def save_attributes(
+        self,
+        request_envelope: dict,
+        attributes: dict,
+        *,
+        persistence_key: str | None = None,
+    ) -> None:
+        requested, versions, changed_fields, original = self._payload(attributes)
+        user_id = self._user_id(request_envelope, persistence_key)
+        operations = []
+        for scope in StateSchema.SCOPES:
+            scope_fields = [
+                field for field in changed_fields if StateSchema.scope_for(field) == scope
+            ]
+            if not scope_fields:
+                continue
+            document = self._scope_document(requested, scope)
+            operations.append(
+                {
+                    "userId": user_id,
+                    "scope": scope,
+                    "expiresAt": self._expires_at(scope, document),
+                    "requested": self._scope_values(requested, scope_fields),
+                    "document": document,
+                    "version": max(0, int(versions.get(scope) or 0)),
+                    "changedFields": scope_fields,
+                    "original": self._scope_values(original, scope_fields),
+                }
+            )
+        if operations:
+            await asyncio.gather(*(self._save_scope(operation) for operation in operations))
+
+    async def delete_attributes(
+        self, request_envelope: dict, *, persistence_key: str | None = None
+    ) -> None:
+        user_id = self._user_id(request_envelope, persistence_key)
+        deletes = [self._table.delete_item(user_id, scope) for scope in StateSchema.SCOPES]
+        await asyncio.gather(*deletes)

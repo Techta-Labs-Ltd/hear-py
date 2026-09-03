@@ -6,6 +6,7 @@ class DialogConstants:
         "feedback": "awaitingFeedback",
         "report_decision": "awaitingReportDecision",
         "resume": "awaitingResume",
+        "notification": "awaitingNotificationChoice",
     }
     TRANSIENT_DISCOVERY_DIALOGS = frozenset(
         {"search_confirmation", "ambiguity", "asr_repair", "organization_name", "creator_name"}

@@ -57,6 +57,140 @@ def test_ambiguity_allows_dismissal_intents(mock_handler_input, intent_name):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slot_name", "spoken_name"),
+    [
+        ("PlayByCreatorIntent", "creatorQuery", "Pendle Voice Dalesman"),
+        ("PlayContentIntent", "topic", "Pendle Voice Dalesman"),
+        ("PlayContentIntent", "topic", "Pendle Voice Dale's Men"),
+    ],
+)
+async def test_candidate_name_bypasses_ambiguity_gate_and_resolves_locally(
+    monkeypatch,
+    mock_handler_input,
+    intent_name,
+    slot_name,
+    spoken_name,
+):
+    candidate = {
+        "type": "creator",
+        "id": "creator-dalesman",
+        "name": "Pendle Voice Dalesman",
+    }
+    pending = {
+        "intent": "creator",
+        "searchPayload": {"query": "", "filter": {}},
+        "slots": {},
+        "candidates": [
+            candidate,
+            {
+                "type": "creator",
+                "id": "creator-lancashire",
+                "name": "Pendle Voice Lancashire Life",
+            },
+        ],
+        "expiresAt": 4102444800,
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "pendingAmbiguity": pending,
+            "activeDialog": {"type": "ambiguity", "context": pending},
+        },
+    )
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": intent_name,
+            "slots": {
+                slot_name: {
+                    "name": slot_name,
+                    "value": spoken_name,
+                }
+            },
+        },
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    DialogValidationInterceptor().process(mock_handler_input)
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["ambiguityResolution"] is True
+    assert nlp["searchPayload"]["filter"] == {"creatorIds": ["creator-dalesman"]}
+    assert User.snapshot(mock_handler_input)["pendingAmbiguity"] is None
+
+
+def test_shared_asr_prefix_does_not_choose_an_arbitrary_candidate(mock_handler_input):
+    pending = {
+        "candidates": [
+            {
+                "type": "creator",
+                "id": "creator-dalesman",
+                "name": "Pendle Voice Dalesman",
+            },
+            {
+                "type": "creator",
+                "id": "creator-lancashire",
+                "name": "Pendle Voice Lancashire Life",
+            },
+        ],
+        "expiresAt": 4102444800,
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "pendingAmbiguity": pending,
+            "activeDialog": {"type": "ambiguity", "context": pending},
+        },
+    )
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {"topic": {"name": "topic", "value": "pendu voice"}},
+        },
+    }
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert failure["dialogType"] == "ambiguity"
+
+
+def test_unrelated_name_remains_blocked_during_ambiguity(mock_handler_input):
+    pending = {
+        "candidates": [
+            {
+                "type": "creator",
+                "id": "creator-dalesman",
+                "name": "Pendle Voice Dalesman",
+            }
+        ],
+        "expiresAt": 4102444800,
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "pendingAmbiguity": pending,
+            "activeDialog": {"type": "ambiguity", "context": pending},
+        },
+    )
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {"topic": {"name": "topic", "value": "jazz"}},
+        },
+    }
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert failure["dialogType"] == "ambiguity"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("intent_name", ["AMAZON.NoIntent", "SkipFeedbackIntent"])
 async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     mock_handler_input, intent_name
@@ -155,6 +289,7 @@ def test_feedback_allows_ratings_and_transport_but_rejects_search(mock_handler_i
         "SetPlaybackSpeedIntent",
         "IncreaseSpeedIntent",
         "DecreaseSpeedIntent",
+        "HearNotificationsIntent",
     ):
         _intent(mock_handler_input, allowed)
         assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
@@ -163,6 +298,35 @@ def test_feedback_allows_ratings_and_transport_but_rejects_search(mock_handler_i
         DialogValidationPolicy.dialog_validation_failure(mock_handler_input)["dialogType"]
         == "feedback"
     )
+
+
+def test_notification_dialog_allows_playback_controls_but_rejects_search(
+    mock_handler_input,
+):
+    context = {"question": "You have a new update. Would you like to listen now?"}
+    User.update(
+        mock_handler_input,
+        {
+            "awaitingNotificationChoice": True,
+            "activeDialog": {"type": "notification", "context": context},
+        },
+    )
+    for allowed in (
+        "AMAZON.YesIntent",
+        "AMAZON.NoIntent",
+        "AMAZON.PauseIntent",
+        "AMAZON.ResumeIntent",
+        "IncreaseSpeedIntent",
+        "DecreaseSpeedIntent",
+        "RewindIntent",
+        "FastForwardIntent",
+    ):
+        _intent(mock_handler_input, allowed)
+        assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
+    _intent(mock_handler_input, "PlayContentIntent")
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+    assert failure["dialogType"] == "notification"
+    assert "new update" in failure["speech"]
 
 
 def test_feedback_validation_repeats_publication_title(mock_handler_input):

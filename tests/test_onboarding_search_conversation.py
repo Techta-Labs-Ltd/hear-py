@@ -662,6 +662,7 @@ async def test_multiple_publications_from_source_start_ambiguity_selection(
     assert result["results"] == []
     assert "Buxton Talking Song" in result["client_message"]
     assert "Daily Sermons" in result["client_message"]
+    assert "There are more options. Say show more to hear them." in result["client_message"]
     pending = User.snapshot(mock_handler_input)["pendingAmbiguity"]
     assert [candidate["id"] for candidate in pending["candidates"]] == [
         "publication-buxton",
@@ -886,6 +887,7 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "more than one match" in spoken
     assert "couldn't match" not in spoken
+    assert "There are more options. Say show more to hear them." in spoken
     directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
     assert directive["type"] == "Dialog.UpdateDynamicEntities"
     assert directive["types"][0]["name"] == "HEAR_CLARIFICATION"
@@ -1346,7 +1348,7 @@ async def test_yes_searches_selected_publication_with_minimal_filter(
 
     progressive.assert_awaited_once_with(
         mock_handler_input,
-        "One moment while I search the Hear catalogue.",
+        "Just a moment while I find that for you.",
     )
     search.assert_awaited_once_with(
         {
@@ -1582,6 +1584,59 @@ async def test_candidate_in_topic_slot_resolves_before_new_search(monkeypatch, m
 
 
 @pytest.mark.asyncio
+async def test_unmatched_clarification_keeps_ambiguity_active_without_resolver(
+    monkeypatch, mock_handler_input
+):
+    pending = {
+        "intent": "creator",
+        "searchPayload": {"query": "", "filter": {}, "page": 0, "limit": 20},
+        "slots": {},
+        "candidates": [
+            {"type": "creator", "id": "creator-one", "name": "Pendle Voice Dalesman"},
+            {
+                "type": "creator",
+                "id": "creator-two",
+                "name": "Pendle Voice Lancashire Life",
+            },
+        ],
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {
+                "name": "ClarifySelectionIntent",
+                "slots": {
+                    "selection": {
+                        "name": "selection",
+                        "value": "something completely different",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["status"] == "ambiguous"
+    assert nlp["ambiguityRetry"] is True
+    store = User.snapshot(mock_handler_input)
+    assert store["pendingAmbiguity"] is not None
+    assert store["activeDialog"]["type"] == "ambiguity"
+
+
+@pytest.mark.asyncio
 async def test_show_more_without_slots_pages_pending_ambiguity_locally(
     monkeypatch, mock_handler_input
 ):
@@ -1596,6 +1651,9 @@ async def test_show_more_without_slots_pages_pending_ambiguity_locally(
                 "Pendle Voice Lancashire Life",
                 "Pendle Voice Gazette",
                 "Pendle Voice Chronicle",
+                "Pendle Voice Echo",
+                "Pendle Voice Herald",
+                "Pendle Voice Review",
             )
         )
     ]
@@ -1629,6 +1687,7 @@ async def test_show_more_without_slots_pages_pending_ambiguity_locally(
     resolve.assert_not_awaited()
     assert "Gazette" in response["outputSpeech"]["ssml"]
     assert "Chronicle" in response["outputSpeech"]["ssml"]
+    assert "Say show more to hear them" in response["outputSpeech"]["ssml"]
     assert "trouble understanding" not in response["outputSpeech"]["ssml"]
 
 
@@ -1806,6 +1865,7 @@ async def test_publication_choices_support_previous_and_next_navigation(
     assert "previous publication choices" in previous_response["outputSpeech"]["ssml"]
     assert "Which publication would you like" in previous_response["outputSpeech"]["ssml"]
     assert "Buxton Talking Song" in previous_response["outputSpeech"]["ssml"]
+    assert "Say show more to hear them" in previous_response["outputSpeech"]["ssml"]
     assert [
         candidate["id"]
         for candidate in User.snapshot(mock_handler_input)["pendingAmbiguity"][

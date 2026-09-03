@@ -59,11 +59,14 @@ jobs:
       HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_PROD || 'alexa' }}
       WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_PROD || 'https://alexa.hear.media/api/v1/alexa/events' }}
       POWERTOOLS_LOG_LEVEL: ${{ vars.POWERTOOLS_LOG_LEVEL_PROD || 'INFO' }}
+      CANONICAL_IDENTITY_ENABLED: ${{ vars.CANONICAL_IDENTITY_ENABLED_PROD || '1' }}
       RESERVED_CONCURRENCY: '0'
       PROVISIONED_CONCURRENCY: ${{ vars.PROVISIONED_CONCURRENCY_PROD || '0' }}
       HEAR_API_KEY: ${{ secrets.HEAR_API_KEY_PROD }}
       WEBHOOK_OUTBOUND_SECRET: ${{ secrets.WEBHOOK_OUTBOUND_SECRET_PROD }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN_PROD }}
+      ALEXA_PROACTIVE_CLIENT_ID: ${{ secrets.ALEXA_PROACTIVE_CLIENT_ID_PROD }}
+      ALEXA_PROACTIVE_CLIENT_SECRET: ${{ secrets.ALEXA_PROACTIVE_CLIENT_SECRET_PROD }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate production configuration
@@ -75,6 +78,8 @@ jobs:
           : "${SHORT_STAGE:?Set the SHORT_STAGE_PROD variable}"
           : "${ALEXA_SKILL_ID:?Set the ALEXA_SKILL_ID_PROD variable}"
           : "${HEAR_API_KEY:?Set the HEAR_API_KEY_PROD secret}"
+          : "${ALEXA_PROACTIVE_CLIENT_ID:?Set the ALEXA_PROACTIVE_CLIENT_ID_PROD secret}"
+          : "${ALEXA_PROACTIVE_CLIENT_SECRET:?Set the ALEXA_PROACTIVE_CLIENT_SECRET_PROD secret}"
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -116,8 +121,10 @@ jobs:
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
+              AlexaProactiveClientId="$ALEXA_PROACTIVE_CLIENT_ID" AlexaProactiveClientSecret="$ALEXA_PROACTIVE_CLIENT_SECRET" \
               WebhookOutboundUrl="$WEBHOOK_OUTBOUND_URL" WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
               SentryDsn="$SENTRY_DSN" PowerToolsLogLevel="$POWERTOOLS_LOG_LEVEL" \
+              CanonicalIdentityEnabled="$CANONICAL_IDENTITY_ENABLED" \
               ReservedConcurrency="$RESERVED_CONCURRENCY" ProvisionedConcurrency="$PROVISIONED_CONCURRENCY"
       - name: Show production stack outputs
         if: steps.cloudformation.outcome == 'success'

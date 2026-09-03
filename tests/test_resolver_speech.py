@@ -35,3 +35,30 @@ def test_common_ambiguity_prefix_requests_distinguishing_words():
     )
     assert "beginning Sussex Coast Talking" in message
     assert "Magazine, News, or Newspaper Worthing" in message
+
+
+def test_ambiguity_message_announces_show_more_when_choices_remain():
+    message = SearchSpeech.ambiguous_reference_message(
+        "pendle voice",
+        [
+            {"name": "Pendle Voice Dalesman"},
+            {"name": "Pendle Voice Lancashire Life"},
+            {"name": "Pendle Voice Leader and Times"},
+        ],
+        has_more=True,
+    )
+
+    assert message.endswith("There are more options. Say show more to hear them.")
+
+
+def test_publication_ambiguity_announces_show_more_when_pages_remain():
+    message = SearchSpeech.publication_ambiguity_message(
+        [
+            {"name": "Buxton Talking Song"},
+            {"name": "Daily Sermons"},
+            {"name": "Hexham Talking Newspapers Reading"},
+        ],
+        has_more=True,
+    )
+
+    assert message.endswith("There are more options. Say show more to hear them.")

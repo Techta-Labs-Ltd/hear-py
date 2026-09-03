@@ -8,6 +8,7 @@ from src.application import Application
 from src.clients.hear import HearApiClient
 from src.container import ApplicationContainer
 from src.database.persistence import MemoryPersistenceAdapter
+from src.models.user import User
 
 USER_ID = "amzn1.ask.account.AUDIO_RUNTIME_TEST"
 APPLICATION_ID = "amzn1.ask.skill.test"
@@ -65,6 +66,10 @@ def _playback_state(*, status: str = "paused", offset_ms: int = 42000) -> dict:
         "startedAt": 1,
         "updatedAt": 1,
     }
+
+
+def _stored_state(persistence: MemoryPersistenceAdapter) -> dict:
+    return User.merge_persisted(persistence._store.get(USER_ID))
 
 
 def _queued_content(content_id: str, title: str) -> dict:
@@ -165,8 +170,8 @@ async def test_latest_source_offer_is_once_per_completed_item_and_no_clears_it(
         None,
     )
     search.assert_not_awaited()
-    assert persistence._store[USER_ID]["pendingLatestSource"] is None
-    assert persistence._store[USER_ID]["activeDialog"] is None
+    assert _stored_state(persistence)["pendingLatestSource"] is None
+    assert _stored_state(persistence)["activeDialog"] is None
     assert "news or sport" in declined["response"]["outputSpeech"]["ssml"]
     relaunched = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
     assert "Would you like to hear the latest" not in relaunched["response"]["outputSpeech"]["ssml"]
@@ -288,7 +293,7 @@ async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypat
         None,
     )
 
-    paused = persistence._store[USER_ID]["activePlayback"]
+    paused = _stored_state(persistence)["activePlayback"]
     assert paused["status"] == "paused"
     assert paused["contentId"] == track_id
     assert paused["trackContentId"] == track_id
@@ -312,7 +317,7 @@ async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypat
     stream = resumed["response"]["directives"][0]["audioItem"]["stream"]
     assert stream["token"] == track_id
     assert stream["offsetInMilliseconds"] == 73000
-    active = persistence._store[USER_ID]["activePlayback"]
+    active = _stored_state(persistence)["activePlayback"]
     assert active["subjectType"] == "publication"
     assert active["subjectId"] == publication_id
     assert active["trackContentId"] == track_id
@@ -331,8 +336,9 @@ async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypat
     assert next_stream["token"] == THIRD_CONTENT_ID
     prepared = persistence._store[USER_ID]["preparedNextContent"]
     assert prepared["publicationId"] == publication_id
-    assert prepared["subjectType"] == "publication"
-    assert prepared["trackContentId"] == THIRD_CONTENT_ID
+    assert prepared["contentId"] == THIRD_CONTENT_ID
+    assert "subjectType" not in prepared
+    assert "trackContentId" not in prepared
     assert prepared["trackIndex"] == 2
     assert prepared["trackCount"] == 5
 
@@ -347,7 +353,7 @@ async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypat
         None,
     )
 
-    continued = persistence._store[USER_ID]["activePlayback"]
+    continued = _stored_state(persistence)["activePlayback"]
     assert continued["contentId"] == THIRD_CONTENT_ID
     assert continued["publicationId"] == publication_id
     assert continued["subjectId"] == publication_id
@@ -374,7 +380,7 @@ async def test_resume_no_abandons_playback_and_offers_next_listening_options():
         None,
     )
     response = result["response"]
-    state = persistence._store[USER_ID]
+    state = _stored_state(persistence)
     assert state["activePlayback"]["status"] == "abandoned"
     assert state["awaitingResume"] is False
     assert state["activeDialog"] is None
@@ -454,7 +460,7 @@ async def test_increase_speed_after_resume_decline_does_not_restart_abandoned_tr
         ),
         None,
     )
-    state = persistence._store[USER_ID]
+    state = _stored_state(persistence)
     response = result["response"]
     assert state["playbackSpeed"] == 1.5
     assert state["activePlayback"]["status"] == "abandoned"
@@ -551,7 +557,7 @@ async def test_speed_control_bypasses_pending_feedback(
     )
 
     response = result["response"]
-    assert persistence._store[USER_ID]["playbackSpeed"] == expected_speed
+    assert _stored_state(persistence)["playbackSpeed"] == expected_speed
     assert response["directives"][0]["type"] == "AudioPlayer.Play"
     assert response["directives"][0]["audioItem"]["stream"]["url"] == expected_url
     assert "feedback question" not in response["outputSpeech"]["ssml"]
@@ -617,9 +623,10 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
         ]
         == 57000
     )
-    assert persistence._store[USER_ID]["feedbackHistory"][-1]["value"] == "enjoyed"
-    assert persistence._store[USER_ID]["awaitingFeedback"] is False
-    assert persistence._store[USER_ID].get("awaitingFollow") is not True
+    state = _stored_state(persistence)
+    assert "feedbackHistory" not in persistence._store[USER_ID]
+    assert state["awaitingFeedback"] is False
+    assert state.get("awaitingFollow") is not True
 
 
 @pytest.mark.asyncio
@@ -703,8 +710,9 @@ async def test_skipping_requested_rating_resumes_active_audio():
     response = result["response"]
     assert response["directives"][0]["type"] == "AudioPlayer.Play"
     assert response["directives"][0]["audioItem"]["stream"]["offsetInMilliseconds"] == 42000
-    assert persistence._store[USER_ID]["feedbackHistory"][-1]["value"] == "skipped"
-    assert persistence._store[USER_ID]["awaitingFeedback"] is False
+    state = _stored_state(persistence)
+    assert "feedbackHistory" not in persistence._store[USER_ID]
+    assert state["awaitingFeedback"] is False
 
 
 @pytest.mark.asyncio
@@ -747,7 +755,7 @@ async def test_requested_not_enjoyed_then_skip_resumes_active_audio():
     response = result["response"]
     assert response["directives"][0]["type"] == "AudioPlayer.Play"
     assert response["directives"][0]["audioItem"]["stream"]["offsetInMilliseconds"] == 42000
-    assert persistence._store[USER_ID]["awaitingReportDecision"] is False
+    assert _stored_state(persistence)["awaitingReportDecision"] is False
 
 
 @pytest.mark.asyncio
@@ -790,7 +798,7 @@ async def test_report_command_pauses_audio_and_yes_resumes_from_current_offset()
     directive = continued["response"]["directives"][0]
     assert directive["type"] == "AudioPlayer.Play"
     assert directive["audioItem"]["stream"]["offsetInMilliseconds"] == 63000
-    assert persistence._store[USER_ID]["awaitingContinueAfterFlag"] is False
+    assert _stored_state(persistence)["awaitingContinueAfterFlag"] is False
 
 
 @pytest.mark.asyncio
@@ -867,7 +875,7 @@ async def test_bare_normal_speed_resets_to_base_audio_without_speed_slot():
     )
     response = result["response"]
     directive = response["directives"][0]
-    assert persistence._store[USER_ID]["playbackSpeed"] == 1.0
+    assert _stored_state(persistence)["playbackSpeed"] == 1.0
     assert directive["audioItem"]["stream"]["offsetInMilliseconds"] == 42000
     assert directive["audioItem"]["stream"]["url"] == "https://cdn.hear.media/normal.mp3"
     assert "reset to normal" in response["outputSpeech"]["ssml"]
@@ -1223,13 +1231,13 @@ async def test_listening_time_uses_event_elapsed_time_and_does_not_count_seeks(
             None,
         )
 
-    state = persistence._store[USER_ID]["activePlayback"]
+    state = _stored_state(persistence)["activePlayback"]
     assert state["listenedMs"] == 120000
     assert state["timeSpentMs"] == 45000
     assert state["timeSpentHours"] == 0.0125
     history = persistence._store[USER_ID]["playHistory"][0]
     assert history["timeSpentMs"] == 45000
-    assert history["sessions"][state["sessionId"]]["timeSpentMs"] == 45000
+    assert "sessions" not in history
 
 
 @pytest.mark.asyncio

@@ -15,9 +15,13 @@ class EventUtils:
 
     @staticmethod
     def envelope(event_type: str, data: dict) -> dict:
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return {
             "event": str(event_type),
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "schemaVersion": EventConstants.CONTRACT_VERSION,
+            "eventId": data.get("clientEventId")
+            or f"{event_type}:{EventUtils.timestamp_ms()}",
+            "timestamp": created_at,
             "data": data,
         }
 
@@ -26,6 +30,9 @@ class EventUtils:
         data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
         values = {
             "eventType": envelope.get("event"),
+            "eventId": envelope.get("eventId"),
+            "schemaVersion": envelope.get("schemaVersion"),
+            "listenerId": data.get("listenerId"),
             "subjectType": data.get("subjectType"),
             "subjectId": data.get("subjectId"),
             "publicationId": data.get("publicationId"),
@@ -54,6 +61,7 @@ class EventUtils:
             return None
         subject_type, subject_id, is_publication = subject
         recorded_at = EventUtils.timestamp_ms()
+        identity_id = listener_id or alexa_user_id
         payload = EventUtils.compact(
             {
                 "alexaUserId": alexa_user_id,
@@ -80,7 +88,7 @@ class EventUtils:
                 "meaningfulTrackCount": pending.get("meaningfulTrackCount"),
                 "timestamp": recorded_at,
                 "clientEventId": (
-                    f"feedback:{alexa_user_id}:{pending.get('feedbackKey') or subject_id}:{value}"
+                    f"feedback:{identity_id}:{pending.get('feedbackKey') or subject_id}:{value}"
                 ),
             }
         )

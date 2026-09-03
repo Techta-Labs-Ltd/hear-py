@@ -149,6 +149,8 @@ class SearchPayload:
             "limit": options.get("limit", 5),
             "page": options.get("page", 0),
         }
+        if (store or {}).get("listenerId"):
+            payload["listenerId"] = (store or {})["listenerId"]
         sort = options.get("sort")
         if sort in SearchConstants.ALLOWED_SEARCH_SORTS:
             payload["sort"] = sort
@@ -161,3 +163,17 @@ class SearchPayload:
     @classmethod
     def build(cls, alexa_user_id: str | None, store: dict | None = None, **kwargs) -> dict:
         return cls.to_dict(alexa_user_id, store, kwargs)
+
+    @staticmethod
+    def with_identity(
+        payload: dict,
+        *,
+        alexa_user_id: str | None,
+        listener_id: str | None,
+    ) -> dict:
+        identified = dict(payload)
+        if alexa_user_id:
+            identified["alexaUserId"] = alexa_user_id
+        if listener_id:
+            identified["listenerId"] = listener_id
+        return identified
