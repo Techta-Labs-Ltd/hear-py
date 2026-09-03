@@ -144,6 +144,19 @@ class PlayCreator:
             and Search._has_active_browse_catalog(active_store)
         ):
             return await Search._show_more_browse(handler_input, self._deps)
+        if nlp_slots.get("ambiguousReferences"):
+            result = await Search.discover_content_via_search(
+                handler_input, {"q": "", "intent": "creator"}, deps=self._deps
+            )
+            message = result.get("client_message") or SearchSpeech.unresolved_reference_message(
+                creator_query or "that name", ["creator"]
+            )
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(message))
+                .reprompt(Ssml.ssml("Please say one of the creator names I just offered."))
+                .set_should_end_session(False)
+                .response
+            )
         if generic_creator_request or (not creator_query and (not resolved_creator)):
             User.update(handler_input, {"awaitingCreatorName": True})
             return (

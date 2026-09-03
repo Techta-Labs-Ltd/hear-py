@@ -810,6 +810,57 @@ def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
     assert result["slots"]["ambiguousReferences"] == expected
 
 
+def test_flat_creator_ambiguities_are_grouped_and_marked_ambiguous():
+    payload = _response(intent="creator", entities=[])
+    payload["ambiguities"] = [
+        {
+            "entityType": "creator",
+            "entityId": "creator-dalesman",
+            "canonicalValue": "Pendle Voice Dalesman",
+        },
+        {
+            "entityType": "creator",
+            "entityId": "creator-lancashire",
+            "canonicalValue": "Pendle Voice Lancashire Life",
+        },
+        {
+            "entityType": "organization",
+            "entityId": "org-dalesman",
+            "canonicalValue": "Pendle Voice Dalesman",
+        },
+        {
+            "entityType": "organization",
+            "entityId": "org-lancashire",
+            "canonicalValue": "Pendle Voice Lancashire Life",
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play pendle voice"
+    )
+
+    expected = [
+        {
+            "phrase": "pendle voice",
+            "candidates": [
+                {
+                    "type": "creator",
+                    "id": "creator-dalesman",
+                    "name": "Pendle Voice Dalesman",
+                },
+                {
+                    "type": "creator",
+                    "id": "creator-lancashire",
+                    "name": "Pendle Voice Lancashire Life",
+                },
+            ],
+        }
+    ]
+    assert result["status"] == "ambiguous"
+    assert result["ambiguities"] == expected
+    assert result["slots"]["ambiguousReferences"] == expected
+
+
 def test_client_defaults_use_fixed_service_contract_without_resolver_settings():
     client = ResolverClient(ResolverOptions(api_key="secret"))
     assert client._host == "https://resolver.hear.media"

@@ -949,6 +949,63 @@ async def test_ambiguity_response_without_original_slot_reprompts_candidates(
     discover.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_creator_ambiguity_without_a_slot_announces_candidates(mock_handler_input):
+    from src.controllers.play import PlayByCreatorHandler
+
+    candidates = [
+        {
+            "type": "creator",
+            "id": "creator-dalesman",
+            "name": "Pendle Voice Dalesman",
+        },
+        {
+            "type": "creator",
+            "id": "creator-lancashire",
+            "name": "Pendle Voice Lancashire Life",
+        },
+        {
+            "type": "creator",
+            "id": "creator-leader",
+            "name": "Pendle Voice Leader and Times",
+        },
+    ]
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "PlayByCreatorIntent", "slots": {}},
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes.update(
+        {
+            "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+            "_nlp": {
+                "status": "ambiguous",
+                "intent": "creator",
+                "slots": {
+                    "ambiguousReferences": [
+                        {"phrase": "pendle voice", "candidates": candidates}
+                    ]
+                },
+            },
+        }
+    )
+
+    await PlayByCreatorHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    store = User.snapshot(mock_handler_input)
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert store["activeDialog"]["type"] == "ambiguity"
+    assert store["pendingAmbiguity"]["candidates"] == candidates
+    assert "Pendle Voice" in spoken
+    assert "Dalesman" in spoken
+    assert "Which creator would you like" not in spoken
+    directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
+    assert directive["type"] == "Dialog.UpdateDynamicEntities"
+
+
 def test_fallback_during_ambiguity_repeats_candidates_not_welcome(mock_handler_input):
     from src.controllers.fallback import FallbackHandler
 

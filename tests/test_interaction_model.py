@@ -208,6 +208,28 @@ def test_active_audio_commands_include_natural_speed_and_rating_phrases():
     assert {"play slow", "play this slow"}.issubset(
         set(intents["DecreaseSpeedIntent"]["samples"])
     )
-    assert {"rate this content", "rate this recording", "give feedback"}.issubset(
+    assert {
+        "rate this content",
+        "rate this recording",
+        "give feedback",
+        "leave feedback on this content",
+        "rate what I'm listening to",
+        "score this recording",
+    }.issubset(
         set(intents["RateContentIntent"]["samples"])
     )
+
+
+def test_rating_and_reporting_use_distinct_asr_friendly_phrases():
+    intents = {
+        item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    rating = set(intents["RateContentIntent"]["samples"])
+    reporting = set(intents["ReportContentIntent"]["samples"])
+    assert not rating.intersection(reporting)
+    assert {"report", "report this"}.isdisjoint(reporting)
+    assert {
+        "report this content as inappropriate",
+        "flag this recording as inappropriate",
+        "report a safety issue",
+    }.issubset(reporting)

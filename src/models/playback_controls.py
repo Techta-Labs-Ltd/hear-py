@@ -4,6 +4,7 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
 from src.alexa.playback import AlexaPlayback
+from src.alexa.playback_context import PlaybackContext
 from src.alexa.speech import Speech
 from src.constants.playback import PlaybackConstants
 from src.models.playback import Playback
@@ -11,6 +12,34 @@ from src.utils.playback import PlaybackUtils
 
 
 class PlaybackControls:
+    @staticmethod
+    async def pause_active(
+        handler_input: HandlerInput,
+        *,
+        deps: object | None = None,
+    ) -> dict:
+        d = deps
+        state = d.playback.state.current(handler_input)
+        audio = PlaybackContext.read_audio_player_context(handler_input)
+        active_token = str((state or {}).get("token") or (state or {}).get("contentId") or "")
+        audio_token = str((audio or {}).get("token") or "")
+        if (
+            state
+            and PlaybackContext.is_audio_player_active(audio)
+            and audio_token
+            and audio_token == active_token
+        ):
+            state = d.playback.observe(
+                handler_input,
+                offset_ms=int(audio.get("offsetMs") or 0),
+                event_type="paused",
+                status="paused",
+            )
+        elif state:
+            state = d.playback.state.merge(handler_input, {"status": "paused"})
+        await d.playback.emit(handler_input, "paused", state)
+        return AlexaPlayback.build_stop_directive()
+
     @staticmethod
     async def restart_active(
         handler_input: HandlerInput,

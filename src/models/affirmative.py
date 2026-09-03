@@ -14,6 +14,7 @@ from src.alexa.ssml import Ssml
 from src.constants.search import SearchConstants
 from src.models.dialog import DialogStateManager
 from src.models.feedback_response import EnjoyedFeedback
+from src.models.playback_controls import PlaybackControls
 from src.models.playback_state import PlaybackQueue
 from src.models.search import Search
 from src.models.social import FollowCreator
@@ -113,11 +114,10 @@ class Affirmative:
             return await self._handle_still_listening_yes(handler_input, store)
         if store.get("awaitingContinueAfterFlag"):
             self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": False})
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.FLAGGED_CONTINUE_YES_ACK))
-                .reprompt(Speech.WELCOME_REPROMPT)
-                .set_should_end_session(False)
-                .response
+            return await PlaybackControls.restart_active(
+                handler_input,
+                speech=Speech.FLAGGED_CONTINUE_YES_ACK,
+                deps=self._deps,
             )
         if store.get("awaitingFeedback"):
             return await EnjoyedFeedback(deps=self._deps).execute(handler_input)

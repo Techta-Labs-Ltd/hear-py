@@ -4,7 +4,6 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
-from src.alexa.playback import AlexaPlayback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.constants.playback import PlaybackConstants
@@ -83,10 +82,9 @@ class PauseIntentHandler(AbstractRequestHandler):
             and AlexaRequest.get_intent_name(handler_input) == "AMAZON.StopIntent"
         ):
             DialogStateManager.clear_transient_discovery(handler_input)
-        state = self._deps.playback.state.merge(handler_input, {"status": "paused"})
-        await self._deps.playback.emit(handler_input, "paused", state)
+        directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
         return handler_input.response_builder.add_directive(
-            AlexaPlayback.build_stop_directive()
+            directive
         ).response
 
 

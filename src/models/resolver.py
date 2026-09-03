@@ -153,26 +153,47 @@ class ResolverResult:
             return entities
         return tuple(entity for entity in entities if entity.confidence == 100)
 
-    def _ambiguity_payload(self) -> list[dict]:
+    @staticmethod
+    def _ambiguity_candidate(candidate: dict) -> dict | None:
+        entity_type = candidate.get("type") or candidate.get("entityType")
+        entity_id = candidate.get("id") or candidate.get("entityId")
+        name = str(candidate.get("name") or candidate.get("canonicalValue") or "").strip()
+        if not entity_type or not entity_id or not name:
+            return None
+        return {"type": str(entity_type), "id": str(entity_id), "name": name}
+
+    def _ambiguity_payload(self, original_utterance: str = "") -> list[dict]:
         ambiguities = []
+        flat_candidates = []
+        flat_phrase = ""
         for ambiguity in self.ambiguities:
             candidates = [
-                {
-                    "type": str(candidate.get("type") or candidate.get("entityType")),
-                    "id": str(candidate.get("id") or candidate.get("entityId")),
-                    "name": str(
-                        candidate.get("name") or candidate.get("canonicalValue") or ""
-                    ).strip(),
-                }
+                normalized
                 for candidate in ambiguity.get("candidates") or []
-                if (candidate.get("name") or candidate.get("canonicalValue"))
-                and (candidate.get("id") or candidate.get("entityId"))
-                and (candidate.get("type") or candidate.get("entityType"))
+                if (normalized := ResolverResult._ambiguity_candidate(candidate))
             ]
             if candidates:
                 ambiguities.append(
                     {"phrase": str(ambiguity.get("phrase") or ""), "candidates": candidates}
                 )
+                continue
+            candidate = ResolverResult._ambiguity_candidate(ambiguity)
+            if candidate:
+                flat_candidates.append(candidate)
+                flat_phrase = flat_phrase or str(ambiguity.get("phrase") or "").strip()
+        if flat_candidates:
+            matching_intent = [
+                candidate
+                for candidate in flat_candidates
+                if candidate.get("type") == self.intent
+            ]
+            candidates = matching_intent or flat_candidates
+            ambiguities.append(
+                {
+                    "phrase": flat_phrase or ResolverResult._fallback_query(original_utterance),
+                    "candidates": candidates,
+                }
+            )
         return ambiguities
 
     def _facet_payload(self, slots: dict) -> tuple[dict, tuple[ResolvedEntity, ...]]:
@@ -318,7 +339,7 @@ class ResolverResult:
         self, *, prefer_location: bool = False, original_utterance: str = ""
     ) -> dict[str, Any]:
         slots = dict(self.slots)
-        ambiguities = self._ambiguity_payload()
+        ambiguities = self._ambiguity_payload(original_utterance)
         filters, sources = self._facet_payload(slots)
         resolution = self._location_payload(slots, filters, sources, prefer_location)
         slots["ambiguousReferences"] = list(ambiguities)
@@ -346,7 +367,7 @@ class ResolverResult:
         ]
         intent = "search" if self.intent in {"tag", "location"} else self.intent
         return {
-            "status": self.status,
+            "status": "ambiguous" if ambiguities else self.status,
             "intent": intent,
             "resolverIntent": self.intent,
             "entities": entities,

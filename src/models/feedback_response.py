@@ -22,7 +22,11 @@ class RatingRequest:
     async def execute(self, handler_input: HandlerInput):
         pending = self._deps.feedback.request_current_rating(handler_input)
         if pending:
-            return AlexaFeedback.present_requested_feedback(handler_input)
+            directive = await PlaybackControls.pause_active(
+                handler_input,
+                deps=self._deps,
+            )
+            return AlexaFeedback.present_requested_feedback(handler_input, directive)
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.RATE_CONTENT_NOTHING))
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
@@ -129,6 +133,12 @@ class SomewhatFeedback:
             liked=None,
         )
         await self._deps.feedback.clear(handler_input)
+        if pending.get("requested"):
+            return await PlaybackControls.restart_active(
+                handler_input,
+                speech=Speech.RATE_CONTENT_SAVED_RESUMING,
+                deps=self._deps,
+            )
         if DeferredIntentManager.has(handler_input):
             return await DeferredIntentManager.resume(handler_input)
         return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SOMEWHAT)
@@ -156,7 +166,9 @@ class NotEnjoyedFeedback:
             creator=selected_source.get("name"),
             liked=False,
         )
-        report_context = Report.snapshot_report_context(store)
+        report_context = Report.snapshot_report_context(store) or {}
+        if pending.get("requested"):
+            report_context["resumeAfterDecision"] = True
         FeedbackService.dismiss(handler_input)
         User.update(
             handler_input,
@@ -200,7 +212,16 @@ class SkipFeedback:
                 .response
             )
         if store.get("awaitingReportDecision"):
+            resume_after_decision = bool(
+                (store.get("reportContext") or {}).get("resumeAfterDecision")
+            )
             await self._deps.feedback.clear(handler_input)
+            if resume_after_decision:
+                return await PlaybackControls.restart_active(
+                    handler_input,
+                    speech=Speech.RATE_CONTENT_SKIPPED_RESUMING,
+                    deps=self._deps,
+                )
             if DeferredIntentManager.has(handler_input):
                 return await DeferredIntentManager.resume(handler_input)
             return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SKIP_INTRO)

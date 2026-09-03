@@ -11,6 +11,7 @@ from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DeferredIntentManager, DialogStateManager
+from src.models.playback_controls import PlaybackControls
 from src.models.report import Report
 
 
@@ -58,11 +59,16 @@ class ReportContentHandler(AbstractRequestHandler):
             if DeferredIntentManager.has(handler_input):
                 return await DeferredIntentManager.resume(handler_input)
             self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": True})
+            directive = await PlaybackControls.pause_active(
+                handler_input,
+                deps=self._deps,
+            )
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml(Speech.REPORT_CONTENT_THEN_ASK_CONTINUE)
                 )
                 .reprompt(Speech.FLAGGED_CONTINUE_REPROMPT)
+                .add_directive(directive)
                 .set_should_end_session(False)
                 .response
             )

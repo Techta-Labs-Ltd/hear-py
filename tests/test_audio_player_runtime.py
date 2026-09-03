@@ -566,16 +566,22 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
         "activePlayback": _playback_state(status="playing", offset_ms=42000),
     }
 
+    rate_event = _event(
+        {
+            "type": "IntentRequest",
+            "intent": {"name": "RateContentIntent", "slots": {}},
+        }
+    )
+    rate_event["context"]["AudioPlayer"] = {
+        "playerActivity": "PLAYING",
+        "token": CONTENT_ID,
+        "offsetInMilliseconds": 57000,
+    }
     result = await Application.build_skill(
         persistence,
         deps=ApplicationContainer(),
     ).invoke(
-        _event(
-            {
-                "type": "IntentRequest",
-                "intent": {"name": "RateContentIntent", "slots": {}},
-            }
-        ),
+        rate_event,
         None,
     )
 
@@ -583,9 +589,12 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
     state = persistence._store[USER_ID]
     assert "Did you enjoy this?" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
+    assert response["directives"] == [{"type": "AudioPlayer.Stop"}]
     assert state["awaitingFeedback"] is True
     assert state["pendingFeedback"]["contentId"] == CONTENT_ID
     assert state["pendingFeedback"]["requested"] is True
+    assert state["activePlayback"]["status"] == "paused"
+    assert state["activePlayback"]["offsetMs"] == 57000
 
     follow_up = await Application.build_skill(
         persistence,
@@ -606,7 +615,7 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
         follow_up["response"]["directives"][0]["audioItem"]["stream"][
             "offsetInMilliseconds"
         ]
-        == 42000
+        == 57000
     )
     assert persistence._store[USER_ID]["feedbackHistory"][-1]["value"] == "enjoyed"
     assert persistence._store[USER_ID]["awaitingFeedback"] is False
@@ -646,6 +655,92 @@ async def test_skipping_requested_rating_resumes_active_audio():
     assert response["directives"][0]["audioItem"]["stream"]["offsetInMilliseconds"] == 42000
     assert persistence._store[USER_ID]["feedbackHistory"][-1]["value"] == "skipped"
     assert persistence._store[USER_ID]["awaitingFeedback"] is False
+
+
+@pytest.mark.asyncio
+async def test_requested_not_enjoyed_then_skip_resumes_active_audio():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=42000),
+    }
+    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "RateContentIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+    await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "FeedbackNotEnjoyedIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    result = await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "SkipFeedbackIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    response = result["response"]
+    assert response["directives"][0]["type"] == "AudioPlayer.Play"
+    assert response["directives"][0]["audioItem"]["stream"]["offsetInMilliseconds"] == 42000
+    assert persistence._store[USER_ID]["awaitingReportDecision"] is False
+
+
+@pytest.mark.asyncio
+async def test_report_command_pauses_audio_and_yes_resumes_from_current_offset():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=42000),
+    }
+    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    report_event = _event(
+        {
+            "type": "IntentRequest",
+            "intent": {"name": "ReportContentIntent", "slots": {}},
+        }
+    )
+    report_event["context"]["AudioPlayer"] = {
+        "playerActivity": "PLAYING",
+        "token": CONTENT_ID,
+        "offsetInMilliseconds": 63000,
+    }
+
+    reported = await skill.invoke(report_event, None)
+
+    assert reported["response"]["directives"] == [{"type": "AudioPlayer.Stop"}]
+    assert persistence._store[USER_ID]["activePlayback"]["status"] == "paused"
+    assert persistence._store[USER_ID]["activePlayback"]["offsetMs"] == 63000
+    assert persistence._store[USER_ID]["awaitingContinueAfterFlag"] is True
+
+    continued = await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+            }
+        ),
+        None,
+    )
+
+    directive = continued["response"]["directives"][0]
+    assert directive["type"] == "AudioPlayer.Play"
+    assert directive["audioItem"]["stream"]["offsetInMilliseconds"] == 63000
+    assert persistence._store[USER_ID]["awaitingContinueAfterFlag"] is False
 
 
 @pytest.mark.asyncio

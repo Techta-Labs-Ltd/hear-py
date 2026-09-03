@@ -6,10 +6,11 @@ from src.alexa.ssml import Ssml
 
 class AlexaFeedback:
     @staticmethod
-    def present_requested_feedback(handler_input):
+    def present_requested_feedback(handler_input, stop_directive: dict):
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.RATE_CONTENT_PROMPT))
             .reprompt(Ssml.ssml(Speech.RATE_CONTENT_PROMPT))
+            .add_directive(stop_directive)
             .with_should_end_session(False)
             .get_response()
         )
