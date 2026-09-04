@@ -173,6 +173,17 @@ def test_template_has_scaling_guards_and_operational_alarms():
     assert "OutboundDeadLetterAlarm:" in template
 
 
+def test_deployments_disable_proactive_reservations_and_report_early_validation():
+    root = Path(__file__).resolve().parents[1]
+    for workflow_name in ("deploy-develop.yml", "deploy-main.yml"):
+        workflow = (root / ".github" / "workflows" / workflow_name).read_text(
+            encoding="utf-8"
+        )
+        assert "PROACTIVE_RESERVED_CONCURRENCY: '0'" in workflow
+        assert "aws cloudformation describe-events" in workflow
+        assert "EventType=='VALIDATION_ERROR'" in workflow
+
+
 def test_template_owns_outbound_event_delivery_pipeline():
     template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
     assert "OutboundQueue:" in template
