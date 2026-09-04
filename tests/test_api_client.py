@@ -129,10 +129,8 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
     assert result["publications"][0]["id"] == "publication-1"
     assert "'city': 'Swindon'" in caplog.text
     assert "'countryCode': 'gb'" in caplog.text
-    assert "'latitudePresent': True" in caplog.text
-    assert "'longitudePresent': True" in caplog.text
-    assert "51.56" not in caplog.text
-    assert "-1.78" not in caplog.text
+    assert "'latitude': 51.56" in caplog.text
+    assert "'longitude': -1.78" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -15,8 +15,8 @@ class AvailabilityResponse:
                 "location": {
                     "city": location.get("city"),
                     "countryCode": location.get("countryCode"),
-                    "latitudePresent": location.get("latitude") is not None,
-                    "longitudePresent": location.get("longitude") is not None,
+                    "latitude": location.get("latitude"),
+                    "longitude": location.get("longitude"),
                 }
             }
         return {
