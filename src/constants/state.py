@@ -50,7 +50,6 @@ class StateSchema:
         "userName": (None, None),
         "userEmail": (None, None),
         "userAddress": (None, None),
-        "givenName": (None, None),
         "fullName": (None, None),
         "listenerProfileResolvedAt": (None, CORE_SCOPE),
         "listenerProfileSkipUntil": (None, CORE_SCOPE),

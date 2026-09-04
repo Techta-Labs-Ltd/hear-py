@@ -137,14 +137,14 @@ class LaunchWorkflow:
 
     @staticmethod
     def _user_name(store: dict) -> str | None:
-        return store.get("userName") or store.get("givenName") or store.get("fullName")
+        return store.get("userName") or store.get("fullName")
 
     @classmethod
     def _listener_data_is_cached(cls, store: dict) -> bool:
         if not store:
             return False
         resolved_at = store.get("listenerProfileResolvedAt", 0)
-        has_name = bool(store.get("userName") or store.get("fullName") or store.get("givenName"))
+        has_name = bool(store.get("userName") or store.get("fullName"))
         if not has_name and not store.get("userEmail"):
             return False
         return bool(resolved_at and int(time.time() * 1000) - resolved_at < cls.PROFILE_TTL_MS)

@@ -41,21 +41,29 @@ class AlexaProfilePolicy:
         return requests
 
     @staticmethod
-    def availability(statuses: list[int], given_name_granted: bool) -> tuple[dict, bool]:
+    def availability(
+        requests: list[tuple[str, str]], results: list[dict], active: dict
+    ) -> tuple[dict, bool]:
+        statuses = [result["status"] for result in results]
         saw_denied = any(status in (401, 403) for status in statuses)
-        saw_empty = any(status == 204 for status in statuses)
         saw_missing_token = any(status == 0 for status in statuses)
-        should_retry = (
-            saw_denied
-            or saw_missing_token
-            or not given_name_granted
-            and (saw_denied or saw_empty or saw_missing_token)
+        name_result = next(
+            (
+                result
+                for (field, _), result in zip(requests, results)
+                if field == "fullName"
+            ),
+            None,
         )
-        name_unavailable = given_name_granted and saw_empty and not saw_denied
-        if should_retry:
+        name_unavailable = bool(
+            name_result
+            and name_result["status"] == 204
+            and not AlexaLocalitySupport.has_any_profile_name(active)
+        )
+        if saw_denied or saw_missing_token:
             return (
                 {"profileFetchDenied": True, "profileNameUnavailable": False},
-                name_unavailable,
+                False,
             )
         if name_unavailable:
             return (
@@ -67,7 +75,7 @@ class AlexaProfilePolicy:
     @staticmethod
     def finalize(active: dict, patch: dict, now: int, name_unavailable: bool) -> dict:
         user_name = (
-            patch.get("fullName") or patch.get("givenName") or active.get("userName") or None
+            patch.get("fullName") or active.get("userName") or active.get("fullName") or None
         )
         user_email = patch.get("userEmail") or active.get("userEmail") or None
         if user_name:
@@ -113,16 +121,12 @@ class ListenerProfileService:
                 for _, path in requests
             )
         )
-        statuses = [result["status"] for result in results]
         patch = {}
         for (field, _), result in zip(requests, results):
             if result["value"]:
                 patch[field] = result["value"]
-        given_name_granted = RequestContext.has_permission(
-            handler_input, permission_scopes.PROFILE_GIVEN_NAME_READ
-        )
         availability, name_unavailable = AlexaProfilePolicy.availability(
-            statuses, given_name_granted
+            requests, results, active
         )
         patch.update(availability)
         return AlexaProfilePolicy.finalize(active, patch, now, name_unavailable)

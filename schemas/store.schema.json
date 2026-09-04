@@ -35,7 +35,6 @@
     "firstLaunchedAt": { "type": ["number", "null"] },
     "followedCreators": { "type": "array", "items": { "type": "object" } },
     "fullName": { "type": ["string", "null"] },
-    "givenName": { "type": ["string", "null"] },
     "lastCompletedSource": { "type": ["string", "null"] },
     "lastLaunchedAt": { "type": ["number", "null"] },
     "lastLatestSourceOfferContentId": { "type": ["string", "null"] },

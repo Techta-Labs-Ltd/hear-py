@@ -115,7 +115,7 @@ class AlexaFeedback:
             or store.get("feedbackCreator")
         )
         creator = Speech.escape_ssml_lite(creator_name) if creator_name else "the creator"
-        user_name = store.get("userName") or store.get("givenName") or store.get("fullName")
+        user_name = store.get("userName") or store.get("fullName")
         if pending.get("subjectType") == "publication":
             speech = f"You listened to {Speech.escape_ssml_lite(title)}. Did you enjoy this publication? Say enjoyed, it was okay, not enjoyed, or skip."
         else:

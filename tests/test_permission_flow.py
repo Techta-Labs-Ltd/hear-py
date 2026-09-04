@@ -101,6 +101,23 @@ def test_notification_consent_uses_alexa_permission_without_account_linking():
     assert "LinkAccount" not in str(response)
 
 
+def test_profile_consent_requests_full_name_and_email_only():
+    handler_input = _handler_input()
+    response = Permission(deps=_deps()).start_profile(handler_input)
+
+    directive = response["directives"][0]
+    assert directive["input"]["permissionScopes"] == [
+        {
+            "permissionScope": "alexa::profile:name:read",
+            "consentLevel": "ACCOUNT",
+        },
+        {
+            "permissionScope": "alexa::profile:email:read",
+            "consentLevel": "ACCOUNT",
+        },
+    ]
+
+
 @pytest.mark.asyncio
 async def test_denied_location_consent_explains_denial_and_voice_fallback():
     handler_input = _handler_input(
