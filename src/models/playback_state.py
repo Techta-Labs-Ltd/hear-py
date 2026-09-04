@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from config import settings
 from src.alexa.request import AlexaRequest
+from src.constants.discovery import DiscoveryConstants
 from src.constants.playback import PlaybackConstants
 from src.models.user import User
 from src.utils.content import ContentIdentity
@@ -506,7 +507,11 @@ class PlaybackQueue:
         payload.update(
             {
                 "page": next_page,
-                "limit": int(pagination.get("limit") or payload.get("limit") or 3),
+                "limit": int(
+                    pagination.get("limit")
+                    or payload.get("limit")
+                    or DiscoveryConstants.CHOICE_PAGE_SIZE
+                ),
             }
         )
         store = User.snapshot(handler_input)

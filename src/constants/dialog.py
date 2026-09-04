@@ -9,7 +9,14 @@ class DialogConstants:
         "notification": "awaitingNotificationChoice",
     }
     TRANSIENT_DISCOVERY_DIALOGS = frozenset(
-        {"search_confirmation", "ambiguity", "asr_repair", "organization_name", "creator_name"}
+        {
+            "search_confirmation",
+            "ambiguity",
+            "availability",
+            "asr_repair",
+            "organization_name",
+            "creator_name",
+        }
     )
     DEFERRED_DISCOVERY_INTENTS = frozenset(
         {

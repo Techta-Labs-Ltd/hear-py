@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 from src.utils.filters import SearchFilters, SearchFilterUtils
 
@@ -42,6 +43,7 @@ class SearchPayload:
     @classmethod
     def from_resolution(cls, resolution: dict, default_limit: int) -> dict:
         payload = cls.with_pagination(resolution.get("searchPayload"), default_limit)
+        payload["limit"] = max(1, int(default_limit))
         if resolution.get("intent") != "publication":
             return payload
         filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
@@ -149,7 +151,7 @@ class SearchPayload:
             "query": SearchFilterUtils.normalize_search_query(options.get("q", "")),
             "isLocal": is_local,
             "isRecommended": bool((nlp_filter or {}).get("isRecommended")),
-            "limit": options.get("limit", 5),
+            "limit": options.get("limit", DiscoveryConstants.CHOICE_PAGE_SIZE),
             "page": options.get("page", 0),
         }
         if (store or {}).get("listenerId"):

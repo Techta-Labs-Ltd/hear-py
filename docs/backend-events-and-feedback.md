@@ -54,6 +54,7 @@ Every normal stateful Alexa request follows this sequence:
 | Hear API | `POST /alexa/listeners/resolve` | `X-Api-Key` | Identity-cache miss on a normal request |
 | Hear API | `POST /alexa/listeners/sync` | `X-Api-Key` | Launch/profile synchronisation |
 | Hear API | `POST /alexa/search` | `X-Api-Key` | Search, browse, queue continuation, playback lookup |
+| Hear API | `POST /alexa/availability` | `X-Api-Key` | Local source discovery and source publication/track choice |
 | Resolver | `POST /resolve` | `x-api-key` | Search/source/location interpretation |
 | DynamoDB listener state | `GetItem`, `UpdateItem`, `DeleteItem` | Lambda IAM | Stateful request |
 | DynamoDB notification inbox | `Query`, `GetItem`, `UpdateItem` | Lambda IAM | Launch, notification intent, and notification playback events |
@@ -226,7 +227,7 @@ Content-Type: application/json
 ~~~json
 {
   "query": "local sport",
-  "limit": 5,
+  "limit": 3,
   "page": 0,
   "alexaUserId": "amzn1.ask.account.current-alias",
   "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
@@ -253,6 +254,14 @@ Content-Type: application/json
 
 Empty filters are omitted in real requests. Allowed sorts are `recommended`, `nearest`, `popular`, `latest`, and `trending`.
 
+All listener-facing discovery and choice searches use pages of three. Every spoken
+page starts again at first, second, and third, including pages reached through next
+or previous. Dynamic Alexa entity synonyms are replaced with only the choices on
+the current page. The response offers `show more` only when cached choices remain
+or the API reports another page; it offers `previous` only after the first page.
+Single-content lookups may use a limit of one because they do not produce a spoken
+choice list.
+
 The skill accepts result arrays from `results` or `items` and consumes top-level `total`, `totalPages`, `page`, `client_message`, `search_relaxation`, and `session_key`. A playable item can contain:
 
 - `contentId` or `id`, title/spoken title, summary, category/tags;
@@ -262,6 +271,112 @@ The skill accepts result arrays from `results` or `items` and consumes top-level
 - locality/location metadata needed for spoken context.
 
 Machine-readable request contract: [`schemas/search-request.schema.json`](../schemas/search-request.schema.json).
+
+### 7.1 Alexa availability bridge
+
+Availability is a small catalogue-summary endpoint. It tells the voice client which
+choices to offer; it does not return playable audio and it does not replace
+`/alexa/search`.
+
+~~~http
+POST <HEAR_API_URL>/<HEAR_API_PATH_PREFIX>/availability
+X-Api-Key: <HEAR_API_KEY>
+Content-Type: application/json
+~~~
+
+Location request:
+
+~~~json
+{
+  "filter": {
+    "location": {
+      "city": "Swindon",
+      "latitude": 51.56,
+      "longitude": -1.78
+    }
+  },
+  "page": 0,
+  "limit": 3
+}
+~~~
+
+Location response:
+
+~~~json
+{
+  "page": 0,
+  "limit": 3,
+  "total": 2,
+  "totalPages": 1,
+  "remaining": 0,
+  "hasMore": false,
+  "nextPage": null,
+  "organizations": [
+    {"id": "706cb68b-8059-407e-a696-0651018066cd", "name": "Talking News Federation"}
+  ],
+  "creators": [
+    {"id": "4cd2cb60-1314-4f66-841d-e49ed4820a3b", "name": "Adeshina Ayomide"}
+  ]
+}
+~~~
+
+After the listener chooses a source, the skill sends exactly one of these filters:
+
+~~~json
+{
+  "filter": {"creatorId": "4cd2cb60-1314-4f66-841d-e49ed4820a3b"},
+  "page": 0,
+  "limit": 3
+}
+~~~
+
+~~~json
+{
+  "filter": {"organizationId": "706cb68b-8059-407e-a696-0651018066cd"},
+  "page": 0,
+  "limit": 3
+}
+~~~
+
+Source response:
+
+~~~json
+{
+  "page": 0,
+  "limit": 3,
+  "total": 5,
+  "totalPages": 1,
+  "remaining": 0,
+  "hasMore": false,
+  "nextPage": null,
+  "publicationCount": 5,
+  "standaloneTrackCount": 8,
+  "publications": [
+    {
+      "publicationId": "b7f65f28-5ba0-4775-b4a1-8a58d821eff5",
+      "title": "Morning Briefings",
+      "trackCount": 31,
+      "publishedAt": 1788518929,
+      "updatedAt": 1788518929
+    }
+  ]
+}
+~~~
+
+The skill follows these rules:
+
+1. A location response becomes a paged spoken list of organisations and creators.
+2. A source with publications and standalone tracks prompts for publications or tracks.
+3. A source with publications only goes directly to the publication choices.
+4. A source with no publications goes silently to `/alexa/search`, filtered by the selected creator or organisation and `isPublication: false`.
+5. Choosing tracks calls `/alexa/search` with the source filter and `isPublication: false`; choosing a track then performs a `contentIds` lookup.
+6. Choosing a publication performs a `publicationIds` lookup through `/alexa/search`.
+7. Availability and track-choice requests use a limit of three. Each page is spoken as first, second, and third, and supports names, ordinals, next, and previous. The skill offers more choices only when another API page exists.
+8. A timeout, non-2xx response, invalid response, or empty location choice list falls back to the existing search flow without announcing an availability error.
+
+The availability request intentionally carries no listener identity, profile data,
+utterance, or playback history. The source IDs and coordinates already supplied by
+the catalogue or resolver are sufficient for this bridge.
 
 ## 8. DynamoDB V2 state contract
 

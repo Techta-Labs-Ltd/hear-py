@@ -14,6 +14,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.constants.discovery import DiscoveryConstants
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.playback_state import PlaybackQueue
 from src.models.user import User
@@ -164,7 +165,11 @@ class Search:
         existing = store.get("pendingAmbiguity") or {}
         candidates = list(existing.get("candidates") or reference.get("candidates") or [])
         choices = DialogSelection.unique_candidates(candidates)
-        displayed = choices[:3]
+        displayed = (
+            DialogSelection.displayed_choices(existing)
+            if existing.get("displayedCandidates")
+            else choices[: DiscoveryConstants.CHOICE_PAGE_SIZE]
+        )
         ambiguity_context = nlp.get("ambiguityContext")
         ambiguity_context = ambiguity_context if isinstance(ambiguity_context, dict) else {}
         pending = {
@@ -185,7 +190,8 @@ class Search:
             "candidates": candidates,
             "choiceCandidates": choices,
             "displayedCandidates": displayed,
-            "spokenCandidateOffset": existing.get("spokenCandidateOffset") or min(3, len(choices)),
+            "spokenCandidateOffset": existing.get("spokenCandidateOffset")
+            or min(DiscoveryConstants.CHOICE_PAGE_SIZE, len(choices)),
             "createdAt": existing.get("createdAt") or int(time.time()),
             "expiresAt": int(time.time()) + 300,
         }
@@ -199,17 +205,13 @@ class Search:
             },
         )
         DialogStateManager.activate(handler_input, "ambiguity", context=pending)
-        message_candidates = list(pending.get("displayedCandidates") or candidates[:3])
-        has_more = DialogSelection.has_more_choices(
-            pending,
-            choices,
-            len(message_candidates),
-        )
-        directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(choices)
+        message_candidates = DialogSelection.displayed_choices(pending)
+        has_more = DialogSelection.displayed_has_more(pending)
+        directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(message_candidates)
         if directive:
             handler_input.response_builder.add_directive(directive)
         message = (
-            SearchSpeech.ambiguity_retry_message(message_candidates)
+            SearchSpeech.ambiguity_retry_message(message_candidates, has_more=has_more)
             if nlp.get("ambiguityRetry")
             else SearchSpeech.ambiguous_reference_message(
                 str(reference.get("phrase") or ""),
@@ -252,7 +254,7 @@ class Search:
             or nlp.get("originalUtterance")
             or "that source"
         )
-        limit = max(1, int(payload.get("limit") or len(choices) or 1))
+        limit = DiscoveryConstants.CHOICE_PAGE_SIZE
         total_hits = max(0, int(search_result.get("total_hits") or len(choices)))
         total_pages = BrowseUtils.resolve_total_pages(
             total_hits,
@@ -287,9 +289,11 @@ class Search:
                 "_search_payload": payload,
                 "_request_label": phrase,
                 "client_message": SearchSpeech.publication_ambiguity_message(
-                    choices[:3],
+                    choices[: DiscoveryConstants.CHOICE_PAGE_SIZE],
                     has_more=DialogSelection.has_more_choices(
-                        {"candidatePagination": candidate_pagination}, choices, 3
+                        {"candidatePagination": candidate_pagination},
+                        choices,
+                        DiscoveryConstants.CHOICE_PAGE_SIZE,
                     ),
                 ),
             }
@@ -364,9 +368,7 @@ class Search:
             user_id,
             store,
             q=query,
-            limit=resolved_payload.get("limit")
-            or opts.get("limit")
-            or settings.search_page_limit,
+            limit=DiscoveryConstants.CHOICE_PAGE_SIZE,
             page=resolved_payload.get("page", opts.get("page", 0)),
             sort=resolved_payload.get("sort")
             or Search._search_sort(handler_input, slots, filters),

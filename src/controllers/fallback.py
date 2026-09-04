@@ -9,6 +9,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.models.dialog import DialogSelection
 from src.models.onboarding import Onboarding
 
 
@@ -39,12 +40,15 @@ class FallbackHandler(AbstractRequestHandler):
                 if references and isinstance(references[0], dict)
                 else "that name"
             )
+            displayed = DialogSelection.displayed_choices(pending)
+            has_more = DialogSelection.displayed_has_more(pending)
             message = SearchSpeech.ambiguous_reference_message(
-                str(phrase or "that name"), list(pending.get("candidates") or [])[:3]
+                str(phrase or "that name"), displayed, has_more=has_more
             )
+            reprompt = SearchSpeech.choice_reprompt(displayed, has_more=has_more)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(message))
-                .reprompt(Ssml.ssml("Please say one of the names I just offered."))
+                .reprompt(Ssml.ssml(reprompt))
                 .set_should_end_session(False)
                 .response
             )

@@ -12,6 +12,7 @@ from src.middleware.dialog_validation import (
     DialogValidationPolicy,
 )
 from src.middleware.resolver import ResolverInterceptor
+from src.models.dialog import DialogSelection
 from src.models.resolver_workflow import ResolverWorkflow
 from src.models.user import User
 
@@ -188,6 +189,81 @@ def test_unrelated_name_remains_blocked_during_ambiguity(mock_handler_input):
     failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
 
     assert failure["dialogType"] == "ambiguity"
+
+
+def test_final_ambiguity_page_repeats_current_ordinals_without_more(mock_handler_input):
+    candidates = [
+        {"type": "creator", "id": f"creator-{index}", "name": f"Source {index}"}
+        for index in range(1, 6)
+    ]
+    pending = {
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates[3:],
+        "spokenCandidateOffset": 5,
+        "candidatePagination": {
+            "currentPage": 1,
+            "totalPages": 2,
+            "totalHits": 5,
+            "limit": 3,
+        },
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "pendingAmbiguity": pending,
+            "activeDialog": {"type": "ambiguity", "context": pending},
+        },
+    )
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": "PlayContentIntent",
+            "slots": {"topic": {"name": "topic", "value": "unrelated"}},
+        },
+    }
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert "First, 4" in failure["speech"]
+    assert "Second, 5" in failure["speech"]
+    assert "show more" not in failure["speech"]
+    assert "show more" not in failure["reprompt"]
+    assert "say previous" in failure["reprompt"]
+
+
+def test_ambiguity_name_matching_is_limited_to_the_current_page(mock_handler_input):
+    candidates = [
+        {"type": "creator", "id": f"creator-{index}", "name": f"Source {index}"}
+        for index in range(1, 6)
+    ]
+    pending = {
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates[3:],
+        "spokenCandidateOffset": 5,
+    }
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": "ClarifySelectionIntent",
+            "slots": {"selection": {"name": "selection", "value": "Source 1"}},
+        },
+    }
+
+    assert DialogSelection.match_pending_candidate(
+        mock_handler_input, pending, "Source 1"
+    ) is None
+
+    mock_handler_input.request_envelope["request"]["intent"]["slots"]["selection"][
+        "value"
+    ] = "Source 4"
+    assert (
+        DialogSelection.match_pending_candidate(mock_handler_input, pending, "Source 4")[
+            "id"
+        ]
+        == "creator-4"
+    )
 
 
 @pytest.mark.asyncio

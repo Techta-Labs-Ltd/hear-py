@@ -66,14 +66,10 @@ class DialogValidationPolicy:
     @staticmethod
     def _ambiguity_prompt(active: dict) -> tuple[str, str]:
         context = active.get("context") or {}
-        choices = list(context.get("choiceCandidates") or context.get("candidates") or [])
-        candidates = list(
-            context.get("displayedCandidates")
-            or choices
-            or []
-        )[:3]
+        candidates = DialogSelection.displayed_choices(context)
         pagination = context.get("candidatePagination") or {}
-        has_more = DialogSelection.has_more_choices(context, choices, len(candidates))
+        has_more = DialogSelection.displayed_has_more(context)
+        has_previous = DialogSelection.displayed_has_previous(context)
         publication_picker = pagination.get("kind") == "publication"
         message = (
             SearchSpeech.publication_ambiguity_message(candidates, has_more=has_more)
@@ -84,18 +80,14 @@ class DialogValidationPolicy:
                 has_more=has_more,
             )
         )
-        ordinals = "first"
-        if len(candidates) == 2:
-            ordinals = "first or second"
-        elif len(candidates) >= 3:
-            ordinals = "first, second, or third"
-        ordinal = "" if publication_picker else f" You can also say {ordinals}."
-        reprompt = f"Say a name, or say {ordinals}"
-        if has_more:
-            reprompt += ", or say show more"
         return (
-            message + ordinal,
-            f"{reprompt}.",
+            message,
+            SearchSpeech.choice_reprompt(
+                candidates,
+                publication_picker=publication_picker,
+                has_more=has_more,
+                has_previous=has_previous,
+            ),
         )
 
     @staticmethod

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.constants.discovery import DiscoveryConstants
+
 
 class AlexaEntities:
     @staticmethod
@@ -23,17 +25,14 @@ class AlexaEntities:
             common_words.append(words[0])
         prefix = " ".join(common_words)
         values = []
-        ordinal_synonyms = (
-            ("first", "one", "number one"),
-            ("second", "two", "number two"),
-            ("third", "three", "number three"),
-            ("fourth", "four", "number four"),
-            ("fifth", "five", "number five"),
-            ("sixth", "six", "number six"),
-        )
+        ordinal_synonyms = DiscoveryConstants.CHOICE_ORDINAL_SYNONYMS
         for index, candidate in enumerate(choices):
             name = str(candidate["name"]).strip()
-            synonyms: list[str] = []
+            synonyms = [
+                str(value).strip()
+                for value in candidate.get("synonyms") or []
+                if str(value or "").strip()
+            ]
             if prefix and name.casefold().startswith(prefix.casefold()):
                 suffix = name[len(prefix) :].strip(" ,-–—")
                 if suffix and suffix.casefold() != name.casefold():

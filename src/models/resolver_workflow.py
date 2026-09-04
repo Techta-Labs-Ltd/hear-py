@@ -295,7 +295,13 @@ class ResolverWorkflow:
             "needsRedirect": alexa_intent != "PlayLocalIntent" and intent_name == "local",
             "localResolved": True,
             "directDiscoveryRequest": True,
-            "searchPayload": {"query": "", "filter": {}, "sort": sort, "page": 0, "limit": 20},
+            "searchPayload": {
+                "query": "",
+                "filter": {},
+                "sort": sort,
+                "page": 0,
+                "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
+            },
             "slots": {"residualQuery": "", "isRecommended": intent_name == "trending", "sort": sort},
         }
 
@@ -318,6 +324,8 @@ class ResolverWorkflowRunner:
         slots = AlexaRequest.read(intent, "slots") or {}
         store = User.snapshot(handler_input)
         dialog = DialogStateManager.active_from_store(store)
+        if (dialog or {}).get("type") == "availability":
+            return None
         ambiguity_active = bool(
             isinstance(store.get("pendingAmbiguity"), dict)
             or (dialog or {}).get("type") == "ambiguity"
@@ -428,9 +436,9 @@ class ResolverWorkflowRunner:
         elif result.get("status") == "ambiguous":
             narrowed = (result.get("ambiguities") or [{}])[0].get("candidates") or []
             displayed = (
-                narrowed[:3]
+                narrowed[: DiscoveryConstants.CHOICE_PAGE_SIZE]
                 if result.get("followUpMatched", True)
-                else list(pending.get("displayedCandidates") or [])[:3]
+                else DialogSelection.displayed_choices(pending)
             )
             narrowed_context = {
                 **pending,

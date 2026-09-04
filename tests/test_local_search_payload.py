@@ -82,6 +82,16 @@ def test_different_named_city_uses_city_coordinates_and_nearest_sort(
 def test_absent_query_is_serialized_as_an_empty_string(mock_handler_input):
     payload = SearchPayload.build("user-1", q=None)
     assert payload["query"] == ""
+    assert payload["limit"] == 3
+
+
+def test_resolver_page_size_is_normalized_to_three():
+    payload = SearchPayload.from_resolution(
+        {"searchPayload": {"query": "news", "page": 0, "limit": 20}},
+        3,
+    )
+
+    assert payload["limit"] == 3
 
 
 def test_publication_filter_is_nested_in_search_filter(mock_handler_input):

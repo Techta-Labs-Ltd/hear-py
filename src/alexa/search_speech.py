@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from src.alexa.speech import Speech
+from src.constants.discovery import DiscoveryConstants
 
 
 class SearchSpeech:
@@ -49,7 +50,40 @@ class SearchSpeech:
     def _candidate_names(candidates: list[dict]) -> tuple[list[str], list[str]]:
         raw = [str(item.get("name") or "").strip() for item in candidates if item.get("name")]
         spoken = list(dict.fromkeys(Speech.escape_ssml_lite(name) for name in raw))
-        return raw[:3], spoken[:3]
+        page_size = DiscoveryConstants.CHOICE_PAGE_SIZE
+        return raw[:page_size], spoken[:page_size]
+
+    @staticmethod
+    def _numbered_choices(names: list[str]) -> str:
+        return " ".join(
+            f"{DiscoveryConstants.CHOICE_ORDINALS[index].title()}, {name}."
+            for index, name in enumerate(names[: DiscoveryConstants.CHOICE_PAGE_SIZE])
+        )
+
+    @staticmethod
+    def _ordinal_choices(count: int) -> str:
+        if count <= 1:
+            return "first"
+        if count == 2:
+            return "first or second"
+        return "first, second, or third"
+
+    @staticmethod
+    def choice_reprompt(
+        candidates: list[dict],
+        *,
+        publication_picker: bool = False,
+        has_more: bool = False,
+        has_previous: bool = False,
+    ) -> str:
+        _, names = SearchSpeech._candidate_names(candidates)
+        subject = "the publication name" if publication_picker else "a name"
+        prompt = f"Say {subject}, or say {SearchSpeech._ordinal_choices(len(names))}"
+        if has_more:
+            prompt += ", or say show more"
+        if has_previous:
+            prompt += ", or say previous"
+        return f"{prompt}."
 
     @staticmethod
     def _common_name_prefix(names: list[str]) -> str:
@@ -75,15 +109,20 @@ class SearchSpeech:
             suffixes = [name[len(prefix) :].strip(" ,-Ã¢â‚¬â€œâ€”") for name in raw_names]
             suffixes = [Speech.escape_ssml_lite(value) for value in suffixes if value]
             if len(suffixes) == len(raw_names):
-                choices = f"{', '.join(suffixes[:-1])}, or {suffixes[-1]}"
+                choices = SearchSpeech._numbered_choices(suffixes)
+                ordinals = SearchSpeech._ordinal_choices(len(suffixes))
                 safe_prefix = Speech.escape_ssml_lite(prefix)
                 message = (
                     f"I found several matches beginning {safe_prefix}. "
-                    f"Please say the distinguishing part: {choices}."
+                    f"{choices} You can say the distinguishing part, or {ordinals}."
                 )
                 return SearchSpeech._with_more_options(message, has_more)
-        choices = names[0] if len(names) == 1 else f"{', '.join(names[:-1])}, or {names[-1]}"
-        message = f"I found more than one match for that name. Did you mean {choices}?"
+        choices = SearchSpeech._numbered_choices(names)
+        ordinals = SearchSpeech._ordinal_choices(len(names))
+        message = (
+            f"I found more than one match for that name. {choices} "
+            f"You can say the name, or {ordinals}."
+        )
         return SearchSpeech._with_more_options(message, has_more)
 
     @staticmethod
@@ -96,13 +135,11 @@ class SearchSpeech:
         _, names = SearchSpeech._candidate_names(candidates)
         if not names:
             return f"{introduction} Which publication would you like?"
-        choices = names[0] if len(names) == 1 else f"{', '.join(names[:-1])}, or {names[-1]}"
-        ordinals = "first" if len(names) == 1 else "first or second"
-        if len(names) >= 3:
-            ordinals = "first, second, or third"
+        choices = SearchSpeech._numbered_choices(names)
+        ordinals = SearchSpeech._ordinal_choices(len(names))
         message = (
-            f"{introduction} Which publication would you like: {choices}? "
-            f"You can say the publication name, or say {ordinals}."
+            f"{introduction} {choices} "
+            f"You can say the publication name, or {ordinals}."
         )
         return SearchSpeech._with_more_options(message, has_more)
 
@@ -168,14 +205,27 @@ class SearchSpeech:
         )
 
     @staticmethod
-    def ambiguity_retry_message(candidates: list[dict]) -> str:
-        choices = SearchSpeech.ambiguous_reference_message("that name", candidates)
-        return f"That did not match the available choices. {choices} You can also say show more."
+    def ambiguity_retry_message(
+        candidates: list[dict], *, has_more: bool = False
+    ) -> str:
+        _, names = SearchSpeech._candidate_names(candidates)
+        choices = SearchSpeech._numbered_choices(names)
+        ordinals = SearchSpeech._ordinal_choices(len(names))
+        message = (
+            f"That did not match the available choices. {choices} "
+            f"You can say the name, or {ordinals}."
+        )
+        return SearchSpeech._with_more_options(message, has_more)
 
     @staticmethod
     def ambiguity_exhausted_message(candidates: list[dict]) -> str:
-        choices = SearchSpeech.ambiguous_reference_message("that name", candidates)
-        return f"Those are all the matches I found. {choices}"
+        _, names = SearchSpeech._candidate_names(candidates)
+        choices = SearchSpeech._numbered_choices(names)
+        ordinals = SearchSpeech._ordinal_choices(len(names))
+        return (
+            f"Those are all the matches I found. {choices} "
+            f"You can say the name, or {ordinals}."
+        )
 
     @staticmethod
     def trending_intro(count) -> str:

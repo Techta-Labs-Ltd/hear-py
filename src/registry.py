@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.container import ApplicationContainer
+from src.controllers.availability import AvailabilityDialogHandler
 from src.controllers.browse import (
     BrowseContentHandler,
     BrowseNavigationHandler,
@@ -91,6 +92,7 @@ class RouteRegistry:
     GATE_HANDLERS = (
         CanFulfillIntentHandler,
         DialogValidationGateHandler,
+        AvailabilityDialogHandler,
         FeedbackGateHandler,
         OnboardingGateHandler,
         TownCaptureHandler,

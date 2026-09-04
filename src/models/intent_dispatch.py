@@ -77,7 +77,6 @@ class IntentDispatcher:
         }
     )
     ACTIONS = {
-        "local": PlayContent,
         "creator": PlayCreator,
         "organization": PlayOrganization,
         "publication": PlayContent,
@@ -126,6 +125,8 @@ class IntentDispatcher:
             return self._deps.browse.content(handler_input)
         if intent == "show_more":
             return self._deps.browse.more(handler_input)
+        if intent == "local":
+            return self._deps.availability.begin_local(handler_input, nlp_data)
         action_type = self.ACTIONS.get(intent)
         if action_type:
             return action_type(deps=self._deps).execute(handler_input)

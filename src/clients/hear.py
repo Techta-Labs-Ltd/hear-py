@@ -8,7 +8,9 @@ from typing import Any
 import httpx
 
 from config import settings
+from src.clients.availability import AvailabilityResponse
 from src.clients.pool import HttpPool
+from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.search_payload import SearchPayload
@@ -134,6 +136,9 @@ class HearApiClient:
     def _build_alexa_search_path(self) -> str:
         return self._build_alexa_relative_path("search")
 
+    def _build_alexa_availability_path(self) -> str:
+        return self._build_alexa_relative_path("availability")
+
     @staticmethod
     def _is_retryable(status: int) -> bool:
         return status >= 500
@@ -217,6 +222,46 @@ class HearApiClient:
             else:
                 break
         return dict(HearApiSupport._EMPTY_SEARCH_RESULT)
+
+    async def availability(
+        self, payload: dict | None = None, timeout_ms: int | None = None
+    ) -> dict:
+        requested = payload if isinstance(payload, dict) else {}
+        availability_filter = AvailabilityResponse.normalize_filter(requested.get("filter"))
+        body = {
+            "filter": availability_filter or {},
+            "page": AvailabilityResponse.integer(requested.get("page")),
+            "limit": AvailabilityResponse.integer(
+                requested.get("limit"), DiscoveryConstants.CHOICE_PAGE_SIZE, 1
+            ),
+        }
+        if availability_filter is None:
+            supplied_filter = requested.get("filter")
+            HearApiSupport.logger.warning(
+                "Hear API availability request rejected invalid filterKeys=%s",
+                sorted(supplied_filter.keys()) if isinstance(supplied_filter, dict) else [],
+            )
+            return AvailabilityResponse.failed(body)
+        path = self._build_alexa_availability_path()
+        HearApiSupport.logger.info(
+            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s",
+            path,
+            body["page"],
+            body["limit"],
+            sorted(body["filter"].keys()),
+        )
+        for attempt in range(self._retry_count + 1):
+            status, data = await self._raw_request("POST", path, body, timeout_ms)
+            HearApiSupport.logger.info(
+                "Hear API availability response attempt=%s status=%s", attempt + 1, status
+            )
+            if status == 200 and isinstance(data, dict):
+                return AvailabilityResponse.normalize(data, body)
+            if attempt < self._retry_count and self._is_retryable(status):
+                await asyncio.sleep(settings.HEAR_API_RETRY_BACKOFF_MS / 1000.0 * 2**attempt)
+            else:
+                break
+        return AvailabilityResponse.failed(body)
 
     async def resolve_listener_identity(
         self,

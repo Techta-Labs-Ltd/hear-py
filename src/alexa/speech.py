@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.constants.discovery import DiscoveryConstants
 from src.utils.content import ContentUtils
 
 
@@ -226,8 +227,13 @@ class Speech:
 
     @staticmethod
     def _build_community_intro(locality, total_hits) -> str:
-        count = min(3, total_hits) if isinstance(total_hits, (int, float)) and total_hits > 0 else 3
-        picks = "3 picks" if count == 3 else f"{count} picks"
+        page_size = DiscoveryConstants.CHOICE_PAGE_SIZE
+        count = (
+            min(page_size, total_hits)
+            if isinstance(total_hits, (int, float)) and total_hits > 0
+            else page_size
+        )
+        picks = f"{count} picks"
         if locality:
             return f"Here are {picks} from your community in {Speech.escape_ssml_lite(locality)}."
         return f"Here are {picks} from your community."

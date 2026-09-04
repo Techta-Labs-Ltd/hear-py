@@ -77,6 +77,30 @@ class DialogSelection:
         )
 
     @staticmethod
+    def displayed_choices(pending: dict) -> list[dict]:
+        choices = DialogSelection.choices(pending)
+        return list(
+            pending.get("displayedCandidates")
+            or choices[: DiscoveryConstants.CHOICE_PAGE_SIZE]
+        )[: DiscoveryConstants.CHOICE_PAGE_SIZE]
+
+    @staticmethod
+    def current_choice_end(pending: dict) -> int:
+        displayed = DialogSelection.displayed_choices(pending)
+        return max(
+            len(displayed),
+            int(pending.get("spokenCandidateOffset") or len(displayed)),
+        )
+
+    @staticmethod
+    def current_choice_start(pending: dict) -> int:
+        return max(
+            0,
+            DialogSelection.current_choice_end(pending)
+            - len(DialogSelection.displayed_choices(pending)),
+        )
+
+    @staticmethod
     def _selection_text(value: object) -> str:
         text = DialogSelection.normalize_ordinal(value)
         text = re.sub(
@@ -156,21 +180,19 @@ class DialogSelection:
 
     @staticmethod
     def match_pending_candidate(handler_input, pending: dict, raw: str) -> dict | None:
-        candidates = list(pending.get("candidates") or [])
-        resolved = DialogSelection._resolved_candidate(handler_input, candidates)
+        displayed = DialogSelection.displayed_choices(pending)
+        resolved = DialogSelection._resolved_candidate(handler_input, displayed)
         if resolved:
             return resolved
-        choices = DialogSelection.choices(pending)
-        displayed = list(pending.get("displayedCandidates") or choices[:3])
         raw_key = DialogSelection.normalize_ordinal(raw)
         ordinal = DiscoveryConstants.ORDINAL_INDEX.get(raw_key)
         if ordinal is not None and ordinal < len(displayed):
             return displayed[ordinal]
-        return DialogSelection.closest_candidate(raw_key, choices)
+        return DialogSelection.closest_candidate(raw_key, displayed)
 
     @staticmethod
     def request_candidate(handler_input, pending: dict) -> dict | None:
-        candidates = DialogSelection.choices(pending)
+        candidates = DialogSelection.displayed_choices(pending)
         resolved = DialogSelection._resolved_candidate(handler_input, candidates)
         if resolved:
             return resolved
@@ -193,6 +215,18 @@ class DialogSelection:
     @staticmethod
     def has_more_choices(pending: dict, candidates: list[dict], next_offset: int) -> bool:
         return next_offset < len(candidates) or DialogSelection.has_more_pages(pending)
+
+    @staticmethod
+    def displayed_has_more(pending: dict) -> bool:
+        return DialogSelection.has_more_choices(
+            pending,
+            DialogSelection.choices(pending),
+            DialogSelection.current_choice_end(pending),
+        )
+
+    @staticmethod
+    def displayed_has_previous(pending: dict) -> bool:
+        return DialogSelection.current_choice_start(pending) > 0
 
 
 class DialogStateManager:
