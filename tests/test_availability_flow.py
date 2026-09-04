@@ -349,7 +349,10 @@ async def test_resolver_location_payload_routes_to_availability_instead_of_searc
             "longitude": -1.78,
         }
     }
-    assert "Talking News Federation" in AvailabilityTestSupport.speech(response)
+    speech = AvailabilityTestSupport.speech(response)
+    assert "I found content near you from Talking News Federation." in speech
+    assert "Would you like to listen?" in speech
+    assert "I found one local source" not in speech
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
 
 

@@ -102,7 +102,7 @@ class AvailabilitySpeech:
     @staticmethod
     def one_local_source(source_name: str) -> str:
         safe = Speech.escape_ssml_lite(source_name)
-        return f"I found one local source, {safe}. Would you like to hear it?"
+        return f"I found content near you from {safe}. Would you like to listen?"
 
     @staticmethod
     def source_content_question(
