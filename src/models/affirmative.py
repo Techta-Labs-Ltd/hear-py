@@ -361,6 +361,7 @@ class Affirmative:
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
         result.setdefault("_search_payload", dict(payload))
+        result.setdefault("_request_label", label)
         result = Search.apply_publication_result_ambiguity(
             handler_input,
             result,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -462,24 +462,19 @@ class Search:
         first = search_result["results"][0]
         content = Search._resolve_content_for_playback(first, handler_input)
         if not content:
-            return Search._build_next_playable_response(
-                handler_input, store, search_result["results"], intent, deps=d
-            )
-        if not ContentNormalizer.is_playable_content_item(content):
-            return Search._build_next_playable_response(
-                handler_input, store, search_result["results"], intent, deps=d
+            return await Search._build_next_playable_response(
+                handler_input, store, search_result, opts, intent, deps=d
             )
         title = ContentUtils.content_title_for_speech(content)
         credit = ContentUtils.pick_content_credit(content)
         total = search_result.get("total_hits") or len(search_result["results"])
         if intro_override:
             intro = intro_override
-        elif title and credit:
-            intro = f"I found {total} stories. Now playing {Speech.escape_ssml_lite(title)}, by {Speech.escape_ssml_lite(credit)}."
-        elif title:
-            intro = f"I found {total} stories. Now playing {Speech.escape_ssml_lite(title)}."
         else:
-            intro = f"I found {total} stories. Now playing the first one."
+            intro = SearchSpeech.search_results_intro(
+                total, search_result.get("_search_payload"),
+                search_result.get("_request_label") or q, title, credit,
+            )
         queue_items = Search.initial_search_queue_items(search_result)
         d.playback.queue.initialize(
             handler_input,
@@ -494,16 +489,13 @@ class Search:
         )
 
     @staticmethod
-    def _build_next_playable_response(
-        handler_input: HandlerInput,
-        store: Dict[str, Any],
-        items: List[Dict[str, Any]],
-        discovery_intent: str,
-        *,
-        deps: object | None = None,
+    async def _build_next_playable_response(
+        handler_input: HandlerInput, store: Dict[str, Any], search_result: Dict[str, Any],
+        options: Dict[str, Any], discovery_intent: str, *, deps: object | None = None,
     ):
         """Fallback: try subsequent items in the result set until a playable one is found."""
         d = Search._dependencies(deps)
+        items = list(search_result.get("results") or [])
         for i in range(1, len(items)):
             item = items[i]
             if not ContentNormalizer.is_playable_content_item(item):
@@ -511,10 +503,9 @@ class Search:
             content = items[i]
             title = ContentUtils.content_title_for_speech(content)
             credit = ContentUtils.pick_content_credit(content)
-            intro = (
-                f"Now playing {Speech.escape_ssml_lite(title)}, by {Speech.escape_ssml_lite(credit)}."
-                if title and credit
-                else "Now playing the next story."
+            intro = options.get("introOverride") or SearchSpeech.search_results_intro(
+                search_result.get("total_hits") or len(items), search_result.get("_search_payload"),
+                search_result.get("_request_label") or options.get("q"), title, credit,
             )
             d.playback.queue.initialize(
                 handler_input,
@@ -523,7 +514,7 @@ class Search:
                 locality=store.get("locality"),
                 start_index=i,
             )
-            return d.playback.start(
+            return await d.playback.start(
                 handler_input, content, intro, 0, {"preserveSessionQueue": True}
             )
         return (
@@ -611,8 +602,11 @@ class Search:
         store = User.snapshot(handler_input)
         title = ContentUtils.content_title_for_speech(content)
         credit = ContentUtils.pick_content_credit(content) or label
-        intro = Speech.LOCAL_CONTENT_FALLBACK(title, credit)
         payload = search_result.get("_search_payload") or {}
+        intro = SearchSpeech.search_results_intro(
+            search_result.get("total_hits") or len(items), payload,
+            search_result.get("_request_label") or label, title, credit,
+        )
         intent = AlexaRequest.get_intent_name(handler_input) or "search"
         catalog = BrowseUtils.build_catalog_from_search_result(
             search_result,

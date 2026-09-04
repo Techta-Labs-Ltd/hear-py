@@ -62,3 +62,74 @@ def test_publication_ambiguity_announces_show_more_when_pages_remain():
     )
 
     assert message.endswith("There are more options. Say show more to hear them.")
+
+
+def test_broad_search_intro_names_the_request_without_first_result_metadata():
+    message = SearchSpeech.search_results_intro(
+        37,
+        {
+            "query": "local transport",
+            "filter": {"city": "Herne Bay", "tags": ["local-transport"]},
+        },
+        "content on local transport in Herne Bay",
+        "Oxfordshire County Council ends free park and ride bus tickets",
+        "Wallingford and District Talking Newspaper",
+    )
+
+    assert (
+        message
+        == "Here are 37 stories about local transport in Herne Bay. Here's the first one."
+    )
+    assert "Oxfordshire" not in message
+    assert "Wallingford" not in message
+
+
+def test_broad_category_intro_uses_filter_when_no_request_label_is_available():
+    message = SearchSpeech.search_results_intro(
+        4,
+        {"query": "", "filter": {"categorySlugs": ["local-history"]}},
+    )
+
+    assert message == "Here are 4 stories about local history. Here's the first one."
+
+
+def test_broad_category_intro_keeps_the_residual_search_terms():
+    message = SearchSpeech.search_results_intro(
+        9,
+        {"query": "heatwave", "filter": {"categorySlugs": ["community-services"]}},
+        "community services",
+    )
+
+    assert (
+        message
+        == "Here are 9 stories about community services and heatwave. Here's the first one."
+    )
+
+
+def test_location_only_intro_uses_natural_source_wording():
+    message = SearchSpeech.search_results_intro(
+        6,
+        {"query": "", "filter": {"city": "Herne Bay"}},
+        "content in Herne Bay",
+    )
+
+    assert message == "Here are 6 stories from Herne Bay. Here's the first one."
+
+
+def test_source_specific_intro_keeps_first_result_context():
+    message = SearchSpeech.search_results_intro(
+        2,
+        {"query": "", "filter": {"organizationIds": ["org-york"]}},
+        "content from York Talking News",
+        "Community update",
+        "York Talking News",
+    )
+
+    assert message == "I found 2 stories. Now playing Community update, by York Talking News."
+
+
+def test_trending_intro_does_not_attribute_the_whole_list_to_the_first_source():
+    assert (
+        SearchSpeech.trending_intro(8)
+        == "Here are 8 trending stories. Here's the first one."
+    )

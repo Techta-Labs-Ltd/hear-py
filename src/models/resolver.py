@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from src.constants.resolver import ResolverConstants
 from src.utils.filters import SearchFilterUtils
 
 
@@ -235,6 +236,42 @@ class ResolverResult:
             max(location.start, source.start) < min(location.end, source.end) for source in sources
         )
 
+    def _credible_source_locations(self) -> tuple[ResolvedEntity, ...]:
+        locations = self.entities_of_type("location")
+        source_locations = tuple(
+            entity
+            for entity in locations
+            if str(entity.location_role or "").casefold() == "source"
+            and entity.confidence >= ResolverConstants.SOURCE_LOCATION_MIN_CONFIDENCE
+        )
+        if source_locations:
+            return source_locations
+        return tuple(
+            entity
+            for entity in locations
+            if entity.confidence == 100
+            and entity.location_role
+            and entity.location_role.casefold() != "unspecified"
+        )
+
+    @staticmethod
+    def _preferred_search_location(
+        locations: tuple[ResolvedEntity, ...],
+    ) -> ResolvedEntity | None:
+        unique: dict[tuple[str, str], ResolvedEntity] = {}
+        for location in locations:
+            key = (
+                str(location.country_code or "").casefold(),
+                location.canonical_value.casefold(),
+            )
+            current = unique.get(key)
+            if current is None or location.confidence > current.confidence:
+                unique[key] = location
+        candidates = tuple(unique.values())
+        exact = tuple(location for location in candidates if location.confidence == 100)
+        preferred = exact or candidates
+        return preferred[0] if len(preferred) == 1 else None
+
     def _location_payload(
         self,
         slots: dict,
@@ -252,11 +289,7 @@ class ResolverResult:
         elif prefer_location:
             all_locations = self.fully_matched_entities_of_type("location")
         else:
-            all_locations = tuple(
-                entity
-                for entity in self.fully_matched_entities_of_type("location")
-                if entity.location_role and entity.location_role != "unspecified"
-            )
+            all_locations = self._credible_source_locations()
         locations = (
             all_locations
             if prefer_location
@@ -268,7 +301,13 @@ class ResolverResult:
         )
         if not locations:
             return {"match": None, "candidates": []}
-        location = locations[0]
+        location = (
+            locations[0]
+            if prefer_location or self.intent == "location"
+            else ResolverResult._preferred_search_location(locations)
+        )
+        if location is None:
+            return {"match": None, "candidates": []}
         match = {
             "city": location.canonical_value,
             "locality": location.canonical_value,
@@ -357,7 +396,7 @@ class ResolverResult:
         if resolution.get("match"):
             accepted_entities.update(
                 (entity.entity_type, entity.entity_id)
-                for entity in self.selected_entities_of_type("location")
+                for entity in self.entities_of_type("location")
                 if entity.canonical_value == resolution["match"].get("city")
             )
         entities = [

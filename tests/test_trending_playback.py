@@ -59,6 +59,6 @@ async def test_recommendation_intent_uses_trending_handler_and_announces_count(
     options = autoplay.await_args.args[2]
     assert (
         options["introOverride"]
-        == "I found 8 trending stories. Now playing Community update, by Hear Reporter."
+        == "Here are 8 trending stories. Here's the first one."
     )
     assert response["directives"][0]["type"] == "AudioPlayer.Play"

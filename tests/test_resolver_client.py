@@ -509,6 +509,124 @@ def test_search_accepts_exact_source_location():
     assert result["slots"]["isLocal"] is True
 
 
+def test_search_prefers_phonetic_source_location_over_unspecified_noise():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-1826527188",
+            "canonicalValue": "Forfar",
+            "originalText": "favour",
+            "confidence": 92,
+            "method": "phonetic_bare",
+            "start": 8,
+            "end": 14,
+            "latitude": 56.6442,
+            "longitude": -2.8884,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        },
+        {
+            "entityType": "location",
+            "entityId": "location-1826454069",
+            "canonicalValue": "Herne Bay",
+            "originalText": "arn bay",
+            "confidence": 89,
+            "method": "phonetic",
+            "start": 20,
+            "end": 27,
+            "latitude": 51.37,
+            "longitude": 1.13,
+            "countryCode": "gb",
+            "locationRole": "source",
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play a favour from arn bay"
+    )
+
+    assert result["searchPayload"] == {
+        "query": "",
+        "sort": "latest",
+        "filter": {
+            "city": "Herne Bay",
+            "countryCode": "gb",
+            "latitude": 51.37,
+            "longitude": 1.13,
+        },
+    }
+    assert result["slots"]["city"] == "Herne Bay"
+    assert result["slots"]["isLocal"] is True
+    assert [entity["canonicalValue"] for entity in result["entities"]] == ["Herne Bay"]
+
+
+def test_search_rejects_low_confidence_source_location():
+    payload = _response(intent="search")
+    payload["slots"].update({"residualQuery": "", "sort": "relevance"})
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-herne-bay",
+            "canonicalValue": "Herne Bay",
+            "originalText": "early bay",
+            "confidence": 70,
+            "method": "phonetic",
+            "start": 10,
+            "end": 19,
+            "latitude": 51.37,
+            "longitude": 1.13,
+            "countryCode": "gb",
+            "locationRole": "source",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play news from early bay"
+    )
+
+    assert result["searchPayload"] == {
+        "query": "news from early bay",
+        "filter": {},
+    }
+    assert result["entities"] == []
+
+
+def test_search_does_not_choose_between_two_equally_credible_source_locations():
+    payload = _response(intent="search")
+    payload["slots"].update({"residualQuery": "", "sort": "relevance"})
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": f"location-{name.casefold().replace(' ', '-')}",
+            "canonicalValue": name,
+            "originalText": original,
+            "confidence": confidence,
+            "method": "phonetic",
+            "start": start,
+            "end": end,
+            "latitude": latitude,
+            "longitude": longitude,
+            "countryCode": "gb",
+            "locationRole": "source",
+        }
+        for name, original, confidence, start, end, latitude, longitude in (
+            ("Herne Bay", "arn bay", 89, 10, 17, 51.37, 1.13),
+            ("Cardiff", "card if", 88, 22, 29, 51.4816, -3.1791),
+        )
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play news from arn bay or card if"
+    )
+
+    assert result["searchPayload"] == {
+        "query": "news from arn bay or card if",
+        "filter": {},
+    }
+    assert result["entities"] == []
+
+
 def test_search_drops_unspecified_location_even_at_full_confidence():
     payload = _response(intent="search")
     payload["entities"] = [
