@@ -10,6 +10,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.constants.discovery import DiscoveryConstants
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.user import User
 from src.utils.browse import BrowseUtils
@@ -40,20 +41,6 @@ class Browse:
     def has_active_ambiguity(self, handler_input: HandlerInput) -> bool:
         pending = self.snapshot(handler_input).get("pendingAmbiguity")
         return isinstance(pending, dict) and bool(pending.get("candidates"))
-
-    @staticmethod
-    def _ambiguity_reprompt(publication_picker: bool, has_more: bool) -> str:
-        if publication_picker:
-            navigation = "show more or previous" if has_more else "previous"
-            return (
-                "Which publication would you like? Say its name, first, second, or third. "
-                f"You can also say {navigation}."
-            )
-        return (
-            "Please say one of the names I just offered, or say show more."
-            if has_more
-            else "Please say one of the names I just offered."
-        )
 
     @staticmethod
     def _merge_ambiguity_candidates(existing: list[dict], incoming: list[dict]) -> list[dict]:
@@ -92,7 +79,7 @@ class Browse:
         self, handler_input: HandlerInput, pending: dict
     ) -> tuple[dict, bool]:
         pagination = dict(pending.get("candidatePagination") or {})
-        limit = max(1, int(pagination.get("limit") or settings.search_page_limit))
+        limit = DiscoveryConstants.CHOICE_PAGE_SIZE
         next_page = max(0, int(pagination.get("currentPage") or 0)) + 1
         payload = SearchPayload.with_pagination(pending.get("searchPayload"), limit)
         payload["page"] = next_page
@@ -414,15 +401,16 @@ class Browse:
 
     async def _more_ambiguity(self, handler_input: HandlerInput, pending: dict):
         candidates = list(pending.get("choiceCandidates") or pending["candidates"])
-        offset = max(3, int(pending.get("spokenCandidateOffset") or 3))
-        next_candidates = candidates[offset : offset + 3]
+        page_size = DiscoveryConstants.CHOICE_PAGE_SIZE
+        offset = DialogSelection.current_choice_end(pending)
+        next_candidates = candidates[offset : offset + page_size]
         load_failed = False
         if not next_candidates and DialogSelection.has_more_pages(pending):
             pending, load_failed = await self._fetch_next_ambiguity_page(handler_input, pending)
             candidates = list(
                 pending.get("choiceCandidates") or pending.get("candidates") or []
             )
-            next_candidates = candidates[offset : offset + 3]
+            next_candidates = candidates[offset : offset + page_size]
             if not load_failed:
                 User.update(handler_input, {"pendingAmbiguity": pending})
                 DialogStateManager.activate(handler_input, "ambiguity", context=pending)
@@ -435,7 +423,7 @@ class Browse:
                 .response
             )
         if not next_candidates:
-            next_candidates = list(pending.get("displayedCandidates") or candidates[:3])
+            next_candidates = DialogSelection.displayed_choices(pending)
             publication_picker = (pending.get("candidatePagination") or {}).get(
                 "kind"
             ) == "publication"
@@ -475,8 +463,16 @@ class Browse:
             candidates,
             int(pending.get("spokenCandidateOffset") or len(next_candidates)),
         )
-        reprompt = Browse._ambiguity_reprompt(publication_picker, has_more)
-        return Browse._choice_navigation_response(handler_input, candidates, message, reprompt)
+        has_previous = DialogSelection.displayed_has_previous(pending)
+        reprompt = SearchSpeech.choice_reprompt(
+            next_candidates,
+            publication_picker=publication_picker,
+            has_more=has_more,
+            has_previous=has_previous,
+        )
+        return Browse._choice_navigation_response(
+            handler_input, next_candidates, message, reprompt
+        )
 
     async def more(self, handler_input: HandlerInput):
         store = User.snapshot(handler_input)
@@ -547,14 +543,11 @@ class Browse:
                 .response
             )
         candidates = list(pending.get("choiceCandidates") or pending["candidates"])
-        displayed = list(pending.get("displayedCandidates") or candidates[:3])
-        offset = max(
-            len(displayed),
-            int(pending.get("spokenCandidateOffset") or len(displayed)),
-        )
-        current_start = max(0, offset - len(displayed))
-        previous_start = max(0, current_start - 3)
-        previous_candidates = candidates[previous_start : previous_start + 3]
+        current_start = DialogSelection.current_choice_start(pending)
+        previous_start = max(0, current_start - DiscoveryConstants.CHOICE_PAGE_SIZE)
+        previous_candidates = candidates[
+            previous_start : previous_start + DiscoveryConstants.CHOICE_PAGE_SIZE
+        ]
         has_more = DialogSelection.has_more_choices(
             pending,
             candidates,
@@ -596,7 +589,13 @@ class Browse:
                     has_more=has_more,
                 )
             )
-        reprompt = Browse._ambiguity_reprompt(publication_picker, has_more)
+        has_previous = DialogSelection.displayed_has_previous(pending)
+        reprompt = SearchSpeech.choice_reprompt(
+            previous_candidates,
+            publication_picker=publication_picker,
+            has_more=has_more,
+            has_previous=has_previous,
+        )
         return Browse._choice_navigation_response(
-            handler_input, candidates, message, reprompt
+            handler_input, previous_candidates, message, reprompt
         )

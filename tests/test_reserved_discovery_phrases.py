@@ -402,6 +402,7 @@ async def test_complete_zero_slot_discovery_stays_out_of_resolver(
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == expected_intent
     assert nlp["searchPayload"]["sort"] == expected_sort
+    assert nlp["searchPayload"]["limit"] == 3
     assert nlp["directDiscoveryRequest"] is True
     assert (
         mock_handler_input.attributes_manager.request_attributes.get("_pendingConfirmation") is None

@@ -49,6 +49,106 @@ def test_location_path_applies_configured_prefix_once():
     )
 
 
+def test_availability_path_applies_configured_prefix_once():
+    client = HearApiClient(HearApiOptions(path_prefix="alexa"))
+    assert client._build_api_path(client._build_alexa_availability_path()) == "/alexa/availability"
+
+
+@pytest.mark.asyncio
+async def test_availability_sends_bridge_contract_and_normalizes_response(monkeypatch):
+    captured = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        captured.update({"method": method, "path": path, "body": body})
+        return (
+            200,
+            {
+                "page": 0,
+                "limit": 3,
+                "total": 2,
+                "totalPages": 1,
+                "remaining": 0,
+                "hasMore": False,
+                "nextPage": None,
+                "publicationCount": 1,
+                "standaloneTrackCount": 7,
+                "organizations": [{"id": "org-1", "name": "Redcar Talking Newspaper"}],
+                "creators": [{"id": "creator-1", "name": "A Reader"}],
+                "publications": [
+                    {
+                        "publicationId": "publication-1",
+                        "title": "Redcar News",
+                        "trackCount": 4,
+                        "publishedAt": 1788393600,
+                        "updatedAt": 1788393600,
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    result = await HearApiClient().availability(
+        {
+            "filter": {
+                "location": {
+                    "city": "Swindon",
+                    "latitude": 51.56,
+                    "longitude": -1.78,
+                }
+            },
+            "page": 0,
+            "limit": 3,
+        }
+    )
+
+    assert captured == {
+        "method": "POST",
+        "path": "/availability",
+        "body": {
+            "filter": {
+                "location": {
+                    "city": "Swindon",
+                    "latitude": 51.56,
+                    "longitude": -1.78,
+                }
+            },
+            "page": 0,
+            "limit": 3,
+        },
+    }
+    assert result["failed"] is False
+    assert result["publication_count"] == 1
+    assert result["standalone_track_count"] == 7
+    assert result["organizations"] == [
+        {"type": "organization", "id": "org-1", "name": "Redcar Talking Newspaper"}
+    ]
+    assert result["publications"][0]["id"] == "publication-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "availability_filter",
+    [
+        {},
+        {"creatorId": "creator-1", "organizationId": "org-1"},
+        {"creatorIds": ["creator-1"]},
+        {"location": {"city": "Swindon"}, "creatorId": "creator-1"},
+        {"location": {"city": "Swindon", "tags": ["news"]}},
+    ],
+)
+async def test_availability_rejects_non_exclusive_filters_without_an_http_call(
+    monkeypatch, availability_filter
+):
+    request = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "_raw_request", request)
+
+    result = await HearApiClient().availability({"filter": availability_filter})
+
+    request.assert_not_awaited()
+    assert result["failed"] is True
+    assert result["_availability_payload"]["filter"] == {}
+
+
 @pytest.mark.asyncio
 async def test_search_omits_sort_values_the_api_rejects(monkeypatch):
     sent = {}
@@ -119,9 +219,7 @@ async def test_identity_resolution_uses_dedicated_endpoint(monkeypatch):
     captured = {}
 
     async def fake_request(self, method, path, body, timeout_ms):
-        captured.update(
-            {"method": method, "path": path, "body": body}
-        )
+        captured.update({"method": method, "path": path, "body": body})
         return (200, {"listenerId": "listener-1"})
 
     monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)

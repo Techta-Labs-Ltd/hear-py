@@ -371,7 +371,13 @@
             "more choices",
             "next publications",
             "show next publications",
-            "show more publications"
+            "show more publications",
+            "more tracks",
+            "show more tracks",
+            "more local sources",
+            "show more local sources",
+            "next tracks",
+            "next local sources"
           ]
         },
         {
@@ -384,7 +390,11 @@
             "show earlier publications",
             "show the previous publications",
             "go back to previous choices",
-            "back to previous choices"
+            "back to previous choices",
+            "previous tracks",
+            "show previous tracks",
+            "previous local sources",
+            "show previous local sources"
           ]
         },
         {

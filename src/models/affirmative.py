@@ -8,12 +8,15 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.entities import AlexaEntities
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.request import AlexaRequest
+from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
-from src.models.dialog import DialogStateManager
+from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.feedback_response import EnjoyedFeedback
 from src.models.playback_controls import PlaybackControls
 from src.models.playback_state import PlaybackQueue
@@ -36,15 +39,21 @@ class Affirmative:
         self._deps = deps
 
     @staticmethod
-    def _ambiguity_response(handler_input):
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml("Please say one of the names I offered, or say show more.")
-            )
-            .reprompt(Ssml.ssml("Say one of the names, or say show more."))
+    def _ambiguity_response(handler_input, store: dict):
+        pending = dict(store.get("pendingAmbiguity") or {})
+        displayed = DialogSelection.displayed_choices(pending)
+        has_more = DialogSelection.displayed_has_more(pending)
+        message = SearchSpeech.ambiguity_retry_message(displayed, has_more=has_more)
+        reprompt = SearchSpeech.choice_reprompt(displayed, has_more=has_more)
+        builder = (
+            handler_input.response_builder.speak(Ssml.ssml(message))
+            .reprompt(Ssml.ssml(reprompt))
             .set_should_end_session(False)
-            .response
         )
+        directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(displayed)
+        if directive:
+            builder.add_directive(directive)
+        return builder.response
 
     async def _dialog_response(
         self,
@@ -54,7 +63,7 @@ class Affirmative:
         dialog_type: str | None,
     ):
         if dialog_type == "ambiguity":
-            return Affirmative._ambiguity_response(handler_input)
+            return Affirmative._ambiguity_response(handler_input, store)
         if dialog_type == "asr_repair":
             return self._handle_asr_repair_yes(handler_input, store)
         if dialog_type == "latest_source":
@@ -220,7 +229,7 @@ class Affirmative:
             "filter": filters,
             "sort": "latest",
             "page": 0,
-            "limit": 3,
+            "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
         }
         payload = SearchPayload.with_identity(
             payload,
@@ -285,32 +294,7 @@ class Affirmative:
             "slots": {"city": city, "isLocal": True, "residualQuery": ""},
         }
         RequestContext.replace_request(handler_input, attrs)
-        result = await Search.discover_content_via_search(
-            handler_input, {"q": "", "intent": "local"}, deps=self._deps
-        )
-        if result.get("results"):
-            return await Search.auto_play_first_from_search(
-                handler_input,
-                result,
-                {
-                    "discoveryIntent": "local",
-                    "q": "",
-                    "introOverride": f"Here is the latest from {Speech.escape_ssml_lite(city)}.",
-                },
-                deps=self._deps,
-            )
-        if result.get("client_message"):
-            speech = Speech.escape_ssml_lite(str(result["client_message"]))
-        elif result.get("failed"):
-            speech = "I cannot reach the Hear catalogue right now. Please try again shortly."
-        else:
-            speech = f"I couldn't find anything available from {Speech.escape_ssml_lite(city)} right now."
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(speech))
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-            .set_should_end_session(False)
-            .response
-        )
+        return await self._deps.availability.begin_local(handler_input, attrs["_nlp"])
 
     def _expired_resolution_response(self, handler_input):
         self._deps.user.update(
@@ -496,6 +480,11 @@ class Affirmative:
         )
         label = str(resolution.get("confirmationLabel") or "that request")
         self._clear_confirmed_resolution(handler_input, resolution)
+        availability_response = await self._deps.availability.handle_resolution(
+            handler_input, resolution, payload, label
+        )
+        if availability_response is not None:
+            return availability_response
         result, response = await self._confirmed_search_result(
             handler_input, resolution, payload, label
         )

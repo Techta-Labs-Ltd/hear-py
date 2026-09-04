@@ -18,6 +18,7 @@ def test_pipeline_declarations_preserve_behavioral_order():
     assert [item.__name__ for item in RouteRegistry.GATE_HANDLERS] == [
         "CanFulfillIntentHandler",
         "DialogValidationGateHandler",
+        "AvailabilityDialogHandler",
         "FeedbackGateHandler",
         "OnboardingGateHandler",
         "TownCaptureHandler",

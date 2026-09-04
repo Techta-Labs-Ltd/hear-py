@@ -2,6 +2,13 @@ from __future__ import annotations
 
 
 class DiscoveryConstants:
+    CHOICE_PAGE_SIZE = 3
+    CHOICE_ORDINALS = ("first", "second", "third")
+    CHOICE_ORDINAL_SYNONYMS = (
+        ("first", "one", "number one"),
+        ("second", "two", "number two"),
+        ("third", "three", "number three"),
+    )
     ORDINAL_INDEX = {
         "first": 0,
         "one": 0,

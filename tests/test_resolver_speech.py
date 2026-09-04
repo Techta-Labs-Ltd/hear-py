@@ -17,9 +17,12 @@ def test_ambiguous_reference_message_does_not_speak_raw_alias():
             {"name": "Burnley and District Talking Newspaper"},
         ],
     )
-    assert (
-        message
-        == "I found more than one match for that name. Did you mean Barking and Dagenham Talking Newspaper, Brentwood and District Talking Newspaper, or Burnley and District Talking Newspaper?"
+    assert message == (
+        "I found more than one match for that name. "
+        "First, Barking and Dagenham Talking Newspaper. "
+        "Second, Brentwood and District Talking Newspaper. "
+        "Third, Burnley and District Talking Newspaper. "
+        "You can say the name, or first, second, or third."
     )
     assert "badtn" not in message.lower()
 
@@ -34,7 +37,8 @@ def test_common_ambiguity_prefix_requests_distinguishing_words():
         ],
     )
     assert "beginning Sussex Coast Talking" in message
-    assert "Magazine, News, or Newspaper Worthing" in message
+    assert "First, Magazine. Second, News. Third, Newspaper Worthing." in message
+    assert "distinguishing part, or first, second, or third" in message
 
 
 def test_ambiguity_message_announces_show_more_when_choices_remain():
@@ -62,6 +66,21 @@ def test_publication_ambiguity_announces_show_more_when_pages_remain():
     )
 
     assert message.endswith("There are more options. Say show more to hear them.")
+
+
+def test_final_ambiguity_page_does_not_offer_show_more():
+    message = SearchSpeech.ambiguous_reference_message(
+        "pendle voice",
+        [
+            {"name": "Pendle Voice Sunday People"},
+            {"name": "Pendle Voice Yorkshire Life"},
+        ],
+        has_more=False,
+    )
+
+    assert "First, Sunday People" in message
+    assert "Second, Yorkshire Life" in message
+    assert "show more" not in message
 
 
 def test_broad_search_intro_names_the_request_without_first_result_metadata():

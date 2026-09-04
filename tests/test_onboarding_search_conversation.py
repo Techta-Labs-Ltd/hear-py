@@ -1496,7 +1496,8 @@ async def test_confirmed_source_with_multiple_publications_asks_for_publication(
     sent = search.await_args.args[0]
     assert sent["limit"] == 3
     assert sent["page"] == 0
-    assert "Which publication would you like" in response["outputSpeech"]["ssml"]
+    assert "First, Buxton Talking Song" in response["outputSpeech"]["ssml"]
+    assert "Second, Daily Sermons" in response["outputSpeech"]["ssml"]
     assert "Buxton Talking Song" in response["outputSpeech"]["ssml"]
     assert "Daily Sermons" in response["outputSpeech"]["ssml"]
     assert response["directives"][0]["type"] == "Dialog.UpdateDynamicEntities"
@@ -1753,7 +1754,11 @@ async def test_show_more_without_slots_pages_pending_ambiguity_locally(
     resolve.assert_not_awaited()
     assert "Gazette" in response["outputSpeech"]["ssml"]
     assert "Chronicle" in response["outputSpeech"]["ssml"]
+    assert "First, Gazette" in response["outputSpeech"]["ssml"]
     assert "Say show more to hear them" in response["outputSpeech"]["ssml"]
+    values = response["directives"][0]["types"][0]["values"]
+    assert [value["id"] for value in values] == ["creator-3", "creator-4", "creator-5"]
+    assert "first" in values[0]["name"]["synonyms"]
     assert "trouble understanding" not in response["outputSpeech"]["ssml"]
 
 
@@ -1847,7 +1852,10 @@ async def test_show_more_fetches_next_publication_page_and_selection_uses_page_z
     assert "York Audio Magazine" in response["outputSpeech"]["ssml"]
     directive = response["directives"][0]
     assert directive["type"] == "Dialog.UpdateDynamicEntities"
-    assert len(directive["types"][0]["values"]) == 5
+    dynamic_values = directive["types"][0]["values"]
+    assert [value["id"] for value in dynamic_values] == ["publication-4", "publication-5"]
+    assert "first" in dynamic_values[0]["name"]["synonyms"]
+    assert "second" in dynamic_values[1]["name"]["synonyms"]
     updated = User.snapshot(mock_handler_input)["pendingAmbiguity"]
     assert len(updated["candidates"]) == 5
     assert [candidate["id"] for candidate in updated["displayedCandidates"]] == [
@@ -1929,7 +1937,9 @@ async def test_publication_choices_support_previous_and_next_navigation(
     assert handler.can_handle(mock_handler_input) is True
     previous_response = await handler.handle(mock_handler_input)
     assert "previous publication choices" in previous_response["outputSpeech"]["ssml"]
-    assert "Which publication would you like" in previous_response["outputSpeech"]["ssml"]
+    assert "First, Buxton Talking Song" in previous_response["outputSpeech"]["ssml"]
+    assert "Second, Daily Sermons" in previous_response["outputSpeech"]["ssml"]
+    assert "Third, Hexham Talking Newspapers Reading" in previous_response["outputSpeech"]["ssml"]
     assert "Buxton Talking Song" in previous_response["outputSpeech"]["ssml"]
     assert "Say show more to hear them" in previous_response["outputSpeech"]["ssml"]
     assert [
@@ -1946,9 +1956,15 @@ async def test_publication_choices_support_previous_and_next_navigation(
     assert handler.can_handle(mock_handler_input) is True
     next_response = await handler.handle(mock_handler_input)
     assert "more publication choices" in next_response["outputSpeech"]["ssml"]
-    assert "Which publication would you like" in next_response["outputSpeech"]["ssml"]
     assert "Swindon Talking News" in next_response["outputSpeech"]["ssml"]
     assert "York Audio Magazine" in next_response["outputSpeech"]["ssml"]
+    assert "First, Swindon Talking News" in next_response["outputSpeech"]["ssml"]
+    assert "Second, York Audio Magazine" in next_response["outputSpeech"]["ssml"]
+    assert "show more" not in next_response["outputSpeech"]["ssml"]
+    next_values = next_response["directives"][0]["types"][0]["values"]
+    assert [value["id"] for value in next_values] == ["publication-4", "publication-5"]
+    assert "first" in next_values[0]["name"]["synonyms"]
+    assert "second" in next_values[1]["name"]["synonyms"]
     search.assert_not_awaited()
 
 

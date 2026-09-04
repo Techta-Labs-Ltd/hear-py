@@ -11,6 +11,7 @@ from src.clients.proactive import ProactiveEventsClient
 from src.clients.progressive import ProgressiveResponseClient
 from src.clients.resolver import ResolverClient, ResolverOptions
 from src.database.notification_inbox import NotificationInboxFactory
+from src.models.availability import Availability
 from src.models.browse import Browse
 from src.models.feedback import FeedbackService
 from src.models.listener import Listener
@@ -42,6 +43,7 @@ class ApplicationContainer:
             "events",
             "feedback",
             "browse",
+            "availability",
             "playback",
             "reminders",
             "user",
@@ -71,6 +73,7 @@ class ApplicationContainer:
         "events",
         "feedback",
         "browse",
+        "availability",
         "playback",
         "search",
         "reminders",
@@ -155,6 +158,7 @@ class ApplicationContainer:
             ResolverOptions(api_key=settings.HEAR_API_KEY)
         )
         self.progressive = components.get("progressive") or ProgressiveResponseClient()
+        self.availability = components.get("availability") or Availability(deps=self)
         self.permission = components.get("permission") or Permission(deps=self)
         self.notifications = components.get("notifications") or Notification(deps=self)
         self.error_reporter = components.get("error_reporter") or ErrorReporter()
