@@ -14,8 +14,6 @@ class ProgressiveResponseSupport:
 
 
 class ProgressiveResponseClient:
-    """Best-effort client for Alexa's Send Directive service."""
-
     def __init__(self, pool: HttpPool | None = None, *, enabled: bool | None = None) -> None:
         self._pool = pool or HttpPool(timeout_ms=settings.HEAR_PROGRESSIVE_TIMEOUT_MS)
         self._enabled = enabled if enabled is not None else settings.progressive_responses_enabled
