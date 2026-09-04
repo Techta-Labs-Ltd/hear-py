@@ -92,12 +92,14 @@ class Availability:
     def _choice_response(self, handler_input, context: dict, position: str = "initial"):
         displayed = AvailabilityData.displayed(context)
         has_more = AvailabilityData.has_more(context)
+        has_previous = max(0, int(context.get("offset") or 0)) > 0
         kind = str(context.get("kind") or "")
         if kind == AvailabilityConstants.SOURCE_KIND:
             speech = AvailabilitySpeech.local_source_choices(
                 displayed,
                 position=position,
                 has_more=has_more,
+                has_previous=has_previous,
                 requested_city=context.get("requestedCity"),
             )
         elif kind == AvailabilityConstants.PUBLICATION_KIND:
@@ -111,12 +113,18 @@ class Availability:
                 else None,
                 position=position,
                 has_more=has_more,
+                has_previous=has_previous,
             )
         else:
             speech = AvailabilitySpeech.track_choices(
-                displayed, position=position, has_more=has_more
+                displayed,
+                position=position,
+                has_more=has_more,
+                has_previous=has_previous,
             )
-        reprompt = AvailabilitySpeech.choice_reprompt(kind, len(displayed), has_more)
+        reprompt = AvailabilitySpeech.choice_reprompt(
+            kind, len(displayed), has_more, has_previous
+        )
         self._activate(handler_input, context)
         return self._response(handler_input, speech, reprompt, displayed)
 
@@ -538,7 +546,9 @@ class Availability:
             self._activate(handler_input, context)
             return self._response(
                 handler_input,
-                AvailabilitySpeech.page_unavailable(kind, displayed),
+                AvailabilitySpeech.page_unavailable(
+                    kind, displayed, has_previous=current_offset > 0
+                ),
                 "Say one of the names, or ask for more choices to try again.",
                 displayed,
             )
@@ -547,7 +557,10 @@ class Availability:
             displayed = AvailabilityData.displayed(context)
             kind = str(context.get("kind") or "choice")
             speech = f"Those are all the {kind} choices. " + AvailabilitySpeech.choice_retry(
-                kind, displayed, has_more=False
+                kind,
+                displayed,
+                has_more=False,
+                has_previous=current_offset > 0,
             )
             self._activate(handler_input, context)
             return self._response(
@@ -623,12 +636,15 @@ class Availability:
             return await self._select(handler_input, context, candidate)
         displayed = AvailabilityData.displayed(context)
         has_more = AvailabilityData.has_more(context)
+        has_previous = max(0, int(context.get("offset") or 0)) > 0
         kind = str(context.get("kind") or "choice")
-        speech = AvailabilitySpeech.choice_retry(kind, displayed, has_more=has_more)
+        speech = AvailabilitySpeech.choice_retry(
+            kind, displayed, has_more=has_more, has_previous=has_previous
+        )
         self._activate(handler_input, context)
         return self._response(
             handler_input,
             speech,
-            AvailabilitySpeech.choice_reprompt(kind, len(displayed), has_more),
+            AvailabilitySpeech.choice_reprompt(kind, len(displayed), has_more, has_previous),
             displayed,
         )

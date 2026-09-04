@@ -439,24 +439,33 @@ class Browse:
                 "kind"
             ) == "publication"
             message = (
-                SearchSpeech.publication_choices_exhausted_message(next_candidates)
+                SearchSpeech.publication_choices_exhausted_message(
+                    next_candidates,
+                    has_previous=DialogSelection.displayed_has_previous(pending),
+                )
                 if publication_picker
-                else SearchSpeech.ambiguity_exhausted_message(next_candidates)
+                else SearchSpeech.ambiguity_exhausted_message(
+                    next_candidates,
+                    has_previous=DialogSelection.displayed_has_previous(pending),
+                )
             )
         else:
             pagination = pending.get("candidatePagination") or {}
             next_offset = offset + len(next_candidates)
             has_more = DialogSelection.has_more_choices(pending, candidates, next_offset)
+            has_previous = offset > 0
             message = (
                 SearchSpeech.more_publication_choices_message(
                     next_candidates,
                     has_more=has_more,
+                    has_previous=has_previous,
                 )
                 if pagination.get("kind") == "publication"
                 else SearchSpeech.ambiguous_reference_message(
                     "that name",
                     next_candidates,
                     has_more=has_more,
+                    has_previous=has_previous,
                 )
             )
             pending = {
@@ -572,12 +581,14 @@ class Browse:
                 SearchSpeech.first_publication_choices_message(
                     previous_candidates,
                     has_more=has_more,
+                    has_previous=False,
                 )
                 if publication_picker
                 else SearchSpeech.ambiguous_reference_message(
                     "that name",
                     previous_candidates,
                     has_more=has_more,
+                    has_previous=False,
                 )
             )
         else:
@@ -592,12 +603,14 @@ class Browse:
                 SearchSpeech.previous_publication_choices_message(
                     previous_candidates,
                     has_more=has_more,
+                    has_previous=previous_start > 0,
                 )
                 if publication_picker
                 else SearchSpeech.ambiguous_reference_message(
                     "that name",
                     previous_candidates,
                     has_more=has_more,
+                    has_previous=previous_start > 0,
                 )
             )
         has_previous = DialogSelection.displayed_has_previous(pending)

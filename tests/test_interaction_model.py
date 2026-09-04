@@ -232,6 +232,26 @@ def test_active_audio_commands_include_natural_speed_and_rating_phrases():
     )
 
 
+def test_all_backend_playback_intents_are_declared_in_the_language_model():
+    intents = {
+        item["name"] for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    assert {
+        "AMAZON.PauseIntent",
+        "AMAZON.ResumeIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.PreviousIntent",
+        "AMAZON.RepeatIntent",
+        "AMAZON.StartOverIntent",
+        "AMAZON.StopIntent",
+        "RewindIntent",
+        "FastForwardIntent",
+        "IncreaseSpeedIntent",
+        "DecreaseSpeedIntent",
+        "SetPlaybackSpeedIntent",
+    }.issubset(intents)
+
+
 def test_rating_and_reporting_use_distinct_asr_friendly_phrases():
     intents = {
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]

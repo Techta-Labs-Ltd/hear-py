@@ -44,13 +44,6 @@ class Speech:
     RESUME_DECLINED_NEXT_OPTIONS = "Okay, I won't continue that recording. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
     RESUME_DECLINED_NEXT_OPTIONS_REPROMPT = "You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
     WELCOME_ERROR = "Welcome to Hear. I'm having a bit of trouble loading content at the moment. You can try again shortly."
-    PLAYBACK_SPEED_NOT_SUPPORTED = "This recording does not have faster or slower versions. I can only play it at normal speed."
-    PLAYBACK_SPEED_MAX = "This is the maximum speed."
-    PLAYBACK_SPEED_MIN = "This is the minimum speed."
-    PLAYBACK_SPEED_INVALID = "Say first through sixth speed, normal speed, faster, or slower."
-    QUEUE_FINISHED = (
-        "That was the last one. Say what's trending for popular tracks, or play something."
-    )
     IDLE_NEXT_REPROMPT = "What would you like to listen to?"
     IDLE_DO_NEXT_REPROMPT = "What would you like to do next?"
     SEARCH_UNAVAILABLE = (
@@ -95,12 +88,6 @@ class Speech:
     ASK_TALKING_NEWSPAPER_REPROMPT = "Please say its name, for example York Talking News."
     NO_CONTENT_AVAILABLE = "There's no content available at the moment. You can try again shortly."
     CONTENT_NOT_READY = "That one isn't ready to play yet. Try another number."
-    RESUMING = "Resuming where you left off."
-    NOTHING_TO_RESUME = "Nothing to resume. Say what's trending, or play something to get started."
-    REPLAYING = "Playing again from the start."
-    PLAYING_PREVIOUS = "Playing the previous recording."
-    NO_PREVIOUS = "There is no previous content to play."
-    CANNOT_SEEK = "Nothing is playing right now. Say play to start listening."
     CREATOR_CREDIT_UNKNOWN = "I do not have creator information for the current content."
     FEEDBACK_FOLLOW_DECLINED = "No problem. What would you like to listen to next?"
     FEEDBACK_SOMEWHAT = "Thanks for the feedback — we'll use that to improve your recommendations. What would you like to listen to next?"
@@ -135,15 +122,8 @@ class Speech:
         "Say what's trending first, then pick the first one or say play number one."
     )
     FALLBACK_SPEECH = "Sorry, I didn't catch that. You can say play news, play from a creator by name, or what's trending. What would you like?"
-    HELP = "Here's what you can do: say what's trending for popular tracks, play followed by a topic, or play from a talking newspaper by name. Rate tracks by saying enjoyed, it was okay, or not enjoyed. Would you like to try something?"
     GOODBYE = "Thanks for listening to Hear. Goodbye."
     ERROR_GENERIC = "Sorry, I didn't quite catch that. You can say play followed by a topic, or what's trending. What would you like?"
-    LOOP_SHUFFLE_UNAVAILABLE = (
-        "Looping and shuffle are not available on Hear yet. Say next, repeat, or pause."
-    )
-    NO_TRACKS_AVAILABLE = (
-        "Welcome to Hear. There are no tracks available right now. Check back soon."
-    )
     ONBOARDING_ASK_PERMISSION = "Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright?"
     ONBOARDING_CONSENT_CARD_SENT = "Please open the Alexa app, find test development under Your Skills, then open Settings and Manage Permissions and enable Device Address. After that, relaunch Hear."
     ONBOARDING_LOCATION_DENIED = "No worries. Which city are you in?"
@@ -313,26 +293,6 @@ class Speech:
         return f"Say the latest from {Speech.escape_ssml_lite(city) or 'your area'}, what's popular, or what's on."
 
     @staticmethod
-    def PLAYBACK_SPEED_UNAVAILABLE(speed, available):
-        return f"Speed {speed} is not available for this content. Available speeds are {available}."
-
-    @staticmethod
-    def PLAYBACK_SPEED_SET(speed):
-        return (
-            "Playback speed reset to normal."
-            if speed == 1.0
-            else f"Playback speed set to {speed}x."
-        )
-
-    @staticmethod
-    def PLAYBACK_SPEED_SET_IDLE(speed):
-        return (
-            "Playback speed reset to normal. What would you like to listen to next?"
-            if speed == 1.0
-            else f"Playback speed set to {speed}x. What would you like to listen to next?"
-        )
-
-    @staticmethod
     def QUEUE_NEXT_ANNOUNCE(title, creator=None, position=None, total=None):
         return Speech._build_queue_next(title, creator, position, total)
 
@@ -343,14 +303,6 @@ class Speech:
     @staticmethod
     def LOCAL_CONTENT_FALLBACK(title, creator=None):
         return Speech.build_now_playing_phrase(title, creator)
-
-    @staticmethod
-    def REWOUND(seconds):
-        return f"Rewound {seconds} seconds."
-
-    @staticmethod
-    def FAST_FORWARDED(seconds):
-        return f"Skipped forward {seconds} seconds."
 
     @staticmethod
     def CREATOR_CREDIT(title, creator):

@@ -310,6 +310,17 @@ class PlaybackQueue:
         ids = queue["orderedContentIds"]
         return ids[target] if isinstance(target, int) and 0 <= target < len(ids) else None
 
+    @staticmethod
+    def has_more_pages(queue: dict | None) -> bool:
+        if not isinstance(queue, dict):
+            return False
+        pagination = queue.get("pagination")
+        if not isinstance(pagination, dict):
+            return False
+        current_page = int(pagination.get("currentPage") or 0)
+        total_pages = int(pagination.get("totalPages") or 0)
+        return total_pages > 0 and current_page + 1 < total_pages
+
     def move(self, handler_input, delta: int) -> str | None:
         queue = self.read(self._user.snapshot(handler_input))
         if not queue:

@@ -5,7 +5,10 @@ import logging
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from config import settings
+from src.alexa.help import HelpSpeech
 from src.alexa.playback import AlexaPlayback
+from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -27,11 +30,11 @@ class HelpIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input: HandlerInput):
         return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.HELP))
-            .reprompt(Ssml.ssml(Speech.IDLE_DO_NEXT_REPROMPT))
+            handler_input.response_builder.speak(Ssml.ssml(HelpSpeech.guide(settings.STAGE)))
+            .reprompt(Ssml.ssml(HelpSpeech.REPROMPT))
             .with_simple_card(
-                "Hear - things to try",
-                "Say: What's trending?\nPlay news.\nPlay from a talking newspaper.\nPlay Pendle Voice.\nWhat's this about?",
+                HelpSpeech.CARD_TITLE,
+                HelpSpeech.card_text(settings.STAGE),
             )
             .set_should_end_session(False)
             .response
@@ -100,7 +103,7 @@ class UnsupportedIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input: HandlerInput):
         return (
-            handler_input.response_builder.speak(Speech.LOOP_SHUFFLE_UNAVAILABLE)
+            handler_input.response_builder.speak(PlaybackSpeech.LOOP_SHUFFLE_UNAVAILABLE)
             .reprompt(Speech.WELCOME_REPROMPT)
             .set_should_end_session(False)
             .response

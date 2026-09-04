@@ -9,16 +9,15 @@ from src.constants.discovery import DiscoveryConstants
 
 class SearchSpeech:
     @staticmethod
-    def _with_more_options(message: str, has_more: bool) -> str:
-        return (
-            f"{message} To hear more choices, say show more or next. "
-            f"You can also say previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
-            if has_more
-            else (
-                f"{message} You can say previous to go back. "
-                f"{Speech.CHOICE_EXIT_INSTRUCTION}"
-            )
-        )
+    def _with_navigation_options(
+        message: str, has_more: bool, has_previous: bool = False
+    ) -> str:
+        navigation = ""
+        if has_more:
+            navigation = " To hear more choices, say show more or next."
+        if has_previous:
+            navigation += " You can say previous to go back."
+        return f"{message}{navigation} {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod
     def search_no_match(query) -> str:
@@ -104,6 +103,7 @@ class SearchSpeech:
         candidates: list[dict],
         *,
         has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         raw_names, names = SearchSpeech._candidate_names(candidates)
         if not names:
@@ -120,14 +120,16 @@ class SearchSpeech:
                     f"I found several matches beginning {safe_prefix}. "
                     f"{choices} You can say the distinguishing part, or {ordinals}."
                 )
-                return SearchSpeech._with_more_options(message, has_more)
+                return SearchSpeech._with_navigation_options(
+                    message, has_more, has_previous
+                )
         choices = SearchSpeech._numbered_choices(names)
         ordinals = SearchSpeech._ordinal_choices(len(names))
         message = (
             f"I found more than one match for that name. {choices} "
             f"You can say the name, or {ordinals}."
         )
-        return SearchSpeech._with_more_options(message, has_more)
+        return SearchSpeech._with_navigation_options(message, has_more, has_previous)
 
     @staticmethod
     def _publication_choice_message(
@@ -135,6 +137,7 @@ class SearchSpeech:
         introduction: str,
         *,
         has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         _, names = SearchSpeech._candidate_names(candidates)
         if not names:
@@ -145,18 +148,20 @@ class SearchSpeech:
             f"{introduction} {choices} "
             f"You can say the publication name, or {ordinals}."
         )
-        return SearchSpeech._with_more_options(message, has_more)
+        return SearchSpeech._with_navigation_options(message, has_more, has_previous)
 
     @staticmethod
     def publication_ambiguity_message(
         candidates: list[dict],
         *,
         has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         return SearchSpeech._publication_choice_message(
             candidates,
             "I found more than one publication.",
             has_more=has_more,
+            has_previous=has_previous,
         )
 
     @staticmethod
@@ -164,11 +169,13 @@ class SearchSpeech:
         candidates: list[dict],
         *,
         has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         return SearchSpeech._publication_choice_message(
             candidates,
             "Here are the next publication choices.",
             has_more=has_more,
+            has_previous=has_previous,
         )
 
     @staticmethod
@@ -176,11 +183,13 @@ class SearchSpeech:
         candidates: list[dict],
         *,
         has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         return SearchSpeech._publication_choice_message(
             candidates,
             "Here are the previous publication choices.",
             has_more=has_more,
+            has_previous=has_previous,
         )
 
     @staticmethod
@@ -188,17 +197,23 @@ class SearchSpeech:
         candidates: list[dict],
         *,
         has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         return SearchSpeech._publication_choice_message(
             candidates,
             "You are already at the first publication choices.",
             has_more=has_more,
+            has_previous=has_previous,
         )
 
     @staticmethod
-    def publication_choices_exhausted_message(candidates: list[dict]) -> str:
+    def publication_choices_exhausted_message(
+        candidates: list[dict], *, has_previous: bool = False
+    ) -> str:
         return SearchSpeech._publication_choice_message(
-            candidates, "Those are all the publication choices I found."
+            candidates,
+            "Those are all the publication choices I found.",
+            has_previous=has_previous,
         )
 
     @staticmethod
@@ -210,7 +225,7 @@ class SearchSpeech:
 
     @staticmethod
     def ambiguity_retry_message(
-        candidates: list[dict], *, has_more: bool = False
+        candidates: list[dict], *, has_more: bool = False, has_previous: bool = False
     ) -> str:
         _, names = SearchSpeech._candidate_names(candidates)
         choices = SearchSpeech._numbered_choices(names)
@@ -219,16 +234,21 @@ class SearchSpeech:
             f"That did not match the available choices. {choices} "
             f"You can say the name, or {ordinals}."
         )
-        return SearchSpeech._with_more_options(message, has_more)
+        return SearchSpeech._with_navigation_options(message, has_more, has_previous)
 
     @staticmethod
-    def ambiguity_exhausted_message(candidates: list[dict]) -> str:
+    def ambiguity_exhausted_message(
+        candidates: list[dict], *, has_previous: bool = False
+    ) -> str:
         _, names = SearchSpeech._candidate_names(candidates)
         choices = SearchSpeech._numbered_choices(names)
         ordinals = SearchSpeech._ordinal_choices(len(names))
-        return (
+        message = (
             f"Those are all the matches I found. {choices} "
             f"You can say the name, or {ordinals}."
+        )
+        return SearchSpeech._with_navigation_options(
+            message, False, has_previous
         )
 
     @staticmethod

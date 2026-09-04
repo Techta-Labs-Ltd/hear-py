@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.models.affirmative import Affirmative
 from src.models.playback import Playback
 from src.models.playback_state import PlaybackQueue
 from src.models.search import Search
@@ -153,3 +154,164 @@ async def test_voice_next_loads_next_page_at_loaded_boundary(monkeypatch, mock_h
     assert start.await_args.args[1]["contentId"] == "content-4"
     queue = PlaybackQueue.read(User.snapshot(mock_handler_input))
     assert queue["currentIndex"] == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("item", "expected_speech"),
+    [
+        (
+            {"contentId": "content-1"},
+            "You've reached the end of these recordings.",
+        ),
+        (
+            {
+                "contentId": "content-1",
+                "publicationId": "publication-1",
+                "publicationTitle": "The Gazette",
+            },
+            "You've reached the end of this publication.",
+        ),
+    ],
+)
+async def test_voice_next_explains_when_the_queue_has_ended(
+    mock_handler_input, item, expected_speech
+):
+    queues = PlaybackQueue(User())
+    queues.initialize(mock_handler_input, [item])
+    client = AsyncMock()
+    playback = type("Playback", (), {"queue": queues})()
+
+    await Playback.play_queue_delta(
+        mock_handler_input,
+        1,
+        "Playing the next recording.",
+        deps=type(
+            "Deps",
+            (),
+            {
+                "heara": client,
+                "playback": playback,
+                "user": User(),
+            },
+        )(),
+    )
+
+    client.search.assert_not_awaited()
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert expected_speech in spoken
+    assert "no content available" not in spoken
+
+
+@pytest.mark.asyncio
+async def test_voice_next_does_not_claim_queue_ended_when_next_page_failed(
+    mock_handler_input,
+):
+    queues = PlaybackQueue(User())
+    queues.initialize(
+        mock_handler_input,
+        [{"contentId": "content-1"}],
+        search_payload={"query": "news", "page": 0, "limit": 1},
+        current_page=0,
+        total_pages=2,
+        page_limit=1,
+    )
+    client = AsyncMock()
+    client.search.return_value = {"results": [], "failed": True}
+    playback = type("Playback", (), {"queue": queues})()
+
+    await Playback.play_queue_delta(
+        mock_handler_input,
+        1,
+        "Playing the next recording.",
+        deps=type(
+            "Deps",
+            (),
+            {
+                "heara": client,
+                "playback": playback,
+                "user": User(),
+            },
+        )(),
+    )
+
+    client.search.assert_awaited_once()
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "no content available" in spoken
+    assert "reached the end" not in spoken
+
+
+@pytest.mark.asyncio
+async def test_still_listening_confirmation_uses_publication_end_message(
+    mock_handler_input,
+):
+    user = User()
+    queues = PlaybackQueue(user)
+    queues.initialize(
+        mock_handler_input,
+        [
+            {
+                "contentId": "content-1",
+                "publicationId": "publication-1",
+                "publicationTitle": "The Gazette",
+            }
+        ],
+    )
+    feedback = type("Feedback", (), {"clear": AsyncMock()})()
+    client = AsyncMock()
+    playback = type("Playback", (), {"queue": queues})()
+    deps = type(
+        "Deps",
+        (),
+        {
+            "feedback": feedback,
+            "heara": client,
+            "playback": playback,
+            "user": user,
+        },
+    )()
+
+    await Affirmative(deps=deps)._handle_still_listening_yes(
+        mock_handler_input, user.snapshot(mock_handler_input)
+    )
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "You've reached the end of this publication." in spoken
+    assert PlaybackQueue.read(user.snapshot(mock_handler_input)) is None
+
+
+@pytest.mark.asyncio
+async def test_still_listening_page_failure_preserves_queue(mock_handler_input):
+    user = User()
+    queues = PlaybackQueue(user)
+    queues.initialize(
+        mock_handler_input,
+        [{"contentId": "content-1"}],
+        search_payload={"query": "news", "page": 0, "limit": 1},
+        current_page=0,
+        total_pages=2,
+        page_limit=1,
+    )
+    feedback = type("Feedback", (), {"clear": AsyncMock()})()
+    client = AsyncMock()
+    client.search.return_value = {"results": [], "failed": True}
+    playback = type("Playback", (), {"queue": queues})()
+    deps = type(
+        "Deps",
+        (),
+        {
+            "feedback": feedback,
+            "heara": client,
+            "playback": playback,
+            "user": user,
+        },
+    )()
+
+    await Affirmative(deps=deps)._handle_still_listening_yes(
+        mock_handler_input, user.snapshot(mock_handler_input)
+    )
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "no content available" in spoken
+    assert "reached the end" not in spoken
+    assert PlaybackQueue.read(user.snapshot(mock_handler_input)) is not None

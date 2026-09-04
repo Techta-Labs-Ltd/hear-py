@@ -7,6 +7,7 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
 from src.alexa.playback import AlexaPlayback, PlayDirective
+from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -296,6 +297,12 @@ class Playback:
         )
 
     @staticmethod
+    def queue_finished_speech(queue: dict | None) -> str:
+        if isinstance(queue, dict) and queue.get("publicationId"):
+            return PlaybackSpeech.PUBLICATION_QUEUE_FINISHED
+        return PlaybackSpeech.QUEUE_FINISHED
+
+    @staticmethod
     async def _find_queue_content(
         handler_input: HandlerInput, content_id: str, *, deps
     ) -> dict | None:
@@ -328,9 +335,14 @@ class Playback:
             if loaded:
                 content_id = deps.playback.queue.move(handler_input, delta)
         if not content_id:
+            queue = PlaybackQueue.read(deps.user.snapshot(handler_input))
+            if delta > 0 and queue and not PlaybackQueue.has_more_pages(queue):
+                message = Playback.queue_finished_speech(queue)
+            else:
+                message = PlaybackSpeech.NO_PREVIOUS if delta < 0 else Speech.NO_CONTENT_AVAILABLE
             return Playback.open_queue_response(
                 handler_input,
-                Speech.NO_PREVIOUS if delta < 0 else Speech.NO_CONTENT_AVAILABLE,
+                message,
             )
         content = PlaybackQueue.cached_content(deps.user.snapshot(handler_input), content_id)
         if not content:

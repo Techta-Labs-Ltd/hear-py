@@ -42,10 +42,16 @@ class FallbackHandler(AbstractRequestHandler):
             )
             displayed = DialogSelection.displayed_choices(pending)
             has_more = DialogSelection.displayed_has_more(pending)
+            has_previous = DialogSelection.displayed_has_previous(pending)
             message = SearchSpeech.ambiguous_reference_message(
-                str(phrase or "that name"), displayed, has_more=has_more
+                str(phrase or "that name"),
+                displayed,
+                has_more=has_more,
+                has_previous=has_previous,
             )
-            reprompt = SearchSpeech.choice_reprompt(displayed, has_more=has_more)
+            reprompt = SearchSpeech.choice_reprompt(
+                displayed, has_more=has_more, has_previous=has_previous
+            )
             return (
                 handler_input.response_builder.speak(Ssml.ssml(message))
                 .reprompt(Ssml.ssml(reprompt))

@@ -73,12 +73,15 @@ class DialogValidationPolicy:
         has_previous = DialogSelection.displayed_has_previous(context)
         publication_picker = pagination.get("kind") == "publication"
         message = (
-            SearchSpeech.publication_ambiguity_message(candidates, has_more=has_more)
+            SearchSpeech.publication_ambiguity_message(
+                candidates, has_more=has_more, has_previous=has_previous
+            )
             if publication_picker
             else SearchSpeech.ambiguous_reference_message(
                 "that name",
                 candidates,
                 has_more=has_more,
+                has_previous=has_previous,
             )
         )
         return (

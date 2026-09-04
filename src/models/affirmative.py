@@ -10,6 +10,7 @@ from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.entities import AlexaEntities
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
@@ -43,8 +44,13 @@ class Affirmative:
         pending = dict(store.get("pendingAmbiguity") or {})
         displayed = DialogSelection.displayed_choices(pending)
         has_more = DialogSelection.displayed_has_more(pending)
-        message = SearchSpeech.ambiguity_retry_message(displayed, has_more=has_more)
-        reprompt = SearchSpeech.choice_reprompt(displayed, has_more=has_more)
+        has_previous = DialogSelection.displayed_has_previous(pending)
+        message = SearchSpeech.ambiguity_retry_message(
+            displayed, has_more=has_more, has_previous=has_previous
+        )
+        reprompt = SearchSpeech.choice_reprompt(
+            displayed, has_more=has_more, has_previous=has_previous
+        )
         builder = (
             handler_input.response_builder.speak(Ssml.ssml(message))
             .reprompt(Ssml.ssml(reprompt))
@@ -532,7 +538,7 @@ class Affirmative:
         if not content_id:
             self._deps.user.update(handler_input, {"listModeActive": False})
             return handler_input.response_builder.speak(
-                Ssml.ssml(Speech.NO_TRACKS_AVAILABLE)
+                Ssml.ssml(PlaybackSpeech.NO_TRACKS_AVAILABLE)
             ).response
         self._deps.user.update(handler_input, {"listModeActive": False})
         await self._deps.feedback.clear(handler_input)
@@ -582,9 +588,18 @@ class Affirmative:
                 queue = PlaybackQueue.read(self._deps.user.snapshot(handler_input))
                 next_id = self._deps.playback.queue.move(handler_input, 1)
         if not queue or not next_id:
-            self._deps.playback.queue.clear(handler_input)
+            current_queue = PlaybackQueue.read(self._deps.user.snapshot(handler_input))
+            if current_queue and not PlaybackQueue.has_more_pages(current_queue):
+                self._deps.playback.queue.clear(handler_input)
+                message = (
+                    PlaybackSpeech.PUBLICATION_QUEUE_FINISHED
+                    if current_queue.get("publicationId")
+                    else PlaybackSpeech.QUEUE_FINISHED
+                )
+            else:
+                message = Speech.NO_CONTENT_AVAILABLE
             return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.QUEUE_FINISHED))
+                handler_input.response_builder.speak(Ssml.ssml(message))
                 .reprompt(Speech.WELCOME_REPROMPT)
                 .set_should_end_session(False)
                 .response

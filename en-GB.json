@@ -76,6 +76,12 @@
           "name": "AMAZON.NextIntent"
         },
         {
+          "name": "AMAZON.PauseIntent"
+        },
+        {
+          "name": "AMAZON.ResumeIntent"
+        },
+        {
           "name": "AMAZON.PreviousIntent"
         },
         {

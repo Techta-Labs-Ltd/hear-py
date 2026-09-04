@@ -4,6 +4,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
+from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.constants.playback import PlaybackConstants
@@ -32,7 +33,7 @@ class SetPlaybackSpeedHandler(AbstractRequestHandler):
             else PlaybackUtils.normalise_speed(AlexaRequest.get_resolved_slot_value(slot))
         )
         if speed is None:
-            return Playback.open_queue_response(handler_input, Speech.PLAYBACK_SPEED_INVALID)
+            return Playback.open_queue_response(handler_input, PlaybackSpeech.SPEED_INVALID)
         return await PlaybackControls._apply_speed(handler_input, speed, deps=self._deps)
 
 
@@ -123,7 +124,7 @@ class NextIntentHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         return await Playback.play_queue_delta(
-            handler_input, 1, "Playing the next recording.", deps=self._deps
+            handler_input, 1, PlaybackSpeech.PLAYING_NEXT, deps=self._deps
         )
 
 
@@ -140,7 +141,7 @@ class PreviousIntentHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         return await Playback.play_queue_delta(
-            handler_input, -1, Speech.PLAYING_PREVIOUS, deps=self._deps
+            handler_input, -1, PlaybackSpeech.PLAYING_PREVIOUS, deps=self._deps
         )
 
 
@@ -158,7 +159,7 @@ class RepeatIntentHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         return await PlaybackControls.restart_active(
-            handler_input, offset_ms=0, speech=Speech.REPLAYING, deps=self._deps
+            handler_input, offset_ms=0, speech=PlaybackSpeech.REPLAYING, deps=self._deps
         )
 
 
@@ -173,7 +174,7 @@ class RewindIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._seek(handler_input, -1, Speech.REWOUND, deps=self._deps)
+        return await PlaybackControls._seek(handler_input, -1, deps=self._deps)
 
 
 class FastForwardIntentHandler(AbstractRequestHandler):
@@ -187,6 +188,4 @@ class FastForwardIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._seek(
-            handler_input, 1, Speech.FAST_FORWARDED, deps=self._deps
-        )
+        return await PlaybackControls._seek(handler_input, 1, deps=self._deps)

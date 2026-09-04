@@ -23,7 +23,6 @@ def test_ambiguous_reference_message_does_not_speak_raw_alias():
         "Second, Brentwood and District Talking Newspaper. "
         "Third, Burnley and District Talking Newspaper. "
         "You can say the name, or first, second, or third. "
-        "You can say previous to go back. "
         "Say no, none of these, or something else to return to search."
     )
     assert "badtn" not in message.lower()
@@ -56,7 +55,6 @@ def test_ambiguity_message_announces_show_more_when_choices_remain():
 
     assert message.endswith(
         "To hear more choices, say show more or next. "
-        "You can also say previous. "
         "Say no, none of these, or something else to return to search."
     )
 
@@ -73,7 +71,6 @@ def test_publication_ambiguity_announces_show_more_when_pages_remain():
 
     assert message.endswith(
         "To hear more choices, say show more or next. "
-        "You can also say previous. "
         "Say no, none of these, or something else to return to search."
     )
 
@@ -90,6 +87,18 @@ def test_final_ambiguity_page_does_not_offer_show_more():
 
     assert "First, Sunday People" in message
     assert "Second, Yorkshire Life" in message
+    assert "show more" not in message
+
+
+def test_later_ambiguity_page_offers_previous_but_not_next_when_exhausted():
+    message = SearchSpeech.ambiguous_reference_message(
+        "pendle voice",
+        [{"name": "Pendle Voice Sunday People"}],
+        has_more=False,
+        has_previous=True,
+    )
+
+    assert "previous to go back" in message
     assert "show more" not in message
 
 

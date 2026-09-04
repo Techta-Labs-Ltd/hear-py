@@ -152,7 +152,16 @@ class ResolverResult:
         entities = self.entities_of_type(entity_type)
         if self.status == "resolved" and self.intent == entity_type:
             return entities
-        return tuple(entity for entity in entities if entity.confidence == 100)
+        minimum = (
+            ResolverConstants.SECONDARY_FACET_MIN_CONFIDENCE
+            if self.status == "resolved"
+            else 100
+        )
+        return tuple(
+            entity
+            for entity in entities
+            if entity.confidence >= minimum
+        )
 
     @staticmethod
     def _ambiguity_candidate(candidate: dict) -> dict | None:
@@ -223,8 +232,15 @@ class ResolverResult:
                 }
             )
             filters["categorySlugs"] = category_slugs
-        tags = self.selected_entities_of_type("tag")
-        if not categories and tags:
+        tags = tuple(
+            tag
+            for tag in self.selected_entities_of_type("tag")
+            if not any(
+                max(tag.start, category.start) < min(tag.end, category.end)
+                for category in categories
+            )
+        )
+        if tags:
             slots["tags"] = [entity.entity_id for entity in tags]
             slots["tagNames"] = [entity.canonical_value for entity in tags]
             filters["tags"] = list(slots["tags"])
@@ -319,9 +335,7 @@ class ResolverResult:
         keys = ("city", "placeName", "countryCode", "latitude", "longitude", "isLocal")
         for key in keys:
             slots.pop(key, None)
-        if self.intent == "category":
-            all_locations = ()
-        elif self.intent == "location":
+        if self.intent == "location":
             all_locations = self.selected_entities_of_type("location")
         elif prefer_location:
             all_locations = self.fully_matched_entities_of_type("location")
@@ -436,13 +450,14 @@ class ResolverResult:
         slots["searchPlan"] = search_plan
         accepted_entities = {
             (entity.entity_type, entity.entity_id)
-            for entity_type in ("creator", "organization", "publication", "category", "tag")
+            for entity_type in ("creator", "organization", "publication", "category")
             for entity in self.selected_entities_of_type(entity_type)
-            if (
-                entity.entity_type != "tag"
-                or not self.selected_entities_of_type("category")
-            )
         }
+        accepted_entities.update(
+            (entity.entity_type, entity.entity_id)
+            for entity in self.selected_entities_of_type("tag")
+            if entity.entity_id in slots.get("tags", [])
+        )
         if resolution.get("match"):
             accepted_entities.update(
                 (entity.entity_type, entity.entity_id)

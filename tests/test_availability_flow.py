@@ -312,9 +312,13 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
         "longitude": -1.78,
     }
     speech = AvailabilityTestSupport.speech(response)
+    assert "Here are the sources I found in Swindon" in speech
+    assert "Here are the local sources I found" not in speech
     assert "First, Talking News Federation" in speech
     assert "Second, Adeshina Ayomide" in speech
+    assert "You can say first or second" in speech
     assert "more sources" not in speech
+    assert "previous" not in speech
     assert response["shouldEndSession"] is False
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
 

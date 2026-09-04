@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from src.clients.resolver import ResolverClient, ResolverOptions
+from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolvedEntity, ResolverResult, ResolverUnavailable
 
 
@@ -216,7 +217,49 @@ def test_two_full_confidence_tags_are_filtered_when_no_category_matches():
     assert result["searchPayload"]["filter"] == {"tags": ["local-history", "oral-history"]}
 
 
-def test_single_or_partial_tag_is_not_used_as_a_filter():
+def test_distinct_category_and_tag_are_both_preserved():
+    payload = _response(intent="category")
+    payload["entities"] = [
+        {
+            "entityType": "category",
+            "entityId": "sport",
+            "canonicalValue": "Sport",
+            "originalText": "sport",
+            "confidence": 100,
+            "method": "bare_match",
+            "start": 5,
+            "end": 10,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+        {
+            "entityType": "tag",
+            "entityId": "football",
+            "canonicalValue": "Football",
+            "originalText": "football",
+            "confidence": 100,
+            "method": "exact",
+            "start": 14,
+            "end": 22,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert result["searchPayload"]["filter"] == {
+        "categorySlugs": ["sport"],
+        "tags": ["football"],
+    }
+    assert [entity["entityType"] for entity in result["entities"]] == ["category", "tag"]
+
+
+def test_low_confidence_tag_is_not_used_as_a_filter():
     payload = _response(intent="search")
     payload["entities"] = [
         {
@@ -224,7 +267,7 @@ def test_single_or_partial_tag_is_not_used_as_a_filter():
             "entityId": "history",
             "canonicalValue": "History",
             "originalText": "history",
-            "confidence": 80,
+            "confidence": 74,
             "method": "fuzzy",
             "start": 5,
             "end": 12,
@@ -356,6 +399,66 @@ def test_category_intent_discards_location_even_at_full_confidence():
         assert key not in result["slots"]
 
 
+def test_category_intent_keeps_high_confidence_source_location():
+    payload = _response(intent="category")
+    payload["slots"].update({"residualQuery": "", "latest": True, "sort": "latest"})
+    payload["entities"] = [
+        {
+            "entityType": "category",
+            "entityId": "sport",
+            "canonicalValue": "Sport",
+            "originalText": "sport",
+            "confidence": 100,
+            "method": "exact_core",
+            "start": 27,
+            "end": 32,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+        {
+            "entityType": "location",
+            "entityId": "location-1826498106",
+            "canonicalValue": "Swindon",
+            "originalText": "swidon",
+            "confidence": 99,
+            "method": "phonetic",
+            "start": 38,
+            "end": 44,
+            "latitude": 51.56,
+            "longitude": -1.78,
+            "countryCode": "gb",
+            "locationRole": "source",
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play the latest content on sport from swidon"
+    )
+
+    assert result["searchPayload"] == {
+        "query": "",
+        "sort": "latest",
+        "filter": {
+            "categorySlugs": ["sport"],
+            "city": "Swindon",
+            "countryCode": "gb",
+            "latitude": 51.56,
+            "longitude": -1.78,
+        },
+    }
+    assert result["slots"]["city"] == "Swindon"
+    assert (
+        ConfirmationPolicy.confirmation_speech(result)
+        == "the latest content on sport in Swindon"
+    )
+    assert [entity["entityType"] for entity in result["entities"]] == [
+        "category",
+        "location",
+    ]
+
+
 @pytest.mark.parametrize("confidence", [0, 101, 1.0, 99.5, "100", True])
 def test_entity_model_rejects_confidence_outside_integer_1_to_100(confidence):
     entity = {**_response()["entities"][0], "confidence": confidence}
@@ -403,7 +506,7 @@ def test_partial_source_is_not_trusted_when_resolver_intent_does_not_select_it()
     payload["entities"] = [
         {
             **payload["entities"][1],
-            "confidence": 89,
+            "confidence": 74,
             "method": "fuzzy_bare",
         }
     ]
@@ -412,6 +515,105 @@ def test_partial_source_is_not_trusted_when_resolver_intent_does_not_select_it()
 
     assert "publicationIds" not in result["slots"]
     assert result["searchPayload"]["filter"] == {}
+
+
+def test_resolved_category_keeps_high_confidence_secondary_organization():
+    payload = _response(intent="category")
+    payload["slots"].update({"residualQuery": "", "latest": False})
+    payload["entities"] = [
+        {
+            "entityType": "organization",
+            "entityId": "706cb68b-8059-407e-a696-0651018066cd",
+            "canonicalValue": "Talking News Federation",
+            "originalText": "tnf",
+            "confidence": 98,
+            "method": "exact",
+            "start": 16,
+            "end": 19,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+        {
+            "entityType": "category",
+            "entityId": "sport",
+            "canonicalValue": "Sport",
+            "originalText": "sport",
+            "confidence": 100,
+            "method": "bare_match",
+            "start": 5,
+            "end": 10,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play sport from tnf"
+    )
+
+    assert result["searchPayload"]["filter"] == {
+        "organizationIds": ["706cb68b-8059-407e-a696-0651018066cd"],
+        "categorySlugs": ["sport"],
+    }
+    assert result["slots"]["organizationName"] == "Talking News Federation"
+    assert result["slots"]["categoryName"] == "Sport"
+    assert ConfirmationPolicy.confirmation_speech(result) == "sport from Talking News Federation"
+
+
+@pytest.mark.parametrize(("confidence", "accepted"), [(75, True), (74, False)])
+def test_secondary_organization_confidence_boundary(confidence, accepted):
+    payload = _response(intent="category")
+    payload["entities"] = [
+        {
+            "entityType": "organization",
+            "entityId": "organization-tnf",
+            "canonicalValue": "Talking News Federation",
+            "originalText": "tnf",
+            "confidence": confidence,
+            "method": "fuzzy_bare",
+            "start": 16,
+            "end": 19,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+        payload["entities"][0],
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert bool(result["slots"].get("organizationIds")) is accepted
+
+
+@pytest.mark.parametrize(("confidence", "accepted"), [(75, True), (74, False)])
+def test_source_location_confidence_boundary(confidence, accepted):
+    payload = _response(intent="category")
+    payload["entities"] = [
+        payload["entities"][0],
+        {
+            "entityType": "location",
+            "entityId": "location-swindon",
+            "canonicalValue": "Swindon",
+            "originalText": "swidon",
+            "confidence": confidence,
+            "method": "phonetic",
+            "start": 16,
+            "end": 22,
+            "latitude": 51.56,
+            "longitude": -1.78,
+            "countryCode": "gb",
+            "locationRole": "source",
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+
+    assert bool(result["resolution"]["match"]) is accepted
 
 
 def test_single_exact_tag_is_used_as_a_search_filter():

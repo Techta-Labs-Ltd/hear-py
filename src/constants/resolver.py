@@ -2,7 +2,8 @@ from __future__ import annotations
 
 
 class ResolverConstants:
-    SOURCE_LOCATION_MIN_CONFIDENCE = 85
+    SECONDARY_FACET_MIN_CONFIDENCE = 75
+    SOURCE_LOCATION_MIN_CONFIDENCE = 75
     STANDALONE_LOCATION_MIN_CONFIDENCE = 75
     CARRIERS = {
         "PlayContentIntent": "play",

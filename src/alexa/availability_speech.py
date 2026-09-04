@@ -44,19 +44,24 @@ class AvailabilitySpeech:
         return " ".join(spoken)
 
     @staticmethod
-    def _choice_instruction(count: int, noun: str, has_more: bool) -> str:
+    def _choice_instruction(
+        count: int, noun: str, has_more: bool, has_previous: bool = False
+    ) -> str:
         ordinals = ("first", "first or second", "first, second, or third")
         choice = ordinals[max(0, min(count, DiscoveryConstants.CHOICE_PAGE_SIZE) - 1)]
         if has_more:
             choice = choice.replace(", or ", ", ")
-            return (
-                f"You can say {choice}, show more, or next. "
-                f"You can also say previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
-            )
-        return f"You can say {choice} or previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
+            navigation = f"You can say {choice}, show more, or next."
+        else:
+            navigation = f"You can say {choice}."
+        if has_previous:
+            navigation += " You can also say previous."
+        return f"{navigation} {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod
-    def choice_reprompt(kind: str, count: int, has_more: bool) -> str:
+    def choice_reprompt(
+        kind: str, count: int, has_more: bool, has_previous: bool = False
+    ) -> str:
         nouns = {
             "source": ("source", "sources"),
             "publication": ("publication", "publications"),
@@ -67,10 +72,10 @@ class AvailabilitySpeech:
         choices = ordinals[max(0, min(count, DiscoveryConstants.CHOICE_PAGE_SIZE) - 1)]
         if has_more:
             choices = choices.replace(", or ", ", ") + ", show more, or next"
-        return (
-            f"Say the {singular} name, or say {choices}. "
-            f"You can also say previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
-        )
+        prompt = f"Say the {singular} name, or say {choices}."
+        if has_previous:
+            prompt += " You can also say previous."
+        return f"{prompt} {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod
     def _position_opening(
@@ -94,6 +99,7 @@ class AvailabilitySpeech:
         *,
         position: str = "initial",
         has_more: bool = False,
+        has_previous: bool = False,
         requested_city: str | None = None,
     ) -> str:
         if not candidates:
@@ -110,7 +116,9 @@ class AvailabilitySpeech:
                 has_more,
             )
         choices = AvailabilitySpeech._numbered_choices(candidates)
-        instruction = AvailabilitySpeech._choice_instruction(len(candidates), "sources", has_more)
+        instruction = AvailabilitySpeech._choice_instruction(
+            len(candidates), "sources", has_more, has_previous
+        )
         return f"{opening} {choices} {instruction}"
 
     @staticmethod
@@ -160,6 +168,7 @@ class AvailabilitySpeech:
         publication_count: int | None = None,
         position: str = "initial",
         has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         if not candidates:
             return "I couldn't load the publication choices just now. Please try again."
@@ -177,13 +186,17 @@ class AvailabilitySpeech:
         )
         choices = AvailabilitySpeech._numbered_choices(candidates)
         instruction = AvailabilitySpeech._choice_instruction(
-            len(candidates), "publications", has_more
+            len(candidates), "publications", has_more, has_previous
         )
         return f"{prefix}{opening} {choices} {instruction}"
 
     @staticmethod
     def track_choices(
-        candidates: list[dict], *, position: str = "initial", has_more: bool = False
+        candidates: list[dict],
+        *,
+        position: str = "initial",
+        has_more: bool = False,
+        has_previous: bool = False,
     ) -> str:
         if not candidates:
             return "I couldn't load the track choices just now. Please try again."
@@ -195,21 +208,35 @@ class AvailabilitySpeech:
             has_more,
         )
         choices = AvailabilitySpeech._numbered_choices(candidates)
-        instruction = AvailabilitySpeech._choice_instruction(len(candidates), "tracks", has_more)
+        instruction = AvailabilitySpeech._choice_instruction(
+            len(candidates), "tracks", has_more, has_previous
+        )
         return f"{opening} {choices} {instruction}"
 
     @staticmethod
-    def choice_retry(kind: str, candidates: list[dict], *, has_more: bool = False) -> str:
+    def choice_retry(
+        kind: str,
+        candidates: list[dict],
+        *,
+        has_more: bool = False,
+        has_previous: bool = False,
+    ) -> str:
         noun = "source" if kind == "source" else kind
         choices = AvailabilitySpeech._numbered_choices(candidates)
-        instruction = AvailabilitySpeech._choice_instruction(len(candidates), f"{noun}s", has_more)
+        instruction = AvailabilitySpeech._choice_instruction(
+            len(candidates), f"{noun}s", has_more, has_previous
+        )
         return f"I didn't match that to one of the {noun} choices. {choices} {instruction}"
 
     @staticmethod
-    def page_unavailable(kind: str, candidates: list[dict]) -> str:
+    def page_unavailable(
+        kind: str, candidates: list[dict], *, has_previous: bool = False
+    ) -> str:
         noun = "source" if kind == "source" else kind
         choices = AvailabilitySpeech._numbered_choices(candidates)
-        instruction = AvailabilitySpeech._choice_instruction(len(candidates), f"{noun}s", True)
+        instruction = AvailabilitySpeech._choice_instruction(
+            len(candidates), f"{noun}s", True, has_previous
+        )
         return f"I couldn't load the next {noun} choices just now. {choices} {instruction}"
 
     @staticmethod
