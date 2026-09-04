@@ -5,7 +5,25 @@ from src.constants.discovery import DiscoveryConstants
 
 class AvailabilityResponse:
     SOURCE_FILTER_KEYS = ("creatorId", "organizationId")
-    LOCATION_FILTER_KEYS = ("city", "latitude", "longitude")
+    LOCATION_FILTER_KEYS = ("city", "countryCode", "latitude", "longitude")
+
+    @staticmethod
+    def log_filter(value: dict) -> dict:
+        location = value.get("location")
+        if isinstance(location, dict):
+            return {
+                "location": {
+                    "city": location.get("city"),
+                    "countryCode": location.get("countryCode"),
+                    "latitudePresent": location.get("latitude") is not None,
+                    "longitudePresent": location.get("longitude") is not None,
+                }
+            }
+        return {
+            key: value[key]
+            for key in AvailabilityResponse.SOURCE_FILTER_KEYS
+            if value.get(key)
+        }
 
     @staticmethod
     def normalize_filter(value: object) -> dict | None:

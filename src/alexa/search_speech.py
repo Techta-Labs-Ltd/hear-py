@@ -21,10 +21,10 @@ class SearchSpeech:
         safe = Speech.escape_ssml_lite(query)
         return (
             f"I couldn't find anything matching {safe}. Try saying play followed by "
-            "a different topic, creator, publication, or place."
+            "a different topic, creator, publication, or city."
             if safe
             else "I couldn't find anything matching that. Try saying play followed by "
-            "a topic, creator, publication, or place."
+            "a topic, creator, publication, or city."
         )
 
     @staticmethod

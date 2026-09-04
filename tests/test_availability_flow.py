@@ -270,6 +270,89 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
 
 
+def test_supplied_location_filter_preserves_country_and_does_not_mix_saved_coordinates():
+    payload = {
+        "filter": {
+            "city": "Liverpool",
+            "countryCode": "gb",
+        }
+    }
+    store = {
+        "userCity": "Swindon",
+        "latitude": 51.56,
+        "longitude": -1.78,
+    }
+
+    assert AvailabilityData.location_from_payload(payload, store) == {
+        "city": "Liverpool",
+        "countryCode": "gb",
+    }
+
+
+def test_coordinate_only_location_filter_is_preserved():
+    payload = {"filter": {"latitude": 53.4072, "longitude": -2.9917}}
+
+    assert AvailabilityData.location_from_payload(payload, {}) == {
+        "latitude": 53.4072,
+        "longitude": -2.9917,
+    }
+
+
+@pytest.mark.asyncio
+async def test_resolver_location_payload_routes_to_availability_instead_of_search(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(
+        mock_handler_input,
+        "PlayLocalIntent",
+        {"localQuery": {"name": "localQuery", "value": "Swindon"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "userCity": "Swindon",
+        "latitude": 51.56,
+        "longitude": -1.78,
+    }
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "page": 0,
+            "total_pages": 1,
+            "has_more": False,
+            "organizations": [
+                {"type": "organization", "id": "org-1", "name": "Talking News Federation"}
+            ],
+            "creators": [],
+        }
+    )
+    nlp = {
+        "intent": "local",
+        "directDiscoveryRequest": True,
+        "searchPayload": {
+            "query": "",
+            "filter": {},
+            "sort": "latest",
+            "page": 0,
+            "limit": 5,
+        },
+        "slots": {"residualQuery": "", "isLocal": True, "sort": "latest"},
+    }
+
+    response = await Availability(deps=deps).begin_local(handler_input, nlp)
+
+    deps.heara.availability.assert_awaited_once()
+    deps.heara.search.assert_not_awaited()
+    assert deps.heara.availability.await_args.args[0]["filter"] == {
+        "location": {
+            "city": "Swindon",
+            "latitude": 51.56,
+            "longitude": -1.78,
+        }
+    }
+    assert "Talking News Federation" in AvailabilityTestSupport.speech(response)
+    assert DialogStateManager.get_active(handler_input)["type"] == "availability"
+
+
 @pytest.mark.asyncio
 async def test_source_with_publications_and_tracks_asks_for_content_type(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
@@ -439,6 +522,32 @@ async def test_availability_dialog_accepts_ordinal_and_keeps_retry_open(mock_han
         response
     )
     assert response["shouldEndSession"] is False
+
+
+@pytest.mark.asyncio
+async def test_declining_single_available_source_uses_natural_uk_english(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.NoIntent")
+    candidate = {"type": "organization", "id": "org-1", "name": "Local Voice"}
+    User.update(
+        handler_input,
+        {
+            "activeDialog": {
+                "type": "availability",
+                "context": {
+                    "kind": "source",
+                    "candidates": [candidate],
+                    "singleChoice": True,
+                },
+            }
+        },
+    )
+    deps = AvailabilityTestSupport.dependencies({"failed": False})
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "What would you like to listen to instead?" in speech
+    assert "What would you like to hear instead?" not in speech
 
 
 @pytest.mark.asyncio

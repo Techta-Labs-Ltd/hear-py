@@ -7,11 +7,29 @@ class ResumeSpeech:
     CREATOR_SOURCES = frozenset({"creator", "playbycreatorintent"})
     ORGANIZATION_SOURCES = frozenset({"organization", "playbyorganizationintent"})
     PUBLICATION_SOURCES = frozenset({"publication", "playpublicationintent"})
+    PLACEHOLDER_LABELS = frozenset(
+        {
+            "a publication",
+            "a recording",
+            "independent creator",
+            "that creator",
+            "that organization",
+            "that publication",
+            "that recording",
+            "that source",
+            "unknown",
+            "untitled",
+        }
+    )
 
     @staticmethod
     def _safe_label(value, *, credit: bool = False) -> str | None:
         label = Speech.humanize_spoken_title(value)
-        if not label or (credit and Speech.is_bad_credit(label)):
+        if (
+            not label
+            or label.casefold() in ResumeSpeech.PLACEHOLDER_LABELS
+            or (credit and Speech.is_bad_credit(label))
+        ):
             return None
         return Speech.escape_ssml_lite(label)
 
@@ -24,7 +42,7 @@ class ResumeSpeech:
     @staticmethod
     def _question(statement: str | None = None) -> str:
         if not statement:
-            return "Would you like to continue this recording?"
+            statement = "You were listening to a recording"
         punctuation = "" if statement.endswith((".", "!", "?")) else "."
         return f"{statement}{punctuation} Would you like to continue?"
 
@@ -43,10 +61,8 @@ class ResumeSpeech:
             publication = cls._safe_label(
                 active.get("publicationTitle") or active.get("subjectTitle")
             )
-            publisher = cls._safe_label(
-                active.get("organizationName") or active.get("creatorName"),
-                credit=True,
-            )
+            publisher = cls._safe_label(active.get("organizationName"), credit=True)
+            publisher = publisher or cls._safe_label(active.get("creatorName"), credit=True)
             if publication and publisher and publication.casefold() != publisher.casefold():
                 return cls._question(
                     f"You were listening to {publication}, from {publisher}"
@@ -57,20 +73,27 @@ class ResumeSpeech:
                 return cls._question(
                     f"You were listening to a publication from {publisher}"
                 )
-            return "Would you like to continue this publication?"
+            return cls._question("You were listening to a publication")
 
         if source in cls.ORGANIZATION_SOURCES or source == "latest_source":
             organization = cls._safe_label(active.get("organizationName"), credit=True)
             if organization:
                 return cls._question(f"You were listening to {organization}")
+            creator = cls._safe_label(active.get("creatorName"), credit=True)
+            if creator:
+                return cls._question(f"You were listening to {creator}")
 
         if source in cls.CREATOR_SOURCES or source == "latest_source":
             creator = cls._safe_label(active.get("creatorName"), credit=True)
             if creator:
                 return cls._question(f"You were listening to {creator}")
 
-        summary = cls._safe_label(active.get("summary"))
-        return cls._question(f"You were listening to {summary}" if summary else None)
+        description = cls._safe_label(
+            active.get("summary") or active.get("spokenTitle") or active.get("title")
+        )
+        return cls._question(
+            f"You were listening to {description}" if description else None
+        )
 
     @classmethod
     def reprompt(cls, subject: dict | None, store: dict | None = None) -> str:

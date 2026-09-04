@@ -244,11 +244,12 @@ class HearApiClient:
             return AvailabilityResponse.failed(body)
         path = self._build_alexa_availability_path()
         HearApiSupport.logger.info(
-            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s",
+            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s query=%s",
             path,
             body["page"],
             body["limit"],
             sorted(body["filter"].keys()),
+            AvailabilityResponse.log_filter(body["filter"]),
         )
         for attempt in range(self._retry_count + 1):
             status, data = await self._raw_request("POST", path, body, timeout_ms)

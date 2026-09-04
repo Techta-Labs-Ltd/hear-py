@@ -50,7 +50,7 @@ class Availability:
             payload = SearchPayload.with_pagination(existing, DiscoveryConstants.CHOICE_PAGE_SIZE)
             payload["limit"] = DiscoveryConstants.CHOICE_PAGE_SIZE
             filters = SearchPayload.resolution_filter(slots, payload.get("filter"))
-            payload["filter"] = filters
+            payload["filter"] = SearchFilters.clean(filters)
             payload["isLocal"] = True
         else:
             filters = SearchPayload.resolution_filter(slots, {"isLocal": True})
@@ -570,7 +570,7 @@ class Availability:
             DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
             return self._response(
                 handler_input,
-                "No problem. What would you like to hear instead?",
+                "No problem. What would you like to listen to instead?",
                 Speech.WELCOME_REPROMPT,
             )
         if intent_name == "AMAZON.YesIntent" and context.get("singleChoice"):

@@ -301,7 +301,8 @@ async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypat
     assert paused["offsetMs"] == 73000
 
     launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
-    assert "that publication" in launch["response"]["outputSpeech"]["ssml"]
+    assert "You were listening to a publication" in launch["response"]["outputSpeech"]["ssml"]
+    assert "that publication" not in launch["response"]["outputSpeech"]["ssml"]
     assert persistence._store[USER_ID]["awaitingResume"] is True
 
     resumed = await skill.invoke(

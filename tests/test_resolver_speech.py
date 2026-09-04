@@ -5,7 +5,7 @@ def test_no_match_names_request_and_explains_how_to_retry():
     message = SearchSpeech.search_no_match("Roman Empire")
 
     assert "couldn't find anything matching Roman Empire" in message
-    assert "different topic, creator, publication, or place" in message
+    assert "different topic, creator, publication, or city" in message
 
 
 def test_ambiguous_reference_message_does_not_speak_raw_alias():

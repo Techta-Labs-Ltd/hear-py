@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock
 
 import httpx
@@ -55,7 +56,7 @@ def test_availability_path_applies_configured_prefix_once():
 
 
 @pytest.mark.asyncio
-async def test_availability_sends_bridge_contract_and_normalizes_response(monkeypatch):
+async def test_availability_sends_bridge_contract_and_normalizes_response(monkeypatch, caplog):
     captured = {}
 
     async def fake_request(self, method, path, body, timeout_ms):
@@ -87,19 +88,21 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
         )
 
     monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
-    result = await HearApiClient().availability(
-        {
-            "filter": {
-                "location": {
-                    "city": "Swindon",
-                    "latitude": 51.56,
-                    "longitude": -1.78,
-                }
-            },
-            "page": 0,
-            "limit": 3,
-        }
-    )
+    with caplog.at_level(logging.INFO, logger="src.clients.hear"):
+        result = await HearApiClient().availability(
+            {
+                "filter": {
+                    "location": {
+                        "city": "Swindon",
+                        "countryCode": "gb",
+                        "latitude": 51.56,
+                        "longitude": -1.78,
+                    }
+                },
+                "page": 0,
+                "limit": 3,
+            }
+        )
 
     assert captured == {
         "method": "POST",
@@ -108,6 +111,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
             "filter": {
                 "location": {
                     "city": "Swindon",
+                    "countryCode": "gb",
                     "latitude": 51.56,
                     "longitude": -1.78,
                 }
@@ -123,6 +127,12 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
         {"type": "organization", "id": "org-1", "name": "Redcar Talking Newspaper"}
     ]
     assert result["publications"][0]["id"] == "publication-1"
+    assert "'city': 'Swindon'" in caplog.text
+    assert "'countryCode': 'gb'" in caplog.text
+    assert "'latitudePresent': True" in caplog.text
+    assert "'longitudePresent': True" in caplog.text
+    assert "51.56" not in caplog.text
+    assert "-1.78" not in caplog.text
 
 
 @pytest.mark.asyncio

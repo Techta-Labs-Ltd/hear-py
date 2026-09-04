@@ -95,15 +95,21 @@ class AvailabilityData:
     @staticmethod
     def location_from_payload(payload: dict, store: dict) -> dict:
         filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
-        city = str(
-            filters.get("city") or store.get("userCity") or store.get("locality") or ""
-        ).strip()
+        requested_city = str(filters.get("city") or "").strip()
+        saved_city = str(store.get("userCity") or store.get("locality") or "").strip()
+        city = requested_city or saved_city
+        uses_saved_location = not requested_city or (
+            saved_city and requested_city.casefold() == saved_city.casefold()
+        )
         location = {}
         if city:
             location["city"] = city
+        country_code = filters.get("countryCode")
+        if country_code is not None:
+            location["countryCode"] = country_code
         for key in ("latitude", "longitude"):
             value = filters.get(key)
-            if value is None:
+            if value is None and uses_saved_location:
                 value = store.get(key)
             if value is not None:
                 location[key] = value

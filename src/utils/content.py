@@ -343,7 +343,7 @@ class ContentIdentity:
         if not isinstance(item, dict):
             return None
         if ContentIdentity.is_publication(item):
-            return ContentUtils.nullable_string(item.get("publicationTitle")) or "that publication"
+            return ContentUtils.nullable_string(item.get("publicationTitle"))
         return ContentUtils.nullable_string(
             item.get("title") or item.get("spokenTitle") or item.get("displayTitle")
         )

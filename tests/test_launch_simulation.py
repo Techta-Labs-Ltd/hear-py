@@ -173,6 +173,78 @@ class TestIsNewUser:
         assert "Weekly publication" in reprompt
         assert "Second track" not in speech
 
+    def test_resume_prompt_rejects_placeholder_publication_title(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "track-2",
+                    "title": "Second track",
+                    "publicationId": "publication-1",
+                    "publicationTitle": None,
+                    "subjectTitle": "that publication",
+                    "organizationName": "Talking News Federation",
+                    "subjectType": "publication",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to a publication from Talking News Federation." in speech
+        assert "that publication" not in speech
+
+    def test_resume_prompt_uses_creator_when_publication_and_organization_are_placeholders(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "track-2",
+                    "title": "Second track",
+                    "publicationId": "publication-1",
+                    "subjectTitle": "that publication",
+                    "organizationName": "Independent Creator",
+                    "creatorName": "David Beard",
+                    "subjectType": "publication",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to a publication from David Beard." in speech
+        assert "that publication" not in speech
+        assert "Independent Creator" not in speech
+
+    def test_resume_prompt_without_publication_metadata_still_uses_listening_sentence(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "track-2",
+                    "publicationId": "publication-1",
+                    "subjectType": "publication",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to a publication." in speech
+        assert "Would you like to continue?" in speech
+
     def test_resume_prompt_uses_short_description_for_an_ordinary_result(self):
         hi = _build_handler_input(
             store_override={
@@ -200,6 +272,48 @@ class TestIsNewUser:
         assert "A guide to using the RNIB Navigator GPS app" in reprompt
         assert "Would you like to continue?" in reprompt
         assert "Please say yes or no." in reprompt
+
+    def test_resume_prompt_uses_title_when_trending_result_has_no_description(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "Community news roundup",
+                    "discoverySource": "trending",
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to Community news roundup." in speech
+        assert "Would you like to continue?" in speech
+        assert "from what" not in speech
+
+    def test_resume_prompt_always_says_what_the_listener_was_doing(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "discoverySource": "trending",
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to a recording." in speech
+        assert "Would you like to continue?" in speech
 
     def test_resume_prompt_uses_creator_for_creator_search(self):
         hi = _build_handler_input(
