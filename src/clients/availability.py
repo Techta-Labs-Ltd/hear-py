@@ -26,6 +26,27 @@ class AvailabilityResponse:
         }
 
     @staticmethod
+    def log_response(value: dict) -> dict:
+        return {
+            key: value.get(key)
+            for key in (
+                "page",
+                "limit",
+                "total",
+                "totalPages",
+                "remaining",
+                "hasMore",
+                "nextPage",
+                "publicationCount",
+                "standaloneTrackCount",
+                "organizations",
+                "creators",
+                "publications",
+            )
+            if key in value
+        }
+
+    @staticmethod
     def normalize_filter(value: object) -> dict | None:
         """Accept one availability scope: one source, or one location."""
         if not isinstance(value, dict) or len(value) != 1:

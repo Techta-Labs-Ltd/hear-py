@@ -257,6 +257,10 @@ class HearApiClient:
                 "Hear API availability response attempt=%s status=%s", attempt + 1, status
             )
             if status == 200 and isinstance(data, dict):
+                HearApiSupport.logger.info(
+                    "Hear API availability response data=%s",
+                    AvailabilityResponse.log_response(data),
+                )
                 return AvailabilityResponse.normalize(data, body)
             if attempt < self._retry_count and self._is_retryable(status):
                 await asyncio.sleep(settings.HEAR_API_RETRY_BACKOFF_MS / 1000.0 * 2**attempt)

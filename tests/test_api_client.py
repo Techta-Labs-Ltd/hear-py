@@ -131,6 +131,13 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
     assert "'countryCode': 'gb'" in caplog.text
     assert "'latitude': 51.56" in caplog.text
     assert "'longitude': -1.78" in caplog.text
+    assert "availability response data=" in caplog.text
+    assert "'total': 2" in caplog.text
+    assert "'publicationCount': 1" in caplog.text
+    assert "'standaloneTrackCount': 7" in caplog.text
+    assert "'name': 'Redcar Talking Newspaper'" in caplog.text
+    assert "'name': 'A Reader'" in caplog.text
+    assert "'title': 'Redcar News'" in caplog.text
 
 
 @pytest.mark.asyncio
