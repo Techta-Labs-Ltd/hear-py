@@ -11,7 +11,13 @@ from src.models.user import User
 from src.services.listener_sync import ListenerSyncSupport
 
 
-def _handler_input(*, token: str = "", status: str = "") -> HandlerInput:
+def _handler_input(
+    *,
+    token: str = "",
+    status: str = "",
+    connection_code: str = "200",
+    connection_message: str = "OK",
+) -> HandlerInput:
     envelope = AttrDict(
         {
             "context": {
@@ -28,7 +34,10 @@ def _handler_input(*, token: str = "", status: str = "") -> HandlerInput:
                 "cause": {
                     "type": "ConnectionCompleted",
                     "token": token,
-                    "status": {"code": "200", "message": "OK"},
+                    "status": {
+                        "code": connection_code,
+                        "message": connection_message,
+                    },
                     "result": {"status": status},
                 },
             },
@@ -120,9 +129,66 @@ async def test_profile_consent_requires_both_name_and_email(profile, expected_ty
         status="ACCEPTED",
     )
     deps = _deps(profile=profile)
-    await Permission(deps=deps).resume(handler_input)
+    response = await Permission(deps=deps).resume(handler_input)
     assert deps.user.snapshot(handler_input)["listenerType"] == expected_type
     deps.listener_sync.sync_for_launch.assert_awaited_once_with(handler_input)
+    if expected_type == "guest":
+        speech = response["outputSpeech"]["ssml"]
+        assert "Permission was granted" in speech
+        assert "your email address" in speech
+        assert response["card"]["type"] == "AskForPermissionsConsent"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "connection_code", "expected"),
+    [
+        ("DENIED", "200", "permission to share your name and email was not granted"),
+        ("NOT_ANSWERED", "200", "permission question was not answered"),
+        ("", "204", "permission question was not answered"),
+        ("REDIRECT_TO_APP", "200", "couldn't complete the permission request by voice"),
+        ("", "500", "couldn't complete the permission request"),
+    ],
+)
+async def test_profile_consent_failure_explains_the_outcome_and_recovery(
+    status,
+    connection_code,
+    expected,
+):
+    handler_input = _handler_input(
+        token=PermissionConstants.PROFILE_PURPOSE,
+        status=status,
+        connection_code=connection_code,
+    )
+    deps = _deps()
+
+    response = await Permission(deps=deps).resume(handler_input)
+
+    speech = response["outputSpeech"]["ssml"]
+    assert expected in speech
+    assert "Manage Permissions" in speech
+    assert "continue using Hear as a guest" in speech
+    assert response["card"] == {
+        "type": "AskForPermissionsConsent",
+        "permissions": list(PermissionConstants.PROFILE_SCOPES),
+    }
+    assert response["shouldEndSession"] is False
+    assert deps.user.snapshot(handler_input)["awaitingProfilePermission"] is False
+    deps.listener_profile.apply_listener_profile.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_profile_consent_uses_pending_state_when_alexa_omits_token():
+    handler_input = _handler_input(status="DENIED")
+    deps = _deps()
+    deps.user.update(handler_input, {"awaitingProfilePermission": True})
+
+    response = await Permission(deps=deps).resume(handler_input)
+
+    speech = response["outputSpeech"]["ssml"]
+    assert "permission to share your name and email was not granted" in speech
+    assert "say the name of your city" not in speech
+    deps.onboarding.decline_permission.assert_not_called()
 
 
 def test_guest_sync_excludes_protected_profile_and_location_fields():
