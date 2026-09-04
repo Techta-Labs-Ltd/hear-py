@@ -45,17 +45,32 @@ class PermissionPolicy:
         }
 
     @staticmethod
-    def resume_result(handler_input) -> tuple[str, str]:
+    def resume_result(handler_input) -> tuple[str, str, str, str]:
         request = getattr(handler_input.request_envelope, "request", {}) or {}
         cause = request.get("cause", {}) if isinstance(request, dict) else getattr(request, "cause", {})
         token = cause.get("token", "") if isinstance(cause, dict) else getattr(cause, "token", "")
         result = cause.get("result", {}) if isinstance(cause, dict) else getattr(cause, "result", {})
         status = result.get("status", "") if isinstance(result, dict) else getattr(result, "status", "")
-        return str(token or ""), str(status or "")
+        connection = cause.get("status", {}) if isinstance(cause, dict) else getattr(cause, "status", {})
+        code = connection.get("code", "") if isinstance(connection, dict) else getattr(connection, "code", "")
+        message = connection.get("message", "") if isinstance(connection, dict) else getattr(connection, "message", "")
+        return (
+            str(token or ""),
+            str(status or ""),
+            str(code or ""),
+            str(message or ""),
+        )
 
     @staticmethod
     def app_guidance() -> str:
         return f"You can also enable permissions in the Alexa app under {PermissionPolicy.skill_name()}, Settings, Manage Permissions."
+
+    @staticmethod
+    def profile_app_guidance() -> str:
+        return (
+            "Open the Alexa app and use the permission card, or go to "
+            f"{PermissionPolicy.skill_name()}, Settings, then Manage Permissions."
+        )
 
 
 class Permission:
@@ -107,8 +122,21 @@ class Permission:
         )
 
     async def resume(self, handler_input):
-        purpose, status = PermissionPolicy.resume_result(handler_input)
-        accepted = status.upper() == "ACCEPTED"
+        purpose, status, connection_code, connection_message = PermissionPolicy.resume_result(
+            handler_input
+        )
+        store = self._deps.user.snapshot(handler_input)
+        if not purpose and store.get("awaitingProfilePermission"):
+            purpose = PermissionConstants.PROFILE_PURPOSE
+        normalized_status = status.upper()
+        accepted = connection_code in {"", "200"} and normalized_status == "ACCEPTED"
+        self.logger.info(
+            "Hear: permission consent resumed purpose=%s status=%s connectionCode=%s connectionMessage=%s",
+            purpose or "unknown",
+            normalized_status or "missing",
+            connection_code or "missing",
+            connection_message or "missing",
+        )
         if purpose == PermissionConstants.LOCATION_PURPOSE and accepted:
             return await Onboarding.auto_detect_location_or_manual(
                 handler_input,
@@ -128,10 +156,10 @@ class Permission:
             )
         if purpose == PermissionConstants.PROFILE_PURPOSE:
             self._deps.user.update(handler_input, {"awaitingProfilePermission": False})
-            return AlexaResponse.present_idle_next(
+            return self._profile_permission_failure(
                 handler_input,
-                Speech.PROFILE_PERMISSION_FAILED,
-                Speech.WELCOME_REPROMPT,
+                status=normalized_status,
+                connection_code=connection_code,
             )
         return self.location_fallback(handler_input, denied=True)
 
@@ -149,10 +177,62 @@ class Permission:
             await self._deps.listener_sync.sync_for_launch(handler_input)
         except Exception as error:
             self.logger.warning("Hear: post-consent listener sync failed error=%s", type(error).__name__)
-        return AlexaResponse.present_idle_next(
-            handler_input,
-            Speech.PROFILE_PERMISSION_COMPLETE if registered else Speech.PROFILE_PERMISSION_FAILED,
-            Speech.WELCOME_REPROMPT,
+        if registered:
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.PROFILE_PERMISSION_COMPLETE,
+                Speech.WELCOME_REPROMPT,
+            )
+        return self._profile_details_missing(handler_input, store)
+
+    @staticmethod
+    def _profile_failure_reason(*, status: str, connection_code: str) -> str:
+        if status == "DENIED":
+            return Speech.PROFILE_PERMISSION_DENIED
+        if status == "NOT_ANSWERED" or connection_code == "204":
+            return Speech.PROFILE_PERMISSION_NOT_ANSWERED
+        if status == "REDIRECT_TO_APP":
+            return Speech.PROFILE_PERMISSION_APP_REQUIRED
+        return Speech.PROFILE_PERMISSION_FAILED
+
+    def _profile_permission_failure(
+        self,
+        handler_input,
+        *,
+        status: str,
+        connection_code: str,
+    ):
+        speech = (
+            f"{self._profile_failure_reason(status=status, connection_code=connection_code)} "
+            f"{PermissionPolicy.profile_app_guidance()} "
+            f"{Speech.PROFILE_PERMISSION_GUEST_CONTINUE}"
+        )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(speech))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .with_ask_for_permissions_consent_card(PermissionConstants.PROFILE_SCOPES)
+            .set_should_end_session(False)
+            .response
+        )
+
+    def _profile_details_missing(self, handler_input, store: dict):
+        missing = []
+        if not (store.get("fullName") or store.get("userName")):
+            missing.append("your name")
+        if not store.get("userEmail"):
+            missing.append("your email address")
+        details = " and ".join(missing) or "the required details"
+        reason = Speech.PROFILE_PERMISSION_MISSING_DETAILS.format(details=details)
+        speech = (
+            f"{reason} Please check your Alexa profile details and permissions. "
+            f"{Speech.PROFILE_PERMISSION_GUEST_CONTINUE}"
+        )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(speech))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .with_ask_for_permissions_consent_card(PermissionConstants.PROFILE_SCOPES)
+            .set_should_end_session(False)
+            .response
         )
 
     def location_fallback(self, handler_input, *, denied: bool):

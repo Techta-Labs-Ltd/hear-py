@@ -8,10 +8,15 @@ class Speech:
     LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say the name of your city, or say skip to continue as a guest."
     LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say the name of your city, or say skip to continue as a guest."
     LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check your device location right now. Please say the name of your city, or say skip to continue as a guest."
-    PROFILE_PERMISSION_OFFER = "Would you like to share your name and email so I can setup your Hear listener profile? You can say yes or skip."
+    PROFILE_PERMISSION_OFFER = "Would you like to share your name and email so I can set up your Hear listener profile? You can say yes or skip."
     PROFILE_PERMISSION_REASON = "Your name lets me personalise Hear, and your email identifies your listener account. Alexa will now ask whether you give Hear permission to share them."
     PROFILE_PERMISSION_SKIPPED = "No problem. You can continue using Hear as a guest. What would you like to listen to?"
-    PROFILE_PERMISSION_FAILED = "I couldn't complete your listener account setup, so I'll keep you as a guest. You can say set up my account later. What would you like to listen to?"
+    PROFILE_PERMISSION_DENIED = "I couldn't set up your listener profile because permission to share your name and email was not granted."
+    PROFILE_PERMISSION_NOT_ANSWERED = "I couldn't set up your listener profile because the permission question was not answered."
+    PROFILE_PERMISSION_APP_REQUIRED = "Alexa couldn't complete the permission request by voice, so your listener profile was not set up."
+    PROFILE_PERMISSION_FAILED = "Alexa couldn't complete the permission request, so your listener profile was not set up."
+    PROFILE_PERMISSION_MISSING_DETAILS = "Permission was granted, but your Alexa profile did not provide {details}, so your listener profile was not set up."
+    PROFILE_PERMISSION_GUEST_CONTINUE = "You can continue using Hear as a guest. What would you like to listen to?"
     PROFILE_PERMISSION_COMPLETE = "Thanks. Your Hear listener account is ready. What would you like to listen to?"
     TOWN_SKIPPED = "Okay. What would you like to listen to?"
     TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say the full city name, or say skip to continue without one."
@@ -142,9 +147,7 @@ class Speech:
     LOCATION_NOT_FOUND = "Welcome back to Hear. I don't have a city for this Echo yet. You can tell me your city now, or say skip. To use your Echo's saved location instead, update Device Location in the Alexa app and relaunch Hear."
     LOCATION_DECLINED = "No problem. What would you like to listen to?"
     LOCATION_RETRY = "No problem. Which city should I set instead?"
-    WELCOME_RETURN_GENERIC = (
-        "Welcome back to Hear. You can say what's trending, or play news. What would you like?"
-    )
+    WELCOME_RETURN_GENERIC = "Welcome back to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
     LATEST_SOURCE_DECLINED = "No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
 
     @staticmethod
@@ -276,7 +279,7 @@ class Speech:
         return (
             f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. You can say what's trending, play news, or play from a creator. What would you like?"
             if name
-            else "Hello, welcome to Hear. You can say what's trending, play news, or play from a creator. What would you like?"
+            else "Welcome to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
         )
 
     @staticmethod
@@ -284,7 +287,7 @@ class Speech:
         return (
             f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. You can say play news, or what's trending. What would you like?"
             if name
-            else "Hello, welcome to Hear. You can say play news, or what's trending. What would you like?"
+            else "Welcome to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
         )
 
     @staticmethod
@@ -413,7 +416,7 @@ class Speech:
 
     @staticmethod
     def WELCOME_RETURN_CITY(city=None):
-        return "Welcome back to Hear. You can say what's trending, play news, or play from a talking newspaper. What would you like?"
+        return "Welcome back to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
 
     @staticmethod
     def LATEST_SOURCE_OFFER(source):
