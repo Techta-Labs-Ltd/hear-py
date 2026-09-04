@@ -5,6 +5,10 @@ from src.utils.content import ContentUtils
 
 
 class Speech:
+    CHOICE_EXIT_INSTRUCTION = (
+        "Say no, none of these, or something else to return to search."
+    )
+    CHOICES_DISMISSED = "No problem. What would you like to listen to instead?"
     ONBOARDING_LOCATION_REASON = "Your location helps Hear find nearby news, sport, publications, and talking newspapers. Alexa will now ask whether you give Hear permission to use your location."
     LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say the name of your city, or say skip to continue as a guest."
     LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say the name of your city, or say skip to continue as a guest."

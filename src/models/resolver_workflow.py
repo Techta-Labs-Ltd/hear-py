@@ -45,7 +45,7 @@ class ResolverWorkflow:
         "AMAZON.PreviousIntent",
         "ShowMoreBrowseIntent",
         "ShowPreviousBrowseIntent",
-    }
+    } | DialogConstants.CHOICE_DISMISS_INTENTS
     CANONICAL_ZERO_SLOT_DISCOVERY = {
         "PlayContentIntent": "play",
         "PlayLatestContentIntent": "play latest",

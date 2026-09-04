@@ -82,6 +82,12 @@ class PauseIntentHandler(AbstractRequestHandler):
             and AlexaRequest.get_intent_name(handler_input) == "AMAZON.StopIntent"
         ):
             DialogStateManager.clear_transient_discovery(handler_input)
+            directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
+            return (
+                handler_input.response_builder.speak(Speech.GOODBYE)
+                .add_directive(directive)
+                .response
+            )
         directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
         return handler_input.response_builder.add_directive(
             directive

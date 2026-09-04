@@ -6,11 +6,13 @@ import threading
 
 from aws_lambda_powertools import Logger, Tracer
 
+from config import settings
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AlexaMetrics
 from src.application import Application
 from src.container import ApplicationContainer
 from src.models.resolver import ResolverUnavailable
+from src.services.logging_control import LoggingControl
 from src.services.observability import ErrorReporter
 
 
@@ -35,6 +37,7 @@ class LambdaApplication:
     tracer = Tracer()
 
     def __init__(self) -> None:
+        LoggingControl.configure(settings.HEAR_LOGGING_ENABLED)
         logging.getLogger().setLevel(logging.INFO)
         self._error_reporter = ErrorReporter()
         self._error_reporter.initialize()
@@ -96,6 +99,7 @@ class OutboundLambdaApplication:
     tracer = Tracer(service="hear-outbound-events")
 
     def __init__(self) -> None:
+        LoggingControl.configure(settings.HEAR_LOGGING_ENABLED)
         self._runtime = LambdaRuntime()
         self._dependencies: ApplicationContainer | None = None
 
@@ -125,6 +129,7 @@ class NotificationLambdaApplication:
     tracer = Tracer(service="hear-proactive-notifications")
 
     def __init__(self) -> None:
+        LoggingControl.configure(settings.HEAR_LOGGING_ENABLED)
         self._runtime = LambdaRuntime()
         self._dependencies: ApplicationContainer | None = None
 

@@ -24,6 +24,7 @@ class DialogValidationPolicy:
     _EXIT_INTENTS = {"AMAZON.CancelIntent", "AMAZON.StopIntent"}
     _BINARY_INTENTS = _EXIT_INTENTS | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
     _AMBIGUITY_INTENTS = _EXIT_INTENTS | {
+        "DismissChoicesIntent",
         "ClarifySelectionIntent",
         "ShowMoreBrowseIntent",
         "AMAZON.NextIntent",

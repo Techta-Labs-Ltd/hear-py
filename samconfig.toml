@@ -7,7 +7,7 @@ capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = false
 fail_on_empty_changeset = false
 resolve_s3 = true
-parameter_overrides = "Stage=development ShortStage=dev PowerToolsLogLevel=DEBUG"
+parameter_overrides = "Stage=development ShortStage=dev PowerToolsLogLevel=DEBUG HearLoggingEnabled=true"
 tags = "Application=hear-alexa-skill Stage=development ManagedBy=SAM"
 
 [production.deploy.parameters]
@@ -17,5 +17,5 @@ capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = true
 fail_on_empty_changeset = false
 resolve_s3 = true
-parameter_overrides = "Stage=production ShortStage=prod PowerToolsLogLevel=INFO"
+parameter_overrides = "Stage=production ShortStage=prod PowerToolsLogLevel=INFO HearLoggingEnabled=true"
 tags = "Application=hear-alexa-skill Stage=production ManagedBy=SAM"

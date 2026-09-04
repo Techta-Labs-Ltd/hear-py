@@ -49,6 +49,10 @@ Parameters:
     Type: String
     Default: INFO
     AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+  HearLoggingEnabled:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
   CanonicalIdentityEnabled:
     Type: String
     Default: "1"
@@ -119,6 +123,7 @@ Globals:
         SENTRY_DSN: !Ref SentryDsn
         POWERTOOLS_SERVICE_NAME: hear-alexa-skill
         POWERTOOLS_LOG_LEVEL: !Ref PowerToolsLogLevel
+        HEAR_LOGGING_ENABLED: !Ref HearLoggingEnabled
         HEAR_METRICS_NAMESPACE: HearAlexa
 
 Resources:

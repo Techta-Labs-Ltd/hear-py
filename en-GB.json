@@ -369,6 +369,12 @@
             "next choices",
             "show next choices",
             "more choices",
+            "more publication",
+            "more publications",
+            "show more publication",
+            "show more publication choices",
+            "more publication choices",
+            "next publication",
             "next publications",
             "show next publications",
             "show more publications",
@@ -378,6 +384,21 @@
             "show more local sources",
             "next tracks",
             "next local sources"
+          ]
+        },
+        {
+          "name": "DismissChoicesIntent",
+          "slots": [],
+          "samples": [
+            "something else",
+            "none of these",
+            "none of them",
+            "different search",
+            "search for something else",
+            "go back to search",
+            "return to search",
+            "leave these choices",
+            "I don't want any of these"
           ]
         },
         {

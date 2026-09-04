@@ -11,9 +11,13 @@ class SearchSpeech:
     @staticmethod
     def _with_more_options(message: str, has_more: bool) -> str:
         return (
-            f"{message} There are more options. Say show more to hear them."
+            f"{message} To hear more choices, say show more or next. "
+            f"You can also say previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
             if has_more
-            else message
+            else (
+                f"{message} You can say previous to go back. "
+                f"{Speech.CHOICE_EXIT_INSTRUCTION}"
+            )
         )
 
     @staticmethod
@@ -80,10 +84,10 @@ class SearchSpeech:
         subject = "the publication name" if publication_picker else "a name"
         prompt = f"Say {subject}, or say {SearchSpeech._ordinal_choices(len(names))}"
         if has_more:
-            prompt += ", or say show more"
+            prompt += ", or say show more or next"
         if has_previous:
             prompt += ", or say previous"
-        return f"{prompt}."
+        return f"{prompt}. {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod
     def _common_name_prefix(names: list[str]) -> str:
@@ -163,7 +167,7 @@ class SearchSpeech:
     ) -> str:
         return SearchSpeech._publication_choice_message(
             candidates,
-            "Here are more publication choices.",
+            "Here are the next publication choices.",
             has_more=has_more,
         )
 
@@ -200,7 +204,7 @@ class SearchSpeech:
     @staticmethod
     def publication_choices_unavailable_message() -> str:
         return (
-            "I couldn't load more publication choices right now. Please say one of the names "
+            "I couldn't load the next publication choices right now. Please say one of the names "
             "I already offered, or say show more to try again."
         )
 

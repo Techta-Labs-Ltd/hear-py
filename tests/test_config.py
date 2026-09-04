@@ -37,6 +37,7 @@ def test_runtime_flags_are_loaded_through_settings():
         HEAR_DEFAULT_PLAYBACK_SPEED=1.5,
         HEAR_SEEK_STEP_MS=15000,
         HEAR_MAX_HISTORY=12,
+        HEAR_LOGGING_ENABLED=False,
     )
     assert configured.progressive_responses_enabled is False
     assert configured.HEAR_RESOLVER_URL == "https://resolver.test"
@@ -45,6 +46,7 @@ def test_runtime_flags_are_loaded_through_settings():
     assert configured.default_speed == 1.5
     assert configured.seek_step_ms == 15000
     assert configured.max_history == 12
+    assert configured.HEAR_LOGGING_ENABLED is False
 
 
 def test_env_example_documents_every_application_setting():

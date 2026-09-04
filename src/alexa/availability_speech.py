@@ -49,8 +49,11 @@ class AvailabilitySpeech:
         choice = ordinals[max(0, min(count, DiscoveryConstants.CHOICE_PAGE_SIZE) - 1)]
         if has_more:
             choice = choice.replace(", or ", ", ")
-            return f"You can say {choice}, or more {noun}."
-        return f"You can say {choice}."
+            return (
+                f"You can say {choice}, show more, or next. "
+                f"You can also say previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
+            )
+        return f"You can say {choice} or previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod
     def choice_reprompt(kind: str, count: int, has_more: bool) -> str:
@@ -63,8 +66,11 @@ class AvailabilitySpeech:
         ordinals = ("first", "first or second", "first, second, or third")
         choices = ordinals[max(0, min(count, DiscoveryConstants.CHOICE_PAGE_SIZE) - 1)]
         if has_more:
-            choices = choices.replace(", or ", ", ") + f", or more {plural}"
-        return f"Say the {singular} name, or say {choices}."
+            choices = choices.replace(", or ", ", ") + ", show more, or next"
+        return (
+            f"Say the {singular} name, or say {choices}. "
+            f"You can also say previous. {Speech.CHOICE_EXIT_INSTRUCTION}"
+        )
 
     @staticmethod
     def _position_opening(
@@ -75,7 +81,7 @@ class AvailabilitySpeech:
         verb = "is" if count == 1 else "are"
         singular = noun.removesuffix("s") if count == 1 else noun
         if position == "more":
-            return f"Here {verb} {label} more {singular}."
+            return f"Here {verb} the next {label} {singular}."
         if position == "previous":
             return f"Here {verb} the previous {singular}."
         if has_more:
@@ -84,24 +90,35 @@ class AvailabilitySpeech:
 
     @staticmethod
     def local_source_choices(
-        candidates: list[dict], *, position: str = "initial", has_more: bool = False
+        candidates: list[dict],
+        *,
+        position: str = "initial",
+        has_more: bool = False,
+        requested_city: str | None = None,
     ) -> str:
         if not candidates:
             return "I couldn't find any local sources just now. What would you like to hear?"
-        opening = AvailabilitySpeech._position_opening(
-            candidates,
-            position,
-            "local sources",
-            "Here are the local sources I found.",
-            has_more,
-        )
+        if requested_city and position == "initial":
+            safe_city = Speech.escape_ssml_lite(requested_city)
+            opening = f"Here are the sources I found in {safe_city}."
+        else:
+            opening = AvailabilitySpeech._position_opening(
+                candidates,
+                position,
+                "local sources" if not requested_city else "sources",
+                "Here are the local sources I found.",
+                has_more,
+            )
         choices = AvailabilitySpeech._numbered_choices(candidates)
         instruction = AvailabilitySpeech._choice_instruction(len(candidates), "sources", has_more)
         return f"{opening} {choices} {instruction}"
 
     @staticmethod
-    def one_local_source(source_name: str) -> str:
+    def one_local_source(source_name: str, *, requested_city: str | None = None) -> str:
         safe = Speech.escape_ssml_lite(source_name)
+        if requested_city:
+            safe_city = Speech.escape_ssml_lite(requested_city)
+            return f"I found content in {safe_city} from {safe}. Would you like to listen?"
         return f"I found content near you from {safe}. Would you like to listen?"
 
     @staticmethod
@@ -193,7 +210,7 @@ class AvailabilitySpeech:
         noun = "source" if kind == "source" else kind
         choices = AvailabilitySpeech._numbered_choices(candidates)
         instruction = AvailabilitySpeech._choice_instruction(len(candidates), f"{noun}s", True)
-        return f"I couldn't load more {noun} choices just now. {choices} {instruction}"
+        return f"I couldn't load the next {noun} choices just now. {choices} {instruction}"
 
     @staticmethod
     def playing_choice(title: str, source_name: str | None = None) -> str:

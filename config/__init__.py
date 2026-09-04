@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     STAGE: str = "development"
     NODE_ENV: str = "development"
     DEBUG_HEAR: bool = False
+    HEAR_LOGGING_ENABLED: bool = True
     POWERTOOLS_SERVICE_NAME: str = "hear-alexa-skill"
     POWERTOOLS_LOG_LEVEL: str = "INFO"
     HEAR_METRICS_NAMESPACE: str = "HearAlexa"

@@ -212,7 +212,7 @@ class SkipFeedback:
             DialogStateManager.dismiss_ambiguity(handler_input)
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml("No problem. What would you like to listen to?")
+                    Ssml.ssml(Speech.CHOICES_DISMISSED)
                 )
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)

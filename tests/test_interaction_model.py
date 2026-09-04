@@ -154,12 +154,24 @@ def test_publication_choice_navigation_has_forward_and_back_phrases():
         set(intents["ShowMoreBrowseIntent"]["samples"])
     )
     assert {
+        "more publication",
+        "more publications",
+        "show more publication",
+        "show more publication choices",
+    }.issubset(set(intents["ShowMoreBrowseIntent"]["samples"]))
+    assert {
         "previous publication choices",
         "show earlier publications",
         "go back to previous choices",
     }.issubset(
         set(intents["ShowPreviousBrowseIntent"]["samples"])
     )
+    assert {
+        "something else",
+        "none of these",
+        "go back to search",
+        "I don't want any of these",
+    }.issubset(set(intents["DismissChoicesIntent"]["samples"]))
 
 
 def test_search_query_is_the_only_slot_in_each_sample_that_uses_it():

@@ -22,7 +22,9 @@ def test_ambiguous_reference_message_does_not_speak_raw_alias():
         "First, Barking and Dagenham Talking Newspaper. "
         "Second, Brentwood and District Talking Newspaper. "
         "Third, Burnley and District Talking Newspaper. "
-        "You can say the name, or first, second, or third."
+        "You can say the name, or first, second, or third. "
+        "You can say previous to go back. "
+        "Say no, none of these, or something else to return to search."
     )
     assert "badtn" not in message.lower()
 
@@ -52,7 +54,11 @@ def test_ambiguity_message_announces_show_more_when_choices_remain():
         has_more=True,
     )
 
-    assert message.endswith("There are more options. Say show more to hear them.")
+    assert message.endswith(
+        "To hear more choices, say show more or next. "
+        "You can also say previous. "
+        "Say no, none of these, or something else to return to search."
+    )
 
 
 def test_publication_ambiguity_announces_show_more_when_pages_remain():
@@ -65,7 +71,11 @@ def test_publication_ambiguity_announces_show_more_when_pages_remain():
         has_more=True,
     )
 
-    assert message.endswith("There are more options. Say show more to hear them.")
+    assert message.endswith(
+        "To hear more choices, say show more or next. "
+        "You can also say previous. "
+        "Say no, none of these, or something else to return to search."
+    )
 
 
 def test_final_ambiguity_page_does_not_offer_show_more():

@@ -4,6 +4,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.request import AlexaRequest
+from src.constants.dialog import DialogConstants
 from src.models.browse import Browse
 
 
@@ -47,6 +48,8 @@ class BrowseNavigationHandler(AbstractRequestHandler):
         if AlexaRequest.get_request_type(handler_input) != "IntentRequest":
             return False
         intent_name = AlexaRequest.get_intent_name(handler_input)
+        if intent_name in DialogConstants.CHOICE_DISMISS_INTENTS:
+            return self._model.has_active_ambiguity(handler_input)
         if intent_name == "ShowMoreBrowseIntent":
             return True
         return intent_name in {
@@ -56,6 +59,8 @@ class BrowseNavigationHandler(AbstractRequestHandler):
         } and self._model.has_active_ambiguity(handler_input)
 
     async def handle(self, handler_input: HandlerInput):
+        if AlexaRequest.get_intent_name(handler_input) in DialogConstants.CHOICE_DISMISS_INTENTS:
+            return self._model.dismiss_choices(handler_input)
         if AlexaRequest.get_intent_name(handler_input) in {
             "AMAZON.PreviousIntent",
             "ShowPreviousBrowseIntent",

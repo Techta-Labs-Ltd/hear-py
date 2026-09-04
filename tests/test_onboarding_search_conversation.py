@@ -13,10 +13,51 @@ from src.clients.hear import HearApiClient
 from src.clients.resolver import ResolverClient, ResolverUnavailable
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
+from src.controllers.browse import BrowseNavigationHandler
 from src.controllers.launch import TownCaptureHandler
 from src.middleware.resolver import ResolverInterceptor
 from src.models.user import User
 from src.registry import RouteRegistry
+
+
+@pytest.mark.asyncio
+async def test_something_else_leaves_ambiguity_and_returns_to_search(
+    monkeypatch, mock_handler_input
+):
+    pending = {
+        "candidates": [
+            {"type": "publication", "id": "pub-1", "name": "First Publication"},
+            {"type": "publication", "id": "pub-2", "name": "Second Publication"},
+        ],
+        "displayedCandidates": [
+            {"type": "publication", "id": "pub-1", "name": "First Publication"},
+            {"type": "publication", "id": "pub-2", "name": "Second Publication"},
+        ],
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "DismissChoicesIntent", "slots": {}}}
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "pendingAmbiguity": pending,
+        "activeDialog": {"type": "ambiguity", "context": pending},
+    }
+    mock_handler_input.response_builder = ResponseBuilder()
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    handler = BrowseNavigationHandler(deps=ApplicationContainer())
+
+    resolve.assert_not_awaited()
+    assert handler.can_handle(mock_handler_input) is True
+    response = await handler.handle(mock_handler_input)
+
+    assert "What would you like to listen to instead?" in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
+    assert User.snapshot(mock_handler_input)["pendingAmbiguity"] is None
+    assert User.snapshot(mock_handler_input)["activeDialog"] is None
 
 
 def _town_request(mock_handler_input, value: str):
@@ -728,7 +769,7 @@ async def test_multiple_publications_from_source_start_ambiguity_selection(
     assert result["results"] == []
     assert "Buxton Talking Song" in result["client_message"]
     assert "Daily Sermons" in result["client_message"]
-    assert "There are more options. Say show more to hear them." in result["client_message"]
+    assert "To hear more choices, say show more or next." in result["client_message"]
     pending = User.snapshot(mock_handler_input)["pendingAmbiguity"]
     assert [candidate["id"] for candidate in pending["candidates"]] == [
         "publication-buxton",
@@ -953,7 +994,7 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "more than one match" in spoken
     assert "couldn't match" not in spoken
-    assert "There are more options. Say show more to hear them." in spoken
+    assert "To hear more choices, say show more or next." in spoken
     directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
     assert directive["type"] == "Dialog.UpdateDynamicEntities"
     assert directive["types"][0]["name"] == "HEAR_CLARIFICATION"
@@ -1755,7 +1796,7 @@ async def test_show_more_without_slots_pages_pending_ambiguity_locally(
     assert "Gazette" in response["outputSpeech"]["ssml"]
     assert "Chronicle" in response["outputSpeech"]["ssml"]
     assert "First, Gazette" in response["outputSpeech"]["ssml"]
-    assert "Say show more to hear them" in response["outputSpeech"]["ssml"]
+    assert "say show more or next" in response["outputSpeech"]["ssml"]
     values = response["directives"][0]["types"][0]["values"]
     assert [value["id"] for value in values] == ["creator-3", "creator-4", "creator-5"]
     assert "first" in values[0]["name"]["synonyms"]
@@ -1941,7 +1982,7 @@ async def test_publication_choices_support_previous_and_next_navigation(
     assert "Second, Daily Sermons" in previous_response["outputSpeech"]["ssml"]
     assert "Third, Hexham Talking Newspapers Reading" in previous_response["outputSpeech"]["ssml"]
     assert "Buxton Talking Song" in previous_response["outputSpeech"]["ssml"]
-    assert "Say show more to hear them" in previous_response["outputSpeech"]["ssml"]
+    assert "say show more or next" in previous_response["outputSpeech"]["ssml"]
     assert [
         candidate["id"]
         for candidate in User.snapshot(mock_handler_input)["pendingAmbiguity"][
@@ -1955,7 +1996,7 @@ async def test_publication_choices_support_previous_and_next_navigation(
     mock_handler_input.response_builder = ResponseBuilder()
     assert handler.can_handle(mock_handler_input) is True
     next_response = await handler.handle(mock_handler_input)
-    assert "more publication choices" in next_response["outputSpeech"]["ssml"]
+    assert "next publication choices" in next_response["outputSpeech"]["ssml"]
     assert "Swindon Talking News" in next_response["outputSpeech"]["ssml"]
     assert "York Audio Magazine" in next_response["outputSpeech"]["ssml"]
     assert "First, Swindon Talking News" in next_response["outputSpeech"]["ssml"]

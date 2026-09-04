@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.alexa.speech import Speech
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.controllers.playback_controls import PauseIntentHandler
@@ -116,6 +117,7 @@ async def test_stop_clears_discovery_state(monkeypatch):
     monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
     await PauseIntentHandler(deps=ApplicationContainer()).handle(handler_input)
     _assert_discovery_cleared(handler_input)
+    handler_input.response_builder.speak.assert_called_once_with(Speech.GOODBYE)
 
 
 @pytest.mark.asyncio

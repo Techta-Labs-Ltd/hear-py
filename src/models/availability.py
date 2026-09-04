@@ -9,6 +9,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.availability import AvailabilityConstants
+from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.models.availability_data import AvailabilityData
 from src.models.dialog import DialogSelection, DialogStateManager
@@ -94,7 +95,10 @@ class Availability:
         kind = str(context.get("kind") or "")
         if kind == AvailabilityConstants.SOURCE_KIND:
             speech = AvailabilitySpeech.local_source_choices(
-                displayed, position=position, has_more=has_more
+                displayed,
+                position=position,
+                has_more=has_more,
+                requested_city=context.get("requestedCity"),
             )
         elif kind == AvailabilityConstants.PUBLICATION_KIND:
             speech = AvailabilitySpeech.publication_choices(
@@ -122,6 +126,7 @@ class Availability:
         if AvailabilityData.request_scope(payload) != AvailabilityConstants.LOCATION_KIND:
             return await self._fallback_local_search(handler_input)
         location = AvailabilityData.location_from_payload(payload, User.snapshot(handler_input))
+        requested_city = AvailabilityData.requested_city(resolved, payload)
         if not location:
             User.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
             return self._response(
@@ -143,13 +148,16 @@ class Availability:
             "hasMore": bool(result.get("has_more")),
             "availabilityFilter": {"location": location},
             "baseSearchPayload": payload,
+            "requestedCity": requested_city,
         }
         if len(candidates) == 1 and not AvailabilityData.remote_more(context):
             context["singleChoice"] = True
             self._activate(handler_input, context)
             return self._response(
                 handler_input,
-                AvailabilitySpeech.one_local_source(candidates[0]["name"]),
+                AvailabilitySpeech.one_local_source(
+                    candidates[0]["name"], requested_city=requested_city
+                ),
                 "Say yes to hear it, or no to choose something else.",
                 candidates,
             )
@@ -164,10 +172,16 @@ class Availability:
         if scope == AvailabilityConstants.LOCATION_KIND and (
             resolution.get("intent") == "local" or AvailabilityData.has_location_payload(payload)
         ):
+            resolution_slots = (
+                resolution.get("slots") if isinstance(resolution.get("slots"), dict) else {}
+            )
             nlp = {
                 "intent": "local",
                 "searchPayload": payload,
-                "slots": {"isLocal": True},
+                "requestedLocation": bool(
+                    resolution_slots.get("city") or resolution_slots.get("placeName")
+                ),
+                "slots": {"isLocal": True, **resolution_slots},
             }
             return await self.begin_local(handler_input, nlp)
         return None
@@ -357,27 +371,22 @@ class Availability:
         base_payload = dict(context.get("baseSearchPayload") or {})
         await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._search_source(handler_input, source, base_payload)
-        candidates = AvailabilityData.track_candidates(result)
-        if not candidates:
+        if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
-        if len(candidates) == 1 and int(result.get("total_hits") or 1) == 1:
-            return await self._play_selected(handler_input, candidates[0], source)
-        track_context = {
-            "kind": AvailabilityConstants.TRACK_KIND,
-            "source": source,
-            "candidates": candidates,
-            "offset": 0,
-            "apiPage": int(result.get("page") or 0),
-            "totalPages": AvailabilityData.search_total_pages(result),
-            "hasMore": bool(
-                AvailabilityData.search_total_pages(result)
-                and int(result.get("page") or 0) + 1 < AvailabilityData.search_total_pages(result)
-            ),
-            "baseSearchPayload": base_payload,
-            "trackSearchPayload": result.get("_search_payload") or {},
-            "trackCount": int(result.get("total_hits") or len(candidates)),
-        }
-        return self._choice_response(handler_input, track_context)
+        first = result["results"][0]
+        DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+        return await Search.auto_play_first_from_search(
+            handler_input,
+            result,
+            {
+                "discoveryIntent": source.get("type") or "search",
+                "q": result.get("_search_payload", {}).get("query") or "",
+                "introOverride": AvailabilitySpeech.playing_choice(
+                    ContentUtils.content_title_for_speech(first), source.get("name")
+                ),
+            },
+            deps=self._deps,
+        )
 
     async def _play_selected(self, handler_input, candidate: dict, source: dict):
         store = User.snapshot(handler_input)
@@ -562,6 +571,13 @@ class Availability:
         if active.get("type") != AvailabilityConstants.DIALOG_TYPE or not context:
             return None
         intent_name = AlexaRequest.get_intent_name(handler_input) or ""
+        if intent_name in DialogConstants.CHOICE_DISMISS_INTENTS:
+            DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+            return self._response(
+                handler_input,
+                Speech.CHOICES_DISMISSED,
+                Speech.WELCOME_REPROMPT,
+            )
         if intent_name in AvailabilityConstants.MORE_INTENTS:
             return await self._more(handler_input, context)
         if intent_name in AvailabilityConstants.PREVIOUS_INTENTS:
@@ -594,6 +610,13 @@ class Availability:
                 )
             if intent_name == "AMAZON.NoIntent" and int(context.get("publicationCount") or 0) == 1:
                 return await self._begin_tracks(handler_input, context)
+        if intent_name == "AMAZON.NoIntent":
+            DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+            return self._response(
+                handler_input,
+                Speech.CHOICES_DISMISSED,
+                Speech.WELCOME_REPROMPT,
+            )
         raw = self._request_text(handler_input)
         candidate = DialogSelection.match_pending_candidate(handler_input, context, raw)
         if candidate:

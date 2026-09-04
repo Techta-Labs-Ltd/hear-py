@@ -42,6 +42,17 @@ class Browse:
         pending = self.snapshot(handler_input).get("pendingAmbiguity")
         return isinstance(pending, dict) and bool(pending.get("candidates"))
 
+    def dismiss_choices(self, handler_input: HandlerInput):
+        DialogStateManager.dismiss_ambiguity(handler_input)
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(Speech.CHOICES_DISMISSED)
+            )
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
+
     @staticmethod
     def _merge_ambiguity_candidates(existing: list[dict], incoming: list[dict]) -> list[dict]:
         merged = []

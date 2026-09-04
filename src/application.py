@@ -8,6 +8,7 @@ from src.container import ApplicationContainer
 from src.database.dynamo_user import DynamoUserSupport
 from src.database.persistence import MemoryPersistenceAdapter
 from src.registry import RouteRegistry
+from src.services.logging_control import LoggingControl
 
 
 class Application:
@@ -39,6 +40,7 @@ class Application:
         persistence_adapter=None, *, deps: ApplicationContainer | None = None
     ) -> AsyncSkill:
         """Create a fully configured skill application."""
+        LoggingControl.configure(settings.HEAR_LOGGING_ENABLED)
         skill = AsyncSkill(
             persistence_adapter=persistence_adapter
             if persistence_adapter is not None

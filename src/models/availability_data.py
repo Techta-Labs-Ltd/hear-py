@@ -11,6 +11,17 @@ from src.utils.content import ContentIdentity, ContentUtils
 
 class AvailabilityData:
     @staticmethod
+    def requested_city(resolution: dict, payload: dict) -> str:
+        slots = resolution.get("slots") if isinstance(resolution.get("slots"), dict) else {}
+        city = str(slots.get("city") or slots.get("placeName") or "").strip()
+        if city:
+            return city
+        if not resolution.get("requestedLocation"):
+            return ""
+        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        return str(filters.get("city") or "").strip()
+
+    @staticmethod
     def _has_value(value: object) -> bool:
         if value is None or value is False:
             return False
