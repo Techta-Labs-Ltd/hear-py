@@ -9,8 +9,9 @@ class PlaybackSpeech:
         "Say next or skip for the next recording, previous for the one before it, repeat or "
         "start over to return to the beginning, rewind 30 seconds, or fast forward 2 minutes. "
         "If you do not give a time, rewind and fast forward move by the standard step. You can "
-        "say faster, slower, or normal speed. You can also choose first speed for 0.5 times, "
-        "second for 0.75, third for normal speed, fourth for 1.25, fifth for 1.5, or sixth for "
+        "say faster, slower, or normal speed. You can also choose first through sixth speed: "
+        "first for 0.5 times, second for 0.75, third for normal speed, fourth for "
+        "1.25, fifth for 1.5, or sixth for "
         "2 times speed. Available speeds may vary by recording. Say stop when you want to "
         "finish listening. Loop and shuffle are not available."
     )

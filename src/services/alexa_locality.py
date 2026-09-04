@@ -12,7 +12,7 @@ class AlexaLocalitySupport:
     )
     @staticmethod
     def has_any_profile_name(store: dict) -> bool:
-        return bool(store.get("userName") or store.get("fullName") or store.get("givenName"))
+        return bool(store.get("userName") or store.get("fullName"))
 
     @classmethod
     def has_full_address_permission(cls, handler_input) -> bool:
@@ -84,14 +84,9 @@ class AlexaLocalityService:
         if AlexaLocalitySupport.has_any_profile_name(store) or store.get("profileNameUnavailable"):
             return []
         requested: list[str] = []
-        given_name_granted = RequestContext.has_permission(
-            handler_input, permission_scopes.PROFILE_GIVEN_NAME_READ
-        )
         full_name_granted = RequestContext.has_permission(
             handler_input, permission_scopes.PROFILE_NAME_READ
         )
-        if not given_name_granted or store.get("profileFetchDenied"):
-            requested.append(permission_scopes.PROFILE_GIVEN_NAME_READ)
-        if not full_name_granted and permission_scopes.PROFILE_GIVEN_NAME_READ not in requested:
+        if not full_name_granted or store.get("profileFetchDenied"):
             requested.append(permission_scopes.PROFILE_NAME_READ)
         return requested

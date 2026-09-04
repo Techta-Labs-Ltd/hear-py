@@ -17,6 +17,8 @@ def test_playback_guide_covers_every_supported_control():
         "slower",
         "normal speed",
         "first through sixth speed",
+        "first for 0.5 times",
+        "sixth for 2 times speed",
         "stop",
         "loop",
         "shuffle",

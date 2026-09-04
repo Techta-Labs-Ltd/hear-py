@@ -22,10 +22,10 @@ def test_listener_repository_owns_profile_updates():
     repository = Listener(User())
     result = repository.apply_profile(
         handler_input,
-        {"givenName": "Ada", "userName": "Ada", "listenerProfileResolvedAt": 123},
+        {"fullName": "Ada Lovelace", "userName": "Ada Lovelace", "listenerProfileResolvedAt": 123},
     )
-    assert result["givenName"] == "Ada"
-    assert result["userName"] == "Ada"
+    assert result["fullName"] == "Ada Lovelace"
+    assert result["userName"] == "Ada Lovelace"
     assert result["playCount"] == 4
     assert handler_input.attributes_manager.request_attributes["_dirty"] is True
 

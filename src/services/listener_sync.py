@@ -24,7 +24,7 @@ class ListenerSyncSupport:
         device = getattr(system, "device", None)
         registered = bool(
             store.get("userEmail")
-            and (store.get("userName") or store.get("fullName") or store.get("givenName"))
+            and (store.get("userName") or store.get("fullName"))
         )
         identity = Listener.identity(handler_input)
         profile = {
@@ -44,9 +44,7 @@ class ListenerSyncSupport:
         if registered:
             profile.update(
                 {
-                    "userName": store.get("userName")
-                    or store.get("fullName")
-                    or store.get("givenName"),
+                    "userName": store.get("userName") or store.get("fullName"),
                     "userEmail": store.get("userEmail"),
                     "address": store.get("userAddress") or store.get("address"),
                     "city": store.get("userCity") or store.get("city"),

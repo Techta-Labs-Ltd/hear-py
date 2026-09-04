@@ -3,7 +3,6 @@ class ListenerConstants:
         {
             "familyName",
             "fullName",
-            "givenName",
             "listenerProfileResolvedAt",
             "listenerProfileSkipUntil",
             "profileFetchDenied",

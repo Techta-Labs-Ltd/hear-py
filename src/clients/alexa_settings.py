@@ -33,7 +33,6 @@ class AlexaSettingsSupport:
             candidate = (
                 data.get("name")
                 or data.get("value")
-                or data.get("givenName")
                 or data.get("fullName")
                 or data.get("email")
                 or data.get("firstName")

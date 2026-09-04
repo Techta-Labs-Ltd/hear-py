@@ -33,7 +33,6 @@ async def test_listener_profile_fetches_independent_settings_concurrently(
         active -= 1
         values = {
             "Profile.name": "Alex Hear",
-            "Profile.givenName": "Alex",
             "Profile.email": "alex@example.com",
         }
         return {"value": values[setting_path], "status": 200}
@@ -51,6 +50,38 @@ async def test_listener_profile_fetches_independent_settings_concurrently(
     assert maximum == 2
     assert result["userName"] == "Alex Hear"
     assert result["userEmail"] == "alex@example.com"
+    requested_paths = {
+        call.args[1] for call in settings_client.get_profile_setting.await_args_list
+    }
+    assert requested_paths == {"Profile.name", "Profile.email"}
+
+
+@pytest.mark.asyncio
+async def test_listener_profile_does_not_treat_an_empty_email_as_a_missing_name(
+    mock_handler_input,
+):
+    async def fetch(handler_input, setting_path, *, label=""):
+        del handler_input, label
+        if setting_path == "Profile.name":
+            return {"value": "Alex Hear", "status": 200}
+        return {"value": None, "status": 204}
+
+    User.hydrate(mock_handler_input, {})
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.context.System.user.permissions.scopes = {
+        permission_scopes.PROFILE_NAME_READ: {"status": "GRANTED"},
+        permission_scopes.PROFILE_EMAIL_READ: {"status": "GRANTED"},
+    }
+    service = ListenerProfileService(
+        SimpleNamespace(get_profile_setting=AsyncMock(side_effect=fetch)),
+        Listener(User()),
+    )
+
+    result = await service.apply_listener_profile(mock_handler_input)
+
+    assert result["fullName"] == "Alex Hear"
+    assert result["userName"] == "Alex Hear"
+    assert result["profileNameUnavailable"] is False
 
 
 def test_identity_extracts_raw_alexa_context_and_session_fallback(mock_handler_input):
