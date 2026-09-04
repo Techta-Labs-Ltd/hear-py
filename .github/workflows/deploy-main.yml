@@ -62,7 +62,7 @@ jobs:
       CANONICAL_IDENTITY_ENABLED: ${{ vars.CANONICAL_IDENTITY_ENABLED_PROD || '1' }}
       RESERVED_CONCURRENCY: '0'
       PROVISIONED_CONCURRENCY: ${{ vars.PROVISIONED_CONCURRENCY_PROD || '0' }}
-      PROACTIVE_RESERVED_CONCURRENCY: ${{ vars.PROACTIVE_RESERVED_CONCURRENCY_PROD || '0' }}
+      PROACTIVE_RESERVED_CONCURRENCY: '0'
       HEAR_API_KEY: ${{ secrets.HEAR_API_KEY_PROD }}
       WEBHOOK_OUTBOUND_SECRET: ${{ secrets.WEBHOOK_OUTBOUND_SECRET_PROD }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN_PROD }}
@@ -147,6 +147,17 @@ jobs:
       - name: Show CloudFormation failure details
         if: steps.cloudformation.outcome == 'failure'
         run: |
+          FAILED_CHANGE_SET=$(aws cloudformation list-change-sets --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "reverse(sort_by(Summaries[?Status=='FAILED'], &CreationTime))[0].ChangeSetName" \
+            --output text)
+          if [[ -n "$FAILED_CHANGE_SET" && "$FAILED_CHANGE_SET" != "None" ]]; then
+            aws cloudformation describe-events --stack-name "$STACK_NAME" \
+              --change-set-name "$FAILED_CHANGE_SET" \
+              --region "$AWS_REGION" \
+              --query "OperationEvents[?EventType=='VALIDATION_ERROR'].[Timestamp,LogicalResourceId,ValidationName,ValidationStatusReason]" \
+              --output table
+          fi
           aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" \
             --query "reverse(sort_by(StackEvents[?ResourceStatus=='CREATE_FAILED' || ResourceStatus=='UPDATE_FAILED' || ResourceStatus=='DELETE_FAILED'], &Timestamp))[:20].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
