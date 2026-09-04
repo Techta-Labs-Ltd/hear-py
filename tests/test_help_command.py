@@ -29,7 +29,14 @@ def test_help_command_gives_a_complete_uk_english_voice_guide(mock_handler_input
     assert "next or skip" in spoken
     assert "previous" in spoken
     assert "rewind 30 seconds" in spoken
-    assert "first through sixth speed" in spoken
+    assert "first speed for 0.5 times" in spoken
+    assert "second for 0.75" in spoken
+    assert "third for normal speed" in spoken
+    assert "fourth for 1.25" in spoken
+    assert "fifth for 1.5" in spoken
+    assert "sixth for 2 times speed" in spoken
+    assert "Available speeds may vary by recording" in spoken
+    assert "pause it and then say" in spoken
     assert "what's this about" in spoken
     assert "follow or unfollow" in spoken
     assert "notifications on or off" in spoken

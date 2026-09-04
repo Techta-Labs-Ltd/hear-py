@@ -9,8 +9,10 @@ class PlaybackSpeech:
         "Say next or skip for the next recording, previous for the one before it, repeat or "
         "start over to return to the beginning, rewind 30 seconds, or fast forward 2 minutes. "
         "If you do not give a time, rewind and fast forward move by the standard step. You can "
-        "say faster, slower, normal speed, or choose first through sixth speed. Say stop when "
-        "you want to finish listening. Loop and shuffle are not available."
+        "say faster, slower, or normal speed. You can also choose first speed for 0.5 times, "
+        "second for 0.75, third for normal speed, fourth for 1.25, fifth for 1.5, or sixth for "
+        "2 times speed. Available speeds may vary by recording. Say stop when you want to "
+        "finish listening. Loop and shuffle are not available."
     )
     CARD_SECTION = (
         "CONTROL PLAYBACK\n"
@@ -52,9 +54,9 @@ class PlaybackSpeech:
     def mid_session_guide(stage: str) -> str:
         invocation = PlaybackSpeech.invocation(stage)
         return (
-            f"While audio is playing, say, Alexa, ask {invocation} to rate this content, "
-            "to pause and rate the current recording. For speed control, say, Alexa, ask "
-            f"{invocation} to play faster, play slower, or use normal speed."
+            "While audio is playing, you can pause it and then say, Alexa, ask "
+            f"{invocation} to rate this content. To change the playback speed, say, Alexa, "
+            f"ask {invocation} to play faster, play slower, or use normal speed."
         )
 
     @staticmethod
