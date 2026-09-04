@@ -64,7 +64,6 @@ Every normal stateful Alexa request follows this sequence:
 | Alexa directives | `POST /v1/directives` | Alexa bearer token | One best-effort progressive response |
 | Alexa profile | `GET /v2/accounts/~current/settings/{setting}` | Alexa bearer token | Granted name/email permission |
 | Alexa address | `GET /v1/devices/{id}/settings/address` | Alexa bearer token | Granted full-address permission |
-| Alexa postcode | `GET /v1/devices/{id}/settings/address/countryAndPostalCode` | Alexa bearer token | Granted postcode permission |
 | Alexa reminders | `DELETE /v1/alerts/reminders/{token}` | Alexa bearer token | Clear a saved feedback reminder |
 
 ## 4. Canonical listener registration and resolution
@@ -620,7 +619,6 @@ All Alexa reads use `Authorization: Bearer <apiAccessToken>` and `Accept: applic
 
 - `Profile.name` and `Profile.email` use `GET /v2/accounts/~current/settings/{setting}`.
 - Full address uses `GET /v1/devices/{deviceId}/settings/address`.
-- Country/postcode uses `GET /v1/devices/{deviceId}/settings/address/countryAndPostalCode`.
 - Geolocation is read from the Alexa request envelope and is not a separate HTTP call.
 
 Responses `401/403` are permission/authorization failures, `204` is empty, and temporary failures are fail-open. Raw access tokens, raw full API responses, and raw email values are not logged.

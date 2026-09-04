@@ -255,9 +255,9 @@ class ResolverResult:
         )
 
     @staticmethod
-    def _preferred_search_location(
+    def _unique_search_locations(
         locations: tuple[ResolvedEntity, ...],
-    ) -> ResolvedEntity | None:
+    ) -> tuple[ResolvedEntity, ...]:
         unique: dict[tuple[str, str], ResolvedEntity] = {}
         for location in locations:
             key = (
@@ -267,10 +267,46 @@ class ResolverResult:
             current = unique.get(key)
             if current is None or location.confidence > current.confidence:
                 unique[key] = location
-        candidates = tuple(unique.values())
+        return tuple(unique.values())
+
+    @staticmethod
+    def _preferred_search_location(
+        locations: tuple[ResolvedEntity, ...],
+    ) -> ResolvedEntity | None:
+        candidates = ResolverResult._unique_search_locations(locations)
         exact = tuple(location for location in candidates if location.confidence == 100)
         preferred = exact or candidates
         return preferred[0] if len(preferred) == 1 else None
+
+    def _standalone_unspecified_location(
+        self,
+        slots: dict,
+        filters: dict,
+        original_utterance: str,
+    ) -> ResolvedEntity | None:
+        if filters or str(slots.get("residualQuery") or "").strip():
+            return None
+        locations = ResolverResult._unique_search_locations(
+            tuple(
+                entity
+                for entity in self.entities_of_type("location")
+                if str(entity.location_role or "").casefold() == "unspecified"
+                and entity.confidence
+                >= ResolverConstants.STANDALONE_LOCATION_MIN_CONFIDENCE
+                and entity.latitude is not None
+                and entity.longitude is not None
+            )
+        )
+        meaningful_query = " ".join(
+            ResolverResult._fallback_query(original_utterance).casefold().split()
+        )
+        candidates = tuple(
+            location
+            for location in locations
+            if meaningful_query
+            == " ".join(location.original_text.casefold().split())
+        )
+        return max(candidates, key=lambda location: location.confidence, default=None)
 
     def _location_payload(
         self,
@@ -278,6 +314,7 @@ class ResolverResult:
         filters: dict,
         sources: tuple[ResolvedEntity, ...],
         prefer_location: bool,
+        original_utterance: str,
     ) -> dict:
         keys = ("city", "placeName", "countryCode", "latitude", "longitude", "isLocal")
         for key in keys:
@@ -290,6 +327,13 @@ class ResolverResult:
             all_locations = self.fully_matched_entities_of_type("location")
         else:
             all_locations = self._credible_source_locations()
+            if not all_locations:
+                standalone = self._standalone_unspecified_location(
+                    slots,
+                    filters,
+                    original_utterance,
+                )
+                all_locations = (standalone,) if standalone else ()
         locations = (
             all_locations
             if prefer_location
@@ -380,7 +424,13 @@ class ResolverResult:
         slots = dict(self.slots)
         ambiguities = self._ambiguity_payload(original_utterance)
         filters, sources = self._facet_payload(slots)
-        resolution = self._location_payload(slots, filters, sources, prefer_location)
+        resolution = self._location_payload(
+            slots,
+            filters,
+            sources,
+            prefer_location,
+            original_utterance,
+        )
         slots["ambiguousReferences"] = list(ambiguities)
         search_plan = self._search_plan(slots, filters, original_utterance)
         slots["searchPlan"] = search_plan

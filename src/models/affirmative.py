@@ -157,14 +157,16 @@ class Affirmative:
             or {}
         )
         city = pending.get("city")
-        if not city:
+        has_coordinates = (
+            pending.get("latitude") is not None and pending.get("longitude") is not None
+        )
+        if not city and not has_coordinates:
             self._deps.onboarding.clear_invalid_confirmation(handler_input)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_RETRY))
                 .set_should_end_session(False)
                 .response
             )
-        final_city = city
         resume_community = bool(
             store.get("awaitingCommunityPlayback")
             or (session_attrs or {}).get("awaitingCommunityPlayback")
@@ -183,9 +185,14 @@ class Affirmative:
                 RequestContext.session(handler_input),
             )
         self._deps.user.update(handler_input, {"awaitingProfilePermission": True})
+        confirmation = (
+            Speech.LOCATION_CONFIRMED(city)
+            if city
+            else Speech.LOCATION_COORDINATES_CONFIRMED
+        )
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml(f"{Speech.LOCATION_CONFIRMED(final_city)} {Speech.PROFILE_PERMISSION_OFFER}")
+                Ssml.ssml(f"{confirmation} {Speech.PROFILE_PERMISSION_OFFER}")
             )
             .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
             .set_should_end_session(False)

@@ -137,7 +137,10 @@ class SearchPayload:
             if not requested_city and saved_city:
                 requested_city = saved_city
                 filter_obj["city"] = saved_city
-            if saved_city and requested_city.casefold() == saved_city.casefold():
+            uses_saved_location = not requested_city or (
+                saved_city and requested_city.casefold() == saved_city.casefold()
+            )
+            if uses_saved_location:
                 for key in ("latitude", "longitude"):
                     if filter_obj.get(key) is None and (store or {}).get(key) is not None:
                         filter_obj[key] = (store or {})[key]

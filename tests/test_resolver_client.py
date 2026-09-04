@@ -509,6 +509,124 @@ def test_search_accepts_exact_source_location():
     assert result["slots"]["isLocal"] is True
 
 
+@pytest.mark.parametrize(
+    ("utterance", "start", "end"),
+    [("yuck", 0, 4), ("play yuck", 5, 9)],
+)
+def test_search_accepts_single_whole_query_unspecified_location(utterance, start, end):
+    payload = _response(intent="search")
+    payload["slots"].update(
+        {"residualQuery": "", "latest": False, "sort": None}
+    )
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-1826149980",
+            "canonicalValue": "York",
+            "originalText": "yuck",
+            "confidence": 98,
+            "method": "phonetic_bare",
+            "start": start,
+            "end": end,
+            "latitude": 53.96,
+            "longitude": -1.08,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance=utterance
+    )
+
+    assert result["searchPayload"] == {
+        "query": "",
+        "filter": {
+            "city": "York",
+            "countryCode": "gb",
+            "latitude": 53.96,
+            "longitude": -1.08,
+        },
+    }
+    assert result["slots"]["city"] == "York"
+    assert result["slots"]["isLocal"] is True
+    assert [entity["canonicalValue"] for entity in result["entities"]] == ["York"]
+
+
+@pytest.mark.parametrize(("confidence", "accepted"), [(75, True), (74, False)])
+def test_standalone_unspecified_location_confidence_boundary(confidence, accepted):
+    payload = _response(intent="search")
+    payload["slots"].update(
+        {"residualQuery": "", "latest": False, "sort": None}
+    )
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-york",
+            "canonicalValue": "York",
+            "originalText": "yuck",
+            "confidence": confidence,
+            "method": "phonetic_bare",
+            "start": 5,
+            "end": 9,
+            "latitude": 53.96,
+            "longitude": -1.08,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play yuck"
+    )
+
+    assert bool(result["searchPayload"]["filter"]) is accepted
+    assert result["slots"].get("city") == ("York" if accepted else None)
+
+
+def test_search_chooses_highest_ranked_whole_query_unspecified_location():
+    payload = _response(intent="search")
+    payload["slots"].update(
+        {"residualQuery": "", "latest": False, "sort": None}
+    )
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": entity_id,
+            "canonicalValue": city,
+            "originalText": "yuck",
+            "confidence": confidence,
+            "method": "phonetic_bare",
+            "start": 5,
+            "end": 9,
+            "latitude": latitude,
+            "longitude": longitude,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        }
+        for entity_id, city, confidence, latitude, longitude in (
+            ("location-york", "York", 98, 53.96, -1.08),
+            ("location-yorkshire", "Yorkshire", 90, 54.0, -1.5),
+        )
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play yuck"
+    )
+
+    assert result["searchPayload"] == {
+        "query": "",
+        "filter": {
+            "city": "York",
+            "countryCode": "gb",
+            "latitude": 53.96,
+            "longitude": -1.08,
+        },
+    }
+    assert result["resolution"]["match"]["city"] == "York"
+    assert [entity["canonicalValue"] for entity in result["entities"]] == ["York"]
+
+
 def test_search_prefers_phonetic_source_location_over_unspecified_noise():
     payload = _response(intent="search")
     payload["entities"] = [

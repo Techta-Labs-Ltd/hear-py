@@ -60,10 +60,18 @@ class OnboardingPolicy:
         """Re-ask the location confirmation using the pending candidate city."""
         pending = store.get("pendingLocationConfirm") or {}
         city = pending.get("city")
-        if not city:
+        has_coordinates = (
+            pending.get("latitude") is not None and pending.get("longitude") is not None
+        )
+        if not city and not has_coordinates:
             return None
+        speech = (
+            Speech.ONBOARDING_TOWN_CONFIRM(city)
+            if city
+            else Speech.ONBOARDING_DEVICE_LOCATION_CONFIRM
+        )
         return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.ONBOARDING_TOWN_CONFIRM(city)))
+            handler_input.response_builder.speak(Ssml.ssml(speech))
             .reprompt(Ssml.ssml(OnboardingConstants.TOWN_CONFIRM_REPROMPT))
             .set_should_end_session(False)
             .response
