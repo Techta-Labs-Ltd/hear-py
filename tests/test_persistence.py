@@ -7,7 +7,7 @@ from src.container import ApplicationContainer
 from src.middleware.persistence import SavePersistenceInterceptor
 from src.models.browse import Browse
 from src.models.playback_history import PlaybackHistory
-from src.models.playback_state import PlaybackQueue
+from src.models.playback_state import PlaybackQueue, PlaybackState
 from src.models.social import FollowingManager
 from src.models.user import User
 
@@ -33,6 +33,57 @@ class TestPersistence:
 
     def test_default_state_serializes_to_an_empty_sparse_document(self):
         assert User.persisted_snapshot(dict(StateSchema.DEFAULT_STORE)) == {}
+
+    def test_active_playback_keeps_resume_description_and_search_source(self):
+        snapshot = User.persisted_snapshot(
+            {
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "summary": "A guide to using a navigation app",
+                    "discoverySource": "search",
+                    "status": "paused",
+                }
+            }
+        )
+
+        assert snapshot["activePlayback"]["summary"] == (
+            "A guide to using a navigation app"
+        )
+        assert snapshot["activePlayback"]["discoverySource"] == "search"
+
+    def test_playback_start_copies_the_queue_discovery_source(self, mock_handler_input):
+        queue_store = PlaybackQueue(User()).initialize(
+            mock_handler_input,
+            [{"contentId": "content-1"}],
+            source="creator",
+        )
+        queue_id = queue_store["playbackQueue"]["queueId"]
+
+        active = PlaybackState(User()).start(
+            mock_handler_input,
+            {
+                "contentId": "content-1",
+                "summary": "A local news update",
+            },
+            queue_id=queue_id,
+        )
+
+        assert active["summary"] == "A local news update"
+        assert active["discoverySource"] == "creator"
+
+    def test_prepared_next_content_keeps_its_short_description(self):
+        snapshot = User.persisted_snapshot(
+            {
+                "preparedNextContent": {
+                    "contentId": "content-2",
+                    "summary": "The afternoon news bulletin",
+                }
+            }
+        )
+
+        assert snapshot["preparedNextContent"]["summary"] == (
+            "The afternoon news bulletin"
+        )
 
     def test_backend_owned_history_and_profile_pii_are_not_persisted(self):
         snapshot = User.persisted_snapshot(

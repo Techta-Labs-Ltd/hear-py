@@ -128,6 +128,7 @@ class TestIsNewUser:
                     "title": "Second track",
                     "publicationId": "publication-1",
                     "publicationTitle": "Weekly publication",
+                    "organizationName": "York Talking Newspaper",
                     "subjectType": "publication",
                     "audioUrl": "https://cdn.hear.media/track-2.mp3",
                     "status": "paused",
@@ -141,7 +142,11 @@ class TestIsNewUser:
 
         speech = _speak_text(hi)
         assert "Weekly publication" in speech
+        assert "York Talking Newspaper" in speech
         assert "Second track" not in speech
+        assert "Would you like to continue?" in speech
+        assert "You were listening to" in speech
+        assert "You did not finish" not in speech
 
     def test_resume_prompt_uses_persisted_subject_title_in_speech_and_reprompt(self):
         hi = _build_handler_input(
@@ -167,6 +172,84 @@ class TestIsNewUser:
         assert "Weekly publication" in speech
         assert "Weekly publication" in reprompt
         assert "Second track" not in speech
+
+    def test_resume_prompt_uses_short_description_for_an_ordinary_result(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "024 - RNIB navigator gps app",
+                    "summary": "A guide to using the RNIB Navigator GPS app",
+                    "discoverySource": "search",
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        reprompt = hi.response_builder.speak.return_value.reprompt.call_args.args[0]
+        assert "A guide to using the RNIB Navigator GPS app" in speech
+        assert "You were listening to" in speech
+        assert "024 - RNIB navigator gps app" not in speech
+        assert "Would you like to continue?" in speech
+        assert "A guide to using the RNIB Navigator GPS app" in reprompt
+        assert "Would you like to continue?" in reprompt
+        assert "Please say yes or no." in reprompt
+
+    def test_resume_prompt_uses_creator_for_creator_search(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "Track one",
+                    "summary": "A local news update",
+                    "creatorName": "Jane Smith",
+                    "discoverySource": "creator",
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to Jane Smith." in speech
+        assert "something by" not in speech
+        assert "A local news update" not in speech
+        assert "Would you like to continue?" in speech
+
+    def test_resume_prompt_uses_organisation_for_organisation_search(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "Track one",
+                    "summary": "A local news update",
+                    "organizationName": "York Talking Newspaper",
+                    "discoverySource": "organization",
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to York Talking Newspaper." in speech
+        assert "something from" not in speech
+        assert "A local news update" not in speech
+        assert "Would you like to continue?" in speech
 
 
 class TestSpeechStrings:
