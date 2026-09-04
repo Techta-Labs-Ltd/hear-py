@@ -7,6 +7,7 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.request import AlexaRequest
+from src.alexa.resume_speech import ResumeSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogStateManager
@@ -88,14 +89,13 @@ class LaunchWorkflow:
 
     def _unfinished_response(self, handler_input: HandlerInput, store: dict):
         active = self._deps.playback.state.from_store(store) or {}
-        title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(active, store))
         self._deps.user.update(handler_input, {"awaitingResume": True})
         DialogStateManager.activate(handler_input, "resume", context=active)
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml(f"You did not finish {title}. Would you like to continue?")
+                Ssml.ssml(ResumeSpeech.prompt(active, store))
             )
-            .reprompt(Ssml.ssml(f"Would you like to continue {title}?"))
+            .reprompt(Ssml.ssml(ResumeSpeech.reprompt(active, store)))
             .set_should_end_session(False)
             .response
         )

@@ -323,9 +323,6 @@ class Browse:
             return self.dependencies.search._build_search_outcome_response(
                 handler_input, search_result
             )
-        first = search_result["results"][0]
-        creator = first.get("creator")
-        nested_creator_name = creator.get("name") if isinstance(creator, dict) else None
         response = await self.dependencies.search.auto_play_first_from_search(
             handler_input,
             search_result,
@@ -333,11 +330,7 @@ class Browse:
                 "discoveryIntent": "WhatsTrendingIntent",
                 "locality": active_store.get("locality"),
                 "introOverride": SearchSpeech.trending_intro(
-                    search_result.get("total_hits") or len(search_result["results"]),
-                    ContentUtils.content_title_for_speech(first),
-                    ContentUtils.pick_content_credit(first)
-                    or first.get("creatorName")
-                    or nested_creator_name,
+                    search_result.get("total_hits") or len(search_result["results"])
                 ),
             },
             deps=self.dependencies,

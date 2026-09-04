@@ -199,6 +199,73 @@ async def test_real_search_shape_reaches_playback_without_catalog_call_error(
 
 
 @pytest.mark.asyncio
+async def test_broad_search_playback_intro_uses_request_not_first_item_metadata(
+    monkeypatch, mock_handler_input
+):
+    start = AsyncMock(return_value={"response": "play"})
+    monkeypatch.setattr("src.models.playback.Playback.start", start)
+
+    await Search.auto_play_first_from_search(
+        mock_handler_input,
+        {
+            "results": [
+                {
+                    "contentId": "content-1",
+                    "title": "Oxfordshire County Council changes bus ticket pricing",
+                    "creator": "Wallingford and District Talking Newspaper",
+                    "shortDescription": "A detailed council transport update",
+                    "audioUrl": "https://cdn.hear.media/audio/content-1.mp3",
+                }
+            ],
+            "total_hits": 37,
+            "_request_label": "content on local transport in Herne Bay",
+            "_search_payload": {
+                "query": "local transport",
+                "filter": {"city": "Herne Bay", "tags": ["local-transport"]},
+            },
+        },
+        deps=ApplicationContainer(),
+    )
+
+    assert (
+        start.await_args.args[2]
+        == "Here are 37 stories about local transport in Herne Bay. Here's the first one."
+    )
+
+
+@pytest.mark.asyncio
+async def test_broad_search_fallback_does_not_announce_later_item_source(
+    monkeypatch, mock_handler_input
+):
+    start = AsyncMock(return_value={"response": "play"})
+    monkeypatch.setattr("src.models.playback.Playback.start", start)
+
+    result = await Search.auto_play_first_from_search(
+        mock_handler_input,
+        {
+            "results": [
+                {"contentId": "unavailable", "title": "Unavailable story"},
+                {
+                    "contentId": "content-2",
+                    "title": "Second result title",
+                    "creator": "A single publisher",
+                    "audioUrl": "https://cdn.hear.media/audio/content-2.mp3",
+                },
+            ],
+            "total_hits": 12,
+            "_request_label": "content on local history",
+            "_search_payload": {"query": "local history", "filter": {}},
+        },
+        deps=ApplicationContainer(),
+    )
+
+    assert result == {"response": "play"}
+    assert start.await_args.args[2] == (
+        "Here are 12 stories about local history. Here's the first one."
+    )
+
+
+@pytest.mark.asyncio
 async def test_search_initializes_playback_queue_with_first_page_only(
     monkeypatch, mock_handler_input
 ):

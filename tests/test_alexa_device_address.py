@@ -20,18 +20,21 @@ class _Pool:
         return self.client
 
 
-def _handler_input(*, scopes=None):
+def _handler_input(*, scopes=None, geolocation=None):
+    context = {
+        "System": {
+            "apiEndpoint": "https://api.eu.amazonalexa.com",
+            "apiAccessToken": "request-token",
+            "device": {"deviceId": "device-123"},
+            "user": {"permissions": {"scopes": scopes or {}}},
+        }
+    }
+    if geolocation:
+        context["Geolocation"] = geolocation
     return SimpleNamespace(
         request_envelope=AttrDict(
             {
-                "context": {
-                    "System": {
-                        "apiEndpoint": "https://api.eu.amazonalexa.com",
-                        "apiAccessToken": "request-token",
-                        "device": {"deviceId": "device-123"},
-                        "user": {"permissions": {"scopes": scopes or {}}},
-                    }
-                }
+                "context": context,
             }
         )
     )
@@ -77,12 +80,32 @@ async def test_address_api_is_used_only_with_full_address_permission(caplog):
 
 
 @pytest.mark.asyncio
-async def test_address_api_403_is_reported_as_permission_denied():
-    pool = _Pool(SimpleNamespace(status_code=403))
+async def test_geolocation_coordinates_are_used_without_an_http_call():
+    pool = _Pool(SimpleNamespace(status_code=500))
     result = await AlexaLocalityService(AlexaSettingsClient(pool=pool)).detect_device_location(
-        _handler_input()
+        _handler_input(
+            geolocation={
+                "coordinate": {
+                    "latitudeInDegrees": 53.789,
+                    "longitudeInDegrees": -2.248,
+                    "accuracyInMeters": 20,
+                },
+                "timestamp": "2026-09-04T10:00:00Z",
+            }
+        )
     )
-    assert result == {"_status": "permission_denied"}
+    assert result == {
+        "_status": "resolved",
+        "city": "",
+        "locality": "",
+        "countryCode": None,
+        "postalCode": None,
+        "stateOrRegion": None,
+        "latitude": 53.789,
+        "longitude": -2.248,
+        "source": "geolocation",
+    }
+    pool.client.get.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -121,8 +144,8 @@ async def test_address_api_preserves_non_permission_failure(status_code, expecte
 
 
 @pytest.mark.asyncio
-async def test_address_api_is_not_called_without_permission():
-    pool = _Pool(SimpleNamespace(status_code=200))
+async def test_address_api_is_not_called_without_a_location_permission():
+    pool = _Pool(SimpleNamespace(status_code=500))
     result = await AlexaLocalityService(AlexaSettingsClient(pool=pool)).detect_device_location(
         _handler_input()
     )

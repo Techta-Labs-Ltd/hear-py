@@ -2,7 +2,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from config import Settings, settings
-from config.permission_scopes import DEVICE_ADDRESS, REMINDERS_READWRITE
+from config.permission_scopes import (
+    GEOLOCATION_READ,
+    REMINDERS_READWRITE,
+)
 from src.utils.deadline import DeadlineBudget
 
 
@@ -15,7 +18,7 @@ def test_settings_loads_defaults():
 
 
 def test_permission_scopes():
-    assert DEVICE_ADDRESS == "read::alexa:device:all:address"
+    assert GEOLOCATION_READ == "alexa::devices:all:geolocation:read"
     assert REMINDERS_READWRITE.startswith("alexa::")
 
 

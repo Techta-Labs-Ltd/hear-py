@@ -64,7 +64,12 @@ def test_location_consent_directive_is_voice_forward_and_explains_value():
     assert directive["type"] == "Connections.StartConnection"
     assert directive["uri"] == PermissionConstants.CONNECTION_URI
     assert directive["token"] == PermissionConstants.LOCATION_PURPOSE
-    assert len(directive["input"]["permissionScopes"]) == 2
+    assert directive["input"]["permissionScopes"] == [
+        {
+            "permissionScope": "alexa::devices:all:geolocation:read",
+            "consentLevel": "ACCOUNT",
+        }
+    ]
     assert "shouldEndSession" not in response
 
 

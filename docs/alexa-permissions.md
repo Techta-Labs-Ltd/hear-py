@@ -9,7 +9,8 @@ linking or a Hear OAuth flow.
 For development skill `amzn1.ask.skill.502ef74e-db9f-485f-acdd-13d23c895e59`:
 
 1. Open **Build > Permissions** in the Alexa developer console.
-2. Enable **Device Address > Full Address**.
+2. Enable **Location Services**. Full Address can remain enabled only as a
+   fallback for devices that provide a saved city but no live coordinates.
 3. Build the skill model and enable the development skill on the test account.
 4. Say yes to Hear's location-permission question.
 5. Approve the `AskForPermissionsConsent` request in the Alexa app Activity
@@ -26,11 +27,15 @@ If a permission request is not visible in Activity, use **More > Skills & Games
 The backend must not claim delivery merely because the Lambda returned a
 consent directive.
 
-The current full-address runtime scope is:
+The voice-consent and skill-manifest scope is:
 
-`read::alexa:device:all:address`
+`alexa::devices:all:geolocation:read`
 
-Do not enable Geolocation until a feature directly consumes live coordinates.
+Geolocation supplies latitude and longitude directly in the Alexa request; it
+does not require a separate HTTP call. Hear never sends a postcode to the
+resolver. If coordinates are unavailable, an already-granted full-address
+permission can provide a city for resolution. Otherwise Hear asks the listener
+to say their town.
 
 ## Notification permission and proactive events
 

@@ -45,6 +45,17 @@ def test_my_city_without_named_facet_uses_registered_listener_radius(
     }
 
 
+def test_coordinate_only_location_is_used_for_local_search(mock_handler_input):
+    payload = SearchPayload.build(
+        "user-1",
+        {"latitude": 53.789, "longitude": -2.248},
+        q="",
+        nlp_filter={"isLocal": True},
+    )
+    assert payload["filter"] == {"latitude": 53.789, "longitude": -2.248}
+    assert payload["sort"] == "nearest"
+
+
 def test_different_named_city_uses_city_coordinates_and_nearest_sort(
     mock_handler_input,
 ):

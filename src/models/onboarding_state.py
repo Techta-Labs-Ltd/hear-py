@@ -144,8 +144,6 @@ class OnboardingState:
     ) -> dict:
         locality = candidate.locality or candidate.city
         changes = {
-            "userCity": candidate.city,
-            "locality": locality,
             "deviceCountryCode": candidate.country_code,
             "latitude": candidate.latitude,
             "longitude": candidate.longitude,
@@ -159,6 +157,8 @@ class OnboardingState:
             "pendingLocationConfirm": None,
             "_requiresReliableSave": True,
         }
+        if candidate.city:
+            changes.update({"userCity": candidate.city, "locality": locality})
         if preserve_postal_code:
             current = self.snapshot(handler_input)
             changes["devicePostalCode"] = candidate.postal_code or current.get("devicePostalCode")
@@ -166,9 +166,9 @@ class OnboardingState:
             "onboardingStage": None,
             "onboardingComplete": True,
             "awaitingLocationConfirm": False,
-            "userCity": candidate.city,
-            "locality": locality,
         }
+        if candidate.city:
+            session.update({"userCity": candidate.city, "locality": locality})
         if offer_community_playback:
             changes["awaitingCommunityPlayback"] = True
             session["awaitingCommunityPlayback"] = True

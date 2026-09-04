@@ -2,6 +2,8 @@ from __future__ import annotations
 
 
 class ResolverConstants:
+    SOURCE_LOCATION_MIN_CONFIDENCE = 85
+    STANDALONE_LOCATION_MIN_CONFIDENCE = 75
     CARRIERS = {
         "PlayContentIntent": "play",
         "PlayByCreatorIntent": "play from",

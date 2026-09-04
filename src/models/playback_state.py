@@ -63,6 +63,15 @@ class PlaybackState:
             if subject_type == "publication"
             else track_session_id
         )
+        store = self._user.snapshot(handler_input)
+        queue = store.get("playbackQueue") or {}
+        discovery_source = options.get("discovery_source")
+        if (
+            not discovery_source
+            and queue_id
+            and str(queue.get("queueId") or "") == str(queue_id)
+        ):
+            discovery_source = queue.get("source")
         state = {
             "contentId": content_id,
             "token": content_id,
@@ -73,6 +82,8 @@ class PlaybackState:
             "creatorName": content.get("creatorName") or content.get("creator"),
             "organizationId": content.get("organizationId"),
             "organizationName": content.get("organizationName"),
+            "summary": content.get("summary") or content.get("shortDescription"),
+            "discoverySource": discovery_source,
             "playbackSpeeds": content.get("playbackSpeeds") or [],
             "publicationId": content.get("publicationId"),
             "publicationTitle": content.get("publicationTitle"),

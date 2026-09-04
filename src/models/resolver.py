@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from src.constants.resolver import ResolverConstants
 from src.utils.filters import SearchFilterUtils
 
 
@@ -235,12 +236,85 @@ class ResolverResult:
             max(location.start, source.start) < min(location.end, source.end) for source in sources
         )
 
+    def _credible_source_locations(self) -> tuple[ResolvedEntity, ...]:
+        locations = self.entities_of_type("location")
+        source_locations = tuple(
+            entity
+            for entity in locations
+            if str(entity.location_role or "").casefold() == "source"
+            and entity.confidence >= ResolverConstants.SOURCE_LOCATION_MIN_CONFIDENCE
+        )
+        if source_locations:
+            return source_locations
+        return tuple(
+            entity
+            for entity in locations
+            if entity.confidence == 100
+            and entity.location_role
+            and entity.location_role.casefold() != "unspecified"
+        )
+
+    @staticmethod
+    def _unique_search_locations(
+        locations: tuple[ResolvedEntity, ...],
+    ) -> tuple[ResolvedEntity, ...]:
+        unique: dict[tuple[str, str], ResolvedEntity] = {}
+        for location in locations:
+            key = (
+                str(location.country_code or "").casefold(),
+                location.canonical_value.casefold(),
+            )
+            current = unique.get(key)
+            if current is None or location.confidence > current.confidence:
+                unique[key] = location
+        return tuple(unique.values())
+
+    @staticmethod
+    def _preferred_search_location(
+        locations: tuple[ResolvedEntity, ...],
+    ) -> ResolvedEntity | None:
+        candidates = ResolverResult._unique_search_locations(locations)
+        exact = tuple(location for location in candidates if location.confidence == 100)
+        preferred = exact or candidates
+        return preferred[0] if len(preferred) == 1 else None
+
+    def _standalone_unspecified_location(
+        self,
+        slots: dict,
+        filters: dict,
+        original_utterance: str,
+    ) -> ResolvedEntity | None:
+        if filters or str(slots.get("residualQuery") or "").strip():
+            return None
+        locations = ResolverResult._unique_search_locations(
+            tuple(
+                entity
+                for entity in self.entities_of_type("location")
+                if str(entity.location_role or "").casefold() == "unspecified"
+                and entity.confidence
+                >= ResolverConstants.STANDALONE_LOCATION_MIN_CONFIDENCE
+                and entity.latitude is not None
+                and entity.longitude is not None
+            )
+        )
+        meaningful_query = " ".join(
+            ResolverResult._fallback_query(original_utterance).casefold().split()
+        )
+        candidates = tuple(
+            location
+            for location in locations
+            if meaningful_query
+            == " ".join(location.original_text.casefold().split())
+        )
+        return max(candidates, key=lambda location: location.confidence, default=None)
+
     def _location_payload(
         self,
         slots: dict,
         filters: dict,
         sources: tuple[ResolvedEntity, ...],
         prefer_location: bool,
+        original_utterance: str,
     ) -> dict:
         keys = ("city", "placeName", "countryCode", "latitude", "longitude", "isLocal")
         for key in keys:
@@ -252,11 +326,14 @@ class ResolverResult:
         elif prefer_location:
             all_locations = self.fully_matched_entities_of_type("location")
         else:
-            all_locations = tuple(
-                entity
-                for entity in self.fully_matched_entities_of_type("location")
-                if entity.location_role and entity.location_role != "unspecified"
-            )
+            all_locations = self._credible_source_locations()
+            if not all_locations:
+                standalone = self._standalone_unspecified_location(
+                    slots,
+                    filters,
+                    original_utterance,
+                )
+                all_locations = (standalone,) if standalone else ()
         locations = (
             all_locations
             if prefer_location
@@ -268,7 +345,13 @@ class ResolverResult:
         )
         if not locations:
             return {"match": None, "candidates": []}
-        location = locations[0]
+        location = (
+            locations[0]
+            if prefer_location or self.intent == "location"
+            else ResolverResult._preferred_search_location(locations)
+        )
+        if location is None:
+            return {"match": None, "candidates": []}
         match = {
             "city": location.canonical_value,
             "locality": location.canonical_value,
@@ -341,7 +424,13 @@ class ResolverResult:
         slots = dict(self.slots)
         ambiguities = self._ambiguity_payload(original_utterance)
         filters, sources = self._facet_payload(slots)
-        resolution = self._location_payload(slots, filters, sources, prefer_location)
+        resolution = self._location_payload(
+            slots,
+            filters,
+            sources,
+            prefer_location,
+            original_utterance,
+        )
         slots["ambiguousReferences"] = list(ambiguities)
         search_plan = self._search_plan(slots, filters, original_utterance)
         slots["searchPlan"] = search_plan
@@ -357,7 +446,7 @@ class ResolverResult:
         if resolution.get("match"):
             accepted_entities.update(
                 (entity.entity_type, entity.entity_id)
-                for entity in self.selected_entities_of_type("location")
+                for entity in self.entities_of_type("location")
                 if entity.canonical_value == resolution["match"].get("city")
             )
         entities = [

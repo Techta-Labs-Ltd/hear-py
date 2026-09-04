@@ -50,6 +50,13 @@ class Speech:
     SEARCH_PROGRESSIVE = "Just a moment while I find that for you."
     SEARCH_MORE_PROGRESSIVE = "Just a moment while I find a few more options."
     SEARCH_LATEST_PROGRESSIVE = "Just a moment while I find the latest for you."
+    LOCATION_PROGRESSIVE = "One moment while I check that for you."
+    ONBOARDING_DEVICE_LOCATION_CONFIRM = (
+        "I've found your device location. Would you like me to use it for local content?"
+    )
+    LOCATION_COORDINATES_CONFIRMED = (
+        "Thank you. I'll use your device location for local content."
+    )
     NOTIFICATION_LOADING = "Just a moment while I get that ready."
     NO_NOTIFICATIONS = "You don't have any new updates from the sources you follow."
     NOTIFICATIONS_UNAVAILABLE = (

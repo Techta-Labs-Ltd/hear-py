@@ -178,17 +178,124 @@ class SearchSpeech:
         return f"Those are all the matches I found. {choices}"
 
     @staticmethod
-    def trending_intro(count, title=None, credit=None) -> str:
+    def trending_intro(count) -> str:
         total = max(0, int(count or 0))
         noun = "story" if total == 1 else "stories"
-        intro = f"I found {total} trending {noun}."
-        safe_title = Speech.escape_ssml_lite(str(title).strip()) if title else ""
-        safe_credit = Speech.escape_ssml_lite(str(credit).strip()) if credit else ""
-        if safe_title and safe_credit:
-            return f"{intro} Now playing {safe_title}, by {safe_credit}."
-        if safe_title:
-            return f"{intro} Now playing {safe_title}."
-        return f"{intro} Now playing the first one."
+        count_label = "one" if total == 1 else str(total)
+        intro = f"Here {'is' if total == 1 else 'are'} {count_label} trending {noun}."
+        return intro if total == 1 else f"{intro} Here's the first one."
+
+    @staticmethod
+    def _search_filter(search_payload: dict | None) -> dict:
+        payload = search_payload if isinstance(search_payload, dict) else {}
+        filters = payload.get("filter")
+        return filters if isinstance(filters, dict) else {}
+
+    @staticmethod
+    def _has_source_filter(search_payload: dict | None) -> bool:
+        payload = search_payload if isinstance(search_payload, dict) else {}
+        filters = SearchSpeech._search_filter(payload)
+        return any(
+            filters.get(key) or payload.get(key)
+            for key in ("creatorIds", "organizationIds", "publicationIds")
+        )
+
+    @staticmethod
+    def _filter_labels(filters: dict) -> list[str]:
+        values = []
+        for key in ("categorySlugs", "tags"):
+            raw = filters.get(key) or []
+            raw = raw if isinstance(raw, (list, tuple, set)) else [raw]
+            values.extend(
+                str(value).strip().replace("-", " ")
+                for value in raw
+                if str(value or "").strip()
+            )
+        return list(dict.fromkeys(values))
+
+    @staticmethod
+    def _clean_result_subject(value: object) -> tuple[str, str]:
+        subject = " ".join(str(value or "").strip().split())
+        lowered = subject.casefold()
+        for prefix in ("the latest content on ", "content on "):
+            if lowered.startswith(prefix):
+                return "about", subject[len(prefix) :].strip()
+        for prefix in ("the latest content published ", "content published "):
+            if lowered.startswith(prefix):
+                return "", f"published {subject[len(prefix) :].strip()}"
+        for prefix in ("the latest content in ", "content in "):
+            if lowered.startswith(prefix):
+                return "from", subject[len(prefix) :].strip()
+        for prefix in ("the latest content from ", "content from "):
+            if lowered.startswith(prefix):
+                return "from", subject[len(prefix) :].strip()
+        if lowered.startswith("the latest "):
+            subject = subject[len("the latest ") :].strip()
+        if subject.casefold() in {
+            "",
+            "anything",
+            "content",
+            "something",
+            "that request",
+            "your search",
+        }:
+            return "", ""
+        return "about", subject
+
+    @staticmethod
+    def _broad_result_context(
+        search_payload: dict | None, request_label: object = None
+    ) -> tuple[str, str]:
+        payload = search_payload if isinstance(search_payload, dict) else {}
+        filters = SearchSpeech._search_filter(payload)
+        relation, subject = SearchSpeech._clean_result_subject(request_label)
+        labels = SearchSpeech._filter_labels(filters)
+        query = str(payload.get("query") or payload.get("q") or "").strip()
+        if query and query.casefold() not in {value.casefold() for value in labels}:
+            labels.append(query)
+        missing = [value for value in labels if value.casefold() not in subject.casefold()]
+        if subject and missing:
+            subject = f"{subject} and {' and '.join(missing)}"
+        elif not subject:
+            relation = "about" if labels else ""
+            subject = " and ".join(labels)
+        city = str(filters.get("city") or payload.get("city") or "").strip()
+        if city and city.casefold() not in subject.casefold():
+            if subject:
+                subject = f"{subject} in {city}"
+            else:
+                relation, subject = "from", city
+        if not subject and (payload.get("isLocal") or filters.get("isLocal")):
+            relation, subject = "from", "your community"
+        return relation, subject
+
+    @staticmethod
+    def search_results_intro(
+        count,
+        search_payload: dict | None = None,
+        request_label: object = None,
+        title: object = None,
+        credit: object = None,
+    ) -> str:
+        total = max(0, int(count or 0))
+        noun = "story" if total == 1 else "stories"
+        count_label = "one" if total == 1 else str(total)
+        if SearchSpeech._has_source_filter(search_payload):
+            intro = f"I found {count_label} {noun}."
+            safe_title = Speech.escape_ssml_lite(str(title).strip()) if title else ""
+            safe_credit = Speech.escape_ssml_lite(str(credit).strip()) if credit else ""
+            if safe_title and safe_credit:
+                return f"{intro} Now playing {safe_title}, by {safe_credit}."
+            if safe_title:
+                return f"{intro} Now playing {safe_title}."
+            return f"{intro} Now playing the first one."
+        relation, subject = SearchSpeech._broad_result_context(search_payload, request_label)
+        detail = ""
+        if subject:
+            safe_subject = Speech.escape_ssml_lite(subject)
+            detail = f" {relation} {safe_subject}" if relation else f" {safe_subject}"
+        intro = f"Here {'is' if total == 1 else 'are'} {count_label} {noun}{detail}."
+        return intro if total == 1 else f"{intro} Here's the first one."
 
     @staticmethod
     def talking_newspaper_not_recognized(name) -> str:

@@ -141,11 +141,20 @@ class Onboarding(OnboardingService):
         if stage == OnboardingConstants.ONBOARDING_AWAIT_CONFIRM:
             pending = store.get("pendingLocationConfirm") or {}
             city = pending.get("city")
-            if not city:
+            has_coordinates = (
+                pending.get("latitude") is not None
+                and pending.get("longitude") is not None
+            )
+            if not city and not has_coordinates:
                 return None
+            speech = (
+                Speech.ONBOARDING_TOWN_CONFIRM(city)
+                if city
+                else Speech.ONBOARDING_DEVICE_LOCATION_CONFIRM
+            )
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.ONBOARDING_TOWN_CONFIRM(city))
+                    Ssml.ssml(speech)
                 )
                 .reprompt(Ssml.ssml(OnboardingConstants.TOWN_CONFIRM_REPROMPT))
                 .set_should_end_session(False)
@@ -160,7 +169,7 @@ class Onboarding(OnboardingService):
         *,
         deps: object | None = None,
     ):
-        """Prompt the user to grant device-address and geolocation permissions."""
+        """Prompt the user to grant location permission."""
         d = Onboarding._dependencies(deps)
         d.onboarding.ask_permission(handler_input)
         DialogStateManager.activate(
@@ -180,7 +189,7 @@ class Onboarding(OnboardingService):
         deps: object | None = None,
     ):
         """Send the Alexa-owned consent card for the location data we consume."""
-        permissions = [OnboardingConstants.PERMISSIONS["DEVICE_ADDRESS"]]
+        permissions = [OnboardingConstants.PERMISSIONS["GEOLOCATION"]]
         d = Onboarding._dependencies(deps)
         d.onboarding.keep_permission_pending(handler_input)
         DialogStateManager.activate(
@@ -373,6 +382,7 @@ class Onboarding(OnboardingService):
             phrase,
         )
         try:
+            await d.progressive.send(handler_input, Speech.LOCATION_PROGRESSIVE)
             options = {
                 "alexa_user_id": AlexaRequest.get_user_id(handler_input),
                 "prefer_location": True,
@@ -535,6 +545,7 @@ class Onboarding(OnboardingService):
         after_consent: bool = False,
     ):
         d = Onboarding._dependencies(deps)
+        await d.progressive.send(handler_input, Speech.LOCATION_PROGRESSIVE)
         match = await d.locality.detect_device_location(handler_input)
         if not match or match.get("_status") == "permission_denied":
             if after_consent:
@@ -553,8 +564,9 @@ class Onboarding(OnboardingService):
                 .set_should_end_session(False)
                 .response
             )
-        lookup = match.get("city") or match.get("postalCode")
-        if not lookup:
+        city = str(match.get("city") or "").strip()
+        has_coordinates = match.get("latitude") is not None and match.get("longitude") is not None
+        if not city and not has_coordinates:
             d.onboarding.location_not_found(handler_input)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_PERMISSION_EMPTY))
@@ -562,7 +574,7 @@ class Onboarding(OnboardingService):
                 .set_should_end_session(False)
                 .response
             )
-        if match.get("latitude") is None or match.get("longitude") is None:
+        if city and not has_coordinates:
             try:
                 options = {
                     "alexa_user_id": AlexaRequest.get_user_id(handler_input),
@@ -571,7 +583,7 @@ class Onboarding(OnboardingService):
                 }
                 if store.get("listenerId"):
                     options["listener_id"] = store["listenerId"]
-                response = await d.resolver.resolve_utterance(str(lookup), **options)
+                response = await d.resolver.resolve_utterance(city, **options)
                 resolved = (response.get("resolution") or {}).get("match")
             except ResolverUnavailable as exc:
                 Onboarding.logger.warning(
@@ -582,7 +594,7 @@ class Onboarding(OnboardingService):
             if not resolved:
                 Onboarding.logger.info(
                     "Hear: device-address city could not be resolved to coordinates city=%s",
-                    lookup,
+                    city,
                 )
                 return Onboarding.handle_location_not_found(handler_input, store, deps=d)
             match = {
@@ -604,7 +616,11 @@ class Onboarding(OnboardingService):
         )
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml(Speech.ONBOARDING_DEVICE_TOWN_CONFIRM(match["city"]))
+                Ssml.ssml(
+                    Speech.ONBOARDING_DEVICE_TOWN_CONFIRM(city)
+                    if city
+                    else Speech.ONBOARDING_DEVICE_LOCATION_CONFIRM
+                )
             )
             .reprompt(Ssml.ssml(OnboardingConstants.TOWN_CONFIRM_REPROMPT))
             .set_should_end_session(False)

@@ -1,5 +1,5 @@
 DEVICE_ADDRESS = "read::alexa:device:all:address"
-DEVICE_COUNTRY_POSTAL = "alexa:devices:all:address:country_and_postal_code:read"
+DEVICE_ADDRESS_FULL = "alexa::devices:all:address:full:read"
 REMINDERS_READWRITE = "alexa::alerts:reminders:skill:readwrite"
 GEOLOCATION_READ = "alexa::devices:all:geolocation:read"
 PROFILE_NAME_READ = "alexa::profile:name:read"
