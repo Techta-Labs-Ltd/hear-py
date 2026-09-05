@@ -229,7 +229,7 @@ class OnboardingService:
     def keep_permission_pending(self, handler_input) -> dict:
         return self._onboarding.stage_permission(handler_input, reliable=False)
 
-    def start_town_capture(self, handler_input) -> dict:
+    def begin_town_capture(self, handler_input) -> dict:
         return self._onboarding.start_town_capture(
             handler_input, reliable=False, reset_resolver_failures=True
         )

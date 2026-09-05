@@ -304,7 +304,7 @@ class Onboarding(OnboardingService):
     ):
         """Begin the town-capture flow asking where the user is based."""
         d = Onboarding._dependencies(deps)
-        d.onboarding.start_town_capture(handler_input)
+        d.onboarding.begin_town_capture(handler_input)
         DialogStateManager.activate(
             handler_input,
             "onboarding",
