@@ -45,10 +45,12 @@ Generate this object. Slot values contain only `name.value` and optional
       "values": [
         {
           "name": {
-            "value": "Tynedale",
+            "value": "Tynedale Talking Newspaper",
             "synonyms": [
+              "Tynedale",
               "Tyndale",
-              "Tyne Dale"
+              "Tyne Dale",
+              "Tynedale Talking News"
             ]
           }
         }
@@ -94,7 +96,7 @@ Alexa interaction model.
 | Slot | Backend records |
 | --- | --- |
 | `HEAR_LOCATION` | Active towns, cities, localities, areas, and their observed spoken variants |
-| `HEAR_ORGANIZATION` | Distinctive spoken organization names and stems, plus observed ASR variants |
+| `HEAR_ORGANIZATION` | Full backend organization names, plus distinctive spoken names and observed ASR variants |
 | `HEAR_CREATOR` | Active creator, author, narrator, and contributor names |
 | `HEAR_TOPIC` | Approved topics, categories, subjects, and searchable tags |
 
@@ -127,13 +129,13 @@ Talking Newspaper`.
 
 1. Emit exactly the four slot objects in the order shown above.
 2. Emit only `name.value` and optional `name.synonyms`; never emit `id`.
-3. For creators and locations, use the public spoken/display name as the
-   canonical `value`.
+3. Use the exact public/backend catalog name as the canonical `value`. This is
+   the text Alexa sends to the resolver after a successful slot match.
 4. For an organization whose public name ends in a generic phrase such as
-   `Talking Newspaper`, emit its distinctive spoken name as the canonical
-   value. For example, emit `Tynedale`; the intent grammar supplies `talking
-   news` or `talking newspaper`, and the Hear resolver maps `Tynedale` to the
-   complete backend organization record.
+   `Talking Newspaper`, add its distinctive spoken stem as a synonym. For
+   example, the canonical value remains `Tynedale Talking Newspaper`, while
+   `Tynedale`, `Tyndale`, and `Tyne Dale` are synonyms. The intent grammar can
+   supply `talking news` or `talking newspaper` around that stem.
 5. Trim values, collapse repeated whitespace, and discard blank strings.
 6. De-duplicate values and synonyms case-insensitively within each slot.
 7. Do not assign one synonym to multiple canonical values in the same slot.
@@ -149,17 +151,18 @@ Talking Newspaper`.
 The backend source record should therefore expose, or derive, these fields:
 
 ```text
-spoken_value       required canonical phrase emitted as name.value
+catalog_name       required canonical phrase emitted as name.value
+spoken_stem        optional distinctive form without generic carrier words
 approved_aliases   optional real alternative names
 observed_asr_forms optional corrections learned from tested device transcripts
 active             only active/searchable records are emitted
 ```
 
-For `Tynedale Talking Newspaper`, the generator derives `spoken_value` as
-`Tynedale`, merges approved aliases with observed forms such as `Tyndale` and
-`Tyne Dale`, de-duplicates them, and emits no Alexa ID. Keep the complete public
-name and database identity in the Hear catalog; Alexa supplies recognition
-vocabulary while the resolver remains the authority for the actual record.
+For `Tynedale Talking Newspaper`, the generator emits that complete catalog
+name as `name.value`, then merges the `Tynedale` spoken stem with approved
+aliases and observed forms such as `Tyndale` and `Tyne Dale`. It de-duplicates
+them and emits no Alexa ID. Alexa supplies recognition vocabulary while the
+resolver remains the authority for the actual record.
 
 The schema in `schemas/alexa-search-slot.schema.json` validates this output and
 rejects value-level IDs or other unexpected fields.
@@ -179,8 +182,8 @@ For every populated domain slot:
 Examples sent to the resolver:
 
 ```text
-play from Tynedale
-play sport from Tynedale
+play from Tynedale Talking Newspaper
+play sport from Tynedale Talking Newspaper
 play a publication by Jane Smith
 play near London
 play sport near Herne Bay

@@ -1386,16 +1386,22 @@
           "values": [
             {
               "name": {
-                "value": "Tynedale",
+                "value": "Tynedale Talking Newspaper",
                 "synonyms": [
+                  "Tynedale",
                   "Tyndale",
-                  "Tyne Dale"
+                  "Tyne Dale",
+                  "Tynedale Talking News"
                 ]
               }
             },
             {
               "name": {
-                "value": "York"
+                "value": "York Talking News",
+                "synonyms": [
+                  "York",
+                  "York Talking Newspaper"
+                ]
               }
             }
           ]

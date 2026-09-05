@@ -165,13 +165,19 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
                         "resolutionsPerAuthority": [
                             {
                                 "status": {"code": "ER_SUCCESS_MATCH"},
-                                "values": [{"value": {"name": "Tynedale"}}],
+                                "values": [
+                                    {
+                                        "value": {
+                                            "name": "Tynedale Talking Newspaper"
+                                        }
+                                    }
+                                ],
                             }
                         ]
                     },
                 }
             },
-            "play from Tynedale",
+            "play from Tynedale Talking Newspaper",
         ),
         (
             "PlayLocalIntent",

@@ -251,16 +251,18 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
         "audio newspaper",
     }.issubset(set(newspaper["name"]["synonyms"]))
     assert "top english paper" not in newspaper["name"]["synonyms"]
-    assert "Tynedale" in organization_values
+    assert "Tynedale Talking Newspaper" in organization_values
     assert "play from {organizationQuery}" in organization_slot["samples"]
     assert intents["SelectOrganizationIntent"]["slots"][0]["type"] == "HEAR_ORGANIZATION"
     assert "{organizationQuery}" in intents["SelectOrganizationIntent"]["samples"]
     tynedale = next(
         item
         for item in types["HEAR_ORGANIZATION"]["values"]
-        if item["name"]["value"] == "Tynedale"
+        if item["name"]["value"] == "Tynedale Talking Newspaper"
     )
-    assert {"Tyndale", "Tyne Dale"}.issubset(set(tynedale["name"]["synonyms"]))
+    assert {"Tynedale", "Tyndale", "Tyne Dale"}.issubset(
+        set(tynedale["name"]["synonyms"])
+    )
     assert (
         "play the {publicationSort} publication from {publicationSourceQuery} talking news"
         in intents["PlayPublicationIntent"]["samples"]
