@@ -45,10 +45,10 @@ Generate this object. Slot values contain only `name.value` and optional
       "values": [
         {
           "name": {
-            "value": "Tynedale Talking Newspaper",
+            "value": "Tynedale",
             "synonyms": [
-              "Tynedale Talking News",
-              "Tynedale Talking News Paper"
+              "Tyndale",
+              "Tyne Dale"
             ]
           }
         }
@@ -94,7 +94,7 @@ Alexa interaction model.
 | Slot | Backend records |
 | --- | --- |
 | `HEAR_LOCATION` | Active towns, cities, localities, areas, and their observed spoken variants |
-| `HEAR_ORGANIZATION` | Active organizations, talking newspapers, and organization-owned publication/source names |
+| `HEAR_ORGANIZATION` | Distinctive spoken organization names and stems, plus observed ASR variants |
 | `HEAR_CREATOR` | Active creator, author, narrator, and contributor names |
 | `HEAR_TOPIC` | Approved topics, categories, subjects, and searchable tags |
 
@@ -112,8 +112,10 @@ on the resolver to clarify the unavoidable ambiguity.
 | `TownCaptureIntent.townName` | `HEAR_LOCATION` |
 | `SetLocationIntent.location` | `HEAR_LOCATION` |
 | `PlayByOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
+| `SelectOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `PlayPublicationIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
 | `PlayByCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
+| `SelectCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
 
 Creator-owned publication requests use `PlayByCreatorIntent`, for example
@@ -125,18 +127,39 @@ Talking Newspaper`.
 
 1. Emit exactly the four slot objects in the order shown above.
 2. Emit only `name.value` and optional `name.synonyms`; never emit `id`.
-3. Use the public spoken/display name as the canonical `value`.
-4. Trim values, collapse repeated whitespace, and discard blank strings.
-5. De-duplicate values and synonyms case-insensitively within each slot.
-6. Do not assign one synonym to multiple canonical values in the same slot.
-7. Keep every value and synonym at 140 characters or fewer.
-8. Add observed speech variants and approved aliases, not arbitrary generated
+3. For creators and locations, use the public spoken/display name as the
+   canonical `value`.
+4. For an organization whose public name ends in a generic phrase such as
+   `Talking Newspaper`, emit its distinctive spoken name as the canonical
+   value. For example, emit `Tynedale`; the intent grammar supplies `talking
+   news` or `talking newspaper`, and the Hear resolver maps `Tynedale` to the
+   complete backend organization record.
+5. Trim values, collapse repeated whitespace, and discard blank strings.
+6. De-duplicate values and synonyms case-insensitively within each slot.
+7. Do not assign one synonym to multiple canonical values in the same slot.
+8. Keep every value and synonym at 140 characters or fewer.
+9. Add observed speech variants and approved aliases, not arbitrary generated
    misspellings.
-9. Exclude carrier words such as `play`, `from`, `by`, `near`, `creator`, and
+10. Exclude carrier words such as `play`, `from`, `by`, `near`, `creator`, and
    `organization` unless they are part of the entity's real public name.
-10. Sort deterministically so identical backend data produces identical JSON.
-11. Reject output that makes the complete interaction model exceed Alexa's
+11. Sort deterministically so identical backend data produces identical JSON.
+12. Reject output that makes the complete interaction model exceed Alexa's
     size limit; retain margin for intents, samples, and prompts.
+
+The backend source record should therefore expose, or derive, these fields:
+
+```text
+spoken_value       required canonical phrase emitted as name.value
+approved_aliases   optional real alternative names
+observed_asr_forms optional corrections learned from tested device transcripts
+active             only active/searchable records are emitted
+```
+
+For `Tynedale Talking Newspaper`, the generator derives `spoken_value` as
+`Tynedale`, merges approved aliases with observed forms such as `Tyndale` and
+`Tyne Dale`, de-duplicates them, and emits no Alexa ID. Keep the complete public
+name and database identity in the Hear catalog; Alexa supplies recognition
+vocabulary while the resolver remains the authority for the actual record.
 
 The schema in `schemas/alexa-search-slot.schema.json` validates this output and
 rejects value-level IDs or other unexpected fields.
@@ -156,12 +179,24 @@ For every populated domain slot:
 Examples sent to the resolver:
 
 ```text
-play from Tynedale Talking Newspaper
-play sport from Tynedale Talking Newspaper
+play from Tynedale
+play sport from Tynedale
 play a publication by Jane Smith
 play near London
 play sport near Herne Bay
 ```
+
+The interaction model explicitly supports both complete commands and name-only
+turns. `Tynedale`, `Tyndale talking news`, `play from Tyndale talking news`, and
+`play sport from Tyndale talking news` all populate the organization slot. A
+bare creator name similarly populates `SelectCreatorIntent`. These selection
+intents still go through the same Hear resolver as the longer play intents.
+
+If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
+waiting for an organization or creator, active dialog state takes precedence.
+The backend sends the captured words to the expected organization or creator
+resolver route and does not save them as the listener's city. An actual
+onboarding location question still owns a bare city response.
 
 If a new value is absent from the generated slot, Alexa may still return it as
 raw text and the resolver still receives it. Absence can reduce ASR accuracy,

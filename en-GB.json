@@ -200,6 +200,8 @@
           ],
           "samples": [
             "play {dateQuery} content",
+            "play {dateQuery} {topic}",
+            "play {topic} from {dateQuery}",
             "find me {topic}",
             "play {topic}",
             "listen to {topic}",
@@ -478,8 +480,13 @@
               "type": "HEAR_ORGANIZATION",
               "samples": [
                 "{organizationQuery}",
+                "{organizationQuery} talking newspaper",
+                "{organizationQuery} talking news",
+                "{organizationQuery} talking news paper",
                 "the {organizationQuery}",
                 "from {organizationQuery}",
+                "play {organizationQuery}",
+                "play from {organizationQuery}",
                 "I want {organizationQuery}"
               ]
             },
@@ -502,9 +509,16 @@
             "play something from a talking news paper",
             "play something from talking news",
             "play me a talking newspaper",
+            "play {organizationQuery} talking newspaper",
+            "play {organizationQuery} talking news",
+            "play {organizationQuery} talking news paper",
             "play from {organizationQuery}",
+            "play from {organizationQuery} talking newspaper",
+            "play from {organizationQuery} talking news",
             "play something from {organizationQuery}",
             "play {topic} from {organizationQuery}",
+            "play {topic} from {organizationQuery} talking newspaper",
+            "play {topic} from {organizationQuery} talking news",
             "play me {topic} from {organizationQuery}",
             "find {topic} from {organizationQuery}",
             "play latest from {organizationQuery}",
@@ -550,11 +564,41 @@
             "play the latest publication",
             "play {publicationSort} publications",
             "play the {publicationSort} publication",
+            "play {publicationSort} publication from {publicationSourceQuery}",
+            "play the {publicationSort} publication from {publicationSourceQuery}",
+            "play {publicationSort} publication from {publicationSourceQuery} talking newspaper",
+            "play {publicationSort} publication from {publicationSourceQuery} talking news",
+            "play the {publicationSort} publication from {publicationSourceQuery} talking newspaper",
+            "play the {publicationSort} publication from {publicationSourceQuery} talking news",
             "play publication from {publicationSourceQuery}",
+            "play publication from {publicationSourceQuery} talking newspaper",
+            "play publication from {publicationSourceQuery} talking news",
             "play a publication from {publicationSourceQuery}",
             "play publications from {publicationSourceQuery}",
             "find publications from {publicationSourceQuery}",
             "give me a publication from {publicationSourceQuery}"
+          ]
+        },
+        {
+          "name": "SelectOrganizationIntent",
+          "slots": [
+            {
+              "name": "organizationQuery",
+              "type": "HEAR_ORGANIZATION",
+              "samples": [
+                "{organizationQuery}",
+                "the {organizationQuery}",
+                "I want {organizationQuery}"
+              ]
+            }
+          ],
+          "samples": [
+            "{organizationQuery}",
+            "{organizationQuery} talking newspaper",
+            "{organizationQuery} talking news",
+            "{organizationQuery} talking news paper",
+            "the {organizationQuery}",
+            "{organizationQuery} please"
           ]
         },
         {
@@ -637,6 +681,25 @@
             "let me hear what's new",
             "show me what you've got",
             "what's going on today"
+          ]
+        },
+        {
+          "name": "SelectCreatorIntent",
+          "slots": [
+            {
+              "name": "creatorQuery",
+              "type": "HEAR_CREATOR",
+              "samples": [
+                "{creatorQuery}",
+                "the {creatorQuery}",
+                "I want {creatorQuery}"
+              ]
+            }
+          ],
+          "samples": [
+            "{creatorQuery}",
+            "the {creatorQuery}",
+            "{creatorQuery} please"
           ]
         },
         {
@@ -1323,19 +1386,16 @@
           "values": [
             {
               "name": {
-                "value": "Tynedale Talking Newspaper",
+                "value": "Tynedale",
                 "synonyms": [
-                  "Tynedale Talking News",
-                  "Tynedale Talking News Paper"
+                  "Tyndale",
+                  "Tyne Dale"
                 ]
               }
             },
             {
               "name": {
-                "value": "York Talking News",
-                "synonyms": [
-                  "York Talking Newspaper"
-                ]
+                "value": "York"
               }
             }
           ]

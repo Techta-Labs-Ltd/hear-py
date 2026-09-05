@@ -27,7 +27,9 @@ class ConfirmationPolicy:
         {
             "PlayContentIntent",
             "PlayByCreatorIntent",
+            "SelectCreatorIntent",
             "PlayByOrganizationIntent",
+            "SelectOrganizationIntent",
             "PlayPublicationIntent",
             "BrowseContentIntent",
             "BrowseByCategoryIntent",
@@ -45,7 +47,23 @@ class ConfirmationPolicy:
             "category",
             "feedbackPhrase",
         ),
+        "SelectCreatorIntent": (
+            "creatorQuery",
+            "topic",
+            "organizationQuery",
+            "listPickPhrase",
+            "category",
+            "feedbackPhrase",
+        ),
         "PlayByOrganizationIntent": (
+            "organizationQuery",
+            "topic",
+            "creatorQuery",
+            "listPickPhrase",
+            "category",
+            "feedbackPhrase",
+        ),
+        "SelectOrganizationIntent": (
             "organizationQuery",
             "topic",
             "creatorQuery",

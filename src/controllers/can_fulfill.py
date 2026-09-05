@@ -13,7 +13,9 @@ class CanFulfillPolicy:
     CONTENT_INTENTS = {
         "PlayContentIntent",
         "PlayByCreatorIntent",
+        "SelectCreatorIntent",
         "PlayByOrganizationIntent",
+        "SelectOrganizationIntent",
         "PlayPublicationIntent",
         "BrowseContentIntent",
         "WhatsTrendingIntent",

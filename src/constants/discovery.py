@@ -2,6 +2,10 @@ from __future__ import annotations
 
 
 class DiscoveryConstants:
+    CREATOR_INTENTS = frozenset({"PlayByCreatorIntent", "SelectCreatorIntent"})
+    ORGANIZATION_INTENTS = frozenset(
+        {"PlayByOrganizationIntent", "SelectOrganizationIntent"}
+    )
     CHOICE_PAGE_SIZE = 3
     CHOICE_ORDINALS = ("first", "second", "third")
     CHOICE_ORDINAL_SYNONYMS = (
@@ -148,7 +152,9 @@ class DiscoveryConstants:
         "PlayContentIntent": "general",
         "PlayLatestContentIntent": "general",
         "PlayByCreatorIntent": "creator",
+        "SelectCreatorIntent": "creator",
         "PlayByOrganizationIntent": "organization",
+        "SelectOrganizationIntent": "organization",
         "PlayPublicationIntent": "publication",
         "WhatsTrendingIntent": "trending",
         "PlayRecommendationIntent": "trending",

@@ -156,6 +156,24 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
             "play from North Moor Talking Newspaper",
         ),
         (
+            "SelectOrganizationIntent",
+            {
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "value": "tyndale",
+                    "resolutions": {
+                        "resolutionsPerAuthority": [
+                            {
+                                "status": {"code": "ER_SUCCESS_MATCH"},
+                                "values": [{"value": {"name": "Tynedale"}}],
+                            }
+                        ]
+                    },
+                }
+            },
+            "play from Tynedale",
+        ),
+        (
             "PlayLocalIntent",
             {
                 "topic": {"name": "topic", "value": "sport"},
@@ -195,6 +213,24 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
             },
             "play gardening by Jane Smith",
         ),
+        (
+            "SelectCreatorIntent",
+            {
+                "creatorQuery": {
+                    "name": "creatorQuery",
+                    "value": "jane smyth",
+                    "resolutions": {
+                        "resolutionsPerAuthority": [
+                            {
+                                "status": {"code": "ER_SUCCESS_MATCH"},
+                                "values": [{"value": {"name": "Jane Smith"}}],
+                            }
+                        ]
+                    },
+                }
+            },
+            "play by Jane Smith",
+        ),
     ],
 )
 async def test_generated_slot_match_or_raw_value_always_reaches_backend_resolver(
@@ -225,6 +261,82 @@ async def test_generated_slot_match_or_raw_value_always_reaches_backend_resolver
 
     resolver.resolve_utterance.assert_awaited_once()
     assert resolver.resolve_utterance.await_args.args == (expected_utterance,)
+
+
+@pytest.mark.asyncio
+async def test_organization_follow_up_beats_incorrect_town_intent(mock_handler_input):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "organization",
+                "slots": {
+                    "organizationIds": ["org-tynedale"],
+                    "organizationName": "Tynedale Talking Newspaper",
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "TownCaptureIntent",
+                "slots": {"townName": {"name": "townName", "value": "tyndale"}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingOrganizationName": True,
+    }
+
+    await ResolverInterceptor(
+        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
+    ).process(mock_handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once()
+    assert resolver.resolve_utterance.await_args.args == ("play from tyndale",)
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "organization"
+    assert nlp["alexaRawIntent"] == "TownCaptureIntent"
+    assert nlp["needsRedirect"] is True
+    assert nlp["slots"]["organizationFollowUp"] is True
+    assert "townName" not in nlp["slots"]
+
+
+def test_name_only_selection_intents_use_domain_handlers(mock_handler_input):
+    from src.controllers.play import PlayByCreatorHandler, PlayByOrganizationHandler
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SelectOrganizationIntent",
+                "slots": {
+                    "organizationQuery": {
+                        "name": "organizationQuery",
+                        "value": "tyndale",
+                    }
+                },
+            },
+        }
+    )
+    assert PlayByOrganizationHandler(deps=ApplicationContainer()).can_handle(
+        mock_handler_input
+    )
+
+    mock_handler_input.request_envelope.request.intent.name = "SelectCreatorIntent"
+    mock_handler_input.request_envelope.request.intent.slots = {
+        "creatorQuery": {"name": "creatorQuery", "value": "sample creator"}
+    }
+    assert PlayByCreatorHandler(deps=ApplicationContainer()).can_handle(mock_handler_input)
 
 
 @pytest.mark.asyncio

@@ -29,8 +29,10 @@ def test_discovery_intents_use_domain_specific_generated_slots():
         "PlayLocalIntent",
         "PlayRecommendationIntent",
         "PlayByOrganizationIntent",
+        "SelectOrganizationIntent",
         "PlayPublicationIntent",
         "PlayByCreatorIntent",
+        "SelectCreatorIntent",
         "WhatsTrendingIntent",
     }
     for intent_name in protected:
@@ -64,10 +66,12 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "organizationQuery": "HEAR_ORGANIZATION",
             "topic": "HEAR_TOPIC",
         },
+        "SelectOrganizationIntent": {"organizationQuery": "HEAR_ORGANIZATION"},
         "PlayByCreatorIntent": {
             "creatorQuery": "HEAR_CREATOR",
             "topic": "HEAR_TOPIC",
         },
+        "SelectCreatorIntent": {"creatorQuery": "HEAR_CREATOR"},
         "PlayPublicationIntent": {
             "publicationSourceQuery": "HEAR_ORGANIZATION",
             "publicationSort": "HEAR_PUBLICATION_SORT",
@@ -138,6 +142,7 @@ def test_content_discovery_intents_accept_date_constraints():
     }:
         assert all((slot["name"] != "dateQuery" for slot in intents[intent_name].get("slots", [])))
         assert all(("{dateQuery}" not in sample for sample in intents[intent_name]["samples"]))
+    assert "play {dateQuery} {topic}" in intents["PlayContentIntent"]["samples"]
 
 
 def test_local_community_phrases_are_owned_by_local_intent():
@@ -177,6 +182,7 @@ def test_generic_source_search_is_neutral_and_specialized_routes_are_explicit():
         if slot["name"] == "creatorQuery"
     )
     assert {"play from {topic}", "play content from {topic}"}.isdisjoint(general)
+    assert "play" in general
     assert "from {topic}" not in content_topic["samples"]
     assert "by {creatorQuery}" in creator_slot["samples"]
     assert "play by {creatorQuery}" in creators
@@ -217,11 +223,22 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
     intents = {item["name"]: item for item in language_model["intents"]}
     types = {item["name"]: item for item in language_model["types"]}
     organization_samples = set(intents["PlayByOrganizationIntent"]["samples"])
+    organization_slot = next(
+        slot
+        for slot in intents["PlayByOrganizationIntent"]["slots"]
+        if slot["name"] == "organizationQuery"
+    )
+    organization_values = {
+        item["name"]["value"] for item in types["HEAR_ORGANIZATION"]["values"]
+    }
     newspaper = next(
         item
         for item in types["ContentFormat"]["values"]
         if item["name"]["value"] == "newspaper"
     )
+    assert {
+        "play from {organizationQuery}",
+    }.issubset(organization_samples)
     assert {
         "play from talking news",
         "play from a talking paper",
@@ -234,6 +251,20 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
         "audio newspaper",
     }.issubset(set(newspaper["name"]["synonyms"]))
     assert "top english paper" not in newspaper["name"]["synonyms"]
+    assert "Tynedale" in organization_values
+    assert "play from {organizationQuery}" in organization_slot["samples"]
+    assert intents["SelectOrganizationIntent"]["slots"][0]["type"] == "HEAR_ORGANIZATION"
+    assert "{organizationQuery}" in intents["SelectOrganizationIntent"]["samples"]
+    tynedale = next(
+        item
+        for item in types["HEAR_ORGANIZATION"]["values"]
+        if item["name"]["value"] == "Tynedale"
+    )
+    assert {"Tyndale", "Tyne Dale"}.issubset(set(tynedale["name"]["synonyms"]))
+    assert (
+        "play the {publicationSort} publication from {publicationSourceQuery} talking news"
+        in intents["PlayPublicationIntent"]["samples"]
+    )
 
 
 def test_publication_choice_navigation_has_forward_and_back_phrases():

@@ -214,6 +214,11 @@ class ResolverWorkflowRunner:
         if not follow_up:
             return False
         intent_name, slot_name, matching_intent = follow_up
+        matching_intents = (
+            DiscoveryConstants.CREATOR_INTENTS
+            if intent_name == "creator"
+            else DiscoveryConstants.ORGANIZATION_INTENTS
+        )
         result = await self._resolver_result(handler_input, raw, matching_intent)
         result["intent"] = intent_name
         result.setdefault("slots", {})[slot_name] = raw
@@ -226,8 +231,8 @@ class ResolverWorkflowRunner:
                 **result,
                 "alexaIntent": intent_name,
                 "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": alexa_intent == matching_intent,
-                "needsRedirect": alexa_intent != matching_intent,
+                "nlpMatchesAlexa": alexa_intent in matching_intents,
+                "needsRedirect": alexa_intent not in matching_intents,
                 "localResolved": True,
             },
         )
@@ -294,10 +299,19 @@ class ResolverWorkflowRunner:
 
     async def _apply(self, handler_input) -> None:
         context = ResolverWorkflowRunner._request(handler_input)
-        if not context or ResolverWorkflowRunner._capture_location(handler_input, context):
+        if not context:
             return
         alexa_intent = context["alexa_intent"]
         raw = ResolverWorkflow._extract_raw_utterance(handler_input, alexa_intent)
+        store = User.snapshot(handler_input)
+        if await self._resolve_ambiguity(
+            handler_input, context, raw, store.get("pendingAmbiguity")
+        ):
+            return
+        if await self._resolve_follow_up(handler_input, context, raw, store):
+            return
+        if ResolverWorkflowRunner._capture_location(handler_input, context):
+            return
         local = ResolverWorkflow._local_discovery_resolution(alexa_intent, context["slots"], raw)
         if local:
             ResolverWorkflow._set_nlp(handler_input, local)
@@ -309,13 +323,6 @@ class ResolverWorkflowRunner:
             return
         if not raw and alexa_intent in ResolverWorkflow.SEARCH_INTENTS:
             raw = ResolverWorkflow.CANONICAL_ZERO_SLOT_DISCOVERY.get(alexa_intent)
-        store = User.snapshot(handler_input)
-        if await self._resolve_ambiguity(
-            handler_input, context, raw, store.get("pendingAmbiguity")
-        ):
-            return
-        if await self._resolve_follow_up(handler_input, context, raw, store):
-            return
         await self._resolve_default(handler_input, alexa_intent, raw)
 
     async def apply(self, handler_input) -> None:

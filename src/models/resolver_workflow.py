@@ -21,7 +21,9 @@ class ResolverWorkflow:
         "PlayContentIntent",
         "PlayLatestContentIntent",
         "PlayByCreatorIntent",
+        "SelectCreatorIntent",
         "PlayByOrganizationIntent",
+        "SelectOrganizationIntent",
         "PlayPublicationIntent",
         "BrowseContentIntent",
         "BrowseByCategoryIntent",
@@ -46,7 +48,9 @@ class ResolverWorkflow:
         "PlayContentIntent": "play",
         "PlayLatestContentIntent": "play latest",
         "PlayByCreatorIntent": "play",
+        "SelectCreatorIntent": "play",
         "PlayByOrganizationIntent": "play",
+        "SelectOrganizationIntent": "play",
         "PlayPublicationIntent": "play publication",
         "BrowseByCategoryIntent": "play",
         "BrowseContentIntent": "what's new",
@@ -146,7 +150,7 @@ class ResolverWorkflow:
                 for value in ("play", date_text, requested_sort, "publication", suffix)
                 if value
             )
-        if alexa_intent == "PlayByOrganizationIntent":
+        if alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS:
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             source = AlexaRequest.get_resolved_slot_value(slots.get("organizationQuery"))
             if source:
@@ -158,7 +162,7 @@ class ResolverWorkflow:
                 ):
                     return source
                 return " ".join(value for value in ("play", topic, "from", source) if value)
-        if alexa_intent == "PlayByCreatorIntent":
+        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS:
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             creator = AlexaRequest.get_resolved_slot_value(slots.get("creatorQuery"))
             if creator:
@@ -246,7 +250,7 @@ class ResolverWorkflow:
         ):
             intent_name, sort = direct[alexa_intent]
             return ResolverWorkflow._direct_discovery_result(alexa_intent, intent_name, sort)
-        if alexa_intent == "PlayByCreatorIntent" and (
+        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS and (
             not SearchFilterUtils.is_meaningful_creator_source(raw)
         ):
             return {
@@ -261,10 +265,10 @@ class ResolverWorkflow:
             }
         organization_request_kind = SearchFilterUtils.organization_request_kind(
             raw,
-            organization_intent=alexa_intent == "PlayByOrganizationIntent",
+            organization_intent=alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
         )
         generic_organization = (
-            alexa_intent == "PlayByOrganizationIntent"
+            alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS
             and organization_request_kind != "specific"
             or alexa_intent == "PlayContentIntent"
             and organization_request_kind in {"generic", "repair"}
@@ -281,8 +285,8 @@ class ResolverWorkflow:
                 "intent": "organization",
                 "alexaIntent": "organization",
                 "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": alexa_intent == "PlayByOrganizationIntent",
-                "needsRedirect": alexa_intent != "PlayByOrganizationIntent",
+                "nlpMatchesAlexa": alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
+                "needsRedirect": alexa_intent not in DiscoveryConstants.ORGANIZATION_INTENTS,
                 "localResolved": True,
                 "slots": organization_slots,
             }

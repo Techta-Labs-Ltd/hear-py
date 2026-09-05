@@ -8,7 +8,9 @@ class ResolverConstants:
     CARRIERS = {
         "PlayContentIntent": "play",
         "PlayByCreatorIntent": "play from",
+        "SelectCreatorIntent": "play by",
         "PlayByOrganizationIntent": "play from",
+        "SelectOrganizationIntent": "play from",
         "BrowseByCategoryIntent": "play",
         "PlayLocalIntent": "play local",
         "PlayRecommendationIntent": "recommend",
@@ -20,7 +22,9 @@ class ResolverConstants:
         "PlayLocalIntent": ("cityQuery", "localQuery", "topic", "category"),
         "PlayRecommendationIntent": ("recommendationQuery", "topic", "category"),
         "PlayByCreatorIntent": ("creatorQuery", "topic"),
+        "SelectCreatorIntent": ("creatorQuery",),
         "PlayByOrganizationIntent": ("organizationQuery", "topic"),
+        "SelectOrganizationIntent": ("organizationQuery",),
         "PlayPublicationIntent": ("publicationSourceQuery", "topic"),
         "BrowseByCategoryIntent": ("category", "topic"),
     }
