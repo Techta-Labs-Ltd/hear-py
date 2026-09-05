@@ -24,8 +24,7 @@ class LaunchWorkflow:
 
     async def execute(self, handler_input: HandlerInput):
         store = self._initial_store(handler_input)
-        user_name = self._user_name(store)
-        protected_response = self._protected_response(handler_input, store, user_name)
+        protected_response = self._protected_response(handler_input, store)
         if protected_response is not None:
             return protected_response
         try:
@@ -57,11 +56,14 @@ class LaunchWorkflow:
             return self._deps.user.snapshot(handler_input)
         return store
 
-    def _protected_response(
-        self, handler_input: HandlerInput, store: dict, user_name: str | None
-    ):
+    def _protected_response(self, handler_input: HandlerInput, store: dict):
         if store.get("onboardingStage") == "confirm_town_for_community":
-            return Onboarding.start_town_capture(handler_input, store, user_name, deps=self._deps)
+            self._deps.user.update(
+                handler_input,
+                {"onboardingStage": None, "awaitingCommunityPlayback": False},
+            )
+            DialogStateManager.clear(handler_input, "onboarding")
+            return None
         if store.get("awaitingContinueAfterFlag"):
             subject = store.get("activePlayback") or store.get("reportContext") or {}
             question = AlexaFeedback.keep_listening_question(subject, store)

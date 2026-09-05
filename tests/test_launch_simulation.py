@@ -403,19 +403,29 @@ class TestSpeechStrings:
 
 class TestLaunchSimulation:
     @pytest.mark.asyncio
-    async def test_launch_resumes_pending_community_town_capture(self):
+    async def test_launch_discards_stale_community_town_capture(self, monkeypatch):
         hi = _build_handler_input(
             store_override={
                 "onboardingComplete": True,
                 "onboardingStage": "confirm_town_for_community",
             }
         )
+        monkeypatch.setattr(
+            "src.models.launch_workflow.LaunchWorkflow._ensure_listener_data_for_launch",
+            AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
+        )
+        monkeypatch.setattr(
+            "src.models.launch_workflow.LaunchWorkflow._sync_listener_for_launch",
+            AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
+        )
 
         await LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
 
         store = User.snapshot(hi)
-        assert store["onboardingStage"] == "ask_town"
-        assert hi.response_builder.speak.called
+        speech = _speak_text(hi)
+        assert store["onboardingStage"] is None
+        assert "welcome to hear" in speech.casefold()
+        assert "which city are you in" not in speech.casefold()
 
     @pytest.mark.asyncio
     async def test_launch_enrichment_uses_injected_locality_dependency(self):
