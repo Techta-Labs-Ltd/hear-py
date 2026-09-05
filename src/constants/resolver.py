@@ -17,7 +17,7 @@ class ResolverConstants:
     RAW_SLOT_PRIORITY = {
         "TownCaptureIntent": ("townName", "selection"),
         "SetLocationIntent": ("location", "townName", "selection"),
-        "PlayLocalIntent": ("localQuery", "topic", "category"),
+        "PlayLocalIntent": ("cityQuery", "localQuery", "topic", "category"),
         "PlayRecommendationIntent": ("recommendationQuery", "topic", "category"),
         "PlayByCreatorIntent": ("creatorQuery", "topic"),
         "PlayByOrganizationIntent": ("organizationQuery", "topic"),
@@ -28,6 +28,7 @@ class ResolverConstants:
         "selection",
         "townName",
         "location",
+        "cityQuery",
         "topic",
         "category",
         "creatorQuery",

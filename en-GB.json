@@ -37,7 +37,6 @@
             "what can I say",
             "what can you do",
             "functions",
-            "tell me about this",
             "about this skill",
             "what are my options",
             "how does this work",
@@ -183,7 +182,12 @@
           "slots": [
             {
               "name": "topic",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_TOPIC",
+              "samples": [
+                "{topic}",
+                "about {topic}",
+                "I want {topic}"
+              ]
             },
             {
               "name": "format",
@@ -198,6 +202,7 @@
             "play {dateQuery} content",
             "find me {topic}",
             "play {topic}",
+            "listen to {topic}",
             "play some {topic}",
             "I want {topic}",
             "give me {topic}",
@@ -257,7 +262,12 @@
           "slots": [
             {
               "name": "topic",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_TOPIC",
+              "samples": [
+                "{topic}",
+                "about {topic}",
+                "I want {topic}"
+              ]
             }
           ],
           "samples": [
@@ -273,6 +283,10 @@
             "play me latest {topic}",
             "play latest {topic}",
             "get me the latest {topic}",
+            "what's the latest {topic}",
+            "what is the latest {topic}",
+            "what's latest {topic}",
+            "what is latest {topic}",
             "play the latest"
           ]
         },
@@ -281,7 +295,28 @@
           "slots": [
             {
               "name": "localQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_LOCATION",
+              "samples": [
+                "{localQuery}",
+                "around {localQuery}",
+                "near {localQuery}"
+              ]
+            },
+            {
+              "name": "cityQuery",
+              "type": "HEAR_LOCATION",
+              "samples": [
+                "{cityQuery}",
+                "in {cityQuery}"
+              ]
+            },
+            {
+              "name": "topic",
+              "type": "HEAR_TOPIC",
+              "samples": [
+                "{topic}",
+                "about {topic}"
+              ]
             }
           ],
           "samples": [
@@ -305,10 +340,21 @@
             "play from my town",
             "play content near me",
             "play content near {localQuery}",
+            "play from {cityQuery}",
+            "play something from {cityQuery}",
             "play local {localQuery}",
             "find local content",
             "find content near me",
             "find content near {localQuery}",
+            "find content around {localQuery}",
+            "play content in {cityQuery}",
+            "play {topic} near {localQuery}",
+            "play {topic} in {cityQuery}",
+            "find {topic} near {localQuery}",
+            "find {topic} in {cityQuery}",
+            "find talking newspapers in {cityQuery}",
+            "find organisations in {cityQuery}",
+            "find creators in {cityQuery}",
             "show me local content",
             "show me content near me",
             "what's local",
@@ -333,7 +379,7 @@
           "slots": [
             {
               "name": "recommendationQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_TOPIC"
             }
           ],
           "samples": [
@@ -429,7 +475,21 @@
           "slots": [
             {
               "name": "organizationQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_ORGANIZATION",
+              "samples": [
+                "{organizationQuery}",
+                "the {organizationQuery}",
+                "from {organizationQuery}",
+                "I want {organizationQuery}"
+              ]
+            },
+            {
+              "name": "topic",
+              "type": "HEAR_TOPIC",
+              "samples": [
+                "{topic}",
+                "about {topic}"
+              ]
             }
           ],
           "samples": [
@@ -442,17 +502,18 @@
             "play something from a talking news paper",
             "play something from talking news",
             "play me a talking newspaper",
-            "play from the {organizationQuery}",
-            "play content from {organizationQuery}",
-            "play content from the {organizationQuery}",
-            "play recordings from {organizationQuery}",
-            "play recordings from the {organizationQuery}",
-            "play by {organizationQuery}",
-            "content from {organizationQuery}",
-            "show me content from {organizationQuery}",
-            "show me recordings from {organizationQuery}",
-            "play from the {organizationQuery} organisation",
-            "play from the {organizationQuery} organization"
+            "play from {organizationQuery}",
+            "play something from {organizationQuery}",
+            "play {topic} from {organizationQuery}",
+            "play me {topic} from {organizationQuery}",
+            "find {topic} from {organizationQuery}",
+            "play latest from {organizationQuery}",
+            "play the latest from {organizationQuery}",
+            "play from the organisation {organizationQuery}",
+            "play from the organization {organizationQuery}",
+            "find the talking newspaper {organizationQuery}",
+            "find the organisation {organizationQuery}",
+            "find the organization {organizationQuery}"
           ]
         },
         {
@@ -460,7 +521,12 @@
           "slots": [
             {
               "name": "publicationSourceQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_ORGANIZATION",
+              "samples": [
+                "{publicationSourceQuery}",
+                "from {publicationSourceQuery}",
+                "I want {publicationSourceQuery}"
+              ]
             },
             {
               "name": "publicationSort",
@@ -487,8 +553,6 @@
             "play publication from {publicationSourceQuery}",
             "play a publication from {publicationSourceQuery}",
             "play publications from {publicationSourceQuery}",
-            "play a publication by {publicationSourceQuery}",
-            "find a publication by {publicationSourceQuery}",
             "find publications from {publicationSourceQuery}",
             "give me a publication from {publicationSourceQuery}"
           ]
@@ -515,46 +579,39 @@
           "slots": [
             {
               "name": "creatorQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_CREATOR",
+              "samples": [
+                "{creatorQuery}",
+                "the {creatorQuery}",
+                "by {creatorQuery}",
+                "I want {creatorQuery}"
+              ]
+            },
+            {
+              "name": "topic",
+              "type": "HEAR_TOPIC",
+              "samples": [
+                "{topic}",
+                "about {topic}"
+              ]
             }
           ],
           "samples": [
             "play from a creator",
             "play something from a creator",
             "play me something from a creator",
-            "play from {creatorQuery}",
+            "play by {creatorQuery}",
             "play something by {creatorQuery}",
-            "play something from {creatorQuery}",
-            "play me something from {creatorQuery}",
-            "play me something by {creatorQuery}",
-            "something from {creatorQuery}",
-            "something by {creatorQuery}",
-            "content by {creatorQuery}",
-            "I want to hear {creatorQuery}",
-            "play me {creatorQuery}",
-            "find {creatorQuery}",
-            "anything by {creatorQuery}",
-            "anything from {creatorQuery}",
-            "show me recordings by {creatorQuery}",
-            "play latest recording from {creatorQuery}",
-            "play the latest recording from {creatorQuery}",
-            "play latest from {creatorQuery}",
-            "play the latest from {creatorQuery}",
-            "play recording from {creatorQuery}",
-            "play a recording from {creatorQuery}",
-            "play the latest recording by {creatorQuery}",
-            "play latest recording by {creatorQuery}",
-            "play the latest by {creatorQuery}",
-            "play latest by {creatorQuery}",
-            "latest recording from {creatorQuery}",
-            "the latest recording from {creatorQuery}",
-            "latest from {creatorQuery}",
-            "the latest from {creatorQuery}",
-            "give me the latest from {creatorQuery}",
-            "give me the latest recording from {creatorQuery}",
-            "hear the latest from {creatorQuery}",
-            "play the newest from {creatorQuery}",
-            "play newest recording from {creatorQuery}"
+            "play a publication by {creatorQuery}",
+            "find a publication by {creatorQuery}",
+            "play {topic} by {creatorQuery}",
+            "play me {topic} by {creatorQuery}",
+            "find {topic} by {creatorQuery}",
+            "play from the creator {creatorQuery}",
+            "play something by the creator {creatorQuery}",
+            "find the creator {creatorQuery}",
+            "play recordings by the creator {creatorQuery}",
+            "play the latest by the creator {creatorQuery}"
           ]
         },
         {
@@ -587,7 +644,7 @@
           "slots": [
             {
               "name": "topic",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_TOPIC"
             },
             {
               "name": "dateQuery",
@@ -596,10 +653,10 @@
           ],
           "samples": [
             "what was trending {dateQuery}",
-            "what's the latest {topic}",
-            "what is the latest {topic}",
-            "what's latest {topic}",
-            "what is latest {topic}",
+            "what's trending in {topic}",
+            "what is trending in {topic}",
+            "what's popular in {topic}",
+            "show me trending {topic}",
             "what's trending",
             "what is trending",
             "tell me what's trending",
@@ -645,6 +702,7 @@
             "{speed} x speed",
             "{speed} times normal speed",
             "at {speed} x",
+            "{speed} speed",
             "normal speed",
             "regular speed",
             "reset speed",
@@ -664,8 +722,6 @@
             "increase playback speed",
             "go faster",
             "faster",
-            "double speed",
-            "double the speed",
             "can you play it faster",
             "play it faster",
             "play this faster",
@@ -687,7 +743,6 @@
             "decrease playback speed",
             "go slower",
             "slower",
-            "half speed",
             "can you slow it down",
             "play it slower",
             "play this slower",
@@ -716,24 +771,19 @@
             "rewind by {number}",
             "go back {time}",
             "go back {number}",
-            "go back {number} seconds",
             "skip back",
             "skip back {time}",
             "skip back {number}",
             "jump back",
             "jump back {time}",
             "jump back {number}",
-            "back {number} seconds",
             "back {time}",
-            "rewind {number} seconds",
             "wind back",
             "go back a bit",
             "rewind a bit",
-            "take it back {number} seconds",
             "back it up",
-            "back it up {number} seconds",
-            "rewind to {time}",
-            "back {number} minutes"
+            "take it back {time}",
+            "back it up {time}"
           ]
         },
         {
@@ -764,16 +814,12 @@
             "skip ahead",
             "skip ahead {time}",
             "skip ahead {number}",
-            "forward {number} seconds",
             "forward {time}",
-            "fast forward {number} seconds",
             "wind forward",
-            "go ahead {number} seconds",
-            "skip {number} seconds ahead",
+            "go ahead {time}",
+            "skip {time} ahead",
             "jump ahead",
-            "jump ahead {number} seconds",
-            "forward {number} minutes",
-            "skip {number} minutes"
+            "jump ahead {time}"
           ]
         },
         {
@@ -958,7 +1004,6 @@
             "bad",
             "not for me",
             "terrible",
-            "change it",
             "not interested",
             "awful",
             "dreadful",
@@ -994,13 +1039,11 @@
           "name": "SkipFeedbackIntent",
           "slots": [],
           "samples": [
-            "skip",
             "never mind",
             "ignore that",
             "skip feedback",
             "skip this feedback",
             "skip this question",
-            "move on",
             "don't bother",
             "I don't want to rate",
             "don't rate it",
@@ -1009,12 +1052,9 @@
             "pass",
             "skip the rating",
             "skip rating this",
-            "carry on",
             "I'd rather not say",
-            "just play the next one",
             "whatever",
             "doesn't matter",
-            "skip it",
             "not bothered",
             "can't be bothered"
           ]
@@ -1067,20 +1107,16 @@
             "subscribe",
             "follow this person",
             "follow this author",
-            "I like this creator",
             "add this creator to my list",
             "keep me updated on this creator",
             "follow this narrator",
-            "I want more from this creator",
             "save this creator",
             "follow this artist",
             "follow this voice",
-            "I want to hear more from them",
             "remember this creator",
             "add them to my favourites",
             "favourite this creator",
             "bookmark this creator",
-            "I love this creator",
             "save them",
             "keep this creator",
             "add this creator to my followed list",
@@ -1128,7 +1164,6 @@
             "send this for safety review",
             "mark this as inappropriate",
             "this shouldn't be here",
-            "this is wrong",
             "report this audio",
             "report this recording",
             "report a safety issue",
@@ -1167,7 +1202,12 @@
           "slots": [
             {
               "name": "selection",
-              "type": "HEAR_CLARIFICATION"
+              "type": "HEAR_CLARIFICATION",
+              "samples": [
+                "{selection}",
+                "the {selection}",
+                "I meant {selection}"
+              ]
             }
           ],
           "samples": [
@@ -1184,7 +1224,12 @@
           "slots": [
             {
               "name": "townName",
-              "type": "AMAZON.City"
+              "type": "HEAR_LOCATION",
+              "samples": [
+                "{townName}",
+                "I am in {townName}",
+                "I live in {townName}"
+              ]
             }
           ],
           "samples": [
@@ -1200,7 +1245,12 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.City"
+              "type": "HEAR_LOCATION",
+              "samples": [
+                "{location}",
+                "I am in {location}",
+                "I live in {location}"
+              ]
             }
           ],
           "samples": [
@@ -1247,17 +1297,76 @@
       ],
       "types": [
         {
-          "name": "AMAZON.City",
+          "name": "HEAR_LOCATION",
           "values": [
             {
-              "id": "location-1826454069",
               "name": {
                 "value": "Herne Bay",
                 "synonyms": [
                   "arn bay",
                   "earn bay",
                   "herne bat",
-                  "herne bae"
+                  "herne bae",
+                  "Herne Bay area"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "London"
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_ORGANIZATION",
+          "values": [
+            {
+              "name": {
+                "value": "Tynedale Talking Newspaper",
+                "synonyms": [
+                  "Tynedale Talking News",
+                  "Tynedale Talking News Paper"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "York Talking News",
+                "synonyms": [
+                  "York Talking Newspaper"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_CREATOR",
+          "values": [
+            {
+              "name": {
+                "value": "Sample Creator"
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_TOPIC",
+          "values": [
+            {
+              "name": {
+                "value": "sport",
+                "synonyms": [
+                  "sports",
+                  "sports news"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "local news",
+                "synonyms": [
+                  "community news"
                 ]
               }
             }
@@ -1294,7 +1403,7 @@
               "id": "0.75",
               "name": {
                 "value": "0.75",
-                "synonyms": ["second", "second speed", "second level", "three quarter speed"]
+                "synonyms": ["second", "second speed", "second level", "point seven five", "three quarters", "three quarter speed"]
               }
             },
             {
@@ -1308,14 +1417,14 @@
               "id": "1.25",
               "name": {
                 "value": "1.25",
-                "synonyms": ["fourth", "fourth speed", "fourth level", "one point two five"]
+                "synonyms": ["fourth", "fourth speed", "fourth level", "one point two five", "one and a quarter"]
               }
             },
             {
               "id": "1.5",
               "name": {
                 "value": "1.5",
-                "synonyms": ["fifth", "fifth speed", "fifth level", "one and a half"]
+                "synonyms": ["fifth", "fifth speed", "fifth level", "one point five", "one and a half"]
               }
             },
             {
@@ -1394,7 +1503,7 @@
           "slots": [
             {
               "name": "topic",
-              "type": "AMAZON.SearchQuery",
+              "type": "HEAR_TOPIC",
               "confirmationRequired": false,
               "elicitationRequired": false,
               "prompts": {
@@ -1410,7 +1519,7 @@
           "slots": [
             {
               "name": "townName",
-              "type": "AMAZON.City",
+              "type": "HEAR_LOCATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1426,11 +1535,27 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.City",
+              "type": "HEAR_LOCATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
                 "elicitation": "Elicit.SetLocationIntent.location"
+              }
+            }
+          ]
+        },
+        {
+          "name": "PlayByCreatorIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "creatorQuery",
+              "type": "HEAR_CREATOR",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.PlayByCreatorIntent.creatorQuery"
               }
             }
           ]
@@ -1442,11 +1567,27 @@
           "slots": [
             {
               "name": "organizationQuery",
-              "type": "AMAZON.SearchQuery",
+              "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
                 "elicitation": "Elicit.PlayByOrganizationIntent.organizationQuery"
+              }
+            }
+          ]
+        },
+        {
+          "name": "ClarifySelectionIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "selection",
+              "type": "HEAR_CLARIFICATION",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.ClarifySelectionIntent.selection"
               }
             }
           ]
@@ -1458,7 +1599,7 @@
           "slots": [
             {
               "name": "publicationSourceQuery",
-              "type": "AMAZON.SearchQuery",
+              "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1475,7 +1616,7 @@
         "variations": [
           {
             "type": "PlainText",
-            "value": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper."
+            "value": "What topic would you like me to play?"
           }
         ]
       },
@@ -1498,6 +1639,15 @@
         ]
       },
       {
+        "id": "Elicit.PlayByCreatorIntent.creatorQuery",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which creator would you like to hear?"
+          }
+        ]
+      },
+      {
         "id": "Elicit.PlayByOrganizationIntent.organizationQuery",
         "variations": [
           {
@@ -1507,11 +1657,20 @@
         ]
       },
       {
+        "id": "Elicit.ClarifySelectionIntent.selection",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which option did you mean?"
+          }
+        ]
+      },
+      {
         "id": "Elicit.PlayPublicationIntent.publicationSourceQuery",
         "variations": [
           {
             "type": "PlainText",
-            "value": "Which publication, creator, or organization would you like?"
+            "value": "Which publication or talking newspaper would you like?"
           }
         ]
       }
