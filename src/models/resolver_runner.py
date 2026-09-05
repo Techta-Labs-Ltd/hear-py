@@ -262,6 +262,7 @@ class ResolverWorkflowRunner:
         handler_input,
         alexa_intent: str,
         raw: str | None,
+        intent_slots: dict,
     ) -> None:
         if not raw:
             ResolverWorkflowRunner._resolve_known_without_raw(handler_input, alexa_intent)
@@ -269,6 +270,9 @@ class ResolverWorkflowRunner:
         expected = DiscoveryConstants.ALEXA_TO_NLP.get(alexa_intent, "general")
         if alexa_intent in ResolverWorkflow.SEARCH_INTENTS:
             result = await self._resolver_result(handler_input, raw, alexa_intent)
+            result = ResolverWorkflow.apply_alexa_constraints(
+                result, alexa_intent, intent_slots
+            )
         else:
             if alexa_intent not in DiscoveryConstants.ALEXA_TO_NLP:
                 return
@@ -314,6 +318,9 @@ class ResolverWorkflowRunner:
             return
         local = ResolverWorkflow._local_discovery_resolution(alexa_intent, context["slots"], raw)
         if local:
+            local = ResolverWorkflow.apply_alexa_constraints(
+                local, alexa_intent, context["slots"]
+            )
             ResolverWorkflow._set_nlp(handler_input, local)
             ResolverWorkflow.logger.info(
                 "Hear: discovery request handled locally intent=%s result=%s",
@@ -323,7 +330,7 @@ class ResolverWorkflowRunner:
             return
         if not raw and alexa_intent in ResolverWorkflow.SEARCH_INTENTS:
             raw = ResolverWorkflow.CANONICAL_ZERO_SLOT_DISCOVERY.get(alexa_intent)
-        await self._resolve_default(handler_input, alexa_intent, raw)
+        await self._resolve_default(handler_input, alexa_intent, raw, context["slots"])
 
     async def apply(self, handler_input) -> None:
         try:

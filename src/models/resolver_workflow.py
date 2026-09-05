@@ -11,6 +11,7 @@ from src.constants.resolver import ResolverConstants
 from src.constants.search import SearchConstants
 from src.models.dialog import DialogSelection
 from src.models.user import User
+from src.utils.alexa_date import AlexaDateRange
 from src.utils.filters import SearchFilters, SearchFilterUtils
 from src.utils.search_payload import SearchPayload
 
@@ -134,12 +135,11 @@ class ResolverWorkflow:
                 ),
                 None,
             )
-        date_text = AlexaRequest.get_resolved_slot_value(slots.get("dateQuery")) or ""
         if alexa_intent == "PlayLatestContentIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             content_format = AlexaRequest.get_resolved_slot_value(slots.get("format"))
             return " ".join(
-                value for value in ("play", date_text, "latest", topic or content_format) if value
+                value for value in ("play", "latest", topic or content_format) if value
             )
         if alexa_intent == "PlayPublicationIntent":
             source = AlexaRequest.get_resolved_slot_value(slots.get("publicationSourceQuery"))
@@ -147,7 +147,7 @@ class ResolverWorkflow:
             suffix = f"from {source}" if source else ""
             return " ".join(
                 value
-                for value in ("play", date_text, requested_sort, "publication", suffix)
+                for value in ("play", requested_sort, "publication", suffix)
                 if value
             )
         if alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS:
@@ -195,7 +195,7 @@ class ResolverWorkflow:
             None,
         )
         if raw:
-            return f"{date_text} {raw}".strip()
+            return raw
         fallback = next(
             (
                 str(getattr(slot, "value", "") or "").strip()
@@ -205,8 +205,58 @@ class ResolverWorkflow:
             None,
         )
         if fallback:
-            return f"{date_text} {fallback}".strip()
-        return date_text or None
+            return fallback
+        return None
+
+    @staticmethod
+    def _apply_date_constraint(result: dict, intent_slots: dict) -> dict:
+        date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
+        date_range = AlexaDateRange.parse(date_query, settings.HEAR_RESOLVER_TIMEZONE)
+        if not date_range:
+            return result
+        filters = {
+            key: date_range[key] for key in ("publishedFrom", "publishedTo")
+        }
+        constrained = dict(result)
+        payload = dict(constrained.get("searchPayload") or {})
+        payload["filter"] = {**dict(payload.get("filter") or {}), **filters}
+        constrained["searchPayload"] = payload
+        slots = dict(constrained.get("slots") or {})
+        search_plan = dict(slots.get("searchPlan") or {})
+        search_plan["filter"] = {
+            **dict(search_plan.get("filter") or {}),
+            **filters,
+        }
+        slots.update(
+            {
+                "dateQuery": date_query,
+                "temporalOriginal": date_range["temporalOriginal"],
+                "searchPlan": search_plan,
+            }
+        )
+        constrained["slots"] = slots
+        return constrained
+
+    @staticmethod
+    def apply_alexa_constraints(result: dict, alexa_intent: str, intent_slots: dict) -> dict:
+        constrained = ResolverWorkflow._apply_date_constraint(result, intent_slots)
+        if alexa_intent not in {"WhatsTrendingIntent", "PlayRecommendationIntent"}:
+            return constrained
+        constrained = {**constrained, "intent": "trending"}
+        slots = dict(constrained.get("slots") or {})
+        search_plan = dict(slots.get("searchPlan") or {})
+        search_plan["sort"] = "trending"
+        slots.update(
+            {
+                "isRecommended": True,
+                "sort": "trending",
+                "searchPlan": search_plan,
+            }
+        )
+        payload = dict(constrained.get("searchPayload") or {})
+        payload["sort"] = "trending"
+        constrained.update({"slots": slots, "searchPayload": payload})
+        return constrained
 
     @staticmethod
     def _set_nlp(handler_input, payload: dict) -> None:
@@ -235,9 +285,9 @@ class ResolverWorkflow:
             "PlayLocalIntent": ("local", "latest"),
         }
         direct_slot_names = {
-            "WhatsTrendingIntent": ("topic", "dateQuery"),
+            "WhatsTrendingIntent": ("topic",),
             "PlayRecommendationIntent": ("recommendationQuery",),
-            "BrowseContentIntent": ("dateQuery",),
+            "BrowseContentIntent": (),
             "PlayLocalIntent": ("cityQuery", "localQuery", "topic"),
         }
         if alexa_intent in direct and (

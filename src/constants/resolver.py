@@ -13,8 +13,8 @@ class ResolverConstants:
         "SelectOrganizationIntent": "play from",
         "BrowseByCategoryIntent": "play",
         "PlayLocalIntent": "play local",
-        "PlayRecommendationIntent": "recommend",
-        "WhatsTrendingIntent": "what's trending",
+        "PlayRecommendationIntent": "play",
+        "WhatsTrendingIntent": "play",
     }
     RAW_SLOT_PRIORITY = {
         "TownCaptureIntent": ("townName", "selection"),
