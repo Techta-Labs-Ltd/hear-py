@@ -410,6 +410,178 @@ async def test_complete_zero_slot_discovery_stays_out_of_resolver(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slot_name"),
+    [
+        ("WhatsTrendingIntent", "topic"),
+        ("PlayRecommendationIntent", "recommendationQuery"),
+    ],
+)
+async def test_topic_qualified_trending_resolves_topic_and_preserves_trending_semantics(
+    monkeypatch, mock_handler_input, intent_name, slot_name
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": intent_name,
+                "slots": {slot_name: {"name": slot_name, "value": "sport"}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "category",
+            "slots": {
+                "category": "sport",
+                "categorySlugs": ["sport"],
+                "residualQuery": "",
+                "searchPlan": {"query": "", "filter": {"categorySlugs": ["sport"]}},
+            },
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        "play sport", alexa_user_id="amzn1.ask.account.TEST", timeout_ms=5000
+    )
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "trending"
+    assert nlp["nlpMatchesAlexa"] is True
+    assert nlp["slots"]["category"] == "sport"
+    assert nlp["slots"]["isRecommended"] is True
+    assert nlp["slots"]["sort"] == "trending"
+    assert nlp["slots"]["searchPlan"]["sort"] == "trending"
+    assert nlp["searchPayload"]["sort"] == "trending"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "expected_intent", "expected_sort"),
+    [
+        ("BrowseContentIntent", "browse", "latest"),
+        ("WhatsTrendingIntent", "trending", "trending"),
+    ],
+)
+async def test_date_only_discovery_builds_date_filter_without_resolver_text(
+    monkeypatch, mock_handler_input, intent_name, expected_intent, expected_sort
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": intent_name,
+                "slots": {
+                    "dateQuery": {"name": "dateQuery", "value": "2026-09-04"}
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == expected_intent
+    assert nlp["searchPayload"]["sort"] == expected_sort
+    assert set(nlp["searchPayload"]["filter"]) == {"publishedFrom", "publishedTo"}
+    assert nlp["slots"]["searchPlan"]["filter"] == nlp["searchPayload"]["filter"]
+    assert nlp["slots"]["temporalOriginal"] == "4 September 2026"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slot_name", "raw_name", "expected_utterance", "resolved_intent"),
+    [
+        (
+            "PlayByOrganizationIntent",
+            "organizationQuery",
+            "New Voice Network",
+            "play from New Voice Network",
+            "organization",
+        ),
+        (
+            "PlayByCreatorIntent",
+            "creatorQuery",
+            "New Speaker",
+            "play by New Speaker",
+            "creator",
+        ),
+    ],
+)
+async def test_out_of_catalog_source_name_still_reaches_backend_resolver(
+    monkeypatch,
+    mock_handler_input,
+    intent_name,
+    slot_name,
+    raw_name,
+    expected_utterance,
+    resolved_intent,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": intent_name,
+                "slots": {
+                    slot_name: {
+                        "name": slot_name,
+                        "value": raw_name,
+                        "resolutions": {
+                            "resolutionsPerAuthority": [
+                                {"status": {"code": "ER_SUCCESS_NO_MATCH"}}
+                            ]
+                        },
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": resolved_intent,
+            "slots": {slot_name: raw_name},
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        expected_utterance,
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    assert mock_handler_input.attributes_manager.request_attributes["_nlp"]["intent"] == (
+        resolved_intent
+    )
+
+
+@pytest.mark.asyncio
 async def test_misrouted_local_community_phrase_is_redirected_without_resolver(
     monkeypatch, mock_handler_input
 ):

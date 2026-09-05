@@ -318,6 +318,16 @@ def test_generated_domain_slots_have_id_free_backend_replaceable_values():
         assert all(item["name"]["value"].strip() for item in types[slot_name]["values"])
 
 
+def test_topic_slot_includes_multi_word_catalog_topics():
+    types = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["types"]
+    }
+    topics = {item["name"]["value"]: item["name"] for item in types["HEAR_TOPIC"]["values"]}
+    assert "Premier League" in topics
+    assert "English Premier League" in topics["Premier League"]["synonyms"]
+
+
 def test_backend_domain_slot_schema_forbids_value_ids():
     schema = json.loads(
         (Path(__file__).parents[1] / "schemas" / "alexa-search-slot.schema.json").read_text(

@@ -1435,6 +1435,16 @@
                   "community news"
                 ]
               }
+            },
+            {
+              "name": {
+                "value": "Premier League",
+                "synonyms": [
+                  "English Premier League",
+                  "premiership",
+                  "E. P. L."
+                ]
+              }
             }
           ]
         },

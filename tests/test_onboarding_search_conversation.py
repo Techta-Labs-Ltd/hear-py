@@ -849,7 +849,7 @@ async def test_publication_intent_reconstructs_sort_and_source_for_resolver(
 
 
 @pytest.mark.asyncio
-async def test_publication_intent_carries_alexa_date_with_source_to_resolver(
+async def test_publication_intent_keeps_alexa_date_out_of_resolver_text(
     monkeypatch, mock_handler_input
 ):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
@@ -879,7 +879,62 @@ async def test_publication_intent_carries_alexa_date_with_source_to_resolver(
     )
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    assert resolve.await_args.args == ("play 2026-08-02 publication from wtn",)
+    assert resolve.await_args.args == ("play publication from wtn",)
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    date_filter = nlp["slots"]["searchPlan"]["filter"]
+    assert set(date_filter) == {"publishedFrom", "publishedTo"}
+    assert date_filter["publishedFrom"] < date_filter["publishedTo"]
+    assert nlp["slots"]["temporalOriginal"] == "2 August 2026"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("date_value", "temporal_label"),
+    [
+        ("2026-09-04", "4 September 2026"),
+        ("2026-W35", "from 24 August to 30 August 2026"),
+    ],
+)
+async def test_content_date_is_a_filter_not_resolver_query_text(
+    monkeypatch, mock_handler_input, date_value, temporal_label
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "requestId": "dated-content-request",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayContentIntent",
+                "slots": {
+                    "topic": {"name": "topic", "value": "sport"},
+                    "dateQuery": {"name": "dateQuery", "value": date_value},
+                },
+            },
+        }
+    )
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "category",
+            "slots": {
+                "category": "sport",
+                "categorySlugs": ["sport"],
+                "residualQuery": "",
+                "searchPlan": {"filter": {"categorySlugs": ["sport"]}},
+            },
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    assert resolve.await_args.args == ("play sport",)
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    filters = nlp["slots"]["searchPlan"]["filter"]
+    assert filters["categorySlugs"] == ["sport"]
+    assert filters["publishedFrom"] < filters["publishedTo"]
+    assert nlp["slots"]["temporalOriginal"] == temporal_label
 
 
 @pytest.mark.asyncio

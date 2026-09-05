@@ -29,7 +29,6 @@ from src.utils.search_payload import SearchPayload
 
 class Search:
     logger = logging.getLogger(__name__)
-
     @staticmethod
     def initial_search_queue_items(
         search_result: dict[str, Any],

@@ -80,6 +80,16 @@ Generate this object. Slot values contain only `name.value` and optional
               "sports news"
             ]
           }
+        },
+        {
+          "name": {
+            "value": "Premier League",
+            "synonyms": [
+              "English Premier League",
+              "premiership",
+              "E. P. L."
+            ]
+          }
         }
       ]
     }
@@ -98,7 +108,7 @@ Alexa interaction model.
 | `HEAR_LOCATION` | Active towns, cities, localities, areas, and their observed spoken variants |
 | `HEAR_ORGANIZATION` | Full backend organization names, plus distinctive spoken names and observed ASR variants |
 | `HEAR_CREATOR` | Active creator, author, narrator, and contributor names |
-| `HEAR_TOPIC` | Approved topics, categories, subjects, and searchable tags |
+| `HEAR_TOPIC` | Every active topic, category, subject, and searchable tag, including multi-word values |
 
 Do not copy all records into every slot. Domain separation is what helps Alexa
 prefer `London` as a location instead of a creator name. If the same phrase
@@ -147,6 +157,14 @@ Talking Newspaper`.
 11. Sort deterministically so identical backend data produces identical JSON.
 12. Reject output that makes the complete interaction model exceed Alexa's
     size limit; retain margin for intents, samples, and prompts.
+13. Treat `HEAR_TOPIC` as exhaustive at generation time. Compare its canonical
+    values against every active topic, category, and searchable tag in the
+    backend and fail generation when any are missing.
+14. At the current catalogue size, apply the same completeness check to active
+    locations, organizations, and creators. Never silently omit a record. If
+    the complete model eventually exceeds Alexa's size limit, fail the job and
+    report the counts and estimated model size so an explicit prioritisation
+    policy can be chosen.
 
 The backend source record should therefore expose, or derive, these fields:
 
