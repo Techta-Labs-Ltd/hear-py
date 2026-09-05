@@ -166,6 +166,35 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
             },
             "play sport near Herne Bay",
         ),
+        (
+            "PlayLocalIntent",
+            {
+                "cityQuery": {
+                    "name": "cityQuery",
+                    "value": "London",
+                },
+            },
+            "play near London",
+        ),
+        (
+            "PlayByCreatorIntent",
+            {
+                "topic": {"name": "topic", "value": "gardening"},
+                "creatorQuery": {
+                    "name": "creatorQuery",
+                    "value": "jane smyth",
+                    "resolutions": {
+                        "resolutionsPerAuthority": [
+                            {
+                                "status": {"code": "ER_SUCCESS_MATCH"},
+                                "values": [{"value": {"name": "Jane Smith"}}],
+                            }
+                        ]
+                    },
+                },
+            },
+            "play gardening by Jane Smith",
+        ),
     ],
 )
 async def test_generated_slot_match_or_raw_value_always_reaches_backend_resolver(
@@ -336,7 +365,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
         "resolutionsPerAuthority": [
             {
                 "status": {"code": "ER_SUCCESS_MATCH"},
-                "values": [{"value": {"id": "location-1826454069", "name": "Herne Bay"}}],
+                "values": [{"value": {"name": "Herne Bay"}}],
             }
         ]
     }

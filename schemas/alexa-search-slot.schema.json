@@ -1,37 +1,98 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Hear Alexa search slot",
+  "title": "Hear Alexa domain slots",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name", "values"],
+  "required": ["types"],
   "properties": {
-    "name": {
-      "const": "HEAR_SEARCH_QUERY"
-    },
-    "values": {
+    "types": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["name"],
-        "properties": {
-          "name": {
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/locationSlot"
+        },
+        {
+          "$ref": "#/$defs/organizationSlot"
+        },
+        {
+          "$ref": "#/$defs/creatorSlot"
+        },
+        {
+          "$ref": "#/$defs/topicSlot"
+        }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "locationSlot": {
+      "$ref": "#/$defs/baseSlot",
+      "properties": {
+        "name": {
+          "const": "HEAR_LOCATION"
+        }
+      }
+    },
+    "organizationSlot": {
+      "$ref": "#/$defs/baseSlot",
+      "properties": {
+        "name": {
+          "const": "HEAR_ORGANIZATION"
+        }
+      }
+    },
+    "creatorSlot": {
+      "$ref": "#/$defs/baseSlot",
+      "properties": {
+        "name": {
+          "const": "HEAR_CREATOR"
+        }
+      }
+    },
+    "topicSlot": {
+      "$ref": "#/$defs/baseSlot",
+      "properties": {
+        "name": {
+          "const": "HEAR_TOPIC"
+        }
+      }
+    },
+    "baseSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "values"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["value"],
+            "required": ["name"],
             "properties": {
-              "value": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 140
-              },
-              "synonyms": {
-                "type": "array",
-                "uniqueItems": true,
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 140
+              "name": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value"],
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 140
+                  },
+                  "synonyms": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 140
+                    }
+                  }
                 }
               }
             }

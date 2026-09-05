@@ -18,7 +18,7 @@ def test_constrained_latest_utterances_preserve_the_full_topic_slot():
     assert "what's the latest {topic}" not in trending["samples"]
 
 
-def test_discovery_intents_use_the_generated_search_slot():
+def test_discovery_intents_use_domain_specific_generated_slots():
     intents = {
         item["name"]: item
         for item in _model()["interactionModel"]["languageModel"]["intents"]
@@ -38,11 +38,12 @@ def test_discovery_intents_use_the_generated_search_slot():
             slot["type"] != "AMAZON.SearchQuery"
             for slot in intents[intent_name].get("slots", [])
         )
-    assert any(
-        slot["type"] == "HEAR_SEARCH_QUERY"
+    assert {
+        slot["type"]
         for intent_name in protected
         for slot in intents[intent_name].get("slots", [])
-    )
+        if slot["type"].startswith("HEAR_")
+    }.issuperset({"HEAR_LOCATION", "HEAR_ORGANIZATION", "HEAR_CREATOR", "HEAR_TOPIC"})
 
 
 def test_key_conversation_intents_have_the_expected_slot_contracts():
@@ -50,28 +51,35 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
-        "TownCaptureIntent": {"townName": "AMAZON.City"},
+        "TownCaptureIntent": {"townName": "HEAR_LOCATION"},
+        "SetLocationIntent": {"location": "HEAR_LOCATION"},
         "PlayContentIntent": {
-            "topic": "HEAR_SEARCH_QUERY",
+            "topic": "HEAR_TOPIC",
             "format": "ContentFormat",
             "dateQuery": "AMAZON.DATE",
         },
-        "PlayLatestContentIntent": {"topic": "HEAR_SEARCH_QUERY"},
+        "PlayLatestContentIntent": {"topic": "HEAR_TOPIC"},
+        "PlayRecommendationIntent": {"recommendationQuery": "HEAR_TOPIC"},
         "PlayByOrganizationIntent": {
-            "organizationQuery": "HEAR_SEARCH_QUERY",
-            "topic": "HEAR_SEARCH_QUERY",
+            "organizationQuery": "HEAR_ORGANIZATION",
+            "topic": "HEAR_TOPIC",
         },
         "PlayByCreatorIntent": {
-            "creatorQuery": "HEAR_SEARCH_QUERY",
-            "topic": "HEAR_SEARCH_QUERY",
+            "creatorQuery": "HEAR_CREATOR",
+            "topic": "HEAR_TOPIC",
+        },
+        "PlayPublicationIntent": {
+            "publicationSourceQuery": "HEAR_ORGANIZATION",
+            "publicationSort": "HEAR_PUBLICATION_SORT",
+            "dateQuery": "AMAZON.DATE",
         },
         "PlayLocalIntent": {
-            "localQuery": "HEAR_SEARCH_QUERY",
-            "cityQuery": "HEAR_SEARCH_QUERY",
-            "topic": "HEAR_SEARCH_QUERY",
+            "localQuery": "HEAR_LOCATION",
+            "cityQuery": "HEAR_LOCATION",
+            "topic": "HEAR_TOPIC",
         },
         "WhatsTrendingIntent": {
-            "topic": "HEAR_SEARCH_QUERY",
+            "topic": "HEAR_TOPIC",
             "dateQuery": "AMAZON.DATE",
         },
         "ClarifySelectionIntent": {"selection": "HEAR_CLARIFICATION"},
@@ -89,7 +97,7 @@ def test_location_dialogs_elicit_bare_town_replies():
     }
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "townName",
-        "type": "AMAZON.City",
+        "type": "HEAR_LOCATION",
         "confirmationRequired": False,
         "elicitationRequired": True,
         "prompts": {"elicitation": "Elicit.TownCaptureIntent.townName"},
@@ -97,14 +105,14 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert dialog_intents["SetLocationIntent"]["slots"][0]["elicitationRequired"] is True
 
 
-def test_town_intent_owns_bare_city_and_extends_alexa_city_aliases():
+def test_town_intent_owns_bare_city_and_uses_generated_location_slot():
     model = _model()["interactionModel"]["languageModel"]
     intents = {item["name"]: item for item in model["intents"]}
-    city_type = next((item for item in model["types"] if item["name"] == "AMAZON.City"))
+    city_type = next((item for item in model["types"] if item["name"] == "HEAR_LOCATION"))
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
     assert "{townName}" in intents["TownCaptureIntent"]["samples"]
     assert "{location}" not in intents["SetLocationIntent"]["samples"]
-    assert herne_bay["id"] == "location-1826454069"
+    assert "id" not in herne_bay
     assert "arn bay" in herne_bay["name"]["synonyms"]
 
 
@@ -149,6 +157,7 @@ def test_local_search_keeps_city_search_separate_from_location_mutation():
     location_samples = set(intents["SetLocationIntent"]["samples"])
     assert "play content in {cityQuery}" in local_samples
     assert "find content around {localQuery}" in local_samples
+    assert "play something from {cityQuery}" in local_samples
     assert all("{cityQuery}" not in sample for sample in location_samples)
 
 
@@ -159,7 +168,17 @@ def test_generic_source_search_is_neutral_and_specialized_routes_are_explicit():
     general = set(intents["PlayContentIntent"]["samples"])
     creators = set(intents["PlayByCreatorIntent"]["samples"])
     organizations = set(intents["PlayByOrganizationIntent"]["samples"])
+    content_topic = next(
+        slot for slot in intents["PlayContentIntent"]["slots"] if slot["name"] == "topic"
+    )
+    creator_slot = next(
+        slot
+        for slot in intents["PlayByCreatorIntent"]["slots"]
+        if slot["name"] == "creatorQuery"
+    )
     assert {"play from {topic}", "play content from {topic}"}.isdisjoint(general)
+    assert "from {topic}" not in content_topic["samples"]
+    assert "by {creatorQuery}" in creator_slot["samples"]
     assert "play by {creatorQuery}" in creators
     assert "play from {organizationQuery}" in organizations
     assert "play {topic} from {organizationQuery}" in organizations
@@ -183,6 +202,12 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
         slot = next(item for item in intents[intent_name]["slots"] if item["name"] == slot_name)
         assert slot.get("samples"), f"{intent_name}.{slot_name} needs reply samples"
     dialog_intents = {item["name"]: item for item in model["dialog"]["intents"]}
+    for intent_name, dialog_intent in dialog_intents.items():
+        language_slots = {
+            item["name"]: item["type"] for item in intents[intent_name].get("slots", [])
+        }
+        for dialog_slot in dialog_intent["slots"]:
+            assert dialog_slot["type"] == language_slots[dialog_slot["name"]]
     assert dialog_intents["PlayByCreatorIntent"]["slots"][0]["elicitationRequired"] is True
     assert dialog_intents["ClarifySelectionIntent"]["slots"][0]["elicitationRequired"] is True
 
@@ -241,15 +266,49 @@ def test_publication_choice_navigation_has_forward_and_back_phrases():
     }.issubset(set(intents["DismissChoicesIntent"]["samples"]))
 
 
-def test_generated_search_slot_has_id_free_backend_replaceable_values():
+def test_generated_domain_slots_have_id_free_backend_replaceable_values():
     types = {
         item["name"]: item
         for item in _model()["interactionModel"]["languageModel"]["types"]
     }
-    search_type = types["HEAR_SEARCH_QUERY"]
-    assert search_type["values"]
-    assert all("id" not in item for item in search_type["values"])
-    assert all(item["name"]["value"].strip() for item in search_type["values"])
+    generated = {
+        "HEAR_LOCATION",
+        "HEAR_ORGANIZATION",
+        "HEAR_CREATOR",
+        "HEAR_TOPIC",
+    }
+    assert generated.issubset(types)
+    assert "HEAR_SEARCH_QUERY" not in types
+    for slot_name in generated:
+        assert types[slot_name]["values"]
+        assert all("id" not in item for item in types[slot_name]["values"])
+        assert all(item["name"]["value"].strip() for item in types[slot_name]["values"])
+
+
+def test_backend_domain_slot_schema_forbids_value_ids():
+    schema = json.loads(
+        (Path(__file__).parents[1] / "schemas" / "alexa-search-slot.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    slot_names = [
+        item["properties"]["name"]["const"]
+        for item in (
+            schema["$defs"]["locationSlot"],
+            schema["$defs"]["organizationSlot"],
+            schema["$defs"]["creatorSlot"],
+            schema["$defs"]["topicSlot"],
+        )
+    ]
+    value_schema = schema["$defs"]["baseSlot"]["properties"]["values"]["items"]
+    assert slot_names == [
+        "HEAR_LOCATION",
+        "HEAR_ORGANIZATION",
+        "HEAR_CREATOR",
+        "HEAR_TOPIC",
+    ]
+    assert value_schema["additionalProperties"] is False
+    assert set(value_schema["properties"]) == {"name"}
 
 
 def test_intent_samples_are_unique_within_each_intent():

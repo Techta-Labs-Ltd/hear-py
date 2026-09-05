@@ -182,10 +182,10 @@
           "slots": [
             {
               "name": "topic",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_TOPIC",
               "samples": [
                 "{topic}",
-                "from {topic}",
+                "about {topic}",
                 "I want {topic}"
               ]
             },
@@ -262,10 +262,10 @@
           "slots": [
             {
               "name": "topic",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_TOPIC",
               "samples": [
                 "{topic}",
-                "from {topic}",
+                "about {topic}",
                 "I want {topic}"
               ]
             }
@@ -295,7 +295,7 @@
           "slots": [
             {
               "name": "localQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_LOCATION",
               "samples": [
                 "{localQuery}",
                 "around {localQuery}",
@@ -304,7 +304,7 @@
             },
             {
               "name": "cityQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_LOCATION",
               "samples": [
                 "{cityQuery}",
                 "in {cityQuery}"
@@ -312,7 +312,7 @@
             },
             {
               "name": "topic",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_TOPIC",
               "samples": [
                 "{topic}",
                 "about {topic}"
@@ -340,6 +340,8 @@
             "play from my town",
             "play content near me",
             "play content near {localQuery}",
+            "play from {cityQuery}",
+            "play something from {cityQuery}",
             "play local {localQuery}",
             "find local content",
             "find content near me",
@@ -377,7 +379,7 @@
           "slots": [
             {
               "name": "recommendationQuery",
-              "type": "HEAR_SEARCH_QUERY"
+              "type": "HEAR_TOPIC"
             }
           ],
           "samples": [
@@ -473,7 +475,7 @@
           "slots": [
             {
               "name": "organizationQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_ORGANIZATION",
               "samples": [
                 "{organizationQuery}",
                 "the {organizationQuery}",
@@ -483,7 +485,7 @@
             },
             {
               "name": "topic",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_TOPIC",
               "samples": [
                 "{topic}",
                 "about {topic}"
@@ -519,7 +521,7 @@
           "slots": [
             {
               "name": "publicationSourceQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_ORGANIZATION",
               "samples": [
                 "{publicationSourceQuery}",
                 "from {publicationSourceQuery}",
@@ -551,8 +553,6 @@
             "play publication from {publicationSourceQuery}",
             "play a publication from {publicationSourceQuery}",
             "play publications from {publicationSourceQuery}",
-            "play a publication by {publicationSourceQuery}",
-            "find a publication by {publicationSourceQuery}",
             "find publications from {publicationSourceQuery}",
             "give me a publication from {publicationSourceQuery}"
           ]
@@ -579,17 +579,17 @@
           "slots": [
             {
               "name": "creatorQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_CREATOR",
               "samples": [
                 "{creatorQuery}",
                 "the {creatorQuery}",
-                "from {creatorQuery}",
+                "by {creatorQuery}",
                 "I want {creatorQuery}"
               ]
             },
             {
               "name": "topic",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_TOPIC",
               "samples": [
                 "{topic}",
                 "about {topic}"
@@ -602,6 +602,8 @@
             "play me something from a creator",
             "play by {creatorQuery}",
             "play something by {creatorQuery}",
+            "play a publication by {creatorQuery}",
+            "find a publication by {creatorQuery}",
             "play {topic} by {creatorQuery}",
             "play me {topic} by {creatorQuery}",
             "find {topic} by {creatorQuery}",
@@ -642,7 +644,7 @@
           "slots": [
             {
               "name": "topic",
-              "type": "HEAR_SEARCH_QUERY"
+              "type": "HEAR_TOPIC"
             },
             {
               "name": "dateQuery",
@@ -1222,7 +1224,7 @@
           "slots": [
             {
               "name": "townName",
-              "type": "AMAZON.City",
+              "type": "HEAR_LOCATION",
               "samples": [
                 "{townName}",
                 "I am in {townName}",
@@ -1243,7 +1245,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.City",
+              "type": "HEAR_LOCATION",
               "samples": [
                 "{location}",
                 "I am in {location}",
@@ -1295,24 +1297,29 @@
       ],
       "types": [
         {
-          "name": "AMAZON.City",
+          "name": "HEAR_LOCATION",
           "values": [
             {
-              "id": "location-1826454069",
               "name": {
                 "value": "Herne Bay",
                 "synonyms": [
                   "arn bay",
                   "earn bay",
                   "herne bat",
-                  "herne bae"
+                  "herne bae",
+                  "Herne Bay area"
                 ]
+              }
+            },
+            {
+              "name": {
+                "value": "London"
               }
             }
           ]
         },
         {
-          "name": "HEAR_SEARCH_QUERY",
+          "name": "HEAR_ORGANIZATION",
           "values": [
             {
               "name": {
@@ -1330,15 +1337,22 @@
                   "York Talking Newspaper"
                 ]
               }
-            },
+            }
+          ]
+        },
+        {
+          "name": "HEAR_CREATOR",
+          "values": [
             {
               "name": {
-                "value": "Herne Bay",
-                "synonyms": [
-                  "Herne Bay area"
-                ]
+                "value": "Sample Creator"
               }
-            },
+            }
+          ]
+        },
+        {
+          "name": "HEAR_TOPIC",
+          "values": [
             {
               "name": {
                 "value": "sport",
@@ -1489,7 +1503,7 @@
           "slots": [
             {
               "name": "topic",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_TOPIC",
               "confirmationRequired": false,
               "elicitationRequired": false,
               "prompts": {
@@ -1505,7 +1519,7 @@
           "slots": [
             {
               "name": "townName",
-              "type": "AMAZON.City",
+              "type": "HEAR_LOCATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1521,7 +1535,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.City",
+              "type": "HEAR_LOCATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1537,7 +1551,7 @@
           "slots": [
             {
               "name": "creatorQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_CREATOR",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1553,7 +1567,7 @@
           "slots": [
             {
               "name": "organizationQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1585,7 +1599,7 @@
           "slots": [
             {
               "name": "publicationSourceQuery",
-              "type": "HEAR_SEARCH_QUERY",
+              "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
@@ -1602,7 +1616,7 @@
         "variations": [
           {
             "type": "PlainText",
-            "value": "What would you like me to play? You can name a topic, creator, publication, or talking newspaper."
+            "value": "What topic would you like me to play?"
           }
         ]
       },
@@ -1656,7 +1670,7 @@
         "variations": [
           {
             "type": "PlainText",
-            "value": "Which publication, creator, or organization would you like?"
+            "value": "Which publication or talking newspaper would you like?"
           }
         ]
       }

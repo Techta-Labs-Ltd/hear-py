@@ -30,7 +30,7 @@ does not host a resolver, taxonomy runtime, or inbound webhook.
 
 - [Backend identity, registration, and event contract](docs/backend-events-and-feedback.md)
 - [Alexa permission flow](docs/alexa-permissions.md)
-- [Alexa generated search slot contract](docs/alexa-search-slot.md)
+- [Alexa generated domain-slot contract](docs/alexa-search-slot.md)
 
 ## Configuration
 
