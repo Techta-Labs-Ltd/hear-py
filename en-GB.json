@@ -1415,7 +1415,10 @@
           "values": [
             {
               "name": {
-                "value": "Sample Creator"
+                "value": "Crawley Audio News",
+                "synonyms": [
+                  "Crawley News"
+                ]
               }
             }
           ]

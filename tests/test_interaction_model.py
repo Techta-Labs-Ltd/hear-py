@@ -332,6 +332,16 @@ def test_topic_slot_includes_multi_word_catalog_topics():
     assert "English Premier League" in topics["Premier League"]["synonyms"]
 
 
+def test_development_creator_slot_uses_a_real_backend_creator():
+    types = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["types"]
+    }
+    creators = {item["name"]["value"] for item in types["HEAR_CREATOR"]["values"]}
+    assert "Crawley Audio News" in creators
+    assert "Sample Creator" not in creators
+
+
 def test_backend_domain_slot_schema_forbids_value_ids():
     schema = json.loads(
         (Path(__file__).parents[1] / "schemas" / "alexa-search-slot.schema.json").read_text(
