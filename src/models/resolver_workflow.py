@@ -121,6 +121,16 @@ class ResolverWorkflow:
         slots = DialogSelection.request_slots(handler_input)
         if not slots:
             return None
+        if User.snapshot(handler_input).get("onboardingStage") == "ask_town":
+            return next(
+                (
+                    value.strip()
+                    for slot in slots.values()
+                    if (value := AlexaRequest.get_resolved_slot_value(slot))
+                    and value.strip()
+                ),
+                None,
+            )
         date_text = AlexaRequest.get_resolved_slot_value(slots.get("dateQuery")) or ""
         if alexa_intent == "PlayLatestContentIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
@@ -137,6 +147,44 @@ class ResolverWorkflow:
                 for value in ("play", date_text, requested_sort, "publication", suffix)
                 if value
             )
+        if alexa_intent == "PlayByOrganizationIntent":
+            topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
+            source = AlexaRequest.get_resolved_slot_value(slots.get("organizationQuery"))
+            if source:
+                if (
+                    SearchFilterUtils.normalize_discovery_phrase(source)
+                    in DiscoveryConstants.LOCAL_HINTS
+                    or SearchFilterUtils.organization_request_kind(
+                        source, organization_intent=True
+                    )
+                    != "specific"
+                ):
+                    return source
+                return " ".join(
+                    value for value in ("play", topic, "from", source) if value
+                )
+        if alexa_intent == "PlayByCreatorIntent":
+            topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
+            creator = AlexaRequest.get_resolved_slot_value(slots.get("creatorQuery"))
+            if creator:
+                if (
+                    SearchFilterUtils.normalize_discovery_phrase(creator)
+                    in DiscoveryConstants.LOCAL_HINTS
+                    or not SearchFilterUtils.is_meaningful_creator_source(creator)
+                ):
+                    return creator
+                return " ".join(
+                    value for value in ("play", topic, "by", creator) if value
+                )
+        if alexa_intent == "PlayLocalIntent":
+            topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
+            location = AlexaRequest.get_resolved_slot_value(
+                slots.get("cityQuery") or slots.get("localQuery")
+            )
+            if topic and location:
+                return f"play {topic} near {location}"
+            if location:
+                return f"play near {location}"
         ordered = ResolverConstants.RAW_SLOT_PRIORITY.get(
             alexa_intent, ResolverConstants.DEFAULT_RAW_SLOT_PRIORITY
         )
@@ -193,7 +241,7 @@ class ResolverWorkflow:
             "WhatsTrendingIntent": ("topic", "dateQuery"),
             "PlayRecommendationIntent": ("recommendationQuery",),
             "BrowseContentIntent": ("dateQuery",),
-            "PlayLocalIntent": ("localQuery",),
+            "PlayLocalIntent": ("cityQuery", "localQuery", "topic"),
         }
         if alexa_intent in direct and (
             not any(
@@ -377,7 +425,13 @@ class ResolverWorkflowRunner:
     async def _resolver_result(self, handler_input, raw: str, alexa_intent: str | None = None) -> dict:
         carrier = ResolverConstants.CARRIERS.get(alexa_intent, "")
         normalized = SearchFilterUtils.normalize_discovery_phrase(raw)
-        has_carrier = not carrier or normalized == carrier or normalized.startswith(f"{carrier} ")
+        carrier_verb = carrier.partition(" ")[0]
+        has_carrier = bool(
+            not carrier
+            or normalized == carrier
+            or normalized.startswith(f"{carrier} ")
+            or (carrier_verb and normalized.startswith(f"{carrier_verb} "))
+        )
         utterance = raw if has_carrier else f"{carrier} {raw}"
         options = {
             "alexa_user_id": AlexaRequest.get_user_id(handler_input),

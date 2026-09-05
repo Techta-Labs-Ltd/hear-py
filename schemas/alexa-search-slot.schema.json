@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hear Alexa search slot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "values"],
+  "properties": {
+    "name": {
+      "const": "HEAR_SEARCH_QUERY"
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value"],
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 140
+              },
+              "synonyms": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 140
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

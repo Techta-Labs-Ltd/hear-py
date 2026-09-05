@@ -117,6 +117,88 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slots", "expected_utterance"),
+    [
+        (
+            "PlayByOrganizationIntent",
+            {
+                "topic": {"name": "topic", "value": "sport"},
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "value": "tynedale talking news",
+                    "resolutions": {
+                        "resolutionsPerAuthority": [
+                            {
+                                "status": {"code": "ER_SUCCESS_MATCH"},
+                                "values": [
+                                    {
+                                        "value": {
+                                            "name": "Tynedale Talking Newspaper"
+                                        }
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                },
+            },
+            "play sport from Tynedale Talking Newspaper",
+        ),
+        (
+            "PlayByOrganizationIntent",
+            {
+                "organizationQuery": {
+                    "name": "organizationQuery",
+                    "value": "North Moor Talking Newspaper",
+                }
+            },
+            "play from North Moor Talking Newspaper",
+        ),
+        (
+            "PlayLocalIntent",
+            {
+                "topic": {"name": "topic", "value": "sport"},
+                "cityQuery": {
+                    "name": "cityQuery",
+                    "value": "Herne Bay",
+                },
+            },
+            "play sport near Herne Bay",
+        ),
+    ],
+)
+async def test_generated_slot_match_or_raw_value_always_reaches_backend_resolver(
+    mock_handler_input, intent_name, slots, expected_utterance
+):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={"status": "resolved", "intent": "search", "slots": {}}
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": intent_name, "slots": slots},
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+
+    await ResolverInterceptor(
+        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
+    ).process(mock_handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once()
+    assert resolver.resolve_utterance.await_args.args == (expected_utterance,)
+
+
+@pytest.mark.asyncio
 async def test_local_resolver_result_does_not_send_interpretation_progressive(
     mock_handler_input,
 ):
