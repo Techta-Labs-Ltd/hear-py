@@ -403,6 +403,21 @@ class TestSpeechStrings:
 
 class TestLaunchSimulation:
     @pytest.mark.asyncio
+    async def test_launch_resumes_pending_community_town_capture(self):
+        hi = _build_handler_input(
+            store_override={
+                "onboardingComplete": True,
+                "onboardingStage": "confirm_town_for_community",
+            }
+        )
+
+        await LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+
+        store = User.snapshot(hi)
+        assert store["onboardingStage"] == "ask_town"
+        assert hi.response_builder.speak.called
+
+    @pytest.mark.asyncio
     async def test_launch_enrichment_uses_injected_locality_dependency(self):
         hi = _build_handler_input(store_override={"onboardingComplete": True})
         enriched = {**User.snapshot(hi), "userCity": "Wakefield"}

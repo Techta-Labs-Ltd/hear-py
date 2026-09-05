@@ -163,7 +163,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
             if intent in {"SkipFeedbackIntent", "AMAZON.CancelIntent"}:
                 return Onboarding.finalize_town_skipped(handler_input, store, deps=self._deps)
             if intent in {"TownCaptureIntent", "SetLocationIntent"}:
-                self._deps.onboarding.start_town_capture(handler_input)
+                self._deps.onboarding.begin_town_capture(handler_input)
                 return await TownCapture(deps=self._deps).execute(handler_input)
         return (
             handler_input.response_builder.speak(
