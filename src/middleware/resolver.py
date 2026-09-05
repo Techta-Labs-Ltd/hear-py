@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
-from src.models.resolver_workflow import ResolverWorkflowRunner
+from src.models.resolver_runner import ResolverWorkflowRunner
 
 
 class ResolverInterceptor(AbstractRequestInterceptor):
