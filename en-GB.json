@@ -553,6 +553,10 @@
           ],
           "samples": [
             "play {dateQuery} publication",
+            "play {dateQuery} publication from {publicationSourceQuery}",
+            "play {dateQuery} publication from {publicationSourceQuery} talking newspaper",
+            "play {dateQuery} publication from {publicationSourceQuery} talking news",
+            "play publication from {publicationSourceQuery} from {dateQuery}",
             "play a publication",
             "play publications",
             "play something from a publication",

@@ -144,6 +144,8 @@ class ResolverWorkflow:
         if alexa_intent == "PlayPublicationIntent":
             source = AlexaRequest.get_resolved_slot_value(slots.get("publicationSourceQuery"))
             requested_sort = AlexaRequest.get_resolved_slot_value(slots.get("publicationSort"))
+            if str(requested_sort or "").casefold() not in ResolverConstants.PUBLICATION_SORTS:
+                requested_sort = None
             suffix = f"from {source}" if source else ""
             return " ".join(
                 value

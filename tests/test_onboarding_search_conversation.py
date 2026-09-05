@@ -888,6 +888,50 @@ async def test_publication_intent_keeps_alexa_date_out_of_resolver_text(
 
 
 @pytest.mark.asyncio
+async def test_publication_intent_rejects_out_of_catalog_sort_text(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "requestId": "invalid-publication-sort-request",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayPublicationIntent",
+                "slots": {
+                    "publicationSort": {
+                        "name": "publicationSort",
+                        "value": "yesterday",
+                        "resolutions": {
+                            "resolutionsPerAuthority": [
+                                {"status": {"code": "ER_SUCCESS_NO_MATCH"}}
+                            ]
+                        },
+                    },
+                    "publicationSourceQuery": {
+                        "name": "publicationSourceQuery",
+                        "value": "wtn",
+                    },
+                },
+            },
+        }
+    )
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "organization",
+            "slots": {"searchPlan": {}},
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    assert resolve.await_args.args == ("play publication from wtn",)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("date_value", "temporal_label"),
     [

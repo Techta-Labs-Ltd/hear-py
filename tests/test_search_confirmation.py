@@ -8,8 +8,21 @@ from src.middleware.confirmation import (
     ConfirmationMiddleware,
     SearchConfirmationGateHandler,
 )
+from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolutionBuilder
 from src.models.user import User
+
+
+def test_topic_trending_confirmation_uses_clean_spoken_text():
+    assert (
+        ConfirmationPolicy.confirmation_speech(
+            {
+                "intent": "trending",
+                "slots": {"category": "sport", "isRecommended": True},
+            }
+        )
+        == "what's trending in sport"
+    )
 
 
 def test_full_resolved_search_is_spoken_before_backend_search():

@@ -143,6 +143,10 @@ def test_content_discovery_intents_accept_date_constraints():
         assert all((slot["name"] != "dateQuery" for slot in intents[intent_name].get("slots", [])))
         assert all(("{dateQuery}" not in sample for sample in intents[intent_name]["samples"]))
     assert "play {dateQuery} {topic}" in intents["PlayContentIntent"]["samples"]
+    assert (
+        "play {dateQuery} publication from {publicationSourceQuery}"
+        in intents["PlayPublicationIntent"]["samples"]
+    )
 
 
 def test_local_community_phrases_are_owned_by_local_intent():

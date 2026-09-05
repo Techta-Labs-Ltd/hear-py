@@ -5,6 +5,7 @@ class ResolverConstants:
     SECONDARY_FACET_MIN_CONFIDENCE = 75
     SOURCE_LOCATION_MIN_CONFIDENCE = 75
     STANDALONE_LOCATION_MIN_CONFIDENCE = 75
+    PUBLICATION_SORTS = frozenset({"latest", "trending"})
     CARRIERS = {
         "PlayContentIntent": "play",
         "PlayByCreatorIntent": "play from",

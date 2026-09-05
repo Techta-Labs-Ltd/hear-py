@@ -188,12 +188,12 @@ class ConfirmationPolicy:
         if intent == "trending":
             suffix = f" in {category}" if category else ""
             suffix += f" near {city}" if city else ""
-            return f"whatâ€™s trending{suffix}" if suffix else "whatâ€™s trending right now"
+            return f"what's trending{suffix}" if suffix else "what's trending right now"
         if intent == "browse":
             if category and city:
                 return f"new {category} near {city}"
             if category or city:
-                return f"new in {category}" if category else f"whatâ€™s new near {city}"
+                return f"new in {category}" if category else f"what's new near {city}"
             return "browse content"
         if intent == "following":
             return (
