@@ -172,7 +172,7 @@ class PlayCreator:
                     Ssml.ssml("Which creator would you like to hear?")
                 )
                 .reprompt(Ssml.ssml("Just say their name."))
-                .add_directive({"type": "Dialog.ElicitSlot", "slotToElicit": "creatorQuery"})
+                .add_directive(DialogStateManager.source_capture_directive("creator_name"))
                 .set_should_end_session(False)
                 .response
             )
@@ -312,7 +312,9 @@ class PlayOrganization:
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
                 .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
-                .add_directive({"type": "Dialog.ElicitSlot", "slotToElicit": "organizationQuery"})
+                .add_directive(
+                    DialogStateManager.source_capture_directive("organization_name")
+                )
                 .set_should_end_session(False)
                 .response
             )

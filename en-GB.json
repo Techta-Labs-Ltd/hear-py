@@ -1446,6 +1446,15 @@
                   "York Talking Newspaper"
                 ]
               }
+            },
+            {
+              "name": {
+                "value": "Talking News Federation",
+                "synonyms": [
+                  "TNF",
+                  "Talking Newspaper Federation"
+                ]
+              }
             }
           ]
         },

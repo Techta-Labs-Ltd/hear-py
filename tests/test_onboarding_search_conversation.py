@@ -2800,10 +2800,7 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     chained_builder = mock_handler_input.response_builder.speak.return_value.reprompt.return_value
     chained_builder.add_directive.assert_called_once()
     directive = chained_builder.add_directive.call_args.args[0]
-    assert directive == {
-        "type": "Dialog.ElicitSlot",
-        "slotToElicit": "organizationQuery",
-    }
+    assert directive == DialogStateManager.source_capture_directive("organization_name")
     json.dumps(directive)
     discover.assert_not_awaited()
 
@@ -2971,7 +2968,9 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
         mock_handler_input
     )
     assert "Which creator would you like to hear" in response["outputSpeech"]["ssml"]
-    assert response["directives"] == [{"type": "Dialog.ElicitSlot", "slotToElicit": "creatorQuery"}]
+    assert response["directives"] == [
+        DialogStateManager.source_capture_directive("creator_name")
+    ]
     assert response["shouldEndSession"] is False
     assert User.snapshot(mock_handler_input)["awaitingCreatorName"] is True
     assert DialogStateManager.get_active(mock_handler_input)["type"] == "creator_name"
@@ -2995,17 +2994,20 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
         ),
     ],
 )
-def test_source_name_fallback_reprompts_the_active_capture_dialog(
+def test_source_name_collision_rechains_the_active_capture_dialog(
     mock_handler_input, dialog_type, flag, speech, slot_name
 ):
-    from src.controllers.fallback import FallbackHandler
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
         {
             "type": "IntentRequest",
             "locale": "en-GB",
-            "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+            "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
         }
     )
     mock_handler_input.response_builder = ResponseBuilder()
@@ -3020,12 +3022,15 @@ def test_source_name_fallback_reprompts_the_active_capture_dialog(
         },
     }
 
-    response = FallbackHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    DialogValidationInterceptor().process(mock_handler_input)
+    gate = DialogValidationGateHandler()
+    assert gate.can_handle(mock_handler_input)
+    response = gate.handle(mock_handler_input)
 
     assert speech in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
     assert response["directives"] == [
-        {"type": "Dialog.ElicitSlot", "slotToElicit": slot_name}
+        DialogStateManager.source_capture_directive(dialog_type)
     ]
 
 

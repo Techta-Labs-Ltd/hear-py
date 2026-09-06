@@ -11,6 +11,16 @@ class DialogConstants:
         "creator_name": "awaitingCreatorName",
         "organization_name": "awaitingOrganizationName",
     }
+    SOURCE_CAPTURE = {
+        "creator_name": {
+            "intentName": "SelectCreatorIntent",
+            "slotName": "creatorQuery",
+        },
+        "organization_name": {
+            "intentName": "SelectOrganizationIntent",
+            "slotName": "organizationQuery",
+        },
+    }
     TRANSIENT_DISCOVERY_DIALOGS = frozenset(
         {
             "search_confirmation",

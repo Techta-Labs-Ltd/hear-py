@@ -245,6 +245,25 @@ class DialogStateManager:
         return DialogStateManager.active_from_store(User.snapshot(handler_input))
 
     @staticmethod
+    def source_capture_directive(dialog_type: str) -> dict:
+        capture = DialogConstants.SOURCE_CAPTURE[dialog_type]
+        slot_name = capture["slotName"]
+        return {
+            "type": "Dialog.ElicitSlot",
+            "slotToElicit": slot_name,
+            "updatedIntent": {
+                "name": capture["intentName"],
+                "confirmationStatus": "NONE",
+                "slots": {
+                    slot_name: {
+                        "name": slot_name,
+                        "confirmationStatus": "NONE",
+                    }
+                },
+            },
+        }
+
+    @staticmethod
     def activate(
         handler_input,
         dialog_type: str,

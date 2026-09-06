@@ -63,6 +63,16 @@ class DialogValidationPolicy:
         "AMAZON.YesIntent",
         "AMAZON.NoIntent",
     }
+    _SOURCE_NAME_PROMPTS = {
+        "creator_name": (
+            "Which creator would you like to hear?",
+            "Say play by, followed by the creator's full name.",
+        ),
+        "organization_name": (
+            Speech.ASK_TALKING_NEWSPAPER,
+            "Say play from, followed by the talking newspaper's full name.",
+        ),
+    }
 
     @staticmethod
     def _ambiguity_prompt(active: dict) -> tuple[str, str]:
@@ -138,6 +148,21 @@ class DialogValidationPolicy:
         context = active.get("context") or {}
         onboarding_stage = str(context.get("stage") or "")
         if (
+            dialog_type in DialogValidationPolicy._SOURCE_NAME_PROMPTS
+            and intent_name not in DialogValidationPolicy._EXIT_INTENTS
+            and not any(
+                AlexaRequest.get_resolved_slot_value(slot)
+                for slot in DialogSelection.request_slots(handler_input).values()
+            )
+        ):
+            speech, reprompt = DialogValidationPolicy._SOURCE_NAME_PROMPTS[dialog_type]
+            return {
+                "dialogType": dialog_type,
+                "speech": speech,
+                "reprompt": reprompt,
+                "elicitSlot": DialogConstants.SOURCE_CAPTURE[dialog_type]["slotName"],
+            }
+        if (
             dialog_type == "onboarding"
             and onboarding_stage in {"ask_permission", "await_location_confirm"}
             and (
@@ -211,9 +236,13 @@ class DialogValidationGateHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         failure = RequestContext.request(handler_input)[DialogConstants.VALIDATION_FAILURE]
-        return (
+        builder = (
             handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
             .reprompt(Ssml.ssml(failure["reprompt"]))
             .set_should_end_session(False)
-            .response
         )
+        if failure.get("elicitSlot"):
+            builder.add_directive(
+                DialogStateManager.source_capture_directive(failure["dialogType"])
+            )
+        return builder.response
