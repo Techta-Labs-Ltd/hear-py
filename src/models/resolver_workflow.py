@@ -268,16 +268,21 @@ class ResolverWorkflow:
         slots = result.get("slots") or {}
         names = [
             str(slots[name_slot]).strip()
-            for name_slot, id_slot in ResolverWorkflow.SOURCE_NAME_SLOTS.values()
-            if slots.get(id_slot) and str(slots.get(name_slot) or "").strip()
+            for name_slot, _ in ResolverWorkflow.SOURCE_NAME_SLOTS.values()
+            if str(slots.get(name_slot) or "").strip()
         ]
         for entity in result.get("entities") or []:
             entity_type = entity.get("entityType") or entity.get("type")
-            entity_id = entity.get("entityId") or entity.get("id")
-            if entity_type in ResolverWorkflow.SOURCE_NAME_SLOTS and entity_id:
+            if entity_type in ResolverWorkflow.SOURCE_NAME_SLOTS:
                 name = str(entity.get("canonicalValue") or entity.get("name") or "").strip()
                 if name:
                     names.append(name)
+        result_intent = str(result.get("intent") or "")
+        result_query_slot = ResolverWorkflow.SOURCE_QUERY_SLOTS.get(result_intent)
+        if result_query_slot and result_query_slot != "residualQuery":
+            query_name = str(slots.get(result_query_slot) or "").strip()
+            if query_name:
+                names.append(query_name)
         return list(dict.fromkeys(names))
 
     @staticmethod
@@ -287,16 +292,19 @@ class ResolverWorkflow:
         fallback = ResolverWorkflow.SEARCH_QUERY_SOURCE_INTENTS.get(alexa_intent)
         if not fallback:
             return result
+        expected_intent, expected_types = fallback
         requested = AlexaRequest.get_resolved_slot_value(intent_slots.get("searchQuery"))
         canonical_names = ResolverWorkflow._resolved_source_names(result)
-        if not requested or not canonical_names:
+        if not requested:
             return result
-        if any(
+        verified = bool(canonical_names) and any(
             SearchFilterUtils.is_plausible_source_match(requested, canonical)
             for canonical in canonical_names
-        ):
+        )
+        source_resolution = str(result.get("intent") or "") in ResolverWorkflow.SOURCE_NAME_SLOTS
+        requires_source = expected_intent != "general"
+        if verified or not canonical_names and not source_resolution and not requires_source:
             return result
-        expected_intent, expected_types = fallback
         query_slot = ResolverWorkflow.SOURCE_QUERY_SLOTS[expected_intent]
         reference = {
             "phrase": requested,

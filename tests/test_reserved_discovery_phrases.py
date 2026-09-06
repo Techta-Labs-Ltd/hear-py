@@ -651,7 +651,11 @@ async def test_search_query_fallback_preserves_full_name_and_relation(
         return_value={
             "status": "resolved",
             "intent": resolved_intent,
-            "slots": {"residualQuery": ""},
+            "slots": {
+                "residualQuery": "",
+                f"{resolved_intent}Ids": [f"{resolved_intent}-1"],
+                f"{resolved_intent}Name": raw_name,
+            },
         }
     )
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
@@ -729,6 +733,55 @@ async def test_search_query_fallback_rejects_different_catalog_source(
             "expectedTypes": ["creator", "organization", "publication"],
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_search_query_fallback_rejects_unverified_publication_source(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SearchContentIntent",
+                "slots": {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "Dorking Talking Magazine",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    monkeypatch.setattr(
+        ResolverClient,
+        "resolve_utterance",
+        AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "publication",
+                "slots": {
+                    "publicationSourceQuery": "Orkney Talking Magazine",
+                    "residualQuery": "Dorking Talking Magazine August",
+                },
+            }
+        ),
+    )
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "general"
+    assert nlp["slots"]["residualQuery"] == "Dorking Talking Magazine"
+    assert nlp["slots"]["unresolvedReferences"][0]["phrase"] == (
+        "Dorking Talking Magazine"
+    )
 
 
 @pytest.mark.asyncio
