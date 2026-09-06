@@ -264,20 +264,21 @@ class ResolverWorkflow:
         return constrained
 
     @staticmethod
-    def _resolved_source_name(result: dict) -> str | None:
-        entity_type = str(result.get("intent") or "")
-        name_slot, id_slot = ResolverWorkflow.SOURCE_NAME_SLOTS.get(
-            entity_type, (None, None)
-        )
+    def _resolved_source_names(result: dict) -> list[str]:
         slots = result.get("slots") or {}
-        if name_slot and id_slot and slots.get(id_slot) and slots.get(name_slot):
-            return str(slots[name_slot]).strip() or None
+        names = [
+            str(slots[name_slot]).strip()
+            for name_slot, id_slot in ResolverWorkflow.SOURCE_NAME_SLOTS.values()
+            if slots.get(id_slot) and str(slots.get(name_slot) or "").strip()
+        ]
         for entity in result.get("entities") or []:
-            if entity.get("type") == entity_type and entity.get("id"):
+            entity_type = entity.get("entityType") or entity.get("type")
+            entity_id = entity.get("entityId") or entity.get("id")
+            if entity_type in ResolverWorkflow.SOURCE_NAME_SLOTS and entity_id:
                 name = str(entity.get("canonicalValue") or entity.get("name") or "").strip()
                 if name:
-                    return name
-        return None
+                    names.append(name)
+        return list(dict.fromkeys(names))
 
     @staticmethod
     def _reject_implausible_search_query_source(
@@ -287,10 +288,13 @@ class ResolverWorkflow:
         if not fallback:
             return result
         requested = AlexaRequest.get_resolved_slot_value(intent_slots.get("searchQuery"))
-        canonical = ResolverWorkflow._resolved_source_name(result)
-        if not requested or not canonical:
+        canonical_names = ResolverWorkflow._resolved_source_names(result)
+        if not requested or not canonical_names:
             return result
-        if SearchFilterUtils.is_plausible_source_match(requested, canonical):
+        if any(
+            SearchFilterUtils.is_plausible_source_match(requested, canonical)
+            for canonical in canonical_names
+        ):
             return result
         expected_intent, expected_types = fallback
         query_slot = ResolverWorkflow.SOURCE_QUERY_SLOTS[expected_intent]
@@ -302,7 +306,7 @@ class ResolverWorkflow:
             "Hear: rejected implausible source match intent=%s requested=%s canonical=%s",
             alexa_intent,
             requested,
-            canonical,
+            canonical_names,
         )
         return {
             "status": "resolved",

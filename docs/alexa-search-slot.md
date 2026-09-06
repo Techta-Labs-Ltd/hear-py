@@ -231,6 +231,12 @@ meaning (`play`, `play by`, `play from`, or `play publication from`) and send th
 complete captured phrase to the same Hear resolver. They are not a second
 catalogue and do not bypass resolution.
 
+When a free-text fallback resolves to a catalogue source, the skill compares
+the captured phrase with the resolver's canonical source name before asking
+for confirmation. Close speech variants remain valid, but an unrelated fuzzy
+result is converted to a clear not-found response. The skill never confirms or
+plays an unrelated creator, organisation, or publication as a substitute.
+
 Absence from a generated custom slot can still reduce ASR accuracy, so publish
 refreshed slot values when practical. Updating the Hear database or resolver
 takes effect immediately for backend matching; changing Alexa's ASR vocabulary

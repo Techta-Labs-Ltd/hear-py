@@ -698,7 +698,7 @@ async def test_search_query_fallback_rejects_different_catalog_source(
         AsyncMock(
             return_value={
                 "status": "resolved",
-                "intent": "publication",
+                "intent": "general",
                 "slots": {
                     "publicationIds": ["publication-orkney"],
                     "publicationName": "Orkney Talking Magazine",
