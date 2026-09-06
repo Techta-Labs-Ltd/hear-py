@@ -37,6 +37,7 @@ class DialogValidationPolicy:
         "FeedbackEnjoyedIntent",
         "FeedbackSomewhatIntent",
         "FeedbackNotEnjoyedIntent",
+        "FeedbackResponseIntent",
         "RateContentIntent",
         "SkipFeedbackIntent",
         "AMAZON.YesIntent",
@@ -160,7 +161,7 @@ class DialogValidationPolicy:
                 "dialogType": dialog_type,
                 "speech": speech,
                 "reprompt": reprompt,
-                "elicitSlot": DialogConstants.SOURCE_CAPTURE[dialog_type]["slotName"],
+                "delegateSource": True,
             }
         if (
             dialog_type == "onboarding"
@@ -236,13 +237,17 @@ class DialogValidationGateHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         failure = RequestContext.request(handler_input)[DialogConstants.VALIDATION_FAILURE]
+        if failure.get("delegateSource"):
+            return (
+                handler_input.response_builder.add_directive(
+                    DialogStateManager.source_capture_directive(failure["dialogType"])
+                )
+                .set_should_end_session(False)
+                .response
+            )
         builder = (
             handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
             .reprompt(Ssml.ssml(failure["reprompt"]))
             .set_should_end_session(False)
         )
-        if failure.get("elicitSlot"):
-            builder.add_directive(
-                DialogStateManager.source_capture_directive(failure["dialogType"])
-            )
         return builder.response

@@ -3,6 +3,7 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.feedback import AlexaFeedback
 from src.alexa.request import AlexaRequest
 from src.models.feedback_response import (
     EnjoyedFeedback,
@@ -67,6 +68,32 @@ class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         return await self._action.execute(handler_input)
+
+
+class FeedbackResponseHandler(AbstractRequestHandler):
+    ACTIONS = {
+        "enjoyed": EnjoyedFeedback,
+        "somewhat": SomewhatFeedback,
+        "not enjoyed": NotEnjoyedFeedback,
+    }
+
+    def __init__(self, *, deps: object | None = None):
+        self._deps = deps
+
+    def can_handle(self, handler_input: HandlerInput) -> bool:
+        return (
+            AlexaRequest.get_request_type(handler_input) == "IntentRequest"
+            and AlexaRequest.get_intent_name(handler_input) == "FeedbackResponseIntent"
+        )
+
+    async def handle(self, handler_input: HandlerInput):
+        feedback = (AlexaRequest.get_slot_value(handler_input, "feedback") or "").casefold()
+        action_type = FeedbackResponseHandler.ACTIONS.get(feedback)
+        if action_type:
+            return await action_type(deps=self._deps).execute(handler_input)
+        return AlexaFeedback.present_pending_feedback(
+            handler_input, self._deps.user.snapshot(handler_input)
+        )
 
 
 class SkipFeedbackHandler(AbstractRequestHandler):

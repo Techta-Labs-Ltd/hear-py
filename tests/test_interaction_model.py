@@ -87,6 +87,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "dateQuery": "AMAZON.DATE",
         },
         "ClarifySelectionIntent": {"selection": "HEAR_CLARIFICATION"},
+        "FeedbackResponseIntent": {"feedback": "HEAR_FEEDBACK"},
         "SetPlaybackSpeedIntent": {"speed": "HEAR_PLAYBACK_SPEED"},
     }
     for intent_name, slots in expected.items():
@@ -222,6 +223,8 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
         "PlayByCreatorIntent",
         "PlayByOrganizationIntent",
         "PlayPublicationIntent",
+        "SelectCreatorIntent",
+        "SelectOrganizationIntent",
     ):
         assert dialog_intents[source_intent]["slots"][0]["elicitationRequired"] is True
     assert dialog_intents["ClarifySelectionIntent"]["slots"][0]["elicitationRequired"] is True
@@ -501,11 +504,15 @@ def test_rating_and_reporting_use_distinct_asr_friendly_phrases():
 
 
 def test_feedback_and_follow_samples_do_not_claim_ambiguous_actions():
-    intents = {
-        item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
-    }
+    language_model = _model()["interactionModel"]["languageModel"]
+    intents = {item["name"]: item for item in language_model["intents"]}
+    types = {item["name"]: item for item in language_model["types"]}
     skip_feedback = set(intents["SkipFeedbackIntent"]["samples"])
-    negative = set(intents["FeedbackNotEnjoyedIntent"]["samples"])
+    negative = next(
+        set(value["name"].get("synonyms", []))
+        for value in types["HEAR_FEEDBACK"]["values"]
+        if value["name"]["value"] == "not enjoyed"
+    )
     follow = set(intents["FollowCreatorIntent"]["samples"])
     assert {"skip", "move on", "carry on", "just play the next one"}.isdisjoint(skip_feedback)
     assert "change it" not in negative

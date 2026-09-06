@@ -14,6 +14,7 @@ from src.controllers.fallback import FallbackHandler, UnmatchedIntentHandler
 from src.controllers.feedback import (
     FeedbackEnjoyedHandler,
     FeedbackNotEnjoyedHandler,
+    FeedbackResponseHandler,
     FeedbackSomewhatHandler,
     RateContentHandler,
     SkipFeedbackHandler,
@@ -147,6 +148,7 @@ class RouteRegistry:
         FeedbackEnjoyedHandler,
         FeedbackSomewhatHandler,
         FeedbackNotEnjoyedHandler,
+        FeedbackResponseHandler,
         SkipFeedbackHandler,
         YesIntentHandler,
         NoIntentHandler,

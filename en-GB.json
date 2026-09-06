@@ -1008,137 +1008,18 @@
           ]
         },
         {
-          "name": "FeedbackEnjoyedIntent",
-          "slots": [],
+          "name": "FeedbackResponseIntent",
+          "slots": [
+            {
+              "name": "feedback",
+              "type": "HEAR_FEEDBACK",
+              "samples": [
+                "{feedback}"
+              ]
+            }
+          ],
           "samples": [
-            "enjoyed",
-            "I enjoyed it",
-            "I enjoyed this",
-            "I really enjoyed it",
-            "yes I enjoyed it",
-            "I liked it",
-            "I liked this",
-            "yes it was good",
-            "that was great",
-            "loved it",
-            "great",
-            "good one",
-            "brilliant",
-            "amazing",
-            "fantastic",
-            "that was good",
-            "really good",
-            "excellent",
-            "wonderful",
-            "superb",
-            "I loved that",
-            "that was brilliant",
-            "very good",
-            "top notch",
-            "smashing",
-            "cracking",
-            "well done",
-            "that was lovely",
-            "really enjoyed that",
-            "thoroughly enjoyed it",
-            "that was ace",
-            "absolutely loved it",
-            "five stars",
-            "thumbs up",
-            "positive feedback",
-            "I'd rate it highly",
-            "I thought it was great",
-            "that was interesting",
-            "it was fire",
-            "that slapped",
-            "that was class",
-            "proper good",
-            "mint",
-            "wicked",
-            "sick",
-            "big up",
-            "quality",
-            "banger"
-          ]
-        },
-        {
-          "name": "FeedbackSomewhatIntent",
-          "slots": [],
-          "samples": [
-            "somewhat",
-            "it was okay",
-            "it was just okay",
-            "kind of",
-            "sort of",
-            "not bad",
-            "alright",
-            "so so",
-            "average",
-            "it was alright",
-            "it was alright I suppose",
-            "it was fine",
-            "could be better",
-            "fair enough",
-            "decent",
-            "middling",
-            "passable",
-            "nothing special",
-            "it was okay I suppose",
-            "not great not terrible",
-            "meh",
-            "mixed feelings",
-            "neither good nor bad",
-            "it was reasonable",
-            "fairly good",
-            "it was mid",
-            "mid",
-            "on the fence",
-            "I can take it or leave it",
-            "six out of ten",
-            "three stars",
-            "it was standard"
-          ]
-        },
-        {
-          "name": "FeedbackNotEnjoyedIntent",
-          "slots": [],
-          "samples": [
-            "not enjoyed",
-            "did not enjoy it",
-            "I did not enjoy this",
-            "did not like it",
-            "bad",
-            "not for me",
-            "terrible",
-            "not interested",
-            "awful",
-            "dreadful",
-            "rubbish",
-            "boring",
-            "didn't enjoy it",
-            "I didn't enjoy this",
-            "didn't like it",
-            "I don't like it",
-            "I don't like this",
-            "not my cup of tea",
-            "disliked it",
-            "I disliked this",
-            "that was poor",
-            "waste of time",
-            "not good",
-            "I hated that",
-            "that was dull",
-            "thumbs down",
-            "one star",
-            "I didn't care for that",
-            "no good",
-            "that was naff",
-            "that was trash",
-            "not my thing",
-            "I'll pass on that",
-            "dead",
-            "that was dead",
-            "that was pants"
+            "{feedback}"
           ]
         },
         {
@@ -1451,8 +1332,17 @@
               "name": {
                 "value": "Talking News Federation",
                 "synonyms": [
-                  "TNF",
                   "Talking Newspaper Federation"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "tnf",
+                "synonyms": [
+                  "t n f",
+                  "t. n. f.",
+                  "tee en eff"
                 ]
               }
             }
@@ -1627,6 +1517,64 @@
           ]
         },
         {
+          "name": "HEAR_FEEDBACK",
+          "values": [
+            {
+              "name": {
+                "value": "enjoyed",
+                "synonyms": [
+                  "I enjoyed it",
+                  "I enjoyed this",
+                  "I really enjoyed it",
+                  "I liked it",
+                  "I liked this",
+                  "that was great",
+                  "loved it",
+                  "that was good",
+                  "really good",
+                  "five stars",
+                  "thumbs up"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "somewhat",
+                "synonyms": [
+                  "it was okay",
+                  "it was just okay",
+                  "not bad",
+                  "it was alright",
+                  "it was fine",
+                  "could be better",
+                  "nothing special",
+                  "mixed feelings",
+                  "three stars"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "not enjoyed",
+                "synonyms": [
+                  "did not enjoy it",
+                  "I did not enjoy this",
+                  "did not like it",
+                  "not for me",
+                  "didn't enjoy it",
+                  "I didn't enjoy this",
+                  "didn't like it",
+                  "I don't like it",
+                  "I don't like this",
+                  "that was poor",
+                  "thumbs down",
+                  "one star"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "ContentFormat",
           "values": [
             {
@@ -1723,6 +1671,40 @@
         },
         {
           "name": "PlayByOrganizationIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "organizationQuery",
+              "type": "HEAR_ORGANIZATION",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.PlayByOrganizationIntent.organizationQuery"
+              }
+            }
+          ]
+        },
+        {
+          "name": "SelectCreatorIntent",
+          "delegationStrategy": "ALWAYS",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "creatorQuery",
+              "type": "HEAR_CREATOR",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.PlayByCreatorIntent.creatorQuery"
+              }
+            }
+          ]
+        },
+        {
+          "name": "SelectOrganizationIntent",
+          "delegationStrategy": "ALWAYS",
           "confirmationRequired": false,
           "prompts": {},
           "slots": [

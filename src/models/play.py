@@ -168,11 +168,9 @@ class PlayCreator:
         if generic_creator_request or (not creator_query and (not resolved_creator)):
             PlayCreator._await_name(handler_input)
             return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml("Which creator would you like to hear?")
+                handler_input.response_builder.add_directive(
+                    DialogStateManager.source_capture_directive("creator_name")
                 )
-                .reprompt(Ssml.ssml("Just say their name."))
-                .add_directive(DialogStateManager.source_capture_directive("creator_name"))
                 .set_should_end_session(False)
                 .response
             )
@@ -310,9 +308,7 @@ class PlayOrganization:
         if generic_request or (not org_query and (not resolved_org)):
             PlayOrganization._await_name(handler_input)
             return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
-                .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
-                .add_directive(
+                handler_input.response_builder.add_directive(
                     DialogStateManager.source_capture_directive("organization_name")
                 )
                 .set_should_end_session(False)

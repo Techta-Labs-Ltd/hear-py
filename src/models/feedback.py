@@ -29,6 +29,7 @@ class FeedbackService:
         "FeedbackEnjoyedIntent",
         "FeedbackSomewhatIntent",
         "FeedbackNotEnjoyedIntent",
+        "FeedbackResponseIntent",
         "RateContentIntent",
         "SkipFeedbackIntent",
     }

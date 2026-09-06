@@ -236,19 +236,25 @@ still go through the same Hear resolver as the longer play intents.
 The source slots on `PlayByCreatorIntent`, `PlayByOrganizationIntent`, and
 `PlayPublicationIntent` must remain `elicitationRequired: true`. When the skill
 asks which creator, talking newspaper, or publication the listener wants,
-its `Dialog.ElicitSlot` response explicitly chains to `SelectCreatorIntent` or
-`SelectOrganizationIntent`. Alexa then binds the next name-only turn to the
-correct domain slot instead of allowing a broad unrelated intent to take over.
-A custom slot no-match is valid: its raw spoken value is still forwarded to the
-Hear resolver. The skill also persists the active source-name dialog so an
-unexpected slotless turn repeats the same source question instead of returning
-to the general welcome prompt.
+its `Dialog.Delegate` response explicitly chains to `SelectCreatorIntent` or
+`SelectOrganizationIntent`. Those selection intents use required slots and
+Alexa-managed delegation. A custom slot no-match is valid when Alexa selects
+the intent: its raw spoken value is still forwarded to the Hear resolver. The
+skill also persists the active source-name dialog so an unexpected slotless
+turn repeats the same source question instead of returning to the general
+welcome prompt.
 
 If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
 waiting for an organization or creator, active dialog state takes precedence.
 The backend sends the captured words to the expected organization or creator
 resolver route and does not save them as the listener's city. An actual
 onboarding location question still owns a bare city response.
+
+Emit commonly spoken initialisms such as `tnf` as additional canonical slot
+values, with spaced and phonetic forms such as `t n f` and `tee en eff` as
+synonyms. The resolver converts that alias to the catalogue organisation. This
+is more reliable in Alexa than attaching an unspaced initialism only as a
+synonym of a long organisation name.
 
 If a new value is absent from the generated slot, Alexa may still return it as
 raw text through the custom slot. Alexa can also select the right source intent
