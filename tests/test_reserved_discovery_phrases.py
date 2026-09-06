@@ -669,6 +669,136 @@ async def test_search_query_fallback_preserves_full_name_and_relation(
 
 
 @pytest.mark.asyncio
+async def test_search_query_fallback_rejects_different_catalog_source(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SearchContentIntent",
+                "slots": {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "Dorking Talking Magazine",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    monkeypatch.setattr(
+        ResolverClient,
+        "resolve_utterance",
+        AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "publication",
+                "slots": {
+                    "publicationIds": ["publication-orkney"],
+                    "publicationName": "Orkney Talking Magazine",
+                    "residualQuery": "August",
+                },
+                "entities": [
+                    {
+                        "type": "publication",
+                        "id": "publication-orkney",
+                        "canonicalValue": "Orkney Talking Magazine",
+                    }
+                ],
+            }
+        ),
+    )
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "general"
+    assert nlp["nlpMatchesAlexa"] is True
+    assert nlp["needsRedirect"] is False
+    assert nlp["entities"] == []
+    assert nlp["slots"]["residualQuery"] == "Dorking Talking Magazine"
+    assert nlp["slots"]["unresolvedReferences"] == [
+        {
+            "phrase": "Dorking Talking Magazine",
+            "expectedTypes": ["creator", "organization", "publication"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "raw_name", "resolved_intent", "name_slot", "id_slot", "canonical"),
+    [
+        (
+            "SearchOrganizationIntent",
+            "Tyndale Talking News",
+            "organization",
+            "organizationName",
+            "organizationIds",
+            "Tynedale Talking Newspaper",
+        ),
+        (
+            "SearchCreatorIntent",
+            "John Smyth",
+            "creator",
+            "creatorName",
+            "creatorIds",
+            "John Smith",
+        ),
+    ],
+)
+async def test_search_query_fallback_accepts_close_source_name(
+    monkeypatch,
+    mock_handler_input,
+    intent_name,
+    raw_name,
+    resolved_intent,
+    name_slot,
+    id_slot,
+    canonical,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": intent_name,
+                "slots": {"searchQuery": {"name": "searchQuery", "value": raw_name}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    monkeypatch.setattr(
+        ResolverClient,
+        "resolve_utterance",
+        AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": resolved_intent,
+                "slots": {id_slot: ["source-1"], name_slot: canonical},
+            }
+        ),
+    )
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == resolved_intent
+    assert nlp["slots"][id_slot] == ["source-1"]
+    assert "unresolvedReferences" not in nlp["slots"]
+
+
+@pytest.mark.asyncio
 async def test_misrouted_local_community_phrase_is_redirected_without_resolver(
     monkeypatch, mock_handler_input
 ):

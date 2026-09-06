@@ -1387,6 +1387,66 @@ async def test_ambiguity_response_without_original_slot_reprompts_candidates(
 
 
 @pytest.mark.asyncio
+async def test_unresolved_creator_does_not_play_unrelated_fallback(
+    monkeypatch, mock_handler_input
+):
+    from src.controllers.play import PlayByCreatorHandler
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SearchCreatorIntent",
+                "slots": {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "Unknown Speaker Collective",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes.update(
+        {
+            "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+            "_nlp": {
+                "status": "resolved",
+                "intent": "creator",
+                "slots": {
+                    "creatorQuery": "Unknown Speaker Collective",
+                    "unresolvedReferences": [
+                        {
+                            "phrase": "Unknown Speaker Collective",
+                            "expectedTypes": ["creator"],
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    discover = AsyncMock(
+        return_value={
+            "results": [],
+            "total_hits": 0,
+            "failed": False,
+            "client_message": "I couldn't find a creator named Unknown Speaker Collective.",
+        }
+    )
+    fallback = AsyncMock()
+    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.models.search.Search._discover_content_avoiding_recent", fallback)
+
+    await PlayByCreatorHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "couldn't find a creator" in spoken
+    discover.assert_awaited_once()
+    fallback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_creator_ambiguity_without_a_slot_announces_candidates(mock_handler_input):
     from src.controllers.play import PlayByCreatorHandler
 

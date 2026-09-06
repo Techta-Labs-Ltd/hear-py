@@ -318,6 +318,7 @@ class ConfirmationPolicy:
         slots = nlp.get("slots") or {}
         return bool(
             ConfirmationPolicy.has_pending_ambiguity(nlp)
+            or slots.get("unresolvedReferences")
             or nlp.get("directDiscoveryRequest")
             or (
                 nlp.get("ambiguityResolution")

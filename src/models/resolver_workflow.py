@@ -63,6 +63,26 @@ class ResolverWorkflow:
         "PlayLocalIntent": "play local content",
         "PlayRecommendationIntent": "recommend something",
     }
+    SEARCH_QUERY_SOURCE_INTENTS = {
+        "SearchContentIntent": ("general", ("creator", "organization", "publication")),
+        "SearchCreatorIntent": ("creator", ("creator",)),
+        "SearchOrganizationIntent": ("organization", ("organization",)),
+        "SearchPublicationIntent": (
+            "publication",
+            ("publication", "creator", "organization"),
+        ),
+    }
+    SOURCE_NAME_SLOTS = {
+        "creator": ("creatorName", "creatorIds"),
+        "organization": ("organizationName", "organizationIds"),
+        "publication": ("publicationName", "publicationIds"),
+    }
+    SOURCE_QUERY_SLOTS = {
+        "creator": "creatorQuery",
+        "organization": "organizationQuery",
+        "publication": "publicationSourceQuery",
+        "general": "residualQuery",
+    }
 
     @staticmethod
     def _normalize_ordinal(value: object) -> str:
@@ -244,8 +264,65 @@ class ResolverWorkflow:
         return constrained
 
     @staticmethod
+    def _resolved_source_name(result: dict) -> str | None:
+        entity_type = str(result.get("intent") or "")
+        name_slot, id_slot = ResolverWorkflow.SOURCE_NAME_SLOTS.get(
+            entity_type, (None, None)
+        )
+        slots = result.get("slots") or {}
+        if name_slot and id_slot and slots.get(id_slot) and slots.get(name_slot):
+            return str(slots[name_slot]).strip() or None
+        for entity in result.get("entities") or []:
+            if entity.get("type") == entity_type and entity.get("id"):
+                name = str(entity.get("canonicalValue") or entity.get("name") or "").strip()
+                if name:
+                    return name
+        return None
+
+    @staticmethod
+    def _reject_implausible_search_query_source(
+        result: dict, alexa_intent: str, intent_slots: dict
+    ) -> dict:
+        fallback = ResolverWorkflow.SEARCH_QUERY_SOURCE_INTENTS.get(alexa_intent)
+        if not fallback:
+            return result
+        requested = AlexaRequest.get_resolved_slot_value(intent_slots.get("searchQuery"))
+        canonical = ResolverWorkflow._resolved_source_name(result)
+        if not requested or not canonical:
+            return result
+        if SearchFilterUtils.is_plausible_source_match(requested, canonical):
+            return result
+        expected_intent, expected_types = fallback
+        query_slot = ResolverWorkflow.SOURCE_QUERY_SLOTS[expected_intent]
+        reference = {
+            "phrase": requested,
+            "expectedTypes": list(expected_types),
+        }
+        ResolverWorkflow.logger.warning(
+            "Hear: rejected implausible source match intent=%s requested=%s canonical=%s",
+            alexa_intent,
+            requested,
+            canonical,
+        )
+        return {
+            "status": "resolved",
+            "intent": expected_intent,
+            "confidence": "low",
+            "slots": {
+                query_slot: requested,
+                "residualQuery": "" if query_slot != "residualQuery" else requested,
+                "unresolvedReferences": [reference],
+            },
+            "entities": [],
+            "ambiguities": [],
+        }
+
+    @staticmethod
     def apply_alexa_constraints(result: dict, alexa_intent: str, intent_slots: dict) -> dict:
         constrained = ResolverWorkflow._apply_date_constraint(result, intent_slots)
+        constrained = ResolverWorkflow._reject_implausible_search_query_source(
+            constrained, alexa_intent, intent_slots
+        )
         if alexa_intent not in {"WhatsTrendingIntent", "PlayRecommendationIntent"}:
             return constrained
         constrained = {**constrained, "intent": "trending"}

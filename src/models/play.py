@@ -178,6 +178,8 @@ class PlayCreator:
             deps=self._deps,
         )
         if not search_result.get("results"):
+            if search_result.get("client_message"):
+                return Search._build_search_outcome_response(handler_input, search_result)
             fallback = await Search._discover_content_avoiding_recent(
                 handler_input, {"q": ""}, deps=self._deps
             )
