@@ -74,6 +74,16 @@ class DialogValidationPolicy:
             "Say play from, followed by the talking newspaper's full name.",
         ),
     }
+    _SOURCE_NAME_RECOVERY = {
+        "creator_name": (
+            "I couldn't recognize that creator. "
+            "Say play by, followed by the creator's full name."
+        ),
+        "organization_name": (
+            "I couldn't recognize that talking newspaper. "
+            "Say play from, followed by its full name."
+        ),
+    }
 
     @staticmethod
     def _ambiguity_prompt(active: dict) -> tuple[str, str]:
@@ -156,6 +166,14 @@ class DialogValidationPolicy:
                 for slot in DialogSelection.request_slots(handler_input).values()
             )
         ):
+            if intent_name == "AMAZON.FallbackIntent":
+                recovery = DialogValidationPolicy._SOURCE_NAME_RECOVERY[dialog_type]
+                return {
+                    "dialogType": dialog_type,
+                    "speech": recovery,
+                    "reprompt": recovery,
+                    "endSourceCapture": True,
+                }
             speech, reprompt = DialogValidationPolicy._SOURCE_NAME_PROMPTS[dialog_type]
             return {
                 "dialogType": dialog_type,
@@ -237,6 +255,14 @@ class DialogValidationGateHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         failure = RequestContext.request(handler_input)[DialogConstants.VALIDATION_FAILURE]
+        if failure.get("endSourceCapture"):
+            DialogStateManager.clear(handler_input, failure["dialogType"])
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
+                .reprompt(Ssml.ssml(failure["reprompt"]))
+                .set_should_end_session(False)
+                .response
+            )
         if failure.get("captureSource"):
             return (
                 handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))

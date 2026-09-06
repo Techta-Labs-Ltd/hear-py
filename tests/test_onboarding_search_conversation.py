@@ -3096,6 +3096,59 @@ def test_source_name_collision_rechains_the_active_capture_dialog(
     ]
 
 
+@pytest.mark.parametrize(
+    ("dialog_type", "flag", "expected_speech"),
+    [
+        (
+            "creator_name",
+            "awaitingCreatorName",
+            "Say play by, followed by the creator's full name",
+        ),
+        (
+            "organization_name",
+            "awaitingOrganizationName",
+            "Say play from, followed by its full name",
+        ),
+    ],
+)
+def test_unknown_bare_source_reply_exits_capture_with_carrier_phrase(
+    mock_handler_input, dialog_type, flag, expected_speech
+):
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        flag: True,
+        "activeDialog": {
+            "type": dialog_type,
+            "context": {},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    DialogValidationInterceptor().process(mock_handler_input)
+    response = DialogValidationGateHandler().handle(mock_handler_input)
+
+    assert expected_speech in response["outputSpeech"]["ssml"]
+    assert response.get("directives") is None
+    assert response["shouldEndSession"] is False
+    assert User.snapshot(mock_handler_input)[flag] is False
+    assert User.snapshot(mock_handler_input)["activeDialog"] is None
+
+
 @pytest.mark.asyncio
 async def test_generic_publication_pipeline_prompts_when_slot_has_no_value(
     monkeypatch, mock_handler_input
