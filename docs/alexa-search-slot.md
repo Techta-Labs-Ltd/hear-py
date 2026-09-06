@@ -241,8 +241,12 @@ its `Dialog.ElicitSlot` response explicitly chains to `SelectCreatorIntent` or
 manual skill-response delegation. A custom slot no-match is valid when Alexa
 selects the intent: its raw spoken value is still forwarded to the Hear
 resolver. The skill also persists the active source-name dialog so an
-unexpected slotless turn stays in source capture instead of returning to the
-general welcome prompt.
+unexpected intent collision stays in source capture instead of returning to
+the general welcome prompt. If Alexa classifies an unlisted bare name as
+`AMAZON.FallbackIntent` and supplies no slot text, the skill ends that capture
+attempt and asks the listener to repeat it with an explicit carrier phrase:
+`play by <creator>` or `play from <organization>`. That follow-up uses the
+intent-specific `AMAZON.SearchQuery` route and reaches the Hear resolver.
 
 If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
 waiting for an organization or creator, active dialog state takes precedence.
