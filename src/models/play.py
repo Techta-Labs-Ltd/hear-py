@@ -124,6 +124,17 @@ class PlayCreator:
             context={"slotName": "creatorQuery"},
         )
 
+    @staticmethod
+    def _name_retry_response(handler_input):
+        DialogStateManager.clear(handler_input, "creator_name")
+        prompt = "I couldn't recognize that creator. Say play by, followed by the creator's full name."
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(prompt))
+            .reprompt(Ssml.ssml(prompt))
+            .set_should_end_session(False)
+            .response
+        )
+
     async def execute(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
             return (
@@ -166,6 +177,8 @@ class PlayCreator:
                 .response
             )
         if generic_creator_request or (not creator_query and (not resolved_creator)):
+            if AlexaRequest.get_intent_name(handler_input) == "SelectCreatorIntent":
+                return PlayCreator._name_retry_response(handler_input)
             PlayCreator._await_name(handler_input)
             return (
                 handler_input.response_builder.add_directive(
@@ -246,6 +259,17 @@ class PlayOrganization:
             context={"slotName": "organizationQuery"},
         )
 
+    @staticmethod
+    def _name_retry_response(handler_input):
+        DialogStateManager.clear(handler_input, "organization_name")
+        prompt = "I couldn't recognize that talking newspaper. Say play from, followed by its full name."
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(prompt))
+            .reprompt(Ssml.ssml(prompt))
+            .set_should_end_session(False)
+            .response
+        )
+
     async def execute(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
             return (
@@ -306,6 +330,8 @@ class PlayOrganization:
                 .response
             )
         if generic_request or (not org_query and (not resolved_org)):
+            if AlexaRequest.get_intent_name(handler_input) == "SelectOrganizationIntent":
+                return PlayOrganization._name_retry_response(handler_input)
             PlayOrganization._await_name(handler_input)
             return (
                 handler_input.response_builder.add_directive(

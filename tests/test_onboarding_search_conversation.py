@@ -2985,6 +2985,61 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
     resolve.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "flag", "dialog_type", "expected_speech"),
+    [
+        (
+            "SelectCreatorIntent",
+            "awaitingCreatorName",
+            "creator_name",
+            "Say play by, followed by the creator's full name",
+        ),
+        (
+            "SelectOrganizationIntent",
+            "awaitingOrganizationName",
+            "organization_name",
+            "Say play from, followed by its full name",
+        ),
+    ],
+)
+async def test_empty_delegated_source_reply_gives_carrier_phrase_recovery(
+    mock_handler_input, intent_name, flag, dialog_type, expected_speech
+):
+    from src.controllers.play import PlayByCreatorHandler, PlayByOrganizationHandler
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": intent_name, "slots": {}},
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        flag: True,
+        "activeDialog": {
+            "type": dialog_type,
+            "context": {},
+            "expiresAt": 4102444800,
+        },
+    }
+    handler_type = (
+        PlayByCreatorHandler
+        if intent_name == "SelectCreatorIntent"
+        else PlayByOrganizationHandler
+    )
+
+    response = await handler_type(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    assert expected_speech in response["outputSpeech"]["ssml"]
+    assert User.snapshot(mock_handler_input)[flag] is False
+    assert User.snapshot(mock_handler_input)["activeDialog"] is None
+
+
 @pytest.mark.parametrize(
     ("dialog_type", "flag", "slot_name"),
     [
