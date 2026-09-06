@@ -8,6 +8,14 @@ def test_no_match_names_request_and_explains_how_to_retry():
     assert "different topic, creator, publication, or city" in message
 
 
+def test_unresolved_organization_uses_correct_article():
+    message = SearchSpeech.unresolved_reference_message(
+        "Unknown Voice Network", ["organization"]
+    )
+
+    assert "couldn't find an organisation named Unknown Voice Network" in message
+
+
 def test_ambiguous_reference_message_does_not_speak_raw_alias():
     message = SearchSpeech.ambiguous_reference_message(
         "badtn",

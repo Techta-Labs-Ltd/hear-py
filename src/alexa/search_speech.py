@@ -44,8 +44,9 @@ class SearchSpeech:
             kind = f"{', '.join(expected[:-1])} or {expected[-1]}"
         else:
             kind = expected[0] if expected else "name"
+        article = "an" if kind[:1].casefold() in {"a", "e", "i", "o", "u"} else "a"
         return (
-            f"I couldn't find a {kind} named {safe}. Please try the full name, "
+            f"I couldn't find {article} {kind} named {safe}. Please try the full name, "
             "or ask for a different one."
         )
 
