@@ -707,6 +707,151 @@ async def test_selecting_tracks_starts_playback_without_offering_track_choices(m
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slots"),
+    [
+        (
+            "ClarifySelectionIntent",
+            {"selection": {"name": "selection", "value": "tracks"}},
+        ),
+        (
+            "SearchContentIntent",
+            {"searchQuery": {"name": "searchQuery", "value": "tracks"}},
+        ),
+        (
+            "PlayContentIntent",
+            {"topic": {"name": "topic", "value": "tracks"}},
+        ),
+    ],
+)
+async def test_availability_track_choice_survives_alexa_intent_variants(
+    mock_handler_input, intent_name, slots
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, intent_name, slots)
+    format_candidates = [
+        {"type": "format", "id": "publication", "name": "publications"},
+        {"type": "format", "id": "track", "name": "tracks"},
+    ]
+    source = {"type": "creator", "id": "creator-1", "name": "Pendle Voice Dalesman"}
+    DialogStateManager.activate(
+        handler_input,
+        "availability",
+        context={
+            "kind": "format",
+            "source": source,
+            "candidates": format_candidates,
+            "choiceCandidates": format_candidates,
+            "displayedCandidates": format_candidates,
+            "publicationCandidates": [],
+            "publicationCount": 4,
+            "trackCount": 4,
+            "baseSearchPayload": {},
+            "offset": 0,
+        },
+    )
+    deps = AvailabilityTestSupport.dependencies(
+        {"failed": False},
+        {
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-1",
+                    "title": "Pendle Voice News",
+                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                }
+            ],
+            "total_hits": 1,
+        },
+    )
+    deps.playback = SimpleNamespace(
+        queue=SimpleNamespace(initialize=lambda *_args, **_kwargs: None),
+        start=AsyncMock(return_value={"shouldEndSession": True}),
+    )
+    deps.browse = SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None)
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
+
+    assert response == {"shouldEndSession": True}
+    deps.heara.search.assert_awaited_once()
+    deps.playback.start.assert_awaited_once()
+    assert DialogStateManager.get_active(handler_input) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slots"),
+    [
+        ("PlayPublicationIntent", {}),
+        (
+            "ClarifySelectionIntent",
+            {"selection": {"name": "selection", "value": "publications"}},
+        ),
+        (
+            "SearchContentIntent",
+            {"searchQuery": {"name": "searchQuery", "value": "publication"}},
+        ),
+    ],
+)
+async def test_availability_publication_choice_survives_alexa_intent_variants(
+    mock_handler_input, intent_name, slots
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, intent_name, slots)
+    publication = {
+        "type": "publication",
+        "id": "publication-1",
+        "name": "Pendle Voice Dalesman",
+    }
+    format_candidates = [
+        {"type": "format", "id": "publication", "name": "publications"},
+        {"type": "format", "id": "track", "name": "tracks"},
+    ]
+    source = {"type": "creator", "id": "creator-1", "name": "Pendle Voice"}
+    DialogStateManager.activate(
+        handler_input,
+        "availability",
+        context={
+            "kind": "format",
+            "source": source,
+            "candidates": format_candidates,
+            "choiceCandidates": format_candidates,
+            "displayedCandidates": format_candidates,
+            "publicationCandidates": [publication],
+            "publicationCount": 1,
+            "trackCount": 4,
+            "baseSearchPayload": {},
+            "offset": 0,
+        },
+    )
+    deps = AvailabilityTestSupport.dependencies(
+        {"failed": False},
+        {
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-1",
+                    "title": "Pendle Voice Dalesman",
+                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                }
+            ],
+            "total_hits": 1,
+        },
+    )
+    deps.playback = SimpleNamespace(
+        queue=SimpleNamespace(initialize=lambda *_args, **_kwargs: None),
+        start=AsyncMock(return_value={"shouldEndSession": True}),
+    )
+    deps.browse = SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None)
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
+
+    assert response == {"shouldEndSession": True}
+    sent = deps.heara.search.await_args.args[0]
+    assert sent["filter"] == {"publicationIds": ["publication-1"]}
+    deps.playback.start.assert_awaited_once()
+    assert DialogStateManager.get_active(handler_input) is None
+
+
+@pytest.mark.asyncio
 async def test_more_page_failure_keeps_dialog_open_for_retry(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "ShowMoreBrowseIntent")
     candidates = [

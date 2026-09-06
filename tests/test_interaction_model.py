@@ -359,6 +359,18 @@ def test_generated_domain_slots_have_id_free_backend_replaceable_values():
         assert all(item["name"]["value"].strip() for item in types[slot_name]["values"])
 
 
+def test_clarification_slot_has_format_and_ordinal_fallback_values():
+    types = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["types"]
+    }
+    values = {
+        item["name"]["value"].casefold()
+        for item in types["HEAR_CLARIFICATION"]["values"]
+    }
+    assert {"publications", "tracks", "first", "second", "third"}.issubset(values)
+
+
 def test_topic_slot_includes_multi_word_catalog_topics():
     types = {
         item["name"]: item

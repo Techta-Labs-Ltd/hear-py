@@ -292,6 +292,9 @@ class ResolverWorkflow:
         fallback = ResolverWorkflow.SEARCH_QUERY_SOURCE_INTENTS.get(alexa_intent)
         if not fallback:
             return result
+        result_slots = result.get("slots") or {}
+        if result.get("ambiguities") or result_slots.get("ambiguousReferences"):
+            return result
         expected_intent, expected_types = fallback
         requested = AlexaRequest.get_resolved_slot_value(intent_slots.get("searchQuery"))
         canonical_names = ResolverWorkflow._resolved_source_names(result)

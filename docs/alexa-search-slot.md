@@ -7,6 +7,12 @@ The Hear backend generates four separate custom Alexa slot types:
 - `HEAR_CREATOR`
 - `HEAR_TOPIC`
 
+`HEAR_CLARIFICATION` is not generated from the catalogue. Keep its stable
+fallback values in the interaction model for `first`, `second`, `third`,
+`publications`, and `tracks`. During an ambiguity response, the skill replaces
+that slot's active session values with the currently spoken candidates through
+`Dialog.UpdateDynamicEntities`.
+
 These slots give Alexa domain-specific speech-recognition vocabulary. They do
 not replace the Hear resolver or catalog. Every populated slot still travels
 through the resolver, whether Alexa matched a generated value or returned raw
@@ -198,6 +204,17 @@ For every populated domain slot:
 - The resolver remains responsible for entity lookup, ambiguity, permissions,
   availability, and the final search filters.
 - No Alexa entity ID is required or read for these four slots.
+
+For ambiguity and availability replies:
+
+- The skill stores the exact candidates it just spoke and keeps the dialog open.
+- The response supplies those candidates to `HEAR_CLARIFICATION` dynamically,
+  including distinguishing suffixes and ordinal synonyms.
+- A reply such as `first`, `Dalesman`, `publications`, or `tracks` is matched
+  against the stored current page before any new general search is allowed.
+- The resolver remains authoritative for the original request; selecting a
+  spoken candidate uses its stored resolution instead of starting an unrelated
+  catalogue search.
 
 Examples sent to the resolver:
 

@@ -13,7 +13,7 @@ from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.resolver import ResolverInterceptor
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
-from src.models.play import PlayOrganization
+from src.models.play import PlayCreator, PlayOrganization
 from src.models.user import User
 from src.utils.filters import SearchFilterUtils
 
@@ -850,6 +850,92 @@ async def test_search_query_fallback_accepts_close_source_name(
     assert nlp["intent"] == resolved_intent
     assert nlp["slots"][id_slot] == ["source-1"]
     assert "unresolvedReferences" not in nlp["slots"]
+
+
+@pytest.mark.asyncio
+async def test_search_query_fallback_preserves_actionable_creator_ambiguity(
+    monkeypatch, mock_handler_input
+):
+    candidates = [
+        {
+            "type": "creator",
+            "id": f"creator-{index}",
+            "name": name,
+        }
+        for index, name in enumerate(
+            (
+                "Pendle Voice Dalesman",
+                "Pendle Voice Lancashire Life",
+                "Pendle Voice Leader and Times",
+                "Pendle Voice Sunday People",
+                "Pendle Voice Woman's Weekly",
+                "Pendle Voice Yorkshire Life",
+            ),
+            start=1,
+        )
+    ]
+    reference = {"phrase": "pendu voice", "candidates": candidates}
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SearchCreatorIntent",
+                "slots": {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "pendu voice",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    monkeypatch.setattr(
+        ResolverClient,
+        "resolve_utterance",
+        AsyncMock(
+            return_value={
+                "status": "ambiguous",
+                "intent": "creator",
+                "slots": {
+                    "residualQuery": "",
+                    "ambiguousReferences": [reference],
+                    "unresolvedReferences": [],
+                    "searchPlan": {"query": "", "filter": {}},
+                },
+                "entities": [],
+                "ambiguities": [reference],
+            }
+        ),
+    )
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["status"] == "ambiguous"
+    assert nlp["intent"] == "creator"
+    assert nlp["ambiguities"] == [reference]
+    assert nlp["slots"]["ambiguousReferences"] == [reference]
+    assert nlp["slots"]["unresolvedReferences"] == []
+
+    await PlayCreator(deps=ApplicationContainer()).execute(mock_handler_input)
+
+    store = User.snapshot(mock_handler_input)
+    speech = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert store["activeDialog"]["type"] == "ambiguity"
+    assert store["pendingAmbiguity"]["candidates"] == candidates
+    assert "matches beginning Pendle Voice" in speech
+    assert "First, Dalesman" in speech
+    assert "Second, Lancashire Life" in speech
+    assert "Third, Leader and Times" in speech
+    assert "couldn't find" not in speech
+    directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
+    assert directive["type"] == "Dialog.UpdateDynamicEntities"
 
 
 @pytest.mark.asyncio

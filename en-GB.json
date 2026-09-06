@@ -1584,6 +1584,36 @@
                 "value": "Sussex Coast",
                 "synonyms": ["sussex"]
               }
+            },
+            {
+              "name": {
+                "value": "publications",
+                "synonyms": ["publication", "a publication", "the publication"]
+              }
+            },
+            {
+              "name": {
+                "value": "tracks",
+                "synonyms": ["track", "a track", "individual tracks"]
+              }
+            },
+            {
+              "name": {
+                "value": "first",
+                "synonyms": ["first one", "option one", "number one"]
+              }
+            },
+            {
+              "name": {
+                "value": "second",
+                "synonyms": ["second one", "option two", "number two"]
+              }
+            },
+            {
+              "name": {
+                "value": "third",
+                "synonyms": ["third one", "option three", "number three"]
+              }
             }
           ]
         },
