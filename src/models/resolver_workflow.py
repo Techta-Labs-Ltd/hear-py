@@ -297,7 +297,7 @@ class ResolverWorkflow:
         canonical_names = ResolverWorkflow._resolved_source_names(result)
         if not requested:
             return result
-        verified = bool(canonical_names) and any(
+        verified = bool(canonical_names) and all(
             SearchFilterUtils.is_plausible_source_match(requested, canonical)
             for canonical in canonical_names
         )

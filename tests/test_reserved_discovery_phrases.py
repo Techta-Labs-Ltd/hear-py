@@ -767,7 +767,8 @@ async def test_search_query_fallback_rejects_unverified_publication_source(
                 "status": "resolved",
                 "intent": "publication",
                 "slots": {
-                    "publicationSourceQuery": "Orkney Talking Magazine",
+                    "publicationName": "Orkney Talking Magazine",
+                    "publicationSourceQuery": "Dorking Talking Magazine",
                     "residualQuery": "Dorking Talking Magazine August",
                 },
             }

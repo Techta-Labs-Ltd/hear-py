@@ -457,6 +457,52 @@ def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
     assert response["shouldEndSession"] is False
 
 
+def test_search_confirmation_gate_allows_unresolved_reference_handler():
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "SearchCreatorIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "Unknown Speaker Collective",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "creator",
+            "slots": {
+                "creatorQuery": "Unknown Speaker Collective",
+                "unresolvedReferences": [
+                    {
+                        "phrase": "Unknown Speaker Collective",
+                        "expectedTypes": ["creator"],
+                    }
+                ],
+            },
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+
+    assert SearchConfirmationGateHandler().can_handle(handler_input) is False
+    assert IntentDispatchGateHandler(deps=ApplicationContainer()).can_handle(handler_input) is True
+
+
 def test_resolved_pendle_ambiguity_bypasses_generic_clarification():
     envelope = AttrDict(
         {
