@@ -30,6 +30,7 @@ class ResolverConstants:
         "SearchCreatorIntent": ("searchQuery",),
         "SearchOrganizationIntent": ("searchQuery",),
         "SearchPublicationIntent": ("searchQuery",),
+        "SearchLocationIntent": ("searchQuery",),
         "PlayByCreatorIntent": ("creatorQuery", "topic"),
         "SelectCreatorIntent": ("creatorQuery",),
         "PlayByOrganizationIntent": ("organizationQuery", "topic"),

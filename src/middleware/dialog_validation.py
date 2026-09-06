@@ -55,7 +55,10 @@ class DialogValidationPolicy:
     _LOCATION_ONBOARDING_INTENTS = _BINARY_INTENTS | {
         "TownCaptureIntent",
         "SetLocationIntent",
+        "SearchLocationIntent",
         "SkipFeedbackIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
     }
     _REPORT_DECISION_INTENTS = _EXIT_INTENTS | {
         "ReportCreatorIntent",
@@ -184,14 +187,7 @@ class DialogValidationPolicy:
         if (
             dialog_type == "onboarding"
             and onboarding_stage in {"ask_permission", "await_location_confirm"}
-            and (
-                intent_name
-                not in (
-                    DialogValidationPolicy._LOCATION_ONBOARDING_INTENTS
-                    if onboarding_stage == "ask_permission"
-                    else DialogValidationPolicy._BINARY_INTENTS
-                )
-            )
+            and intent_name not in DialogValidationPolicy._LOCATION_ONBOARDING_INTENTS
         ):
             speech, reprompt = DialogValidationPolicy._onboarding_binary_prompt(onboarding_stage)
         elif (

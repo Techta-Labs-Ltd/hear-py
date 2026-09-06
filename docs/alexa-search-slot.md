@@ -107,6 +107,20 @@ Replace the four matching objects in `interactionModel.languageModel.types` in
 `en-GB.json` with the generated objects before uploading and building the
 Alexa interaction model.
 
+For manual Alexa Console imports, the repository also produces one file per
+slot under `alexa-slot-imports/`:
+
+- `HEAR_LOCATION.csv`
+- `HEAR_ORGANIZATION.csv`
+- `HEAR_CREATOR.csv`
+- `HEAR_TOPIC.csv`
+
+Import each file through that slot type's **Bulk Edit** screen. The files do
+not contain a header row. Each row uses `value,,synonym,...`; the deliberately
+blank second column is the optional Alexa identifier, so these imports retain
+the no-ID contract. Importing a file replaces the values currently displayed
+for that slot type, after which the interaction model must be saved and built.
+
 ## What belongs in each slot
 
 | Slot | Backend records |
@@ -129,6 +143,7 @@ on the resolver to clarify the unavoidable ambiguity.
 | `PlayLocalIntent.cityQuery` | `HEAR_LOCATION` |
 | `TownCaptureIntent.townName` | `HEAR_LOCATION` |
 | `SetLocationIntent.location` | `HEAR_LOCATION` |
+| `SearchLocationIntent.searchQuery` | `AMAZON.SearchQuery` runtime fallback |
 | `PlayByOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `SelectOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `PlayPublicationIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
@@ -205,6 +220,22 @@ For every populated domain slot:
   availability, and the final search filters.
 - No Alexa entity ID is required or read for these four slots.
 
+Location capture uses two complementary routes. `TownCaptureIntent` owns a
+bare city that Alexa recognizes from `HEAR_LOCATION`. Explicit phrases such as
+`my city is Dorking`, `I live in Dorking`, and `set my location to Dorking`
+use `SearchLocationIntent`. Its `AMAZON.SearchQuery` value is sent to the same
+location resolver with `prefer_location: true`, including when the city is not
+present in `HEAR_LOCATION`. Both routes use the resolver result to stage the
+same spoken city confirmation before anything is saved.
+
+Alexa's actual `AMAZON.FallbackIntent` request contains no slot and no raw
+transcript for the skill endpoint to recover. It cannot be forwarded to the
+resolver. During location capture, the skill therefore asks the listener to
+use the explicit carrier `my city is <city>` so Alexa can populate
+`SearchLocationIntent` and preserve the words. Saying `skip` can arrive as
+`AMAZON.NextIntent`, `AMAZON.SkipIntent`, or `SkipFeedbackIntent`; all three
+bypass the resolver and complete the current optional onboarding step.
+
 For ambiguity and availability replies:
 
 - The skill stores the exact candidates it just spoke and keeps the dialog open.
@@ -264,10 +295,10 @@ If a new value is absent from the generated slot, Alexa may still return it as
 raw text through the custom slot. Alexa can also select the right source intent
 without populating that custom slot. The interaction model therefore has
 intent-specific `AMAZON.SearchQuery` fallbacks for arbitrary content, creator,
-organization, and publication phrases. These fallbacks preserve the carrier
-meaning (`play`, `play by`, `play from`, or `play publication from`) and send the
-complete captured phrase to the same Hear resolver. They are not a second
-catalogue and do not bypass resolution.
+organization, publication, and location phrases. These fallbacks preserve the
+carrier meaning (`play`, `play by`, `play from`, `play publication from`, or
+`my city is`) and send the complete captured phrase to the same Hear resolver.
+They are not a second catalogue and do not bypass resolution.
 
 When a free-text fallback resolves to a catalogue source, the skill compares
 the captured phrase with the resolver's canonical source name before asking

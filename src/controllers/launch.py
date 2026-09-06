@@ -74,8 +74,11 @@ class TownCaptureHandler(AbstractRequestHandler):
         return AlexaRequest.get_intent_name(handler_input) in {
             "TownCaptureIntent",
             "SetLocationIntent",
+            "SearchLocationIntent",
             "AMAZON.NoIntent",
             "SkipFeedbackIntent",
+            "AMAZON.NextIntent",
+            "AMAZON.SkipIntent",
             "AMAZON.CancelIntent",
         }
 

@@ -139,22 +139,7 @@ class Decline:
                 Speech.WELCOME_REPROMPT,
             )
         if store.get("awaitingProfilePermission"):
-            self._deps.user.update(
-                handler_input,
-                {"awaitingProfilePermission": False, "listenerType": "guest"},
-            )
-            try:
-                await self._deps.listener_sync.sync_for_launch(handler_input)
-            except Exception:
-                pass
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.PROFILE_PERMISSION_SKIPPED)
-                )
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
-            )
+            return await self.finalize_profile_skipped(handler_input)
         if store.get("listModeActive"):
             return self._handle_list_mode_no(handler_input, store)
         if store.get("awaitingStillListening"):
@@ -187,6 +172,24 @@ class Decline:
         )
         response = response or await self._state_response(handler_input, store)
         return response or Decline._generic_response(handler_input)
+
+    async def finalize_profile_skipped(self, handler_input: HandlerInput):
+        self._deps.user.update(
+            handler_input,
+            {"awaitingProfilePermission": False, "listenerType": "guest"},
+        )
+        try:
+            await self._deps.listener_sync.sync_for_launch(handler_input)
+        except Exception:
+            pass
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(Speech.PROFILE_PERMISSION_SKIPPED)
+            )
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
 
     def _handle_search_no(self, handler_input, store, session_attrs):
         """Cycle through search suggestions or give up."""

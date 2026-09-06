@@ -10,9 +10,9 @@ class Speech:
     )
     CHOICES_DISMISSED = "No problem. What would you like to listen to instead?"
     ONBOARDING_LOCATION_REASON = "Your location helps Hear find nearby news, sport, publications, and talking newspapers. Alexa will now ask whether you give Hear permission to use your location."
-    LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say the name of your city, or say skip to continue as a guest."
-    LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say the name of your city, or say skip to continue as a guest."
-    LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check your device location right now. Please say the name of your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say my city is followed by your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say my city is followed by your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check your device location right now. Please say my city is followed by your city, or say skip to continue as a guest."
     PROFILE_PERMISSION_OFFER = "Would you like to share your name and email so I can set up your Hear listener profile? You can say yes or skip."
     PROFILE_PERMISSION_REASON = "Your name lets me personalise Hear, and your email identifies your listener account. Alexa will now ask whether you give Hear permission to share them."
     PROFILE_PERMISSION_SKIPPED = "No problem. You can continue using Hear as a guest. What would you like to listen to?"
@@ -24,14 +24,14 @@ class Speech:
     PROFILE_PERMISSION_GUEST_CONTINUE = "You can continue using Hear as a guest. What would you like to listen to?"
     PROFILE_PERMISSION_COMPLETE = "Thanks. Your Hear listener account is ready. What would you like to listen to?"
     TOWN_SKIPPED = "Okay. What would you like to listen to?"
-    TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say the full city name, or say skip to continue without one."
+    TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say my city is followed by the full city name, or say skip to continue without one."
     TOWN_LOOKUP_UNAVAILABLE_RETRY = (
         "I can't check that city right now. Please try the city name again."
     )
     TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
     CITY_SETUP_GUIDANCE = "Sorry, I still couldn't identify your city. You can update Device Location for this Echo in the Alexa app and then relaunch Hear, try saying your city again, or say skip to continue."
     REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
-    REPROMPT_ASK_TOWN = "Which city are you in? You can also say skip."
+    REPROMPT_ASK_TOWN = "Say my city is followed by your city. You can also say skip."
     ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which city are you in?"
     COMMUNITY_NEEDS_TOWN = (
         "I'll need your city to find local content. Would you like to set that up?"
@@ -259,9 +259,9 @@ class Speech:
     @staticmethod
     def WELCOME_FIRST_ASK_TOWN(name):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. Which city are you in?"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. Say my city is followed by your city."
             if name
-            else "Hello, welcome to Hear. Which city are you in?"
+            else "Hello, welcome to Hear. Say my city is followed by your city."
         )
 
     @staticmethod

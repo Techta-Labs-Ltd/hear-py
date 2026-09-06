@@ -459,12 +459,20 @@ def test_onboarding_permission_accepts_spoken_location_reply(mock_handler_input)
             },
         },
     )
-    _intent(mock_handler_input, "TownCaptureIntent")
-    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
-    assert failure is None
+    for allowed in (
+        "TownCaptureIntent",
+        "SetLocationIntent",
+        "SearchLocationIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
+    ):
+        _intent(mock_handler_input, allowed)
+        assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
 
 
-def test_onboarding_town_confirmation_accepts_only_yes_or_no(mock_handler_input):
+def test_onboarding_town_confirmation_accepts_location_correction_and_skip(
+    mock_handler_input,
+):
     User.update(
         mock_handler_input,
         {
@@ -475,7 +483,15 @@ def test_onboarding_town_confirmation_accepts_only_yes_or_no(mock_handler_input)
             },
         },
     )
-    for allowed in ("AMAZON.YesIntent", "AMAZON.NoIntent"):
+    for allowed in (
+        "AMAZON.YesIntent",
+        "AMAZON.NoIntent",
+        "TownCaptureIntent",
+        "SetLocationIntent",
+        "SearchLocationIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
+    ):
         _intent(mock_handler_input, allowed)
         assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
     _intent(mock_handler_input, "PlayByCreatorIntent")

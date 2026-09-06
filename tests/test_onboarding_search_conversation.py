@@ -78,6 +78,19 @@ def _town_request(mock_handler_input, value: str):
     return mock_handler_input
 
 
+def _intent_request(mock_handler_input, intent_name: str, slots: dict | None = None):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": intent_name, "slots": slots or {}},
+        }
+    )
+    mock_handler_input.attributes_manager.get_session_attributes = lambda: {}
+    return mock_handler_input
+
+
 @pytest.mark.asyncio
 async def test_external_resolver_call_sends_interpretation_progressive(mock_handler_input):
     resolver = SimpleNamespace(
@@ -501,6 +514,115 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
         "prefer_location": True,
         "timeout_ms": 5000,
     }
+
+
+@pytest.mark.asyncio
+async def test_unknown_city_search_query_reaches_the_location_resolver(mock_handler_input):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "resolution": {
+                    "match": {
+                        "city": "Dorking",
+                        "locality": "Dorking",
+                        "countryCode": "GB",
+                        "latitude": 51.2323,
+                        "longitude": -0.3338,
+                    },
+                    "candidates": [],
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "SearchLocationIntent",
+        {"searchQuery": {"name": "searchQuery", "value": "dorking"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+    }
+
+    await ResolverInterceptor(deps=container).process(handler_input)
+
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"] == {"townName": "dorking", "placeName": "dorking"}
+    assert TownCaptureHandler(deps=container).can_handle(handler_input) is True
+
+    await TownCaptureHandler(deps=container).handle(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "dorking",
+        alexa_user_id="amzn1.ask.account.TEST",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    store = User.snapshot(handler_input)
+    assert store["onboardingStage"] == "await_location_confirm"
+    assert store["pendingLocationConfirm"]["city"] == "Dorking"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stage",
+    ["ask_permission", "ask_town", "await_location_confirm"],
+)
+async def test_next_intent_skips_every_location_onboarding_stage(
+    mock_handler_input, stage
+):
+    from src.middleware.onboarding_gate import OnboardingGateHandler
+
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock())
+    container = ApplicationContainer(resolver=resolver)
+    handler_input = _intent_request(mock_handler_input, "AMAZON.NextIntent")
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": stage,
+        "awaitingLocationConfirm": stage == "await_location_confirm",
+        "pendingLocationConfirm": (
+            {"city": "Dorking"} if stage == "await_location_confirm" else None
+        ),
+    }
+    gate = OnboardingGateHandler(deps=container)
+
+    assert gate.can_handle(handler_input) is True
+    await gate.handle(handler_input)
+
+    resolver.resolve_utterance.assert_not_awaited()
+    store = User.snapshot(handler_input)
+    assert store["onboardingComplete"] is True
+    assert store["onboardingStage"] is None
+    assert store["awaitingLocationConfirm"] is False
+    assert store["pendingLocationConfirm"] is None
+    assert store["awaitingProfilePermission"] is True
+
+
+@pytest.mark.asyncio
+async def test_next_intent_skips_optional_profile_setup(mock_handler_input):
+    from src.middleware.onboarding_gate import OnboardingGateHandler
+
+    listener_sync = SimpleNamespace(sync_for_launch=AsyncMock(return_value=None))
+    container = ApplicationContainer(listener_sync=listener_sync)
+    handler_input = _intent_request(mock_handler_input, "AMAZON.NextIntent")
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingProfilePermission": True,
+    }
+    gate = OnboardingGateHandler(deps=container)
+
+    assert gate.can_handle(handler_input) is True
+    await gate.handle(handler_input)
+
+    store = User.snapshot(handler_input)
+    assert store["awaitingProfilePermission"] is False
+    assert store["listenerType"] == "guest"
+    listener_sync.sync_for_launch.assert_awaited_once_with(handler_input)
 
 
 @pytest.mark.asyncio

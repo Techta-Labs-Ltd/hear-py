@@ -51,8 +51,12 @@ class ResolverWorkflowRunner:
     @staticmethod
     def _capture_location(handler_input, context: dict) -> bool:
         alexa_intent = context["alexa_intent"]
-        if alexa_intent == "SetLocationIntent" and not context["ambiguity_active"]:
-            town = AlexaRequest.get_resolved_slot_value(context["slots"].get("location"))
+        if alexa_intent in {
+            "SetLocationIntent",
+            "SearchLocationIntent",
+        } and not context["ambiguity_active"]:
+            slot_name = "searchQuery" if alexa_intent == "SearchLocationIntent" else "location"
+            town = AlexaRequest.get_resolved_slot_value(context["slots"].get(slot_name))
             ResolverWorkflow._set_nlp(
                 handler_input,
                 {

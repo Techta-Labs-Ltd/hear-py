@@ -55,6 +55,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
     expected = {
         "TownCaptureIntent": {"townName": "HEAR_LOCATION"},
         "SetLocationIntent": {"location": "HEAR_LOCATION"},
+        "SearchLocationIntent": {"searchQuery": "AMAZON.SearchQuery"},
         "PlayContentIntent": {
             "topic": "HEAR_TOPIC",
             "format": "ContentFormat",
@@ -115,7 +116,7 @@ def test_town_intent_owns_bare_city_and_uses_generated_location_slot():
     intents = {item["name"]: item for item in model["intents"]}
     city_type = next((item for item in model["types"] if item["name"] == "HEAR_LOCATION"))
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
-    assert "{townName}" in intents["TownCaptureIntent"]["samples"]
+    assert intents["TownCaptureIntent"]["samples"] == ["{townName}"]
     assert "{location}" not in intents["SetLocationIntent"]["samples"]
     assert "id" not in herne_bay
     assert "arn bay" in herne_bay["name"]["synonyms"]
@@ -239,6 +240,7 @@ def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
         "SearchCreatorIntent": "play by {searchQuery}",
         "SearchOrganizationIntent": "play from {searchQuery}",
         "SearchPublicationIntent": "play publication from {searchQuery}",
+        "SearchLocationIntent": "my city is {searchQuery}",
     }
     for intent_name, sample in expected_samples.items():
         slots = intents[intent_name]["slots"]

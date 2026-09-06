@@ -237,6 +237,32 @@
           ]
         },
         {
+          "name": "SearchLocationIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "my city is {searchQuery}",
+            "my town is {searchQuery}",
+            "I am in {searchQuery}",
+            "I live in {searchQuery}",
+            "my area is {searchQuery}",
+            "set my location to {searchQuery}",
+            "set my town to {searchQuery}",
+            "change my location to {searchQuery}",
+            "update my location to {searchQuery}",
+            "I've moved to {searchQuery}",
+            "I moved to {searchQuery}",
+            "I now live in {searchQuery}",
+            "change my town to {searchQuery}",
+            "change my city to {searchQuery}",
+            "update my town to {searchQuery}"
+          ]
+        },
+        {
           "name": "PlayContentIntent",
           "slots": [
             {
@@ -1213,18 +1239,12 @@
               "name": "townName",
               "type": "HEAR_LOCATION",
               "samples": [
-                "{townName}",
-                "I am in {townName}",
-                "I live in {townName}"
+                "{townName}"
               ]
             }
           ],
           "samples": [
-            "{townName}",
-            "I am in {townName}",
-            "I live in {townName}",
-            "my town is {townName}",
-            "my city is {townName}"
+            "{townName}"
           ]
         },
         {
@@ -1234,24 +1254,11 @@
               "name": "location",
               "type": "HEAR_LOCATION",
               "samples": [
-                "{location}",
-                "I am in {location}",
-                "I live in {location}"
+                "{location}"
               ]
             }
           ],
           "samples": [
-            "set my location to {location}",
-            "set my town to {location}",
-            "change my location to {location}",
-            "update my location to {location}",
-            "my area is {location}",
-            "I've moved to {location}",
-            "I moved to {location}",
-            "I now live in {location}",
-            "change my town to {location}",
-            "change my city to {location}",
-            "update my town to {location}",
             "change my location",
             "change my town",
             "change my city",

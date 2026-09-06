@@ -11,11 +11,15 @@ from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
+from src.models.decline import Decline
 from src.models.onboarding import Onboarding, TownCapture
 
 
 class OnboardingPolicy:
     logger = logging.getLogger(__name__)
+    _SKIP_INTENTS = frozenset(
+        {"SkipFeedbackIntent", "AMAZON.NextIntent", "AMAZON.SkipIntent"}
+    )
     _ASK_TOWN_OWNED_INTENTS = frozenset(
         {
             "TownCaptureIntent",
@@ -98,14 +102,18 @@ class OnboardingGateHandler(AbstractRequestHandler):
         if rt != "IntentRequest":
             return False
         store = self._deps.user.snapshot(handler_input)
+        intent = AlexaRequest.get_intent_name(handler_input)
+        if store.get("awaitingProfilePermission") and intent in OnboardingPolicy._SKIP_INTENTS:
+            return True
         if not OnboardingPolicy._is_new_user(
             store
         ) or OnboardingPolicy._onboarding_completed_in_session(handler_input):
             return False
-        intent = AlexaRequest.get_intent_name(handler_input)
         if intent in ("AMAZON.StopIntent", "AMAZON.CancelIntent"):
             return False
         stage = OnboardingPolicy._get_stage(handler_input, store)
+        if stage and intent in OnboardingPolicy._SKIP_INTENTS:
+            return True
         if stage in (
             OnboardingConstants.ONBOARDING_ASK_TOWN,
             OnboardingConstants.ONBOARDING_AWAIT_CONFIRM,
@@ -133,6 +141,14 @@ class OnboardingGateHandler(AbstractRequestHandler):
         intent = AlexaRequest.get_intent_name(handler_input)
         store = self._deps.user.snapshot(handler_input)
         stage = OnboardingPolicy._get_stage(handler_input, store)
+        if intent in OnboardingPolicy._SKIP_INTENTS:
+            if store.get("awaitingProfilePermission"):
+                return await Decline(deps=self._deps).finalize_profile_skipped(
+                    handler_input
+                )
+            return Onboarding.finalize_town_skipped(
+                handler_input, store, deps=self._deps
+            )
         if stage == OnboardingConstants.ONBOARDING_ASK_TOWN:
             attrs = RequestContext.request(handler_input) or {}
             nlp = attrs.get("_nlp") or {}
@@ -162,7 +178,11 @@ class OnboardingGateHandler(AbstractRequestHandler):
                 return Onboarding.handle_permission_no(handler_input, store, deps=self._deps)
             if intent in {"SkipFeedbackIntent", "AMAZON.CancelIntent"}:
                 return Onboarding.finalize_town_skipped(handler_input, store, deps=self._deps)
-            if intent in {"TownCaptureIntent", "SetLocationIntent"}:
+            if intent in {
+                "TownCaptureIntent",
+                "SetLocationIntent",
+                "SearchLocationIntent",
+            }:
                 self._deps.onboarding.begin_town_capture(handler_input)
                 return await TownCapture(deps=self._deps).execute(handler_input)
         return (

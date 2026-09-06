@@ -160,6 +160,7 @@ class DiscoveryConstants:
         "SelectOrganizationIntent": "organization",
         "PlayPublicationIntent": "publication",
         "SearchPublicationIntent": "publication",
+        "SearchLocationIntent": "location_set",
         "WhatsTrendingIntent": "trending",
         "PlayRecommendationIntent": "trending",
         "PlayLocalIntent": "local",
