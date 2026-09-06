@@ -116,6 +116,14 @@ class PlayCreator:
     def __init__(self, *, deps: object | None = None):
         self._deps = Search._dependencies(deps)
 
+    @staticmethod
+    def _await_name(handler_input) -> None:
+        DialogStateManager.activate(
+            handler_input,
+            "creator_name",
+            context={"slotName": "creatorQuery"},
+        )
+
     async def execute(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
             return (
@@ -158,7 +166,7 @@ class PlayCreator:
                 .response
             )
         if generic_creator_request or (not creator_query and (not resolved_creator)):
-            User.update(handler_input, {"awaitingCreatorName": True})
+            PlayCreator._await_name(handler_input)
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml("Which creator would you like to hear?")
@@ -232,6 +240,14 @@ class PlayOrganization:
     def __init__(self, *, deps: object | None = None):
         self._deps = Search._dependencies(deps)
 
+    @staticmethod
+    def _await_name(handler_input) -> None:
+        DialogStateManager.activate(
+            handler_input,
+            "organization_name",
+            context={"slotName": "organizationQuery"},
+        )
+
     async def execute(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
             return (
@@ -292,7 +308,7 @@ class PlayOrganization:
                 .response
             )
         if generic_request or (not org_query and (not resolved_org)):
-            User.update(handler_input, {"awaitingOrganizationName": True})
+            PlayOrganization._await_name(handler_input)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
                 .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
@@ -317,7 +333,7 @@ class PlayOrganization:
                 .response
             )
         if not resolved_org:
-            User.update(handler_input, {"awaitingOrganizationName": True})
+            PlayOrganization._await_name(handler_input)
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml(SearchSpeech.talking_newspaper_not_recognized(org_query))

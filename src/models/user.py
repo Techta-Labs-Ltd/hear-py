@@ -481,6 +481,8 @@ class User:
                 state.get("pendingResolution"),
             ),
             (state.get("pendingAmbiguity"), "ambiguity", state.get("pendingAmbiguity")),
+            (state.get("awaitingCreatorName"), "creator_name", {}),
+            (state.get("awaitingOrganizationName"), "organization_name", {}),
             (
                 state.get("onboardingStage"),
                 "onboarding",

@@ -223,7 +223,7 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
         "PlayByOrganizationIntent",
         "PlayPublicationIntent",
     ):
-        assert dialog_intents[source_intent]["slots"][0]["elicitationRequired"] is False
+        assert dialog_intents[source_intent]["slots"][0]["elicitationRequired"] is True
     assert dialog_intents["ClarifySelectionIntent"]["slots"][0]["elicitationRequired"] is True
 
 

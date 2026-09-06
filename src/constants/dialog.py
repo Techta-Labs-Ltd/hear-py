@@ -8,6 +8,8 @@ class DialogConstants:
         "report_decision": "awaitingReportDecision",
         "resume": "awaitingResume",
         "notification": "awaitingNotificationChoice",
+        "creator_name": "awaitingCreatorName",
+        "organization_name": "awaitingOrganizationName",
     }
     TRANSIENT_DISCOVERY_DIALOGS = frozenset(
         {

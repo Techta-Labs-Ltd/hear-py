@@ -9,12 +9,40 @@ from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DialogSelection
+from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.onboarding import Onboarding
 
 
 class FallbackModule:
     logger = logging.getLogger(__name__)
+
+    @staticmethod
+    def source_name_response(handler_input, store: dict):
+        active = DialogStateManager.active_from_store(store) or {}
+        dialog_type = active.get("type")
+        prompts = {
+            "creator_name": (
+                "Which creator would you like to hear?",
+                "Just say their name.",
+                "creatorQuery",
+            ),
+            "organization_name": (
+                Speech.ASK_TALKING_NEWSPAPER,
+                Speech.ASK_TALKING_NEWSPAPER_REPROMPT,
+                "organizationQuery",
+            ),
+        }
+        prompt = prompts.get(dialog_type)
+        if not prompt:
+            return None
+        speech, reprompt, slot_name = prompt
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(speech))
+            .reprompt(Ssml.ssml(reprompt))
+            .add_directive({"type": "Dialog.ElicitSlot", "slotToElicit": slot_name})
+            .set_should_end_session(False)
+            .response
+        )
 
 
 class FallbackHandler(AbstractRequestHandler):
@@ -31,6 +59,9 @@ class FallbackHandler(AbstractRequestHandler):
 
     def handle(self, handler_input: HandlerInput):
         store = self._deps.user.snapshot(handler_input)
+        source_name_response = FallbackModule.source_name_response(handler_input, store)
+        if source_name_response is not None:
+            return source_name_response
         pending = store.get("pendingAmbiguity")
         if isinstance(pending, dict) and pending.get("candidates"):
             slots = pending.get("slots") or {}
@@ -95,6 +126,11 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
         )
         if redirect is not None:
             return redirect
+        source_name_response = FallbackModule.source_name_response(
+            handler_input, self._deps.user.snapshot(handler_input)
+        )
+        if source_name_response is not None:
+            return source_name_response
         return (
             handler_input.response_builder.speak(Speech.FALLBACK_SPEECH)
             .reprompt(Speech.WELCOME_REPROMPT)

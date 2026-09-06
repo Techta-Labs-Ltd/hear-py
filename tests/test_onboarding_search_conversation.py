@@ -16,6 +16,7 @@ from src.container import ApplicationContainer
 from src.controllers.browse import BrowseNavigationHandler
 from src.controllers.launch import TownCaptureHandler
 from src.middleware.resolver import ResolverInterceptor
+from src.models.dialog import DialogStateManager
 from src.models.user import User
 from src.registry import RouteRegistry
 
@@ -2795,6 +2796,7 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
     await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     assert User.snapshot(mock_handler_input)["awaitingOrganizationName"] is True
+    assert DialogStateManager.get_active(mock_handler_input)["type"] == "organization_name"
     chained_builder = mock_handler_input.response_builder.speak.return_value.reprompt.return_value
     chained_builder.add_directive.assert_called_once()
     directive = chained_builder.add_directive.call_args.args[0]
@@ -2972,7 +2974,59 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
     assert response["directives"] == [{"type": "Dialog.ElicitSlot", "slotToElicit": "creatorQuery"}]
     assert response["shouldEndSession"] is False
     assert User.snapshot(mock_handler_input)["awaitingCreatorName"] is True
+    assert DialogStateManager.get_active(mock_handler_input)["type"] == "creator_name"
     resolve.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("dialog_type", "flag", "speech", "slot_name"),
+    [
+        (
+            "creator_name",
+            "awaitingCreatorName",
+            "Which creator would you like to hear",
+            "creatorQuery",
+        ),
+        (
+            "organization_name",
+            "awaitingOrganizationName",
+            "Which talking newspaper would you like",
+            "organizationQuery",
+        ),
+    ],
+)
+def test_source_name_fallback_reprompts_the_active_capture_dialog(
+    mock_handler_input, dialog_type, flag, speech, slot_name
+):
+    from src.controllers.fallback import FallbackHandler
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        flag: True,
+        "activeDialog": {
+            "type": dialog_type,
+            "context": {"slotName": slot_name},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    response = FallbackHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    assert speech in response["outputSpeech"]["ssml"]
+    assert response["shouldEndSession"] is False
+    assert response["directives"] == [
+        {"type": "Dialog.ElicitSlot", "slotToElicit": slot_name}
+    ]
 
 
 @pytest.mark.asyncio

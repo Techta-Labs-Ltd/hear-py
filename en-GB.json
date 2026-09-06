@@ -1705,7 +1705,7 @@
               "name": "creatorQuery",
               "type": "HEAR_CREATOR",
               "confirmationRequired": false,
-              "elicitationRequired": false,
+              "elicitationRequired": true,
               "prompts": {
                 "elicitation": "Elicit.PlayByCreatorIntent.creatorQuery"
               }
@@ -1721,7 +1721,7 @@
               "name": "organizationQuery",
               "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
-              "elicitationRequired": false,
+              "elicitationRequired": true,
               "prompts": {
                 "elicitation": "Elicit.PlayByOrganizationIntent.organizationQuery"
               }
@@ -1753,7 +1753,7 @@
               "name": "publicationSourceQuery",
               "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
-              "elicitationRequired": false,
+              "elicitationRequired": true,
               "prompts": {
                 "elicitation": "Elicit.PlayPublicationIntent.publicationSourceQuery"
               }
