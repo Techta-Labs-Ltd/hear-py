@@ -161,7 +161,7 @@ class DialogValidationPolicy:
                 "dialogType": dialog_type,
                 "speech": speech,
                 "reprompt": reprompt,
-                "delegateSource": True,
+                "captureSource": True,
             }
         if (
             dialog_type == "onboarding"
@@ -237,9 +237,11 @@ class DialogValidationGateHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         failure = RequestContext.request(handler_input)[DialogConstants.VALIDATION_FAILURE]
-        if failure.get("delegateSource"):
+        if failure.get("captureSource"):
             return (
-                handler_input.response_builder.add_directive(
+                handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
+                .reprompt(Ssml.ssml(failure["reprompt"]))
+                .add_directive(
                     DialogStateManager.source_capture_directive(failure["dialogType"])
                 )
                 .set_should_end_session(False)

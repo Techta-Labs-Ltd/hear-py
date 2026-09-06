@@ -249,7 +249,8 @@ class DialogStateManager:
         capture = DialogConstants.SOURCE_CAPTURE[dialog_type]
         slot_name = capture["slotName"]
         return {
-            "type": "Dialog.Delegate",
+            "type": "Dialog.ElicitSlot",
+            "slotToElicit": slot_name,
             "updatedIntent": {
                 "name": capture["intentName"],
                 "confirmationStatus": "NONE",

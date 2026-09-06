@@ -181,7 +181,11 @@ class PlayCreator:
                 return PlayCreator._name_retry_response(handler_input)
             PlayCreator._await_name(handler_input)
             return (
-                handler_input.response_builder.add_directive(
+                handler_input.response_builder.speak(
+                    Ssml.ssml("Which creator would you like to hear?")
+                )
+                .reprompt(Ssml.ssml("Just say their name."))
+                .add_directive(
                     DialogStateManager.source_capture_directive("creator_name")
                 )
                 .set_should_end_session(False)
@@ -334,7 +338,9 @@ class PlayOrganization:
                 return PlayOrganization._name_retry_response(handler_input)
             PlayOrganization._await_name(handler_input)
             return (
-                handler_input.response_builder.add_directive(
+                handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
+                .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
+                .add_directive(
                     DialogStateManager.source_capture_directive("organization_name")
                 )
                 .set_should_end_session(False)

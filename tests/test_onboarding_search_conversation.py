@@ -2797,8 +2797,9 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     assert User.snapshot(mock_handler_input)["awaitingOrganizationName"] is True
     assert DialogStateManager.get_active(mock_handler_input)["type"] == "organization_name"
-    mock_handler_input.response_builder.add_directive.assert_called_once()
-    directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
+    chained_builder = mock_handler_input.response_builder.speak.return_value.reprompt.return_value
+    chained_builder.add_directive.assert_called_once()
+    directive = chained_builder.add_directive.call_args.args[0]
     assert directive == DialogStateManager.source_capture_directive("organization_name")
     json.dumps(directive)
     discover.assert_not_awaited()
@@ -2839,7 +2840,7 @@ async def test_generic_talking_newspaper_pipeline_prompts_when_slot_has_no_value
     response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
         mock_handler_input
     )
-    assert "outputSpeech" not in response
+    assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
         DialogStateManager.source_capture_directive("organization_name")
     ]
@@ -2883,7 +2884,7 @@ async def test_generic_talking_newspaper_slot_value_still_prompts_for_name(
     response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
         mock_handler_input
     )
-    assert "outputSpeech" not in response
+    assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
         DialogStateManager.source_capture_directive("organization_name")
     ]
@@ -2933,7 +2934,7 @@ async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
     response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
         mock_handler_input
     )
-    assert "outputSpeech" not in response
+    assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
         DialogStateManager.source_capture_directive("organization_name")
     ]
@@ -2975,7 +2976,7 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
     response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
         mock_handler_input
     )
-    assert "outputSpeech" not in response
+    assert "Which creator would you like to hear" in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
         DialogStateManager.source_capture_directive("creator_name")
     ]
@@ -3088,7 +3089,7 @@ def test_source_name_collision_rechains_the_active_capture_dialog(
     assert gate.can_handle(mock_handler_input)
     response = gate.handle(mock_handler_input)
 
-    assert "outputSpeech" not in response
+    assert "outputSpeech" in response
     assert response["shouldEndSession"] is False
     assert response["directives"] == [
         DialogStateManager.source_capture_directive(dialog_type)

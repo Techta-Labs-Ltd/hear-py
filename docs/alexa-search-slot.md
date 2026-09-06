@@ -236,13 +236,13 @@ still go through the same Hear resolver as the longer play intents.
 The source slots on `PlayByCreatorIntent`, `PlayByOrganizationIntent`, and
 `PlayPublicationIntent` must remain `elicitationRequired: true`. When the skill
 asks which creator, talking newspaper, or publication the listener wants,
-its `Dialog.Delegate` response explicitly chains to `SelectCreatorIntent` or
+its `Dialog.ElicitSlot` response explicitly chains to `SelectCreatorIntent` or
 `SelectOrganizationIntent`. Those selection intents use required slots and
-Alexa-managed delegation. A custom slot no-match is valid when Alexa selects
-the intent: its raw spoken value is still forwarded to the Hear resolver. The
-skill also persists the active source-name dialog so an unexpected slotless
-turn repeats the same source question instead of returning to the general
-welcome prompt.
+manual skill-response delegation. A custom slot no-match is valid when Alexa
+selects the intent: its raw spoken value is still forwarded to the Hear
+resolver. The skill also persists the active source-name dialog so an
+unexpected slotless turn stays in source capture instead of returning to the
+general welcome prompt.
 
 If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
 waiting for an organization or creator, active dialog state takes precedence.

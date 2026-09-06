@@ -1687,7 +1687,7 @@
         },
         {
           "name": "SelectCreatorIntent",
-          "delegationStrategy": "ALWAYS",
+          "delegationStrategy": "SKILL_RESPONSE",
           "confirmationRequired": false,
           "prompts": {},
           "slots": [
@@ -1704,7 +1704,7 @@
         },
         {
           "name": "SelectOrganizationIntent",
-          "delegationStrategy": "ALWAYS",
+          "delegationStrategy": "SKILL_RESPONSE",
           "confirmationRequired": false,
           "prompts": {},
           "slots": [
