@@ -218,8 +218,30 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
         }
         for dialog_slot in dialog_intent["slots"]:
             assert dialog_slot["type"] == language_slots[dialog_slot["name"]]
-    assert dialog_intents["PlayByCreatorIntent"]["slots"][0]["elicitationRequired"] is True
+    for source_intent in (
+        "PlayByCreatorIntent",
+        "PlayByOrganizationIntent",
+        "PlayPublicationIntent",
+    ):
+        assert dialog_intents[source_intent]["slots"][0]["elicitationRequired"] is False
     assert dialog_intents["ClarifySelectionIntent"]["slots"][0]["elicitationRequired"] is True
+
+
+def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
+    intents = {
+        item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    expected_samples = {
+        "SearchContentIntent": "play {searchQuery}",
+        "SearchCreatorIntent": "play by {searchQuery}",
+        "SearchOrganizationIntent": "play from {searchQuery}",
+        "SearchPublicationIntent": "play publication from {searchQuery}",
+    }
+    for intent_name, sample in expected_samples.items():
+        slots = intents[intent_name]["slots"]
+        assert slots == [{"name": "searchQuery", "type": "AMAZON.SearchQuery"}]
+        assert sample in intents[intent_name]["samples"]
+        assert all(value.endswith("{searchQuery}") for value in intents[intent_name]["samples"])
 
 
 def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms():
@@ -241,6 +263,7 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
         if item["name"]["value"] == "newspaper"
     )
     assert {
+        "play {organizationQuery}",
         "play from {organizationQuery}",
     }.issubset(organization_samples)
     assert {
@@ -267,9 +290,23 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
     assert {"Tynedale", "Tyndale", "Tyne Dale"}.issubset(
         set(tynedale["name"]["synonyms"])
     )
-    assert (
-        "play the {publicationSort} publication from {publicationSourceQuery} talking news"
-        in intents["PlayPublicationIntent"]["samples"]
+    lossy_source_suffixes = (
+        "{organizationQuery} talking newspaper",
+        "{organizationQuery} talking news",
+        "{organizationQuery} talking news paper",
+        "{publicationSourceQuery} talking newspaper",
+        "{publicationSourceQuery} talking news",
+    )
+    source_samples = (
+        organization_samples
+        | set(organization_slot["samples"])
+        | set(intents["SelectOrganizationIntent"]["samples"])
+        | set(intents["PlayPublicationIntent"]["samples"])
+    )
+    assert all(
+        suffix not in sample
+        for sample in source_samples
+        for suffix in lossy_source_suffixes
     )
 
 

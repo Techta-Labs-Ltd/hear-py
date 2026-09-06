@@ -150,12 +150,16 @@ class DiscoveryConstants:
     )
     ALEXA_TO_NLP = {
         "PlayContentIntent": "general",
+        "SearchContentIntent": "general",
         "PlayLatestContentIntent": "general",
         "PlayByCreatorIntent": "creator",
+        "SearchCreatorIntent": "creator",
         "SelectCreatorIntent": "creator",
         "PlayByOrganizationIntent": "organization",
+        "SearchOrganizationIntent": "organization",
         "SelectOrganizationIntent": "organization",
         "PlayPublicationIntent": "publication",
+        "SearchPublicationIntent": "publication",
         "WhatsTrendingIntent": "trending",
         "PlayRecommendationIntent": "trending",
         "PlayLocalIntent": "local",

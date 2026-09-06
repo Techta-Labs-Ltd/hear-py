@@ -6,6 +6,7 @@ import pytest
 
 from src.alexa.runtime import AttrDict
 from src.clients.resolver import ResolverClient
+from src.constants.discovery import DiscoveryConstants
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.middleware.confirmation import ConfirmationMiddleware
@@ -524,6 +525,13 @@ async def test_date_only_discovery_builds_date_filter_without_resolver_text(
             "play by New Speaker",
             "creator",
         ),
+        (
+            "PlayPublicationIntent",
+            "publicationSourceQuery",
+            "Dorking Talking Magazine",
+            "play publication from Dorking Talking Magazine",
+            "publication",
+        ),
     ],
 )
 async def test_out_of_catalog_source_name_still_reaches_backend_resolver(
@@ -579,6 +587,85 @@ async def test_out_of_catalog_source_name_still_reaches_backend_resolver(
     assert mock_handler_input.attributes_manager.request_attributes["_nlp"]["intent"] == (
         resolved_intent
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "raw_name", "expected_utterance", "resolved_intent"),
+    [
+        (
+            "SearchContentIntent",
+            "Dorking Talking Magazine",
+            "play Dorking Talking Magazine",
+            "organization",
+        ),
+        (
+            "SearchCreatorIntent",
+            "Unknown Speaker Collective",
+            "play by Unknown Speaker Collective",
+            "creator",
+        ),
+        (
+            "SearchOrganizationIntent",
+            "Unknown Voice Network",
+            "play from Unknown Voice Network",
+            "organization",
+        ),
+        (
+            "SearchPublicationIntent",
+            "Unknown Voice Magazine",
+            "play publication from Unknown Voice Magazine",
+            "publication",
+        ),
+    ],
+)
+async def test_search_query_fallback_preserves_full_name_and_relation(
+    monkeypatch,
+    mock_handler_input,
+    intent_name,
+    raw_name,
+    expected_utterance,
+    resolved_intent,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": intent_name,
+                "slots": {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": raw_name,
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": resolved_intent,
+            "slots": {"residualQuery": ""},
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        expected_utterance,
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == resolved_intent
+    assert nlp["needsRedirect"] is (resolved_intent != DiscoveryConstants.ALEXA_TO_NLP[intent_name])
 
 
 @pytest.mark.asyncio

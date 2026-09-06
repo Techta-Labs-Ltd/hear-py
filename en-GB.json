@@ -178,6 +178,65 @@
           "name": "AMAZON.FallbackIntent"
         },
         {
+          "name": "SearchContentIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play {searchQuery}",
+            "find {searchQuery}",
+            "listen to {searchQuery}"
+          ]
+        },
+        {
+          "name": "SearchCreatorIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play by {searchQuery}",
+            "play something by {searchQuery}",
+            "play from creator {searchQuery}",
+            "find creator {searchQuery}",
+            "find the creator {searchQuery}"
+          ]
+        },
+        {
+          "name": "SearchOrganizationIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play from {searchQuery}",
+            "find organization {searchQuery}",
+            "find organisation {searchQuery}",
+            "find talking newspaper {searchQuery}"
+          ]
+        },
+        {
+          "name": "SearchPublicationIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play publication from {searchQuery}",
+            "play a publication from {searchQuery}",
+            "find publication from {searchQuery}"
+          ]
+        },
+        {
           "name": "PlayContentIntent",
           "slots": [
             {
@@ -480,9 +539,6 @@
               "type": "HEAR_ORGANIZATION",
               "samples": [
                 "{organizationQuery}",
-                "{organizationQuery} talking newspaper",
-                "{organizationQuery} talking news",
-                "{organizationQuery} talking news paper",
                 "the {organizationQuery}",
                 "from {organizationQuery}",
                 "play {organizationQuery}",
@@ -509,16 +565,10 @@
             "play something from a talking news paper",
             "play something from talking news",
             "play me a talking newspaper",
-            "play {organizationQuery} talking newspaper",
-            "play {organizationQuery} talking news",
-            "play {organizationQuery} talking news paper",
+            "play {organizationQuery}",
             "play from {organizationQuery}",
-            "play from {organizationQuery} talking newspaper",
-            "play from {organizationQuery} talking news",
             "play something from {organizationQuery}",
             "play {topic} from {organizationQuery}",
-            "play {topic} from {organizationQuery} talking newspaper",
-            "play {topic} from {organizationQuery} talking news",
             "play me {topic} from {organizationQuery}",
             "find {topic} from {organizationQuery}",
             "play latest from {organizationQuery}",
@@ -554,8 +604,6 @@
           "samples": [
             "play {dateQuery} publication",
             "play {dateQuery} publication from {publicationSourceQuery}",
-            "play {dateQuery} publication from {publicationSourceQuery} talking newspaper",
-            "play {dateQuery} publication from {publicationSourceQuery} talking news",
             "play publication from {publicationSourceQuery} from {dateQuery}",
             "play a publication",
             "play publications",
@@ -570,13 +618,7 @@
             "play the {publicationSort} publication",
             "play {publicationSort} publication from {publicationSourceQuery}",
             "play the {publicationSort} publication from {publicationSourceQuery}",
-            "play {publicationSort} publication from {publicationSourceQuery} talking newspaper",
-            "play {publicationSort} publication from {publicationSourceQuery} talking news",
-            "play the {publicationSort} publication from {publicationSourceQuery} talking newspaper",
-            "play the {publicationSort} publication from {publicationSourceQuery} talking news",
             "play publication from {publicationSourceQuery}",
-            "play publication from {publicationSourceQuery} talking newspaper",
-            "play publication from {publicationSourceQuery} talking news",
             "play a publication from {publicationSourceQuery}",
             "play publications from {publicationSourceQuery}",
             "find publications from {publicationSourceQuery}",
@@ -598,9 +640,6 @@
           ],
           "samples": [
             "{organizationQuery}",
-            "{organizationQuery} talking newspaper",
-            "{organizationQuery} talking news",
-            "{organizationQuery} talking news paper",
             "the {organizationQuery}",
             "{organizationQuery} please"
           ]
@@ -1636,7 +1675,7 @@
               "name": "creatorQuery",
               "type": "HEAR_CREATOR",
               "confirmationRequired": false,
-              "elicitationRequired": true,
+              "elicitationRequired": false,
               "prompts": {
                 "elicitation": "Elicit.PlayByCreatorIntent.creatorQuery"
               }
@@ -1652,7 +1691,7 @@
               "name": "organizationQuery",
               "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
-              "elicitationRequired": true,
+              "elicitationRequired": false,
               "prompts": {
                 "elicitation": "Elicit.PlayByOrganizationIntent.organizationQuery"
               }
@@ -1684,7 +1723,7 @@
               "name": "publicationSourceQuery",
               "type": "HEAR_ORGANIZATION",
               "confirmationRequired": false,
-              "elicitationRequired": true,
+              "elicitationRequired": false,
               "prompts": {
                 "elicitation": "Elicit.PlayPublicationIntent.publicationSourceQuery"
               }

@@ -20,12 +20,16 @@ class ResolverWorkflow:
     logger = logging.getLogger(__name__)
     SEARCH_INTENTS = {
         "PlayContentIntent",
+        "SearchContentIntent",
         "PlayLatestContentIntent",
         "PlayByCreatorIntent",
+        "SearchCreatorIntent",
         "SelectCreatorIntent",
         "PlayByOrganizationIntent",
+        "SearchOrganizationIntent",
         "SelectOrganizationIntent",
         "PlayPublicationIntent",
+        "SearchPublicationIntent",
         "BrowseContentIntent",
         "BrowseByCategoryIntent",
         "WhatsTrendingIntent",

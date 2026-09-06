@@ -144,8 +144,10 @@ Talking Newspaper`.
 4. For an organization whose public name ends in a generic phrase such as
    `Talking Newspaper`, add its distinctive spoken stem as a synonym. For
    example, the canonical value remains `Tynedale Talking Newspaper`, while
-   `Tynedale`, `Tyndale`, and `Tyne Dale` are synonyms. The intent grammar can
-   supply `talking news` or `talking newspaper` around that stem.
+   `Tynedale`, `Tyndale`, and `Tyne Dale` are synonyms. Utterance templates
+   must consume the complete organization slot. Do not place `talking news`,
+   `talking newspaper`, or `talking magazine` after the slot placeholder,
+   because Alexa can then truncate a full spoken name to only its first word.
 5. Trim values, collapse repeated whitespace, and discard blank strings.
 6. De-duplicate values and synonyms case-insensitively within each slot.
 7. Do not assign one synonym to multiple canonical values in the same slot.
@@ -208,10 +210,11 @@ play sport near Herne Bay
 ```
 
 The interaction model explicitly supports both complete commands and name-only
-turns. `Tynedale`, `Tyndale talking news`, `play from Tyndale talking news`, and
-`play sport from Tyndale talking news` all populate the organization slot. A
-bare creator name similarly populates `SelectCreatorIntent`. These selection
-intents still go through the same Hear resolver as the longer play intents.
+turns. `Tynedale`, `Tynedale Talking Newspaper`, `play Tynedale Talking
+Newspaper`, `play from Tynedale Talking Newspaper`, and `play sport from
+Tynedale Talking Newspaper` all populate one complete organization slot. A bare
+creator name similarly populates `SelectCreatorIntent`. These selection intents
+still go through the same Hear resolver as the longer play intents.
 
 If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
 waiting for an organization or creator, active dialog state takes precedence.
@@ -220,8 +223,16 @@ resolver route and does not save them as the listener's city. An actual
 onboarding location question still owns a bare city response.
 
 If a new value is absent from the generated slot, Alexa may still return it as
-raw text and the resolver still receives it. Absence can reduce ASR accuracy,
-so publish refreshed slot values when practical. Updating the Hear database or
-resolver takes effect immediately for backend matching; changing Alexa's ASR
-vocabulary takes effect only after the updated interaction model is uploaded
-and built for the relevant skill stage.
+raw text through the custom slot. Alexa can also select the right source intent
+without populating that custom slot. The interaction model therefore has
+intent-specific `AMAZON.SearchQuery` fallbacks for arbitrary content, creator,
+organization, and publication phrases. These fallbacks preserve the carrier
+meaning (`play`, `play by`, `play from`, or `play publication from`) and send the
+complete captured phrase to the same Hear resolver. They are not a second
+catalogue and do not bypass resolution.
+
+Absence from a generated custom slot can still reduce ASR accuracy, so publish
+refreshed slot values when practical. Updating the Hear database or resolver
+takes effect immediately for backend matching; changing Alexa's ASR vocabulary
+takes effect only after the updated interaction model is uploaded and built for
+the relevant skill stage.
