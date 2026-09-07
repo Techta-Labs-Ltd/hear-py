@@ -1253,6 +1253,8 @@
             "the {selection} one",
             "choose {selection}",
             "select {selection}",
+            "pick {selection}",
+            "play {selection}",
             "{selection} please"
           ]
         },
@@ -1520,19 +1522,64 @@
             {
               "name": {
                 "value": "first",
-                "synonyms": ["first one", "option one", "number one"]
+                "synonyms": [
+                  "one",
+                  "1",
+                  "1st",
+                  "the first",
+                  "the first one",
+                  "first one",
+                  "first option",
+                  "first choice",
+                  "option one",
+                  "option 1",
+                  "choice one",
+                  "choice 1",
+                  "number one",
+                  "number 1"
+                ]
               }
             },
             {
               "name": {
                 "value": "second",
-                "synonyms": ["second one", "option two", "number two"]
+                "synonyms": [
+                  "two",
+                  "2",
+                  "2nd",
+                  "the second",
+                  "the second one",
+                  "second one",
+                  "second option",
+                  "second choice",
+                  "option two",
+                  "option 2",
+                  "choice two",
+                  "choice 2",
+                  "number two",
+                  "number 2"
+                ]
               }
             },
             {
               "name": {
                 "value": "third",
-                "synonyms": ["third one", "option three", "number three"]
+                "synonyms": [
+                  "three",
+                  "3",
+                  "3rd",
+                  "the third",
+                  "the third one",
+                  "third one",
+                  "third option",
+                  "third choice",
+                  "option three",
+                  "option 3",
+                  "choice three",
+                  "choice 3",
+                  "number three",
+                  "number 3"
+                ]
               }
             }
           ]

@@ -266,6 +266,50 @@ def test_ambiguity_name_matching_is_limited_to_the_current_page(mock_handler_inp
     )
 
 
+@pytest.mark.parametrize(
+    "spoken, expected_id",
+    [
+        ("play first", "creator-1"),
+        ("the first one", "creator-1"),
+        ("pick option two", "creator-2"),
+        ("number 2", "creator-2"),
+        ("select choice 3", "creator-3"),
+        ("3rd option", "creator-3"),
+    ],
+)
+def test_ambiguity_ordinal_variants_select_current_spoken_choice(
+    mock_handler_input, spoken, expected_id
+):
+    pending = {
+        "displayedCandidates": [
+            {"type": "creator", "id": f"creator-{index}", "name": f"Creator {index}"}
+            for index in range(1, 4)
+        ]
+    }
+
+    candidate = DialogSelection.match_pending_candidate(
+        mock_handler_input, pending, spoken
+    )
+
+    assert candidate["id"] == expected_id
+
+
+def test_ambiguity_gibberish_does_not_select_an_ordinal(mock_handler_input):
+    pending = {
+        "displayedCandidates": [
+            {"type": "creator", "id": f"creator-{index}", "name": f"Creator {index}"}
+            for index in range(1, 4)
+        ]
+    }
+
+    assert (
+        DialogSelection.match_pending_candidate(
+            mock_handler_input, pending, "something unrelated"
+        )
+        is None
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("intent_name", ["AMAZON.NoIntent", "SkipFeedbackIntent"])
 async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(

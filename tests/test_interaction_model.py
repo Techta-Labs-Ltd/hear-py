@@ -448,6 +448,28 @@ def test_clarification_slot_has_format_and_ordinal_fallback_values():
     assert {"publications", "tracks", "first", "second", "third"}.issubset(values)
 
 
+def test_clarification_slot_has_safe_ordinal_asr_variants():
+    types = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["types"]
+    }
+    values = {
+        item["name"]["value"].casefold(): {
+            synonym.casefold() for synonym in item["name"].get("synonyms", [])
+        }
+        for item in types["HEAR_CLARIFICATION"]["values"]
+    }
+    assert {"1", "1st", "option 1", "choice one", "number 1"}.issubset(
+        values["first"]
+    )
+    assert {"2", "2nd", "option 2", "choice two", "number 2"}.issubset(
+        values["second"]
+    )
+    assert {"3", "3rd", "option 3", "choice three", "number 3"}.issubset(
+        values["third"]
+    )
+
+
 def test_topic_slot_includes_multi_word_catalog_topics():
     types = {
         item["name"]: item

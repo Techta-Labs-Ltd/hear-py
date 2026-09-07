@@ -99,7 +99,10 @@ def test_followed_creator_and_organization_with_same_id_are_distinct(
     [
         ("the first one", "first"),
         ("the second choice", "second"),
-        ("number two", "number two"),
+        ("number two", "two"),
+        ("play the first one", "first"),
+        ("pick option two", "two"),
+        ("select choice 3", "3"),
         ("3rd option", "third"),
     ],
 )

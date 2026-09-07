@@ -19,6 +19,15 @@ fallback values in the interaction model for `first`, `second`, `third`,
 that slot's active session values with the currently spoken candidates through
 `Dialog.UpdateDynamicEntities`.
 
+Ordinal selection is deliberately reinforced in all three recognition layers.
+The static slot and each dynamic candidate include safe forms such as `one`,
+`1st`, `option one`, `choice 1`, and `number one` (and the equivalent second
+and third forms). The backend applies the same normalization while an ambiguity
+or availability choice is active, so replies such as `play first`, `pick option
+two`, or `select choice 3` still choose the displayed item even if Alexa routes
+the reply through another intent. Do not add broad unrelated sound-alikes: an
+unknown phrase must cause a retry instead of silently selecting the wrong item.
+
 These slots give Alexa domain-specific speech-recognition vocabulary. They do
 not replace the Hear resolver or catalog. Every populated slot still travels
 through the resolver, whether Alexa matched a generated value or returned raw

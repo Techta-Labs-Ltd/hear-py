@@ -7,7 +7,7 @@ class DiscoveryConstants:
     PUBLICATION_INTENTS = frozenset({"PlayPublicationIntent", "SelectPublicationSourceIntent"})
     CHOICE_PAGE_SIZE = 3
     CHOICE_ORDINALS = ("first", "second", "third")
-    CHOICE_ORDINAL_SYNONYMS = (("first", "one", "number one"), ("second", "two", "number two"), ("third", "three", "number three"))
+    CHOICE_ORDINAL_SYNONYMS = (("first", "one", "1", "1st", "the first", "the first one", "first option", "first choice", "option one", "option 1", "choice one", "choice 1", "number one", "number 1"), ("second", "two", "2", "2nd", "the second", "the second one", "second option", "second choice", "option two", "option 2", "choice two", "choice 2", "number two", "number 2"), ("third", "three", "3", "3rd", "the third", "the third one", "third option", "third choice", "option three", "option 3", "choice three", "choice 3", "number three", "number 3"))
     ORDINAL_INDEX = {
         "first": 0,
         "one": 0,
