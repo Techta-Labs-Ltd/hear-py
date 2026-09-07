@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 
@@ -10,7 +11,21 @@ class AlexaFeedback:
         text = " ".join(str(value or "").casefold().replace("’", "'").split())
         if not text:
             return None
-        if text in {"skip", "skip it", "never mind", "pass", "no comment", "don't bother"}:
+        if text in {
+            "skip",
+            "skip it",
+            "skip feedback",
+            "skip this feedback",
+            "skip rating",
+            "skip the rating",
+            "never mind",
+            "ignore that",
+            "pass",
+            "no comment",
+            "don't bother",
+            "i don't want to rate",
+            "i'd rather not say",
+        }:
             return "skipped"
         if any(
             phrase in text
@@ -66,6 +81,13 @@ class AlexaFeedback:
         saved = store if isinstance(store, dict) else {}
         active = saved.get("activePlayback") or {}
         queue = saved.get("playbackQueue") or {}
+        discovery_subject = DiscoverySpeech.subject(
+            current.get("discoveryContext")
+            or active.get("discoveryContext")
+            or queue.get("discoveryContext")
+        )
+        if discovery_subject:
+            return discovery_subject
         has_current_identity = bool(
             current.get("feedbackKey")
             or current.get("subjectType")
@@ -144,18 +166,19 @@ class AlexaFeedback:
 
     @staticmethod
     def discovery_continuation_question(context: dict) -> str:
-        name = Speech.escape_ssml_lite(str(context.get("name") or "that content"))
-        return f"Would you like to continue listening to {name}?"
+        subject = DiscoverySpeech.subject(context) or "that content"
+        return f"Would you like to continue listening to {Speech.escape_ssml_lite(subject)}?"
 
     @staticmethod
     def discovery_continuation_reprompt(context: dict) -> str:
-        name = Speech.escape_ssml_lite(str(context.get("name") or "that content"))
-        return f"Say yes to continue listening to {name}, or no to choose something else."
+        subject = DiscoverySpeech.subject(context) or "that content"
+        safe_subject = Speech.escape_ssml_lite(subject)
+        return f"Say yes to continue listening to {safe_subject}, or no to choose something else."
 
     @staticmethod
     def discovery_continuing_speech(context: dict) -> str:
-        name = Speech.escape_ssml_lite(str(context.get("name") or "that content"))
-        return f"Continuing {name}."
+        subject = DiscoverySpeech.subject(context) or "that content"
+        return f"Continuing {Speech.escape_ssml_lite(subject)}."
 
     @staticmethod
     def present_requested_feedback(

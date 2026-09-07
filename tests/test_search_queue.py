@@ -58,6 +58,22 @@ def test_search_queue_retains_exact_organization_discovery_context(mock_handler_
     }
 
 
+def test_search_queue_retains_location_as_location_context(mock_handler_input):
+    payload = {"query": "", "filter": {"city": "York", "isLocal": True}}
+    PlaybackQueue(User()).initialize(
+        mock_handler_input,
+        [{"contentId": "content-1"}],
+        source="PlayLocalIntent",
+        discovery_label="content in York",
+        search_payload=payload,
+    )
+
+    context = PlaybackQueue.read(User.snapshot(mock_handler_input))["discoveryContext"]
+
+    assert context["kind"] == "location"
+    assert context["name"] == "York"
+
+
 @pytest.mark.asyncio
 async def test_next_page_is_loaded_only_when_requested(mock_handler_input):
     first_page = [{"contentId": f"content-{index}"} for index in range(1, 4)]

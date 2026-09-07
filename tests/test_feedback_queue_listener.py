@@ -105,6 +105,8 @@ async def test_alexa_skip_variants_dismiss_active_feedback(mock_handler_input, i
         ("I didn't enjoy that", "not enjoyed"),
         ("I didn’t enjoy that", "not enjoyed"),
         ("never mind", "skipped"),
+        ("skip this feedback", "skipped"),
+        ("I'd rather not say", "skipped"),
     ],
 )
 def test_feedback_raw_phrases_are_normalized(raw, expected):
@@ -185,7 +187,8 @@ def test_feedback_continuation_speaks_exact_discovery_name(
     )
     assert response is not None
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert f"continue listening to {name}" in spoken
+    expected = f"content on {name}" if kind == "topic" else name
+    assert f"continue listening to {expected}" in spoken
 
 
 @pytest.mark.asyncio
@@ -369,7 +372,16 @@ def test_internal_short_identifier_is_not_used_as_spoken_title():
             "audioUrl": "https://cdn.hear.media/one.mp3",
         }
     )
-    assert ContentUtils.content_title_for_speech(item) == "a local recording"
+    assert ContentUtils.content_title_for_speech(item) is None
+
+
+def test_feedback_subject_uses_discovery_context_when_track_title_is_missing():
+    subject = {
+        "title": None,
+        "discoveryContext": {"kind": "organization", "name": "York Talking News"},
+    }
+
+    assert AlexaFeedback.subject_title(subject, {}) == "York Talking News"
 
 
 def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_input):

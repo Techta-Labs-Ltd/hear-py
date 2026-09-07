@@ -23,13 +23,8 @@ class SearchSpeech:
     @staticmethod
     def search_no_match(query) -> str:
         safe = Speech.escape_ssml_lite(query)
-        return (
-            f"I couldn't find anything matching {safe}. Try saying play followed by "
-            "a different topic, creator, publication, or city."
-            if safe
-            else "I couldn't find anything matching that. Try saying play followed by "
-            "a topic, creator, publication, or city."
-        )
+        subject = safe or "that"
+        return f"I couldn't find anything matching {subject}. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def unresolved_reference_message(phrase: str, expected_types: list[str]) -> str:
@@ -290,7 +285,7 @@ class SearchSpeech:
         return list(dict.fromkeys(values))
 
     @staticmethod
-    def _clean_result_subject(value: object) -> tuple[str, str]:
+    def clean_result_subject(value: object) -> tuple[str, str]:
         subject = " ".join(str(value or "").strip().split())
         lowered = subject.casefold()
         for prefix in ("the latest content on ", "content on "):
@@ -332,7 +327,7 @@ class SearchSpeech:
     ) -> tuple[str, str]:
         payload = search_payload if isinstance(search_payload, dict) else {}
         filters = SearchSpeech._search_filter(payload)
-        relation, subject = SearchSpeech._clean_result_subject(request_label)
+        relation, subject = SearchSpeech.clean_result_subject(request_label)
         labels = SearchSpeech._filter_labels(filters)
         query = str(payload.get("query") or payload.get("q") or "").strip()
         if query and query.casefold() not in {value.casefold() for value in labels}:
@@ -362,7 +357,7 @@ class SearchSpeech:
         credit: object = None,
     ) -> str:
         if SearchSpeech._has_source_filter(search_payload):
-            _, subject = SearchSpeech._clean_result_subject(request_label)
+            _, subject = SearchSpeech.clean_result_subject(request_label)
             source = subject or str(credit or "").strip()
             if source:
                 return f"Playing {Speech.escape_ssml_lite(source)}."

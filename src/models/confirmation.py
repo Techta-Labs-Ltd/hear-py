@@ -204,7 +204,11 @@ class ConfirmationPolicy:
                 return f"{latest}{category} nearest to {city}"
             if city:
                 return f"{latest}from {city}" if latest else f"content from {city}"
-            return f"{latest}{category} in your community" if category else "tracks near you"
+            return (
+                f"{latest}{category} in your community"
+                if category
+                else "content from your community"
+            )
         if intent == "trending":
             suffix = f" in {category}" if category else ""
             suffix += f" near {city}" if city else ""

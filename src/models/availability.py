@@ -133,6 +133,7 @@ class Availability:
             return await self._fallback_local_search(handler_input)
         location = AvailabilityData.location_from_payload(payload, User.snapshot(handler_input))
         requested_city = AvailabilityData.requested_city(resolved, payload)
+        requested_city = requested_city or str(location.get("city") or "").strip()
         if not location:
             User.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
             return self._response(
@@ -163,7 +164,6 @@ class Availability:
                 handler_input,
                 AvailabilitySpeech.one_local_source(
                     candidates[0]["name"],
-                    source_type=candidates[0].get("type"),
                     requested_city=requested_city,
                 ),
                 "Say yes to hear it, or no to choose something else.",

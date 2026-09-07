@@ -17,7 +17,23 @@ These were real design and coverage problems rather than one isolated bug. The c
 - The generated slot validator covers all four domain slots and enforces domain ownership and approved canonical collisions.
 - The cleaned imports contain 5,429 locations, 286 organisations, 14 creators, and 4,562 topics. The 276 organisation accounts copied into `HEAR_CREATOR` and the two generic talking-newspaper topics were removed.
 
-Verification completed with 699 passing tests, valid interaction-model JSON, successful byte-code compilation, clean Ruff checks, and a strict architecture audit with 0 errors and 0 warnings.
+Verification completed with 712 passing tests, valid interaction-model JSON, successful byte-code compilation, clean Ruff checks, and a strict architecture audit with 0 errors and 0 warnings.
+
+### Final requirement re-verification — 7 September 2026
+
+| Requirement | Verified result |
+| --- | --- |
+| Typed availability speech | One and multiple results use the returned organisation and creator types. A known requested or saved city is spoken by name. Coordinate-only results make no proximity claim. |
+| Mid-session feedback | The interrupted recording resumes from its saved offset. |
+| Return-time feedback | Hear asks whether to continue the exact organisation, creator, publication, topic, or location context before playing another recording. |
+| Feedback recognition | Canonical and raw positive, neutral, negative, and dismissal phrases are normalized before routing. Both Alexa skip interpretations are intercepted while feedback is active. |
+| Queue continuation | `PlaybackNearlyFinished` produces an `ENQUEUE` directive with the matching previous token, including lazy page loading and subsequent queue items. |
+| Playback introductions | `short_description` remains metadata only. Unusable track titles do not become spoken titles, and discovery context supplies the introduction. |
+| Relaunch resume prompt | Topic searches retain “content on {topic}” and add the valid organisation or creator behind the current recording. The recording description is never substituted for that context. |
+| Generic recovery speech | Fallback, unmatched-intent, idle-recovery, resolver-unavailable, decline, and no-match paths use the shared listening prompt. |
+| Interaction model and resolver | Domain slots remain separate, generic source-kind requests are handled locally, known and raw names reach the resolver, and ambiguity stays typed. |
+
+No production speech path contains the removed generic proximity phrase, the removed fabricated recording title, or the old “play followed by a topic” guidance.
 
 The remaining acceptance work is external: build the revised Alexa model, run the utterance profiler, upload the generated slot imports, and verify the critical utterances on the physical Echo Dot. Live queue incidents still require the matching Alexa and backend logs for the affected `queueId`.
 
@@ -45,7 +61,7 @@ The deployed development skill was exercised through Alexa after the first corre
 | Defect | Root cause | Required behaviour | Correction |
 | --- | --- | --- | --- |
 | Saying “skip” during feedback played the next recording. | The Echo mapped the spoken word to `AMAZON.NextIntent`; the feedback gate handled only `AMAZON.SkipIntent`. | During an active feedback or report question, both Alexa interpretations must mean “dismiss this question”. For an explicitly requested rating, resume the same recording. | The contextual feedback gate now accepts both intents, before the ordinary playback-next controller. |
-| “Play something from London” was confirmed correctly, but the availability response said “near you”. | `ResolutionBuilder` discarded the explicit-location marker before the yes-confirmation request. | “I found Test TN User near London. Would you like to listen?” | Pending resolutions now retain `requestedLocation`; availability can distinguish an explicitly requested city from the listener’s saved location. |
+| “Play something from London” was confirmed correctly, but the availability response used generic proximity wording. | `ResolutionBuilder` discarded the explicit-location marker before the yes-confirmation request. | “I found Test TN User near London. Would you like to listen?” | Pending resolutions retain `requestedLocation`, and availability now speaks either the explicitly requested city or the listener’s saved city. |
 | “Play a publication” asked for a publication, creator, or organisation. | The generic publication prompt reused broad source wording. | “Which publication would you like?” Reprompt: “Please say the publication name.” | The publication dialog now uses one shared, publication-specific speech constant. |
 | A conflicting Dorking/Orkney resolver combination produced “publication from … from …”. | The confirmation layer preferred the raw publication query and appended an untrusted residual beside a canonical publication. | When a structured publication is accepted, speak only its canonical name unless a separate trusted category or tag is present. Example: “Did you want me to play Orkney Talking Magazine?” | Canonical `publicationName` now takes priority. Conflicting or duplicated raw source words are removed from the spoken subject. |
 
@@ -61,18 +77,14 @@ The deployed development skill was exercised through Alexa after the first corre
 
 - A named organisation, creator, or publication is spoken using its canonical resolver name.
 - A general subject is introduced as “Playing content on {subject}.”
-- An explicit place is repeated as “near {city}”; “near you” is reserved for saved-device location searches.
+- A known place is always repeated as “near {city}”, whether it came from the request or the listener’s saved location. If only coordinates are available, proximity wording is omitted.
 - A prompt asks only for the missing domain: talking newspaper, creator, publication, or city.
 - Resolver residual words never produce duplicated constructions such as “from {source} from {other source}”.
 - `short_description` is never used as the pre-playback introduction.
 
 ## 1. Search and availability speech
 
-The sentence:
-
-> I found content near you from York Talking News.
-
-is hard-coded in `src/alexa/availability_speech.py`. Tests currently require this unwanted wording in `tests/test_availability_flow.py`.
+Before correction, availability used generic proximity wording and could combine it with a source name. That wording was removed. A known requested or saved city is now spoken explicitly, and no proximity claim is made when only coordinates are available.
 
 ### Required speech contract
 
@@ -92,7 +104,7 @@ is hard-coded in `src/alexa/availability_speech.py`. Tests currently require thi
 
 “Closest to” is grammatically correct here, rather than “closer to”.
 
-Candidate objects already contain a `type`, so the speech layer can distinguish organisations, creators, and mixed results. However, `AvailabilityData.source_candidates()` currently combines both lists and de-duplicates them only by name. An organisation and creator with the same name can therefore be collapsed incorrectly.
+Candidate objects contain a `type`, so the speech layer distinguishes organisations, creators, and mixed results. `AvailabilityData.source_candidates()` now de-duplicates by both type and normalized name, so an organisation and creator with the same name remain distinct.
 
 ### Required correction
 
@@ -103,9 +115,9 @@ Candidate objects already contain a `type`, so the speech layer can distinguish 
 - Do not describe every result merely as a generic “source”.
 - Do not introduce source searches using an individual recording title or description.
 
-## 2. Feedback requires two separate workflows
+## 2. Feedback uses two separate workflows
 
-The application currently has one partial distinction: an explicit `RateContentIntent` sets `requested=true`. That path pauses and resumes the current recording. Automatic feedback presented after the listener returns to the skill does not retain enough information about the original search.
+Before correction, the application had only a partial distinction: an explicit `RateContentIntent` set `requested=true`, while automatic feedback presented after the listener returned did not retain enough information about the original search. Both paths now retain and use the required state.
 
 ### Explicit mid-session rating
 
@@ -140,21 +152,21 @@ The playback queue or associated discovery state needs to retain:
 - original structured search payload
 - whether feedback was requested during playback or presented after returning
 
-Currently, the queue mostly stores an intent identifier and search filters. The pending feedback record does not reliably retain the exact human-facing discovery label. The feedback response consequently falls back to a track title, creator credit, follow prompt, or generic idle prompt.
+The queue and pending feedback record now retain the exact human-facing discovery context. Feedback uses that context instead of falling back to an unrelated track title, creator credit, follow prompt, or generic idle prompt.
 
 Following a creator should not replace the required continuation question. Queue continuation must be resolved first; a follow offer can happen separately.
 
-## 3. Feedback recognition and the repeating prompt
+## 3. Feedback recognition and the resolved repeating-prompt defect
 
-The current interaction model contains `FeedbackResponseIntent` with a `HEAR_FEEDBACK` slot. The older `FeedbackEnjoyedIntent`, `FeedbackSomewhatIntent`, and `FeedbackNotEnjoyedIntent` handlers remain in the code and tests, but those intents are not present in the current interaction model.
+The interaction model contains `FeedbackResponseIntent` with a `HEAR_FEEDBACK` slot. Compatibility handlers exist for the older feedback intents, but active recognition and realistic request tests use `FeedbackResponseIntent`.
 
-The active feedback handler accepts only these exact normalized values:
+The active feedback handler dispatches these normalized values:
 
 - `enjoyed`
 - `somewhat`
 - `not enjoyed`
 
-Alexa normally converts a configured synonym such as “I enjoyed it” to the canonical value `enjoyed`. However, a custom slot is training data rather than a strict enumeration. If Alexa returns an unmatched raw phrase, the application receives text such as `I enjoyed it`. The current exact dictionary lookup fails for that raw value and presents the feedback question again.
+Alexa normally converts a configured synonym such as “I enjoyed it” to the canonical value `enjoyed`. However, a custom slot is training data rather than a strict enumeration. The application now normalizes both canonical matches and unmatched raw phrases before dispatch instead of repeating the feedback question.
 
 Amazon documents that custom-slot values outside the supplied list can still be returned and must be validated by the skill:
 
@@ -205,7 +217,7 @@ Suggested negative phrases include:
 
 ### Skip mismatch
 
-The feedback prompt tells listeners to say “skip”, but `SkipFeedbackIntent` deliberately does not include the bare word `skip`. Alexa can consequently route that word to a playback-next intent while leaving feedback pending.
+Alexa can route the bare word “skip” to a playback-next intent instead of `SkipFeedbackIntent`. The contextual feedback gate now intercepts both Alexa interpretations while feedback or a report question is active.
 
 While feedback is active, `skip`, `never mind`, `pass`, and equivalent phrases must dismiss the feedback question. They must not advance playback through the ordinary transport-control path first.
 
@@ -253,17 +265,18 @@ The unit tests prove that a synthetic three-item queue can enqueue its second an
 
 The individual production incident could not be confirmed during this audit because the configured AWS CLI security token was invalid.
 
-## 5. `short_description` is currently being spoken
+## 5. Resolved `short_description` playback-introduction defect
 
-This is confirmed.
+The original defect was confirmed and has been corrected.
 
-`ContentUtils._pick_curated_title()` chooses `shortDescription` as its first fallback. The normalizer can promote that value to `spokenTitle`, after which search and availability introductions speak it before playback.
+Before correction, `ContentUtils._pick_curated_title()` chose `shortDescription` as its first fallback. The normalizer could promote that value to `spokenTitle`, after which search and availability introductions spoke it before playback.
 
-There is also a test explicitly requiring an internal title such as `00000006` to be replaced with the short description “A weekly sport update from York”. That test now contradicts the required behaviour.
+The contradictory test that required an internal title such as `00000006` to be replaced with a short description was removed. Tests now require no spoken title for unusable metadata and verify that discovery context supplies the introduction.
 
 ### Required policy
 
 - Never use `short_description` or `shortDescription` in a playback introduction.
+- Never invent a generic title such as “a local recording.” “Local” describes the search context, not the recording itself.
 - Keep it for “What is this about?”, visual metadata, and description-specific features.
 - For an organisation search, speak the exact organisation name.
 - For a creator search, speak the exact creator name.
@@ -273,9 +286,11 @@ There is also a test explicitly requiring an internal title such as `00000006` t
 
 If the backend title is an internal filename or identifier, do not replace it with the description for the introduction. Use the discovery context instead.
 
-## 6. Generic fallback wording is duplicated
+The same rule applies after relaunching with unfinished playback. For a topic search, the resume question says “You were listening to content on {topic} from {organisation}” or, when there is no valid organisation, “by {creator}”. It never replaces the topic with `short_description`.
 
-The phrase “play followed by a topic, or what’s trending” occurs across:
+## 6. Resolved generic fallback wording duplication
+
+Before correction, the phrase “play followed by a topic, or what’s trending” occurred across:
 
 - `src/alexa/speech.py`
 - `src/alexa/search_speech.py`
@@ -349,7 +364,7 @@ Examples:
 
 The generic words `talking newspaper`, `publication`, and `creator` must not be sent to the resolver as though they were specific entity names.
 
-`ContentFormat` already contains some newspaper synonyms, but it is attached to the general content intent. It does not reliably protect the organisation capture path.
+Before cleanup, `ContentFormat` contained newspaper synonyms while being attached to the general content intent. Those values were removed because they did not protect the organisation capture path and competed with its domain slot.
 
 ### Intent ownership
 
@@ -362,7 +377,7 @@ There should be one primary intent owner for each carrier phrase:
 | `play publication …` | publication flow |
 | `play …` | general topic/content flow |
 
-The current model contains direct competition such as:
+The pre-cleanup model contained direct competition such as:
 
 - `play from {searchQuery}`
 - `play from {organizationQuery}`
@@ -370,7 +385,7 @@ The current model contains direct competition such as:
 - `play {topic}`
 - `play {organizationQuery}`
 
-Alexa does not provide a dependable manual priority between overlapping intents. The model should remove unnecessary duplicate carriers and use dialog state plus the resolver after Alexa selects the domain.
+Alexa does not provide a dependable manual priority between overlapping intents. The cleaned model assigns each carrier phrase to a primary owner and uses dialog state plus the resolver after Alexa selects the domain.
 
 Amazon recommends testing utterance conflicts and using the utterance profiler:
 

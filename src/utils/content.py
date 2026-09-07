@@ -122,7 +122,7 @@ class ContentUtils:
         )
 
     @staticmethod
-    def _pick_display_title(item: dict) -> str:
+    def _pick_display_title(item: dict) -> str | None:
         actual = ContentUtils.prefer_readable(
             item.get("displayTitle"), item.get("spokenTitle"), item.get("title")
         )
@@ -139,13 +139,13 @@ class ContentUtils:
             and (not ContentUtils.is_id_like_label(curated))
         ):
             return curated
-        return actual or curated or "a local recording"
+        return None
 
     @staticmethod
-    def pick_spoken_title(item: dict) -> str:
+    def pick_spoken_title(item: dict) -> str | None:
         title = ContentUtils._pick_display_title(item)
-        if ContentUtils.is_id_like_label(title) or ContentUtils.is_weak_title(title):
-            return "a local recording"
+        if not title or ContentUtils.is_id_like_label(title) or ContentUtils.is_weak_title(title):
+            return None
         return title
 
     @staticmethod
@@ -290,7 +290,7 @@ class ContentUtils:
             and (not ContentUtils.is_id_like_label(curated))
         ):
             return ContentUtils._humanize_spoken_title_safe(curated) or curated
-        return "a local recording"
+        return None
 
     @staticmethod
     def _humanize_spoken_title_safe(value: str) -> str | None:

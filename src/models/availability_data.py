@@ -215,9 +215,9 @@ class AvailabilityData:
     @staticmethod
     def track_candidates(result: dict) -> list[dict]:
         candidates = []
-        for item in result.get("results") or []:
+        for index, item in enumerate(result.get("results") or [], start=1):
             content_id = ContentIdentity.content_id(item)
-            title = ContentUtils.content_title_for_speech(item)
+            title = ContentUtils.content_title_for_speech(item) or f"recording {index}"
             if content_id and title:
                 candidates.append({"type": "track", "id": content_id, "name": title})
         return DialogSelection.unique_candidates(candidates)

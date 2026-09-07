@@ -418,7 +418,12 @@ async def test_requested_city_source_does_not_say_near_you(mock_handler_input):
 
     speech = AvailabilityTestSupport.speech(response)
     assert "I found Liverpool Talking Newspaper near Liverpool" in speech
-    assert "near you" not in speech
+
+
+def test_single_source_without_a_named_city_omits_proximity_claim():
+    assert AvailabilitySpeech.one_local_source("York Talking News") == (
+        "I found York Talking News. Would you like to listen?"
+    )
 
 
 @pytest.mark.asyncio
@@ -473,7 +478,7 @@ async def test_resolver_location_payload_routes_to_availability_instead_of_searc
         }
     }
     speech = AvailabilityTestSupport.speech(response)
-    assert "I found Talking News Federation near you." in speech
+    assert "I found Talking News Federation near Swindon." in speech
     assert "Would you like to listen?" in speech
     assert "I found one local source" not in speech
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
@@ -595,7 +600,7 @@ async def test_source_without_publications_silently_searches_tracks(mock_handler
     assert deps.heara.search.await_count == 1
     assert response == {"shouldEndSession": True}
     intro = deps.playback.start.await_args.args[2]
-    assert intro == "Playing Council Meeting Update, from Redcar Talking Newspaper."
+    assert intro == "Playing Redcar Talking Newspaper."
 
 
 @pytest.mark.asyncio
@@ -736,9 +741,7 @@ async def test_selecting_tracks_starts_playback_without_offering_track_choices(m
     assert deps.heara.search.await_args.args[0]["limit"] == 3
     deps.playback.start.assert_awaited_once()
     assert deps.playback.start.await_args.args[1]["contentId"] == "track-1"
-    assert "Playing Local Track 1, from Redcar Talking Newspaper" in (
-        deps.playback.start.await_args.args[2]
-    )
+    assert deps.playback.start.await_args.args[2] == "Playing Redcar Talking Newspaper."
     assert DialogStateManager.get_active(handler_input) is None
 
 

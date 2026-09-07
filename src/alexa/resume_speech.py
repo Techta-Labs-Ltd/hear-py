@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.speech import Speech
 
 
@@ -38,6 +39,29 @@ class ResumeSpeech:
         queue = store.get("playbackQueue") or {}
         source = active.get("discoverySource") or queue.get("source") or ""
         return str(source).strip().lower()
+
+    @staticmethod
+    def _discovery_context(active: dict, store: dict) -> dict:
+        queue = store.get("playbackQueue") or {}
+        context = active.get("discoveryContext") or queue.get("discoveryContext")
+        return dict(context) if isinstance(context, dict) else {}
+
+    @classmethod
+    def _topic_statement(cls, active: dict, store: dict) -> str | None:
+        context = cls._discovery_context(active, store)
+        if str(context.get("kind") or "").strip().casefold() != "topic":
+            return None
+        subject = DiscoverySpeech.subject(context)
+        if not subject:
+            return None
+        spoken_subject = Speech.escape_ssml_lite(subject)
+        organization = cls._safe_label(active.get("organizationName"), credit=True)
+        creator = cls._safe_label(active.get("creatorName"), credit=True)
+        if organization and organization.casefold() not in spoken_subject.casefold():
+            return f"You were listening to {spoken_subject} from {organization}"
+        if creator and creator.casefold() not in spoken_subject.casefold():
+            return f"You were listening to {spoken_subject} by {creator}"
+        return f"You were listening to {spoken_subject}"
 
     @staticmethod
     def _question(statement: str | None = None) -> str:
@@ -88,8 +112,12 @@ class ResumeSpeech:
             if creator:
                 return cls._question(f"You were listening to {creator}")
 
+        topic_statement = cls._topic_statement(active, saved)
+        if topic_statement:
+            return cls._question(topic_statement)
+
         description = cls._safe_label(
-            active.get("summary") or active.get("spokenTitle") or active.get("title")
+            active.get("spokenTitle") or active.get("title")
         )
         return cls._question(
             f"You were listening to {description}" if description else None

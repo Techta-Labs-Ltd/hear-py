@@ -229,10 +229,11 @@ class IntentDispatcher:
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(
-                    "I'm having trouble understanding that request right now. Please try again."
+                    "I'm having trouble understanding that request right now. "
+                    f"{Speech.WELCOME_REPROMPT}"
                 )
             )
-            .reprompt(Ssml.ssml("Please say your request again."))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
             .get_response()
         )

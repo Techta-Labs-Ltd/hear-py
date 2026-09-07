@@ -27,6 +27,12 @@ class SearchPayload:
             if "organization" in lowered or filters.get("organizationIds")
             else "creator"
             if "creator" in lowered or filters.get("creatorIds")
+            else "location"
+            if "local" in lowered
+            or filters.get("city")
+            or filters.get("latitude") is not None
+            or filters.get("longitude") is not None
+            or filters.get("isLocal")
             else "topic"
         )
         first = next((item for item in items or [] if isinstance(item, dict)), {})
@@ -37,6 +43,8 @@ class SearchPayload:
             name = first.get("organizationName") or raw_label
         elif kind == "creator":
             name = first.get("creatorName") or raw_label
+        elif kind == "location":
+            name = str(filters.get("city") or raw_label).strip()
         else:
             name = raw_label or str((payload or {}).get("query") or "").strip()
             if not name:

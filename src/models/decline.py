@@ -360,7 +360,7 @@ class Decline:
                     f"No problem. {Speech.WELCOME_REPROMPT}"
                 )
             )
-            .reprompt(Ssml.ssml("Try saying what's trending, or play news."))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
             .response
         )

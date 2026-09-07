@@ -47,7 +47,7 @@ class Speech:
     )
     RESUME_DECLINED_NEXT_OPTIONS_REPROMPT = WELCOME_REPROMPT
     WELCOME_ERROR = "Welcome to Hear. I'm having a bit of trouble loading content at the moment. You can try again shortly."
-    IDLE_NEXT_REPROMPT = "What would you like to listen to?"
+    IDLE_NEXT_REPROMPT = WELCOME_REPROMPT
     IDLE_DO_NEXT_REPROMPT = "What would you like to do next?"
     SEARCH_UNAVAILABLE = (
         "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."

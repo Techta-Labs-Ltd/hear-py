@@ -103,7 +103,10 @@ class AvailabilitySpeech:
         requested_city: str | None = None,
     ) -> str:
         if not candidates:
-            return "I couldn't find any local sources just now. What would you like to hear?"
+            return (
+                "I couldn't find a nearby talking newspaper or creator just now. "
+                f"{Speech.WELCOME_REPROMPT}"
+            )
         kinds = {
             str(candidate.get("type") or "").strip().casefold()
             for candidate in candidates
@@ -139,14 +142,13 @@ class AvailabilitySpeech:
     def one_local_source(
         source_name: str,
         *,
-        source_type: str | None = None,
         requested_city: str | None = None,
     ) -> str:
         safe = Speech.escape_ssml_lite(source_name)
         if requested_city:
             safe_city = Speech.escape_ssml_lite(requested_city)
             return f"I found {safe} near {safe_city}. Would you like to listen?"
-        return f"I found {safe} near you. Would you like to listen?"
+        return f"I found {safe}. Would you like to listen?"
 
     @staticmethod
     def source_content_question(
@@ -259,11 +261,11 @@ class AvailabilitySpeech:
         return f"I couldn't load the next {noun} choices just now. {choices} {instruction}"
 
     @staticmethod
-    def playing_choice(title: str, source_name: str | None = None) -> str:
-        safe_title = Speech.escape_ssml_lite(title)
+    def playing_choice(title: str | None, source_name: str | None = None) -> str:
+        safe_title = Speech.escape_ssml_lite(title or "")
         safe_source = Speech.escape_ssml_lite(source_name or "")
-        return (
-            f"Playing {safe_title}, from {safe_source}."
-            if safe_source
-            else f"Playing {safe_title}."
-        )
+        if safe_source:
+            return f"Playing {safe_source}."
+        if safe_title:
+            return f"Playing {safe_title}."
+        return "Playing the next recording."

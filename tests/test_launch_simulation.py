@@ -245,14 +245,19 @@ class TestIsNewUser:
         assert "You were listening to a publication." in speech
         assert "Would you like to continue?" in speech
 
-    def test_resume_prompt_uses_short_description_for_an_ordinary_result(self):
+    def test_resume_prompt_uses_topic_and_organization_for_an_ordinary_result(self):
         hi = _build_handler_input(
             store_override={
                 "activePlayback": {
                     "contentId": "content-1",
                     "title": "024 - RNIB navigator gps app",
                     "summary": "A guide to using the RNIB Navigator GPS app",
+                    "organizationName": "RNIB Connect Radio",
                     "discoverySource": "search",
+                    "discoveryContext": {
+                        "kind": "topic",
+                        "name": "assistive technology",
+                    },
                     "audioUrl": "https://cdn.hear.media/content-1.mp3",
                     "status": "paused",
                 }
@@ -265,13 +270,70 @@ class TestIsNewUser:
 
         speech = _speak_text(hi)
         reprompt = hi.response_builder.speak.return_value.reprompt.call_args.args[0]
-        assert "A guide to using the RNIB Navigator GPS app" in speech
-        assert "You were listening to" in speech
+        assert (
+            "You were listening to content on assistive technology from RNIB Connect Radio."
+            in speech
+        )
+        assert "A guide to using the RNIB Navigator GPS app" not in speech
         assert "024 - RNIB navigator gps app" not in speech
         assert "Would you like to continue?" in speech
-        assert "A guide to using the RNIB Navigator GPS app" in reprompt
+        assert "content on assistive technology from RNIB Connect Radio" in reprompt
         assert "Would you like to continue?" in reprompt
         assert "Please say yes or no." in reprompt
+
+    def test_resume_prompt_uses_topic_and_creator_when_organization_is_unusable(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "Scottish football roundup",
+                    "summary": "Comprehensive coverage of Scottish football results",
+                    "organizationName": "Independent Creator",
+                    "creatorName": "Alex Morgan",
+                    "discoverySource": "search",
+                    "discoveryContext": {
+                        "kind": "topic",
+                        "name": "Premier League",
+                    },
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert (
+            "You were listening to content on Premier League by Alex Morgan."
+            in speech
+        )
+        assert "Comprehensive coverage" not in speech
+        assert "Independent Creator" not in speech
+
+    def test_resume_prompt_uses_title_without_discovery_context_or_summary(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "Community news roundup",
+                    "summary": "A detailed description that must not be spoken",
+                    "discoverySource": "search",
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to Community news roundup." in speech
+        assert "A detailed description" not in speech
 
     def test_resume_prompt_uses_title_when_trending_result_has_no_description(self):
         hi = _build_handler_input(
