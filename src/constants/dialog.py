@@ -10,6 +10,8 @@ class DialogConstants:
         "notification": "awaitingNotificationChoice",
         "creator_name": "awaitingCreatorName",
         "organization_name": "awaitingOrganizationName",
+        "publication_source": "awaitingPublicationSource",
+        "feedback_continuation": "awaitingFeedbackContinuation",
     }
     SOURCE_CAPTURE = {
         "creator_name": {
@@ -20,6 +22,10 @@ class DialogConstants:
             "intentName": "SelectOrganizationIntent",
             "slotName": "organizationQuery",
         },
+        "publication_source": {
+            "intentName": "SelectPublicationSourceIntent",
+            "slotName": "publicationSourceQuery",
+        },
     }
     TRANSIENT_DISCOVERY_DIALOGS = frozenset(
         {
@@ -29,6 +35,7 @@ class DialogConstants:
             "asr_repair",
             "organization_name",
             "creator_name",
+            "publication_source",
         }
     )
     DEFERRED_DISCOVERY_INTENTS = frozenset(
@@ -40,6 +47,7 @@ class DialogConstants:
             "SelectOrganizationIntent",
             "PlayByCreatorIntent",
             "SelectCreatorIntent",
+            "SelectPublicationSourceIntent",
             "PlayPublicationIntent",
             "BrowseContentIntent",
             "WhatsTrendingIntent",

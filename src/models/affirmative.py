@@ -18,7 +18,7 @@ from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 from src.models.dialog import DialogSelection, DialogStateManager
-from src.models.feedback_response import EnjoyedFeedback
+from src.models.feedback_response import EnjoyedFeedback, FeedbackContinuation
 from src.models.playback_controls import PlaybackControls
 from src.models.playback_state import PlaybackQueue
 from src.models.search import Search
@@ -76,6 +76,8 @@ class Affirmative:
             return await self._handle_latest_source_yes(handler_input, store)
         if dialog_type == "notification":
             return await self._deps.notifications.accept(handler_input)
+        if dialog_type == "feedback_continuation":
+            return await FeedbackContinuation.accept(handler_input, deps=self._deps)
         search_pending = bool(
             dialog_type == "search_confirmation"
             or not dialog_type
@@ -142,6 +144,8 @@ class Affirmative:
             )
         if store.get("awaitingNotificationChoice"):
             return await self._deps.notifications.accept(handler_input)
+        if store.get("awaitingFeedbackContinuation"):
+            return await FeedbackContinuation.accept(handler_input, deps=self._deps)
         if store.get("awaitingFeedback"):
             return await EnjoyedFeedback(deps=self._deps).execute(handler_input)
         if store.get("awaitingFollow"):

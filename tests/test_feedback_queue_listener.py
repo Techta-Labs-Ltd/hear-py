@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 import config.permission_scopes as permission_scopes
+from src.alexa.feedback import AlexaFeedback
 from src.alexa.runtime import AttrDict
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
@@ -13,11 +14,13 @@ from src.controllers.confirmation import NoIntentHandler
 from src.controllers.feedback import (
     FeedbackEnjoyedHandler,
     FeedbackNotEnjoyedHandler,
+    FeedbackResponseHandler,
     SkipFeedbackHandler,
 )
 from src.controllers.report import ReportContentHandler
-from src.middleware.feedback_gate import FeedbackGateHandler
+from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
 from src.models.feedback import FeedbackService
+from src.models.feedback_response import FeedbackContinuation
 from src.models.playback import Playback
 from src.models.user import User
 from src.services.listener_sync import ListenerSyncService
@@ -29,7 +32,6 @@ from src.utils.content_normalizer import ContentNormalizer
     "intent_name",
     [
         "AMAZON.NextIntent",
-        "AMAZON.SkipIntent",
         "AMAZON.PreviousIntent",
         "AMAZON.PauseIntent",
         "AMAZON.ResumeIntent",
@@ -50,6 +52,177 @@ def test_pending_feedback_does_not_block_transport_intents(mock_handler_input, i
         {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
     )
     assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
+
+
+def test_pending_feedback_routes_bare_skip_to_feedback_gate(mock_handler_input):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-1",
+            "contentId": "completed-1",
+            "completed": True,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "AMAZON.SkipIntent", "slots": {}}}
+    )
+    assert FeedbackSkipGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is True
+    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
+
+
+@pytest.mark.asyncio
+async def test_bare_skip_dismisses_active_feedback(mock_handler_input):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-1",
+            "contentId": "completed-1",
+            "completed": True,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "AMAZON.SkipIntent", "slots": {}}}
+    )
+    await FeedbackSkipGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingFeedback"] is False
+    assert store["pendingFeedback"] is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("I enjoyed it", "enjoyed"),
+        ("I liked that", "enjoyed"),
+        ("it was alright", "somewhat"),
+        ("I didn't enjoy that", "not enjoyed"),
+        ("I didn’t enjoy that", "not enjoyed"),
+        ("never mind", "skipped"),
+    ],
+)
+def test_feedback_raw_phrases_are_normalized(raw, expected):
+    assert AlexaFeedback.normalize_value(raw) == expected
+
+
+@pytest.mark.asyncio
+async def test_return_time_feedback_asks_to_continue_exact_organization(
+    mock_handler_input,
+):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {
+            "feedbackKey": "completed-1",
+            "contentId": "completed-1",
+            "completed": True,
+            "discoveryContext": {
+                "kind": "organization",
+                "name": "York Talking News",
+                "searchPayload": {"filter": {"organizationIds": ["org-york"]}},
+            },
+        },
+        "playbackQueue": {
+            "queueId": "queue-york",
+            "source": "organization",
+            "orderedContentIds": ["completed-1", "content-2"],
+            "currentIndex": 0,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "intent": {
+                "name": "FeedbackResponseIntent",
+                "slots": {"feedback": {"name": "feedback", "value": "I enjoyed it"}},
+            },
+        }
+    )
+    await FeedbackResponseHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    store = User.snapshot(mock_handler_input)
+    assert "continue listening to York Talking News" in spoken
+    assert store["awaitingFeedbackContinuation"] is True
+    assert store["feedbackContinuation"]["name"] == "York Talking News"
+
+
+@pytest.mark.parametrize(
+    ("kind", "name"),
+    [
+        ("organization", "York Talking News"),
+        ("creator", "David Beard"),
+        ("publication", "The Weekly Edition"),
+        ("topic", "sport"),
+    ],
+)
+def test_feedback_continuation_speaks_exact_discovery_name(
+    mock_handler_input,
+    kind,
+    name,
+):
+    store = {
+        **StateSchema.DEFAULT_STORE,
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "source": kind,
+            "orderedContentIds": ["completed-1", "content-2"],
+            "currentIndex": 0,
+        },
+    }
+    subject = {"discoveryContext": {"kind": kind, "name": name}}
+    response = FeedbackContinuation.present(
+        mock_handler_input,
+        subject,
+        store,
+        "Thanks for the feedback.",
+    )
+    assert response is not None
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert f"continue listening to {name}" in spoken
+
+
+@pytest.mark.asyncio
+async def test_feedback_continuation_yes_plays_next_queue_item(
+    monkeypatch,
+    mock_handler_input,
+):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedbackContinuation": True,
+        "feedbackContinuation": {
+            "kind": "creator",
+            "name": "David Beard",
+            "queueId": "queue-1",
+            "currentIndex": 0,
+        },
+        "activeDialog": {
+            "type": "feedback_continuation",
+            "context": {"kind": "creator", "name": "David Beard"},
+            "createdAt": 1,
+            "expiresAt": 4102444800,
+        },
+    }
+    play_next = AsyncMock(return_value={"response": "next"})
+    monkeypatch.setattr("src.models.feedback_response.Playback.play_queue_delta", play_next)
+    deps = ApplicationContainer()
+    response = await FeedbackContinuation.accept(
+        mock_handler_input,
+        deps=deps,
+    )
+    assert response == {"response": "next"}
+    play_next.assert_awaited_once_with(
+        mock_handler_input,
+        1,
+        "Continuing David Beard.",
+        deps=deps,
+    )
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingFeedbackContinuation"] is False
+    assert store["feedbackContinuation"] is None
 
 
 def test_pending_feedback_does_not_block_an_explicit_notification_request(
@@ -193,7 +366,7 @@ def test_internal_short_identifier_is_not_used_as_spoken_title():
             "audioUrl": "https://cdn.hear.media/one.mp3",
         }
     )
-    assert ContentUtils.content_title_for_speech(item) == "A weekly sport update from York"
+    assert ContentUtils.content_title_for_speech(item) == "a local recording"
 
 
 def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_input):

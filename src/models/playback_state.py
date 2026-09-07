@@ -85,6 +85,7 @@ class PlaybackState:
             "organizationName": content.get("organizationName"),
             "summary": content.get("summary") or content.get("shortDescription"),
             "discoverySource": discovery_source,
+            "discoveryContext": dict(queue.get("discoveryContext") or {}),
             "playbackSpeeds": content.get("playbackSpeeds") or [],
             "publicationId": content.get("publicationId"),
             "publicationTitle": content.get("publicationTitle"),
@@ -484,6 +485,12 @@ class PlaybackQueue:
             "orderedContentIds": content_ids,
             "currentIndex": max(0, min(int(start_index or 0), max(len(content_ids) - 1, 0))),
             "createdAt": int(time.time() * 1000),
+            "discoveryContext": SearchPayload.discovery_context(
+                source,
+                search_payload,
+                options.get("discovery_label"),
+                [item for item in items or [] if isinstance(item, dict)],
+            ),
         }
         if (
             isinstance(search_payload, dict)

@@ -87,10 +87,14 @@ class FeedbackResponseHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        feedback = (AlexaRequest.get_slot_value(handler_input, "feedback") or "").casefold()
+        feedback = AlexaFeedback.normalize_value(
+            AlexaRequest.get_slot_value(handler_input, "feedback")
+        )
         action_type = FeedbackResponseHandler.ACTIONS.get(feedback)
         if action_type:
             return await action_type(deps=self._deps).execute(handler_input)
+        if feedback == "skipped":
+            return await SkipFeedback(deps=self._deps).execute(handler_input)
         return AlexaFeedback.present_pending_feedback(
             handler_input, self._deps.user.snapshot(handler_input)
         )

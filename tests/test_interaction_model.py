@@ -31,8 +31,10 @@ def test_discovery_intents_use_domain_specific_generated_slots():
         "PlayByOrganizationIntent",
         "SelectOrganizationIntent",
         "PlayPublicationIntent",
+        "SelectPublicationSourceIntent",
         "PlayByCreatorIntent",
         "SelectCreatorIntent",
+        "ChooseSourceKindIntent",
         "WhatsTrendingIntent",
     }
     for intent_name in protected:
@@ -46,6 +48,7 @@ def test_discovery_intents_use_domain_specific_generated_slots():
         for slot in intents[intent_name].get("slots", [])
         if slot["type"].startswith("HEAR_")
     }.issuperset({"HEAR_LOCATION", "HEAR_ORGANIZATION", "HEAR_CREATOR", "HEAR_TOPIC"})
+    assert intents["ChooseSourceKindIntent"]["slots"][0]["type"] == "HEAR_SOURCE_KIND"
 
 
 def test_key_conversation_intents_have_the_expected_slot_contracts():
@@ -68,6 +71,9 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "topic": "HEAR_TOPIC",
         },
         "SelectOrganizationIntent": {"organizationQuery": "HEAR_ORGANIZATION"},
+        "SelectPublicationSourceIntent": {
+            "publicationSourceQuery": "HEAR_ORGANIZATION"
+        },
         "PlayByCreatorIntent": {
             "creatorQuery": "HEAR_CREATOR",
             "topic": "HEAR_TOPIC",
@@ -88,6 +94,10 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "dateQuery": "AMAZON.DATE",
         },
         "ClarifySelectionIntent": {"selection": "HEAR_CLARIFICATION"},
+        "ChooseSourceKindIntent": {
+            "sourceKind": "HEAR_SOURCE_KIND",
+            "publicationSort": "HEAR_PUBLICATION_SORT",
+        },
         "FeedbackResponseIntent": {"feedback": "HEAR_FEEDBACK"},
         "SetPlaybackSpeedIntent": {"speed": "HEAR_PLAYBACK_SPEED"},
     }
@@ -262,27 +272,36 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
     organization_values = {
         item["name"]["value"] for item in types["HEAR_ORGANIZATION"]["values"]
     }
-    newspaper = next(
+    source_kind = next(
         item
-        for item in types["ContentFormat"]["values"]
-        if item["name"]["value"] == "newspaper"
+        for item in types["HEAR_SOURCE_KIND"]["values"]
+        if item["name"]["value"] == "talking newspaper"
     )
     assert {
         "play {organizationQuery}",
         "play from {organizationQuery}",
     }.issubset(organization_samples)
+    generic_source_samples = set(intents["ChooseSourceKindIntent"]["samples"])
+    assert {
+        "play from a {sourceKind}",
+        "play from {sourceKind}",
+        "play something from a {sourceKind}",
+        "play something from {sourceKind}",
+        "play me something from a {sourceKind}",
+        "play {sourceKind}",
+    }.issubset(generic_source_samples)
     assert {
         "play from talking news",
         "play from a talking paper",
         "play from an audio newspaper",
-    }.issubset(organization_samples)
+    }.isdisjoint(organization_samples)
     assert {
-        "talking newspaper",
+        "talking news paper",
         "talking news",
         "talking paper",
         "audio newspaper",
-    }.issubset(set(newspaper["name"]["synonyms"]))
-    assert "top english paper" not in newspaper["name"]["synonyms"]
+    }.issubset(set(source_kind["name"]["synonyms"]))
+    assert "top english paper" not in source_kind["name"]["synonyms"]
     assert "Tynedale Talking Newspaper" in organization_values
     assert "play from {organizationQuery}" in organization_slot["samples"]
     assert intents["SelectOrganizationIntent"]["slots"][0]["type"] == "HEAR_ORGANIZATION"
@@ -306,6 +325,7 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
         organization_samples
         | set(organization_slot["samples"])
         | set(intents["SelectOrganizationIntent"]["samples"])
+        | set(intents["SelectPublicationSourceIntent"]["samples"])
         | set(intents["PlayPublicationIntent"]["samples"])
     )
     assert all(
@@ -313,6 +333,30 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
         for sample in source_samples
         for suffix in lossy_source_suffixes
     )
+
+
+def test_source_kind_slot_has_no_ids_and_owns_generic_source_requests():
+    language_model = _model()["interactionModel"]["languageModel"]
+    intents = {item["name"]: item for item in language_model["intents"]}
+    source_kind = next(
+        item for item in language_model["types"] if item["name"] == "HEAR_SOURCE_KIND"
+    )
+    assert {item["name"]["value"] for item in source_kind["values"]} == {
+        "talking newspaper",
+        "publication",
+        "creator",
+    }
+    assert all("id" not in item for item in source_kind["values"])
+    generic_samples = set(intents["ChooseSourceKindIntent"]["samples"])
+    assert "play from a {sourceKind}" in generic_samples
+    assert "play something from a {sourceKind}" in generic_samples
+    assert "play a {sourceKind}" in generic_samples
+    assert "play {publicationSort} {sourceKind}" in generic_samples
+    assert "play from a talking newspaper" not in set(
+        intents["PlayByOrganizationIntent"]["samples"]
+    )
+    assert "play from a creator" not in set(intents["PlayByCreatorIntent"]["samples"])
+    assert "play a publication" not in set(intents["PlayPublicationIntent"]["samples"])
 
 
 def test_publication_choice_navigation_has_forward_and_back_phrases():

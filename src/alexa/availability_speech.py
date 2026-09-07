@@ -104,15 +104,29 @@ class AvailabilitySpeech:
     ) -> str:
         if not candidates:
             return "I couldn't find any local sources just now. What would you like to hear?"
+        kinds = {
+            str(candidate.get("type") or "").strip().casefold()
+            for candidate in candidates
+        }
+        kinds.discard("")
+        noun = (
+            "talking newspapers"
+            if kinds == {"organization"}
+            else "creators"
+            if kinds == {"creator"}
+            else "talking newspapers and creators"
+            if kinds == {"organization", "creator"}
+            else "sources"
+        )
         if requested_city and position == "initial":
             safe_city = Speech.escape_ssml_lite(requested_city)
-            opening = f"Here are the sources I found in {safe_city}."
+            opening = f"Here are the {noun} closest to {safe_city}."
         else:
             opening = AvailabilitySpeech._position_opening(
                 candidates,
                 position,
-                "local sources" if not requested_city else "sources",
-                "Here are the local sources I found.",
+                noun,
+                f"Here are the {noun} I found.",
                 has_more,
             )
         choices = AvailabilitySpeech._numbered_choices(candidates)
@@ -122,12 +136,17 @@ class AvailabilitySpeech:
         return f"{opening} {choices} {instruction}"
 
     @staticmethod
-    def one_local_source(source_name: str, *, requested_city: str | None = None) -> str:
+    def one_local_source(
+        source_name: str,
+        *,
+        source_type: str | None = None,
+        requested_city: str | None = None,
+    ) -> str:
         safe = Speech.escape_ssml_lite(source_name)
         if requested_city:
             safe_city = Speech.escape_ssml_lite(requested_city)
-            return f"I found content in {safe_city} from {safe}. Would you like to listen?"
-        return f"I found content near you from {safe}. Would you like to listen?"
+            return f"I found {safe} near {safe_city}. Would you like to listen?"
+        return f"I found {safe} near you. Would you like to listen?"
 
     @staticmethod
     def source_content_question(

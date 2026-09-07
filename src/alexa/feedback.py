@@ -6,6 +6,61 @@ from src.alexa.ssml import Ssml
 
 class AlexaFeedback:
     @staticmethod
+    def normalize_value(value: object) -> str | None:
+        text = " ".join(str(value or "").casefold().replace("’", "'").split())
+        if not text:
+            return None
+        if text in {"skip", "skip it", "never mind", "pass", "no comment", "don't bother"}:
+            return "skipped"
+        if any(
+            phrase in text
+            for phrase in (
+                "not enjoyed",
+                "did not enjoy",
+                "didn't enjoy",
+                "did not like",
+                "didn't like",
+                "don't like",
+                "not for me",
+                "thumbs down",
+                "one star",
+                "was poor",
+            )
+        ):
+            return "not enjoyed"
+        if any(
+            phrase in text
+            for phrase in (
+                "somewhat",
+                "okay",
+                "alright",
+                "not bad",
+                "fine",
+                "could be better",
+                "nothing special",
+                "mixed feelings",
+                "three stars",
+            )
+        ):
+            return "somewhat"
+        if any(
+            phrase in text
+            for phrase in (
+                "enjoyed",
+                "liked",
+                "loved",
+                "was good",
+                "was great",
+                "very good",
+                "brilliant",
+                "five stars",
+                "thumbs up",
+            )
+        ):
+            return "enjoyed"
+        return None
+
+    @staticmethod
     def subject_title(subject: dict | None, store: dict | None = None) -> str:
         current = subject if isinstance(subject, dict) else {}
         saved = store if isinstance(store, dict) else {}
@@ -86,6 +141,21 @@ class AlexaFeedback:
     def continuing_speech(subject: dict | None, store: dict) -> str:
         title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(subject, store))
         return f"Okay, continuing {title}."
+
+    @staticmethod
+    def discovery_continuation_question(context: dict) -> str:
+        name = Speech.escape_ssml_lite(str(context.get("name") or "that content"))
+        return f"Would you like to continue listening to {name}?"
+
+    @staticmethod
+    def discovery_continuation_reprompt(context: dict) -> str:
+        name = Speech.escape_ssml_lite(str(context.get("name") or "that content"))
+        return f"Say yes to continue listening to {name}, or no to choose something else."
+
+    @staticmethod
+    def discovery_continuing_speech(context: dict) -> str:
+        name = Speech.escape_ssml_lite(str(context.get("name") or "that content"))
+        return f"Continuing {name}."
 
     @staticmethod
     def present_requested_feedback(

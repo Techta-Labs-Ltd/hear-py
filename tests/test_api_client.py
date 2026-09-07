@@ -340,10 +340,7 @@ async def test_broad_search_playback_intro_uses_request_not_first_item_metadata(
         deps=ApplicationContainer(),
     )
 
-    assert (
-        start.await_args.args[2]
-        == "Here are 37 stories about local transport in Herne Bay. Here's the first one."
-    )
+    assert start.await_args.args[2] == "Playing content on local transport in Herne Bay."
 
 
 @pytest.mark.asyncio
@@ -373,9 +370,7 @@ async def test_broad_search_fallback_does_not_announce_later_item_source(
     )
 
     assert result == {"response": "play"}
-    assert start.await_args.args[2] == (
-        "Here are 12 stories about local history. Here's the first one."
-    )
+    assert start.await_args.args[2] == "Playing content on local history."
 
 
 @pytest.mark.asyncio

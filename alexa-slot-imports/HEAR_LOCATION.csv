@@ -88,7 +88,7 @@ Almondbank,,almondbank perth and kinross,almondbank scotland
 Almondbury,,almond berry,almond bree,almondberry,almondbree,almondbury england,almondbury kirklees
 Almondsbury,,almonds berry,almonds bree,almondsberry,almondsbree,almondsbury england,almondsbury south gloucestershire
 Alness,,alness highland,alness scotland
-Alnwick,,alnwick england,alnwick northumberland
+Alnwick,,alnwick england,alnwick northumberland,Annick
 Alresford,,alresford england,alresford essex
 Alrewas,,alrewas england,alrewas staffordshire
 Alsager,,alsager cheshire east,alsager england
@@ -420,7 +420,7 @@ Berry Hill,,berry hill england,berry hill gloucestershire,berryhill
 Berry Pomeroy,,berry pomeroy devon,berry pomeroy england,berrypomeroy,pomeroy
 Bersted,,bersted england,bersted west sussex
 Berwick Hill,,berwick hill england,berwick hill northumberland,berwickhill
-Berwick-Upon-Tweed,,berwick-upon-tweed england,berwick-upon-tweed northumberland
+Berwick-Upon-Tweed,,berwick-upon-tweed england,berwick-upon-tweed northumberland,Berwick Upon Tweed,Berrick Upon Tweed
 Bessbrook,,"bessbrook newry, mourne and down",bessbrook northern ireland
 Bestwood Village,,bestwood village england,bestwood village nottinghamshire,bestwoodvillage
 Betchworth,,betch werth,betch wuth,betchwerth,betchworth england,betchworth surrey,betchwuth
@@ -555,7 +555,7 @@ Blunsdon Saint Andrew,,blunsdon saint andrew england,blunsdon saint andrew swind
 Bluntisham,,bluntis am,bluntis um,bluntisam,bluntisham cambridgeshire,bluntisham england,bluntisum
 Blyth,,blyth england,blyth northumberland,blyth nottinghamshire
 Blythebridge,,blythebridge england,blythebridge staffordshire
-Bo'ness,,bo'ness falkirk,bo'ness scotland
+Bo'ness,,bo'ness falkirk,bo'ness scotland,Boness,Bo Ness
 Bobbing,,bobb en,bobb in,bobben,bobbin,bobbing england,bobbing kent
 Boddam,,boddam aberdeenshire,boddam scotland
 Boddicott,,boddicott england,boddicott oxfordshire
@@ -1228,7 +1228,7 @@ Corwen,,corwen denbighshire,corwen wales
 Cosby,,cosby england,cosby leicestershire
 Coseley,,cose lay,cose lee,cose leigh,coselay,coselee,coseleigh,coseley dudley,coseley england
 Cosham,,cos am,cos um,cosam,cosham england,cosham portsmouth,cosum
-Costessey,,costessey england,costessey norfolk
+Costessey,,costessey england,costessey norfolk,Cossey
 Cotgrave,,cotgrave england,cotgrave nottinghamshire
 Cottenham,,cotten am,cotten um,cottenam,cottenham cambridgeshire,cottenham england,cottenum
 Cottesmore,,cottesmore england,cottesmore rutland
@@ -1878,7 +1878,7 @@ Frinton-on-Sea,,frin tonne on sea,frin tun on sea,frinton-on-sea england,frinton
 Friskney,,friskney england,friskney lincolnshire
 Frizington,,frizing tonne,frizing tun,frizington cumbria,frizington england,frizingtonne,frizingtun
 Frodsham,,frods am,frods um,frodsam,frodsham cheshire west and chester,frodsham england,frodsum
-Frome,,frome england,frome somerset
+Frome,,frome england,frome somerset,Froom
 Fulbourn,,fulbourn cambridgeshire,fulbourn england
 Fulford,,fulford england,fulford staffordshire,fulford york
 Fulham,,Full Em,Full um,ful am,ful um,fulam,fulham england,fulham hammersmith and fulham,fulum
@@ -2233,7 +2233,7 @@ Haverigg,,haverigg cumbria,haverigg england
 Havering,,have en,have in,haveen,havein,haver en,haver in,haveren,haverin,havering england
 Hawarden,,hawarden flintshire,hawarden wales
 Hawes,,hawes england,hawes north yorkshire
-Hawick,,hawick scotland,hawick scottish borders
+Hawick,,hawick scotland,hawick scottish borders,Hoyk
 Hawkesbury,,hawkes berry,hawkes bree,hawkesberry,hawkesbree,hawkesbury england,hawkesbury south gloucestershire,hawkesbury warwickshire
 Hawkhurst,,hawkhurst england,hawkhurst kent
 Hawkinge,,hawkinge england,hawkinge kent
@@ -2665,7 +2665,6 @@ Kings Bromley,,kings brom,kings brom lay,kings brom lee,kings brom leigh,kings b
 Kings Cliffe,,kings cliffe england,kings cliffe northamptonshire,kingscliffe
 Kings Hill,,kings hill england,kings hill kent,kingshill
 Kings Langley,,kings lang lay,kings lang lee,kings lang leigh,kings langlay,kings langlee,kings langleigh,kings langley england,kings langley hertfordshire,kingslangley
-Kings Lynn,
 Kings Norton,,kings nor tonne,kings nor tun,kings norton birmingham,kings norton england,kings nortonne,kings nortun,kingsnorton,kn
 Kings Somborne,,kings somborne england,kings somborne hampshire,kingssomborne,somborne
 Kings Sutton,,kings sut tonne,kings sut tun,kings sutton england,kings sutton northamptonshire,kings suttonne,kings suttun,kingssutton
@@ -2715,7 +2714,7 @@ Kirkby Stephen,,kirkby stephen cumbria,kirkby stephen england,kirkbystephen
 Kirkby-in-Furness,,kif,kirkby-in-furness cumbria,kirkby-in-furness england
 Kirkcaldy,,kirkcaldy fife,kirkcaldy scotland
 Kirkconnel,,kirkconnel dumfries and galloway,kirkconnel scotland
-Kirkcudbright,,kirkcudbright dumfries and galloway,kirkcudbright scotland
+Kirkcudbright,,kirkcudbright dumfries and galloway,kirkcudbright scotland,Kirkcoobree,Kirkoobree
 Kirkham,,kirk am,kirk um,kirkam,kirkham england,kirkham lancashire,kirkum
 Kirkheaton,,kirkhea tonne,kirkhea tun,kirkheaton england,kirkheaton kirklees,kirkheatonne,kirkheatun
 Kirkintilloch,,kirkintilloch east dunbartonshire,kirkintilloch scotland
@@ -2835,7 +2834,7 @@ Lemington,,leming tonne,leming tun,lemington england,lemington newcastle upon ty
 Lenham,,len am,len um,lenam,lenham england,lenham kent,lenum
 Lennoxtown,,lennoxtown east dunbartonshire,lennoxtown scotland
 Lenzie,,lenzie east dunbartonshire,lenzie scotland
-Leominster,,leominster england,leominster herefordshire
+Leominster,,leominster england,leominster herefordshire,Lemster
 Lepton,,lep tonne,lep tun,lepton england,lepton kirklees,leptonne,leptun
 Lerwick,,lerwick scotland,lerwick shetland islands
 Lesbury,,les berry,les bree,lesberry,lesbree,lesbury england,lesbury northumberland
@@ -2952,14 +2951,14 @@ Llandysilio,,llandysilio powys,llandysilio wales
 Llandyssul,,llandyssul carmarthenshire,llandyssul wales
 Llanedy,,llanedy carmarthenshire,llanedy wales
 Llanegwad,,llanegwad carmarthenshire,llanegwad wales
-Llanelli,,llanelli carmarthenshire,llanelli wales
+Llanelli,,llanelli carmarthenshire,llanelli wales,Lanelli
 Llanengan,,llanengan gwynedd,llanengan wales
 Llanerchymedd,,llanerchymedd isle of anglesey,llanerchymedd wales
 Llanfaelog,,llanfaelog isle of anglesey,llanfaelog wales
 Llanfair Caereinion,,caereinion,llanfair caereinion powys,llanfair caereinion wales,llanfaircaereinion
 Llanfair-Dyffryn-Clwyd,,ldc,llanfair-dyffryn-clwyd denbighshire,llanfair-dyffryn-clwyd wales
 Llanfairfechan,,llanfairfechan conwy,llanfairfechan wales
-Llanfairpwllgwyngyll,,llanfairpwllgwyngyll isle of anglesey,llanfairpwllgwyngyll wales
+Llanfairpwllgwyngyll,,llanfairpwllgwyngyll isle of anglesey,llanfairpwllgwyngyll wales,Llanfairpwll,Llanfair P G
 Llanfechell,,llanfechell isle of anglesey,llanfechell wales
 Llanfihangel-ar-Arth,,laa,llanfihangel-ar-arth carmarthenshire,llanfihangel-ar-arth wales
 Llanfoist,,llanfoist monmouthshire,llanfoist wales
@@ -3130,7 +3129,7 @@ Maesteg,,maesteg bridgend,maesteg wales
 Maesycwmmer,,maesycwmmer caerphilly,maesycwmmer wales
 Maghera,,maghera mid-ulster,maghera northern ireland
 Magheralin,,"magheralin armagh city, banbridge and craigavon",magheralin northern ireland
-Maghull,,maghull england,maghull sefton
+Maghull,,maghull england,maghull sefton,Magull
 Magor,,magor monmouthshire,magor wales
 Maguires Bridge,,maguires bridge fermanagh and omagh,maguires bridge northern ireland,maguiresbridge
 Maiden Newton,,maiden new tonne,maiden new tun,maiden newton dorset,maiden newton england,maiden newtonne,maiden newtun,maidennewton
@@ -3290,7 +3289,7 @@ Millom,,millom cumbria,millom england
 Millport,,millport north ayrshire,millport scotland
 Milltimber,,milltimber aberdeen city,milltimber scotland
 Milnathort,,milnathort perth and kinross,milnathort scotland
-Milngavie,,milngavie east dunbartonshire,milngavie scotland
+Milngavie,,milngavie east dunbartonshire,milngavie scotland,Mullguy,Mull Guy
 Milnrow,,milnrow england,milnrow rochdale
 Milnthorpe,,milnthorpe cumbria,milnthorpe england
 Milton,,mil tonne,mil tun,milton cambridgeshire,milton england,milton oxfordshire,milton stoke-on-trent,miltonne,miltun
@@ -3803,7 +3802,7 @@ Polperro,,polperro cornwall,polperro england
 Ponders End,,ponders end enfield,ponders end england,pondersend
 Ponsanooth,,ponsanooth cornwall,ponsanooth england
 Pont Rhyd-y-cyff,,pont rhyd-y-cyff bridgend,pont rhyd-y-cyff wales,pontrhyd-y-cyff,prc,rhyd-y-cyff
-Pont y Paul,
+Pont y Paul,,Pontypool,Pont y Pool
 Pont-y-pwl,,pont-y-pwl torfaen,pont-y-pwl wales
 Pontardawe,,pontardawe neath port talbot,pontardawe wales
 Pontardulais,,pontardulais swansea,pontardulais wales
@@ -4075,7 +4074,7 @@ Rudloe,,rudloe england,rudloe wiltshire
 Rufford,,rufford england,rufford lancashire
 Rugby,,rugby england,rugby warwickshire
 Rugeley,,ruge lay,ruge lee,ruge leigh,rugelay,rugelee,rugeleigh,rugeley england,rugeley staffordshire
-Ruislip,,ruislip england,ruislip hillingdon
+Ruislip,,ruislip england,ruislip hillingdon,Rye Slip
 Runcorn,,runcorn england,runcorn halton
 Runswick,,runswick england,runswick north yorkshire
 Runwell,,runwell england,runwell essex
@@ -4466,7 +4465,7 @@ Sprotbrough,,sprotbrough doncaster,sprotbrough england
 Sproughton,,sprough tonne,sprough tun,sproughton england,sproughton suffolk,sproughtonne,sproughtun
 St Martin's,,martin's,st martin's england,st martin's shropshire,stmartin's
 St Mary's Bay,,st mary's bay england,st mary's bay kent,stmary'sbay
-St. Helens,
+St. Helens,,St Helens
 Stadhampton,,stadhamp tonne,stadhamp tun,stadhampton england,stadhampton oxfordshire,stadhamptonne,stadhamptun
 Stafford,,stafford england,stafford staffordshire
 Staffordshire,
@@ -4837,7 +4836,7 @@ Totternhoe,,totternhoe central bedfordshire,totternhoe england
 Tottington,,totting tonne,totting tun,tottington bury,tottington england,tottingtonne,tottingtun
 Totton,,tot tonne,tot tun,totton england,totton hampshire,tottonne,tottun
 Tow Law,,tl,tow law durham,tow law england,towlaw
-Towcester,,towcester england,towcester northamptonshire
+Towcester,,towcester england,towcester northamptonshire,Toaster
 Tower Hamlets,,hamlets,tower hamlets england,towerhamlets
 Townhill,,townhill fife,townhill scotland
 Towyn,,towyn gwynedd,towyn wales
@@ -5342,7 +5341,7 @@ Wool,,wool dorset,wool england
 Woolaston,,woolas tonne,woolas tun,woolaston england,woolaston gloucestershire,woolastonne,woolastun
 Woolavington,,woolaving tonne,woolaving tun,woolavington england,woolavington somerset,woolavingtonne,woolavingtun
 Wooler,,wooler england,wooler northumberland
-Woolfardisworthy,,woolfardisworthy devon,woolfardisworthy england
+Woolfardisworthy,,woolfardisworthy devon,woolfardisworthy england,Woolsery
 Woolley,,wool lay,wool lee,wool leigh,woollay,woollee,woolleigh,woolley england,woolley wakefield
 Woolmer Green,,woolmer green england,woolmer green hertfordshire,woolmergreen
 Woolpit,,woolpit england,woolpit suffolk

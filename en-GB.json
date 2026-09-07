@@ -263,6 +263,37 @@
           ]
         },
         {
+          "name": "ChooseSourceKindIntent",
+          "slots": [
+            {
+              "name": "sourceKind",
+              "type": "HEAR_SOURCE_KIND"
+            },
+            {
+              "name": "publicationSort",
+              "type": "HEAR_PUBLICATION_SORT"
+            }
+          ],
+          "samples": [
+            "play from a {sourceKind}",
+            "play from {sourceKind}",
+            "play something from a {sourceKind}",
+            "play something from {sourceKind}",
+            "play me something from a {sourceKind}",
+            "play me something from {sourceKind}",
+            "play a {sourceKind}",
+            "play {sourceKind}",
+            "find a {sourceKind}",
+            "find {sourceKind}",
+            "give me a {sourceKind}",
+            "put on a {sourceKind}",
+            "I want a {sourceKind}",
+            "I want {sourceKind}",
+            "play {publicationSort} {sourceKind}",
+            "play the {publicationSort} {sourceKind}"
+          ]
+        },
+        {
           "name": "PlayContentIntent",
           "slots": [
             {
@@ -582,15 +613,6 @@
             }
           ],
           "samples": [
-            "play from a talking newspaper",
-            "play from a talking news paper",
-            "play from talking news",
-            "play from a talking paper",
-            "play from an audio newspaper",
-            "play something from a talking newspaper",
-            "play something from a talking news paper",
-            "play something from talking news",
-            "play me a talking newspaper",
             "play {organizationQuery}",
             "play from {organizationQuery}",
             "play something from {organizationQuery}",
@@ -631,15 +653,6 @@
             "play {dateQuery} publication",
             "play {dateQuery} publication from {publicationSourceQuery}",
             "play publication from {publicationSourceQuery} from {dateQuery}",
-            "play a publication",
-            "play publications",
-            "play something from a publication",
-            "find a publication",
-            "find publications",
-            "give me a publication",
-            "put on a publication",
-            "latest publication",
-            "play the latest publication",
             "play {publicationSort} publications",
             "play the {publicationSort} publication",
             "play {publicationSort} publication from {publicationSourceQuery}",
@@ -668,6 +681,25 @@
             "{organizationQuery}",
             "the {organizationQuery}",
             "{organizationQuery} please"
+          ]
+        },
+        {
+          "name": "SelectPublicationSourceIntent",
+          "slots": [
+            {
+              "name": "publicationSourceQuery",
+              "type": "HEAR_ORGANIZATION",
+              "samples": [
+                "{publicationSourceQuery}",
+                "the {publicationSourceQuery}",
+                "I want {publicationSourceQuery}"
+              ]
+            }
+          ],
+          "samples": [
+            "{publicationSourceQuery}",
+            "the {publicationSourceQuery}",
+            "{publicationSourceQuery} please"
           ]
         },
         {
@@ -710,9 +742,6 @@
             }
           ],
           "samples": [
-            "play from a creator",
-            "play something from a creator",
-            "play me something from a creator",
             "play by {creatorQuery}",
             "play something by {creatorQuery}",
             "play a publication by {creatorQuery}",
@@ -1339,16 +1368,9 @@
               "name": {
                 "value": "Talking News Federation",
                 "synonyms": [
-                  "Talking Newspaper Federation"
-                ]
-              }
-            },
-            {
-              "name": {
-                "value": "tnf",
-                "synonyms": [
-                  "t n f",
-                  "t. n. f.",
+                  "Talking Newspaper Federation",
+                  "TNF",
+                  "T. N. F.",
                   "tee en eff"
                 ]
               }
@@ -1524,6 +1546,52 @@
           ]
         },
         {
+          "name": "HEAR_SOURCE_KIND",
+          "values": [
+            {
+              "name": {
+                "value": "talking newspaper",
+                "synonyms": [
+                  "talking news paper",
+                  "talking news",
+                  "audio newspaper",
+                  "audio news paper",
+                  "talking paper",
+                  "local talking newspaper"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "publication",
+                "synonyms": [
+                  "publications",
+                  "edition",
+                  "editions",
+                  "issue",
+                  "issues"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "creator",
+                "synonyms": [
+                  "creators",
+                  "author",
+                  "authors",
+                  "narrator",
+                  "narrators",
+                  "reader",
+                  "readers",
+                  "contributor",
+                  "contributors"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "HEAR_FEEDBACK",
           "values": [
             {
@@ -1532,13 +1600,19 @@
                 "synonyms": [
                   "I enjoyed it",
                   "I enjoyed this",
+                  "I enjoyed that",
                   "I really enjoyed it",
+                  "yes I enjoyed it",
                   "I liked it",
                   "I liked this",
+                  "I liked that",
                   "that was great",
                   "loved it",
                   "that was good",
+                  "it was good",
                   "really good",
+                  "very good",
+                  "brilliant",
                   "five stars",
                   "thumbs up"
                 ]
@@ -1569,6 +1643,7 @@
                   "did not like it",
                   "not for me",
                   "didn't enjoy it",
+                  "I didn't enjoy that",
                   "I didn't enjoy this",
                   "didn't like it",
                   "I don't like it",
@@ -1584,19 +1659,6 @@
         {
           "name": "ContentFormat",
           "values": [
-            {
-              "name": {
-                "value": "newspaper",
-                "synonyms": [
-                  "talking newspaper",
-                  "news paper",
-                  "talking news",
-                  "talking paper",
-                  "audio newspaper",
-                  "audio news paper"
-                ]
-              }
-            },
             {
               "name": {
                 "value": "podcast",

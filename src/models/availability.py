@@ -24,12 +24,10 @@ from src.utils.search_payload import SearchPayload
 class Availability:
     logger = logging.getLogger(__name__)
     __slots__ = ("_deps",)
-
     def __init__(self, *, deps: object | None = None) -> None:
         if deps is None:
             raise RuntimeError("Availability requires injected dependencies")
         self._deps = deps
-
     @staticmethod
     def _response(handler_input, speech: str, reprompt: str, candidates=None):
         builder = (
@@ -164,7 +162,9 @@ class Availability:
             return self._response(
                 handler_input,
                 AvailabilitySpeech.one_local_source(
-                    candidates[0]["name"], requested_city=requested_city
+                    candidates[0]["name"],
+                    source_type=candidates[0].get("type"),
+                    requested_city=requested_city,
                 ),
                 "Say yes to hear it, or no to choose something else.",
                 candidates,

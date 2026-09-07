@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.runtime import AttrDict, ResponseBuilder
 from src.constants.state import StateSchema
 from src.models.availability import Availability
@@ -312,7 +313,7 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
         "longitude": -1.78,
     }
     speech = AvailabilityTestSupport.speech(response)
-    assert "Here are the sources I found in Swindon" in speech
+    assert "Here are the talking newspapers and creators closest to Swindon" in speech
     assert "Here are the local sources I found" not in speech
     assert "First, Talking News Federation" in speech
     assert "Second, Adeshina Ayomide" in speech
@@ -321,6 +322,41 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
     assert "previous" not in speech
     assert response["shouldEndSession"] is False
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
+
+
+def test_source_candidates_keep_same_name_in_distinct_domains():
+    candidates = AvailabilityData.source_candidates(
+        {
+            "organizations": [
+                {"type": "organization", "id": "org-1", "name": "Community Voice"}
+            ],
+            "creators": [
+                {"type": "creator", "id": "creator-1", "name": "Community Voice"}
+            ],
+        }
+    )
+    assert [(item["type"], item["id"]) for item in candidates] == [
+        ("organization", "org-1"),
+        ("creator", "creator-1"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("candidate_type", "expected"),
+    [
+        ("organization", "Here are the talking newspapers closest to York."),
+        ("creator", "Here are the creators closest to York."),
+    ],
+)
+def test_local_choice_opening_names_the_returned_domain(candidate_type, expected):
+    speech = AvailabilitySpeech.local_source_choices(
+        [
+            {"type": candidate_type, "id": "one", "name": "First Result"},
+            {"type": candidate_type, "id": "two", "name": "Second Result"},
+        ],
+        requested_city="York",
+    )
+    assert expected in speech
 
 
 def test_supplied_location_filter_preserves_country_and_does_not_mix_saved_coordinates():
@@ -381,7 +417,7 @@ async def test_requested_city_source_does_not_say_near_you(mock_handler_input):
     )
 
     speech = AvailabilityTestSupport.speech(response)
-    assert "content in Liverpool from Liverpool Talking Newspaper" in speech
+    assert "I found Liverpool Talking Newspaper near Liverpool" in speech
     assert "near you" not in speech
 
 
@@ -437,7 +473,7 @@ async def test_resolver_location_payload_routes_to_availability_instead_of_searc
         }
     }
     speech = AvailabilityTestSupport.speech(response)
-    assert "I found content near you from Talking News Federation." in speech
+    assert "I found Talking News Federation near you." in speech
     assert "Would you like to listen?" in speech
     assert "I found one local source" not in speech
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"

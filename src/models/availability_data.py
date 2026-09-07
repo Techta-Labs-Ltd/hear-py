@@ -140,10 +140,13 @@ class AvailabilityData:
     def source_candidates(result: dict) -> list[dict]:
         combined = list(result.get("organizations") or []) + list(result.get("creators") or [])
         unique = []
-        names: set[str] = set()
+        names: set[tuple[str, str]] = set()
         for candidate in combined:
             name = str(candidate.get("name") or "").strip()
-            key = DialogSelection.normalize(name)
+            key = (
+                str(candidate.get("type") or "source").strip().casefold(),
+                DialogSelection.normalize(name),
+            )
             if not name or key in names:
                 continue
             names.add(key)

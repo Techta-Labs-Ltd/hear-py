@@ -117,7 +117,6 @@ class ContentUtils:
     @staticmethod
     def _pick_curated_title(item: dict) -> str | None:
         return ContentUtils.prefer_readable(
-            ContentUtils.nullable_string(item.get("shortDescription")),
             ContentUtils._first_search_phrase(item),
             ContentUtils._themes_label(item),
         )
@@ -144,7 +143,10 @@ class ContentUtils:
 
     @staticmethod
     def pick_spoken_title(item: dict) -> str:
-        return ContentUtils._pick_display_title(item)
+        title = ContentUtils._pick_display_title(item)
+        if ContentUtils.is_id_like_label(title) or ContentUtils.is_weak_title(title):
+            return "a local recording"
+        return title
 
     @staticmethod
     def is_bad_credit_name(value) -> bool:
@@ -288,7 +290,7 @@ class ContentUtils:
             and (not ContentUtils.is_id_like_label(curated))
         ):
             return ContentUtils._humanize_spoken_title_safe(curated) or curated
-        return curated or "a local recording"
+        return "a local recording"
 
     @staticmethod
     def _humanize_spoken_title_safe(value: str) -> str | None:

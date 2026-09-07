@@ -304,6 +304,14 @@ class SearchSpeech:
         for prefix in ("the latest content from ", "content from "):
             if lowered.startswith(prefix):
                 return "from", subject[len(prefix) :].strip()
+        for prefix in (
+            "the latest recordings from ",
+            "recordings from ",
+            "the latest content by ",
+            "content by ",
+        ):
+            if lowered.startswith(prefix):
+                return "from", subject[len(prefix) :].strip()
         if lowered.startswith("the latest "):
             subject = subject[len("the latest ") :].strip()
         if subject.casefold() in {
@@ -352,25 +360,18 @@ class SearchSpeech:
         title: object = None,
         credit: object = None,
     ) -> str:
-        total = max(0, int(count or 0))
-        noun = "story" if total == 1 else "stories"
-        count_label = "one" if total == 1 else str(total)
         if SearchSpeech._has_source_filter(search_payload):
-            intro = f"I found {count_label} {noun}."
-            safe_title = Speech.escape_ssml_lite(str(title).strip()) if title else ""
-            safe_credit = Speech.escape_ssml_lite(str(credit).strip()) if credit else ""
-            if safe_title and safe_credit:
-                return f"{intro} Now playing {safe_title}, by {safe_credit}."
-            if safe_title:
-                return f"{intro} Now playing {safe_title}."
-            return f"{intro} Now playing the first one."
+            _, subject = SearchSpeech._clean_result_subject(request_label)
+            source = subject or str(credit or "").strip()
+            if source:
+                return f"Playing {Speech.escape_ssml_lite(source)}."
+            return "Playing the first recording."
         relation, subject = SearchSpeech._broad_result_context(search_payload, request_label)
-        detail = ""
         if subject:
             safe_subject = Speech.escape_ssml_lite(subject)
-            detail = f" {relation} {safe_subject}" if relation else f" {safe_subject}"
-        intro = f"Here {'is' if total == 1 else 'are'} {count_label} {noun}{detail}."
-        return intro if total == 1 else f"{intro} Here's the first one."
+            preposition = "from" if relation == "from" else "on"
+            return f"Playing content {preposition} {safe_subject}."
+        return "Playing content."
 
     @staticmethod
     def talking_newspaper_not_recognized(name) -> str:

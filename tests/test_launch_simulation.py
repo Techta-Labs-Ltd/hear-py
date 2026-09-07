@@ -377,23 +377,15 @@ class TestSpeechStrings:
 
     def test_welcome_return_city_is_lambda(self):
         result = Speech.WELCOME_RETURN_CITY("London")
-        assert result == (
-            "Welcome back to Hear. You can say play from a talking newspaper, "
-            "play news, or what's trending. What would you like to listen to?"
-        )
+        assert result == f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
 
     def test_welcome_return_generic(self):
-        assert (
-            Speech.WELCOME_RETURN_GENERIC
-            == "Welcome back to Hear. You can say play from a talking newspaper, "
-            "play news, or what's trending. What would you like to listen to?"
+        assert Speech.WELCOME_RETURN_GENERIC == (
+            f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
         )
 
     def test_guest_first_welcome_is_concise(self):
-        expected = (
-            "Welcome to Hear. You can say play from a talking newspaper, play news, "
-            "or what's trending. What would you like to listen to?"
-        )
+        expected = f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
         assert Speech.WELCOME_FIRST() == expected
         assert Speech.WELCOME_FIRST_HAS_CITY(None, "London") == expected
 

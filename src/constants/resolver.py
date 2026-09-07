@@ -7,6 +7,7 @@ class ResolverConstants:
     STANDALONE_LOCATION_MIN_CONFIDENCE = 75
     PUBLICATION_SORTS = frozenset({"latest", "trending"})
     CARRIERS = {
+        "ChooseSourceKindIntent": "play",
         "PlayContentIntent": "play",
         "SearchContentIntent": "play",
         "PlayByCreatorIntent": "play from",
@@ -15,6 +16,7 @@ class ResolverConstants:
         "PlayByOrganizationIntent": "play from",
         "SearchOrganizationIntent": "play from",
         "SelectOrganizationIntent": "play from",
+        "SelectPublicationSourceIntent": "play publication from",
         "SearchPublicationIntent": "play publication from",
         "BrowseByCategoryIntent": "play",
         "PlayLocalIntent": "play local",
@@ -22,6 +24,7 @@ class ResolverConstants:
         "WhatsTrendingIntent": "play",
     }
     RAW_SLOT_PRIORITY = {
+        "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
         "TownCaptureIntent": ("townName", "selection"),
         "SetLocationIntent": ("location", "townName", "selection"),
         "PlayLocalIntent": ("cityQuery", "localQuery", "topic", "category"),
@@ -35,6 +38,7 @@ class ResolverConstants:
         "SelectCreatorIntent": ("creatorQuery",),
         "PlayByOrganizationIntent": ("organizationQuery", "topic"),
         "SelectOrganizationIntent": ("organizationQuery",),
+        "SelectPublicationSourceIntent": ("publicationSourceQuery",),
         "PlayPublicationIntent": ("publicationSourceQuery", "topic"),
         "BrowseByCategoryIntent": ("category", "topic"),
     }

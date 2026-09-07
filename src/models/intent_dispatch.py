@@ -217,11 +217,9 @@ class IntentDispatcher:
     def _missing_suggestion_response(handler_input: HandlerInput) -> Response:
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml(
-                    "Sorry, I didn't catch that. You can say play followed by a topic, what's trending, or play from a creator by name. What would you like?"
-                )
+                Ssml.ssml(Speech.FALLBACK_SPEECH)
             )
-            .reprompt(Ssml.ssml("Try saying what's trending, or play followed by a topic."))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
             .get_response()
         )

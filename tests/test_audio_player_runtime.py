@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.speech import Speech
 from src.application import Application
 from src.clients.hear import HearApiClient
 from src.container import ApplicationContainer
@@ -172,7 +173,7 @@ async def test_latest_source_offer_is_once_per_completed_item_and_no_clears_it(
     search.assert_not_awaited()
     assert _stored_state(persistence)["pendingLatestSource"] is None
     assert _stored_state(persistence)["activeDialog"] is None
-    assert "news or sport" in declined["response"]["outputSpeech"]["ssml"]
+    assert Speech.WELCOME_REPROMPT in declined["response"]["outputSpeech"]["ssml"]
     relaunched = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
     assert "Would you like to hear the latest" not in relaunched["response"]["outputSpeech"]["ssml"]
 
@@ -387,9 +388,8 @@ async def test_resume_no_abandons_playback_and_offers_next_listening_options():
     assert state["activeDialog"] is None
     assert response["shouldEndSession"] is False
     assert "Okay, I won't continue that recording." in response["outputSpeech"]["ssml"]
-    assert "news or sport" in response["outputSpeech"]["ssml"]
-    assert "talking newspaper" in response["reprompt"]["outputSpeech"]["ssml"]
-    assert "what's trending" in response["reprompt"]["outputSpeech"]["ssml"]
+    assert Speech.WELCOME_REPROMPT in response["outputSpeech"]["ssml"]
+    assert Speech.WELCOME_REPROMPT in response["reprompt"]["outputSpeech"]["ssml"]
 
 
 @pytest.mark.asyncio

@@ -213,6 +213,9 @@ class ResolverWorkflowRunner:
             if store.get("awaitingCreatorName") or dialog_type == "creator_name"
             else ("organization", "organizationQuery", "PlayByOrganizationIntent")
             if store.get("awaitingOrganizationName") or dialog_type == "organization_name"
+            else ("publication", "publicationSourceQuery", "PlayPublicationIntent")
+            if store.get("awaitingPublicationSource")
+            or dialog_type == "publication_source"
             else None
         )
         if not follow_up:
@@ -222,13 +225,18 @@ class ResolverWorkflowRunner:
             DiscoveryConstants.CREATOR_INTENTS
             if intent_name == "creator"
             else DiscoveryConstants.ORGANIZATION_INTENTS
+            if intent_name == "organization"
+            else DiscoveryConstants.PUBLICATION_INTENTS
         )
         result = await self._resolver_result(handler_input, raw, matching_intent)
         result["intent"] = intent_name
         result.setdefault("slots", {})[slot_name] = raw
         result["slots"][f"{intent_name}FollowUp"] = True
         if result.get("status") == "resolved":
-            DialogStateManager.clear(handler_input, f"{intent_name}_name")
+            dialog_name = (
+                "publication_source" if intent_name == "publication" else f"{intent_name}_name"
+            )
+            DialogStateManager.clear(handler_input, dialog_name)
         ResolverWorkflow._set_nlp(
             handler_input,
             {

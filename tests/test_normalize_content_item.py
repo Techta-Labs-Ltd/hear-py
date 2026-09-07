@@ -37,7 +37,8 @@ def test_normalizes_current_alexa_search_contract():
     assert item["contentId"] == content_id
     assert item["creator"] == "Shetland Life"
     assert item["creatorId"] == "creator-1"
-    assert item["spokenTitle"] == raw["shortDescription"]
+    assert item["spokenTitle"] == "a local recording"
+    assert item["summary"] == raw["shortDescription"]
     assert item["category"]["slug"] == "monthly-update"
     assert item["playbackSpeeds"] == raw["playbackSpeed"]
     assert item["audioUrl"] == raw["audioUrl"]

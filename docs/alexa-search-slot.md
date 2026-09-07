@@ -7,6 +7,12 @@ The Hear backend generates four separate custom Alexa slot types:
 - `HEAR_CREATOR`
 - `HEAR_TOPIC`
 
+The interaction model also contains the small, static `HEAR_SOURCE_KIND` slot.
+It is not generated from catalogue data. Its canonical values are `talking
+newspaper`, `publication`, and `creator`, with common spoken variants. It
+routes a generic request into the correct name-capture flow without sending a
+generic phrase to the resolver.
+
 `HEAR_CLARIFICATION` is not generated from the catalogue. Keep its stable
 fallback values in the interaction model for `first`, `second`, `third`,
 `publications`, and `tracks`. During an ambiguity response, the skill replaces
@@ -135,6 +141,18 @@ prefer `London` as a location instead of a creator name. If the same phrase
 exists in multiple domains, keep it only where users genuinely use it or rely
 on the resolver to clarify the unavoidable ambiguity.
 
+The lexicon post-processor removes organisation-owned accounts from
+`HEAR_CREATOR` when their canonical name is already present in
+`HEAR_ORGANIZATION`. Cross-slot canonical collisions fail validation unless the
+phrase is listed in `allowCrossSlotCollisions`. Synonym overlap is allowed
+because carrier phrases and active dialog establish the domain, but duplicate
+canonical values must be an explicit catalogue decision.
+
+The repeatable cleanup policy is stored in
+`config/alexa_slot_lexicon.json`. Run
+`python scripts/apply_alexa_slot_lexicon.py alexa-slot-imports` after the
+backend generates fresh CSV files and before importing them into Alexa.
+
 ## Intent-to-slot mapping
 
 | Intent field | Slot type |
@@ -147,8 +165,10 @@ on the resolver to clarify the unavoidable ambiguity.
 | `PlayByOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `SelectOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `PlayPublicationIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
+| `SelectPublicationSourceIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
 | `PlayByCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
 | `SelectCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
+| `ChooseSourceKindIntent.sourceKind` | static `HEAR_SOURCE_KIND` |
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
 
 Creator-owned publication requests use `PlayByCreatorIntent`, for example
@@ -285,12 +305,10 @@ Tynedale Talking Newspaper` all populate one complete organization slot. A bare
 creator name similarly populates `SelectCreatorIntent`. These selection intents
 still go through the same Hear resolver as the longer play intents.
 
-The source slots on `PlayByCreatorIntent`, `PlayByOrganizationIntent`, and
-`PlayPublicationIntent` must remain `elicitationRequired: true`. When the skill
-asks which creator, talking newspaper, or publication the listener wants,
-its `Dialog.ElicitSlot` response explicitly chains to `SelectCreatorIntent` or
-`SelectOrganizationIntent`. Those selection intents use required slots and
-manual skill-response delegation. A custom slot no-match is valid when Alexa
+When the skill asks which creator, talking newspaper, or publication source
+the listener wants, its `Dialog.ElicitSlot` response explicitly chains to
+`SelectCreatorIntent`, `SelectOrganizationIntent`, or
+`SelectPublicationSourceIntent`. A custom slot no-match is valid when Alexa
 selects the intent: its raw spoken value is still forwarded to the Hear
 resolver. The skill also persists the active source-name dialog so an
 unexpected intent collision stays in source capture instead of returning to
@@ -301,16 +319,16 @@ attempt and asks the listener to repeat it with an explicit carrier phrase:
 intent-specific `AMAZON.SearchQuery` route and reaches the Hear resolver.
 
 If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
-waiting for an organization or creator, active dialog state takes precedence.
-The backend sends the captured words to the expected organization or creator
+waiting for an organization, creator, or publication source, active dialog
+state takes precedence. The backend sends the captured words to the expected
 resolver route and does not save them as the listener's city. An actual
 onboarding location question still owns a bare city response.
 
-Emit commonly spoken initialisms such as `tnf` as additional canonical slot
-values, with spaced and phonetic forms such as `t n f` and `tee en eff` as
-synonyms. The resolver converts that alias to the catalogue organisation. This
-is more reliable in Alexa than attaching an unspaced initialism only as a
-synonym of a long organisation name.
+Keep the public catalogue name as the single canonical value for an
+organisation. Add commonly spoken initialisms such as `TNF`, `T. N. F.`, and
+`tee en eff` as approved synonyms of `Talking News Federation`. Alexa then
+returns the public canonical name after a successful match, while an unmatched
+raw form still goes to the resolver.
 
 If a new value is absent from the generated slot, Alexa may still return it as
 raw text through the custom slot. Alexa can also select the right source intent

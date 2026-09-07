@@ -486,7 +486,7 @@ class Search:
             handler_input,
             queue_items,
             source=intent or "search",
-            locality=store.get("locality"),
+            discovery_label=search_result.get("_request_label") or q,
             start_index=0,
             **Search.search_queue_pagination(search_result),
         )
@@ -517,7 +517,7 @@ class Search:
                 handler_input,
                 items,
                 source=discovery_intent or "search",
-                locality=store.get("locality"),
+                discovery_label=search_result.get("_request_label") or options.get("q"),
                 start_index=i,
             )
             return await d.playback.start(
@@ -629,7 +629,7 @@ class Search:
             handler_input,
             queue_items,
             source=intent,
-            locality=store.get("locality"),
+            discovery_label=search_result.get("_request_label") or label,
             start_index=0,
             **Search.search_queue_pagination(search_result),
         )

@@ -31,6 +31,33 @@ def test_initial_search_queue_contains_only_the_loaded_page():
     }
 
 
+def test_search_queue_retains_exact_organization_discovery_context(mock_handler_input):
+    payload = {"query": "", "filter": {"organizationIds": ["org-york"]}}
+    PlaybackQueue(User()).initialize(
+        mock_handler_input,
+        [
+            {
+                "contentId": "content-1",
+                "organizationName": "York Talking News",
+            },
+            {
+                "contentId": "content-2",
+                "organizationName": "York Talking News",
+            },
+        ],
+        source="organization",
+        discovery_label="content from York Talking News",
+        search_payload=payload,
+    )
+    context = PlaybackQueue.read(User.snapshot(mock_handler_input))["discoveryContext"]
+    assert context == {
+        "kind": "organization",
+        "name": "York Talking News",
+        "source": "organization",
+        "searchPayload": payload,
+    }
+
+
 @pytest.mark.asyncio
 async def test_next_page_is_loaded_only_when_requested(mock_handler_input):
     first_page = [{"contentId": f"content-{index}"} for index in range(1, 4)]

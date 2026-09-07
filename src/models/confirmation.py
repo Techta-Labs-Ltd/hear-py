@@ -25,6 +25,7 @@ class ConfirmationPolicy:
     )
     ALEXA_INTENTS = frozenset(
         {
+            "ChooseSourceKindIntent",
             "PlayContentIntent",
             "SearchContentIntent",
             "PlayByCreatorIntent",
@@ -34,6 +35,7 @@ class ConfirmationPolicy:
             "SearchOrganizationIntent",
             "SelectOrganizationIntent",
             "PlayPublicationIntent",
+            "SelectPublicationSourceIntent",
             "SearchPublicationIntent",
             "BrowseContentIntent",
             "BrowseByCategoryIntent",
@@ -43,6 +45,7 @@ class ConfirmationPolicy:
         }
     )
     SLOT_PRIORITY = {
+        "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
         "SearchContentIntent": ("searchQuery",),
         "SearchCreatorIntent": ("searchQuery",),
         "SearchOrganizationIntent": ("searchQuery",),
@@ -80,6 +83,14 @@ class ConfirmationPolicy:
             "feedbackPhrase",
         ),
         "PlayPublicationIntent": (
+            "publicationSourceQuery",
+            "topic",
+            "creatorQuery",
+            "organizationQuery",
+            "listPickPhrase",
+            "category",
+        ),
+        "SelectPublicationSourceIntent": (
             "publicationSourceQuery",
             "topic",
             "creatorQuery",
@@ -326,16 +337,14 @@ class ConfirmationPolicy:
             )
             or (nlp.get("intent") == "creator" and slots.get("genericCreatorRequest"))
             or (nlp.get("intent") == "organization" and slots.get("genericOrganizationRequest"))
+            or (
+                nlp.get("intent") == "publication"
+                and slots.get("genericPublicationRequest")
+            )
         )
 
     @staticmethod
     def _clarification(nlp: dict, raw: str | None) -> dict | None:
-        if nlp.get("publicationSourceRequired"):
-            return {
-                "speech": "Which publication, creator, or organization would you like?",
-                "reprompt": "Please say the name of a publication, creator, or organization.",
-                "elicitSlot": "publicationSourceQuery",
-            }
         if ConfirmationPolicy.requires_clarification(nlp, raw):
             return {
                 "speech": "Sorry, I didn't catch that. Please say your request again.",

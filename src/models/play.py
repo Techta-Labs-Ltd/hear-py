@@ -46,6 +46,32 @@ class PlayContent:
             or store.get("devicePostalCode")
         )
 
+    @staticmethod
+    def _await_publication_source(handler_input) -> None:
+        DialogStateManager.activate(
+            handler_input,
+            "publication_source",
+            context={"slotName": "publicationSourceQuery"},
+        )
+
+    @staticmethod
+    def _publication_source_response(handler_input):
+        PlayContent._await_publication_source(handler_input)
+        prompt = "Which publication, creator, or organization would you like?"
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(prompt))
+            .reprompt(
+                Ssml.ssml(
+                    "Please say the name of a publication, creator, or organization."
+                )
+            )
+            .add_directive(
+                DialogStateManager.source_capture_directive("publication_source")
+            )
+            .set_should_end_session(False)
+            .response
+        )
+
     async def _search(self, handler_input, query: str | None) -> dict:
         if query:
             return await Search.discover_content_via_search(
@@ -59,6 +85,9 @@ class PlayContent:
         if not AlexaRequest.get_user_id(handler_input):
             return PlayContent._error_response(handler_input)
         store = User.snapshot(handler_input)
+        nlp = RequestContext.request(handler_input).get("_nlp") or {}
+        if (nlp.get("slots") or {}).get("genericPublicationRequest"):
+            return PlayContent._publication_source_response(handler_input)
         raw = Search._raw_search_phrase(handler_input)
         query = Search._extract_slot_value(handler_input, "query") or raw
         if AlexaRequest.wants_play_from_followed_creators(handler_input, query or raw or ""):
@@ -234,7 +263,6 @@ class PlayCreator:
                 )
         except Exception:
             pass
-        was_relaxed = bool(search_result.get("search_relaxation"))
         response = await Search.auto_play_first_from_search(
             handler_input,
             search_result,
@@ -242,9 +270,7 @@ class PlayCreator:
                 "discoveryIntent": "PlayByCreatorIntent",
                 "q": creator_query,
                 "locality": User.snapshot(handler_input).get("locality"),
-                "introOverride": None
-                if was_relaxed
-                else f"Here is what I found for {Speech.escape_ssml_lite(creator_label)}.",
+                "introOverride": None,
             },
             deps=self._deps,
         )

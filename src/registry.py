@@ -79,7 +79,7 @@ from src.middleware.dialog_validation import (
     DialogValidationGateHandler,
     DialogValidationInterceptor,
 )
-from src.middleware.feedback_gate import FeedbackGateHandler
+from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
 from src.middleware.identity import IdentityInterceptor
 from src.middleware.onboarding_gate import OnboardingGateHandler
 from src.middleware.persistence import (
@@ -94,6 +94,7 @@ class RouteRegistry:
         CanFulfillIntentHandler,
         DialogValidationGateHandler,
         AvailabilityDialogHandler,
+        FeedbackSkipGateHandler,
         FeedbackGateHandler,
         OnboardingGateHandler,
         TownCaptureHandler,

@@ -19,6 +19,7 @@ from src.utils.search_payload import SearchPayload
 class ResolverWorkflow:
     logger = logging.getLogger(__name__)
     SEARCH_INTENTS = {
+        "ChooseSourceKindIntent",
         "PlayContentIntent",
         "SearchContentIntent",
         "PlayLatestContentIntent",
@@ -29,6 +30,7 @@ class ResolverWorkflow:
         "SearchOrganizationIntent",
         "SelectOrganizationIntent",
         "PlayPublicationIntent",
+        "SelectPublicationSourceIntent",
         "SearchPublicationIntent",
         "BrowseContentIntent",
         "BrowseByCategoryIntent",
@@ -57,6 +59,7 @@ class ResolverWorkflow:
         "PlayByOrganizationIntent": "play",
         "SelectOrganizationIntent": "play",
         "PlayPublicationIntent": "play publication",
+        "SelectPublicationSourceIntent": "play publication",
         "BrowseByCategoryIntent": "play",
         "BrowseContentIntent": "what's new",
         "WhatsTrendingIntent": "what's trending",
@@ -165,7 +168,7 @@ class ResolverWorkflow:
             return " ".join(
                 value for value in ("play", "latest", topic or content_format) if value
             )
-        if alexa_intent == "PlayPublicationIntent":
+        if alexa_intent in DiscoveryConstants.PUBLICATION_INTENTS:
             source = AlexaRequest.get_resolved_slot_value(slots.get("publicationSourceQuery"))
             requested_sort = AlexaRequest.get_resolved_slot_value(slots.get("publicationSort"))
             if str(requested_sort or "").casefold() not in ResolverConstants.PUBLICATION_SORTS:
@@ -391,10 +394,11 @@ class ResolverWorkflow:
     def _local_discovery_resolution(
         alexa_intent: str, intent_slots: dict, raw: str | None
     ) -> dict | None:
-        """Return discovery requests whose meaning Alexa has already supplied."""
         AlexaRequest.get_resolved_slot_value(intent_slots.get("topic"))
         date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
         normalized_raw = SearchFilterUtils.normalize_discovery_phrase(raw)
+        if alexa_intent == "ChooseSourceKindIntent":
+            return ResolverWorkflow._source_kind_resolution(intent_slots)
         if normalized_raw in DiscoveryConstants.LOCAL_HINTS:
             return ResolverWorkflow._direct_discovery_result(
                 alexa_intent,
@@ -463,7 +467,7 @@ class ResolverWorkflow:
                 "localResolved": True,
                 "slots": organization_slots,
             }
-        if alexa_intent == "PlayPublicationIntent":
+        if alexa_intent in DiscoveryConstants.PUBLICATION_INTENTS:
             source = AlexaRequest.get_resolved_slot_value(
                 intent_slots.get("publicationSourceQuery")
             )
@@ -476,9 +480,9 @@ class ResolverWorkflow:
                     "nlpMatchesAlexa": True,
                     "needsRedirect": False,
                     "localResolved": True,
-                    "publicationSourceRequired": True,
                     "slots": {
                         "publicationSourceQuery": source or "",
+                        "genericPublicationRequest": True,
                         "publicationSort": AlexaRequest.get_resolved_slot_value(
                             intent_slots.get("publicationSort")
                         ),
@@ -499,6 +503,54 @@ class ResolverWorkflow:
                 "localResolved": True,
                 "searchPayload": {"query": "", "filter": {}},
                 "slots": {"residualQuery": ""},
+            }
+        return None
+
+    @staticmethod
+    def _source_kind_resolution(intent_slots: dict) -> dict | None:
+        source_kind = SearchFilterUtils.normalize_discovery_phrase(
+            AlexaRequest.get_resolved_slot_value(intent_slots.get("sourceKind"))
+        )
+        publication_sort = AlexaRequest.get_resolved_slot_value(
+            intent_slots.get("publicationSort")
+        )
+        publication_source = AlexaRequest.get_resolved_slot_value(
+            intent_slots.get("publicationSourceQuery")
+        )
+        base = {
+            "status": "resolved",
+            "alexaRawIntent": "ChooseSourceKindIntent",
+            "nlpMatchesAlexa": True,
+            "needsRedirect": True,
+            "localResolved": True,
+            "directDiscoveryRequest": True,
+        }
+        if source_kind == "creator":
+            return {
+                **base,
+                "intent": "creator",
+                "alexaIntent": "creator",
+                "slots": {"creatorQuery": "", "genericCreatorRequest": True},
+            }
+        if source_kind == "publication":
+            if SearchFilterUtils.is_meaningful_publication_source(publication_source):
+                return None
+            return {
+                **base,
+                "intent": "publication",
+                "alexaIntent": "publication",
+                "slots": {
+                    "publicationSourceQuery": "",
+                    "publicationSort": publication_sort,
+                    "genericPublicationRequest": True,
+                },
+            }
+        if source_kind == "talking newspaper":
+            return {
+                **base,
+                "intent": "organization",
+                "alexaIntent": "organization",
+                "slots": {"organizationQuery": "", "genericOrganizationRequest": True},
             }
         return None
 

@@ -13,7 +13,7 @@ from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.resolver import ResolverInterceptor
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
-from src.models.play import PlayCreator, PlayOrganization
+from src.models.play import PlayContent, PlayCreator, PlayOrganization
 from src.models.resolver_workflow import ResolverWorkflow
 from src.models.user import User
 from src.utils.filters import SearchFilterUtils
@@ -183,6 +183,58 @@ async def test_truncated_talking_organization_request_never_reaches_resolver(
     assert nlp["intent"] == "organization"
     assert nlp["slots"]["genericOrganizationRequest"] is True
     assert "talkingNewspaperRepairCandidate" not in nlp["slots"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_kind", "expected_intent", "flag", "action_type"),
+    [
+        ("talking newspaper", "organization", "genericOrganizationRequest", PlayOrganization),
+        ("creator", "creator", "genericCreatorRequest", PlayCreator),
+        ("publication", "publication", "genericPublicationRequest", PlayContent),
+    ],
+)
+async def test_generic_source_kind_stays_local_and_starts_typed_capture(
+    monkeypatch,
+    mock_handler_input,
+    source_kind,
+    expected_intent,
+    flag,
+    action_type,
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "ChooseSourceKindIntent",
+                "slots": {
+                    "sourceKind": {"name": "sourceKind", "value": source_kind}
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    await action_type(deps=ApplicationContainer()).execute(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == expected_intent
+    assert nlp["slots"][flag] is True
+    assert User.snapshot(mock_handler_input)["activeDialog"]["type"] in {
+        "organization_name",
+        "creator_name",
+        "publication_source",
+    }
 
 
 @pytest.mark.asyncio
@@ -528,6 +580,13 @@ async def test_date_only_discovery_builds_date_filter_without_resolver_text(
         ),
         (
             "PlayPublicationIntent",
+            "publicationSourceQuery",
+            "Dorking Talking Magazine",
+            "play publication from Dorking Talking Magazine",
+            "publication",
+        ),
+        (
+            "SelectPublicationSourceIntent",
             "publicationSourceQuery",
             "Dorking Talking Magazine",
             "play publication from Dorking Talking Magazine",

@@ -8,7 +8,9 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DeferredIntentManager, DialogStateManager
 from src.models.feedback import FeedbackService
+from src.models.playback import Playback
 from src.models.playback_controls import PlaybackControls
+from src.models.playback_state import PlaybackQueue
 from src.models.report import Report
 from src.models.social import FollowingManager, ListeningTracker
 from src.models.user import User
@@ -38,6 +40,93 @@ class RatingRequest:
             .set_should_end_session(False)
             .response
         )
+
+
+class FeedbackContinuation:
+    @staticmethod
+    def _context(subject: dict, store: dict) -> dict | None:
+        queue = PlaybackQueue.read(store)
+        if not queue:
+            return None
+        has_next = int(queue.get("currentIndex") or 0) < len(queue["orderedContentIds"]) - 1
+        if not has_next and not PlaybackQueue.has_more_pages(queue):
+            return None
+        discovery = dict(
+            subject.get("discoveryContext")
+            or (store.get("activePlayback") or {}).get("discoveryContext")
+            or queue.get("discoveryContext")
+            or {}
+        )
+        name = str(discovery.get("name") or "").strip()
+        kind = str(discovery.get("kind") or "").strip()
+        if not name:
+            if subject.get("publicationTitle"):
+                kind, name = "publication", str(subject["publicationTitle"])
+            elif subject.get("organizationName"):
+                kind, name = "organization", str(subject["organizationName"])
+            elif subject.get("creatorName"):
+                kind, name = "creator", str(subject["creatorName"])
+            elif subject.get("category"):
+                kind, name = "topic", str(subject["category"])
+        if not name:
+            return None
+        return {
+            **discovery,
+            "kind": kind or "topic",
+            "name": name,
+            "queueId": queue.get("queueId"),
+            "currentIndex": int(queue.get("currentIndex") or 0),
+        }
+
+    @staticmethod
+    def present(handler_input, subject: dict, store: dict, prefix: str):
+        context = FeedbackContinuation._context(subject, store)
+        if not context:
+            return None
+        User.update(
+            handler_input,
+            {
+                "awaitingFeedbackContinuation": True,
+                "feedbackContinuation": context,
+                "_requiresReliableSave": True,
+            },
+        )
+        DialogStateManager.activate(
+            handler_input,
+            "feedback_continuation",
+            context=context,
+        )
+        question = AlexaFeedback.discovery_continuation_question(context)
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(f"{prefix} {question}"))
+            .reprompt(Ssml.ssml(AlexaFeedback.discovery_continuation_reprompt(context)))
+            .set_should_end_session(False)
+            .response
+        )
+
+    @staticmethod
+    async def accept(handler_input, *, deps):
+        context = dict(User.snapshot(handler_input).get("feedbackContinuation") or {})
+        User.update(
+            handler_input,
+            {"awaitingFeedbackContinuation": False, "feedbackContinuation": None},
+        )
+        DialogStateManager.clear(handler_input, "feedback_continuation")
+        return await Playback.play_queue_delta(
+            handler_input,
+            1,
+            AlexaFeedback.discovery_continuing_speech(context),
+            deps=deps,
+        )
+
+    @staticmethod
+    def decline(handler_input):
+        User.update(
+            handler_input,
+            {"awaitingFeedbackContinuation": False, "feedbackContinuation": None},
+        )
+        DialogStateManager.clear(handler_input, "feedback_continuation")
+        return AlexaResponse.present_idle_next(handler_input, "No problem.")
 
 
 class EnjoyedFeedback:
@@ -77,6 +166,15 @@ class EnjoyedFeedback:
         if DeferredIntentManager.has(handler_input):
             await self._deps.feedback.clear(handler_input)
             return await DeferredIntentManager.resume(handler_input)
+        await self._deps.feedback.clear(handler_input)
+        continuation = FeedbackContinuation.present(
+            handler_input,
+            pending,
+            store,
+            "Thanks for the feedback.",
+        )
+        if continuation:
+            return continuation
         updated_store = User.snapshot(handler_input)
         if (
             creator_id
@@ -102,7 +200,6 @@ class EnjoyedFeedback:
                 .set_should_end_session(False)
                 .response
             )
-        await self._deps.feedback.clear(handler_input)
         title = (
             pending.get("title")
             or store.get("feedbackContentTitle")
@@ -148,6 +245,14 @@ class SomewhatFeedback:
             )
         if DeferredIntentManager.has(handler_input):
             return await DeferredIntentManager.resume(handler_input)
+        continuation = FeedbackContinuation.present(
+            handler_input,
+            pending,
+            store,
+            "Thanks for the feedback.",
+        )
+        if continuation:
+            return continuation
         return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SOMEWHAT)
 
 
@@ -236,6 +341,14 @@ class SkipFeedback:
                 )
             if DeferredIntentManager.has(handler_input):
                 return await DeferredIntentManager.resume(handler_input)
+            continuation = FeedbackContinuation.present(
+                handler_input,
+                dict(store.get("reportContext") or {}),
+                store,
+                "No problem.",
+            )
+            if continuation:
+                return continuation
             return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SKIP_INTRO)
         if not store.get("awaitingFeedback"):
             return (
@@ -257,6 +370,14 @@ class SkipFeedback:
             )
         if DeferredIntentManager.has(handler_input):
             return await DeferredIntentManager.resume(handler_input)
+        continuation = FeedbackContinuation.present(
+            handler_input,
+            dict(pending),
+            store,
+            "No problem.",
+        )
+        if continuation:
+            return continuation
         return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SKIP_INTRO)
 
 

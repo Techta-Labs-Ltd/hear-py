@@ -3,16 +3,11 @@ from __future__ import annotations
 
 class DiscoveryConstants:
     CREATOR_INTENTS = frozenset({"PlayByCreatorIntent", "SelectCreatorIntent"})
-    ORGANIZATION_INTENTS = frozenset(
-        {"PlayByOrganizationIntent", "SelectOrganizationIntent"}
-    )
+    ORGANIZATION_INTENTS = frozenset({"PlayByOrganizationIntent", "SelectOrganizationIntent"})
+    PUBLICATION_INTENTS = frozenset({"PlayPublicationIntent", "SelectPublicationSourceIntent"})
     CHOICE_PAGE_SIZE = 3
     CHOICE_ORDINALS = ("first", "second", "third")
-    CHOICE_ORDINAL_SYNONYMS = (
-        ("first", "one", "number one"),
-        ("second", "two", "number two"),
-        ("third", "three", "number three"),
-    )
+    CHOICE_ORDINAL_SYNONYMS = (("first", "one", "number one"), ("second", "two", "number two"), ("third", "three", "number three"))
     ORDINAL_INDEX = {
         "first": 0,
         "one": 0,
@@ -149,6 +144,7 @@ class DiscoveryConstants:
         }
     )
     ALEXA_TO_NLP = {
+        "ChooseSourceKindIntent": "general",
         "PlayContentIntent": "general",
         "SearchContentIntent": "general",
         "PlayLatestContentIntent": "general",
@@ -159,6 +155,7 @@ class DiscoveryConstants:
         "SearchOrganizationIntent": "organization",
         "SelectOrganizationIntent": "organization",
         "PlayPublicationIntent": "publication",
+        "SelectPublicationSourceIntent": "publication",
         "SearchPublicationIntent": "publication",
         "SearchLocationIntent": "location_set",
         "WhatsTrendingIntent": "trending",

@@ -1836,7 +1836,7 @@ async def test_no_declines_ambiguity_confirmation_before_stale_location(
     await NoIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
-    assert "news or sport" in spoken
+    assert Speech.WELCOME_REPROMPT in spoken
     assert "Which town" not in spoken
     assert store["pendingResolution"] is None
     assert store["awaitingLocationConfirm"] is False
@@ -3303,7 +3303,9 @@ async def test_generic_publication_pipeline_prompts_when_slot_has_no_value(
     mock_handler_input.response_builder = ResponseBuilder()
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
     ConfirmationMiddleware().process(mock_handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+        mock_handler_input
+    )
     assert (
         "Which publication, creator, or organization would you like"
         in response["outputSpeech"]["ssml"]

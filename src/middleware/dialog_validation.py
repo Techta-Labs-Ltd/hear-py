@@ -50,6 +50,7 @@ class DialogValidationPolicy:
         "resume",
         "latest_source",
         "asr_repair",
+        "feedback_continuation",
     }
     _NOTIFICATION_INTENTS = _BINARY_INTENTS | PlaybackConstants.TRANSPORT_INTENTS
     _LOCATION_ONBOARDING_INTENTS = _BINARY_INTENTS | {
@@ -76,6 +77,10 @@ class DialogValidationPolicy:
             Speech.ASK_TALKING_NEWSPAPER,
             "Say play from, followed by the talking newspaper's full name.",
         ),
+        "publication_source": (
+            "Which publication, creator, or organization would you like?",
+            "Please say the name of a publication, creator, or organization.",
+        ),
     }
     _SOURCE_NAME_RECOVERY = {
         "creator_name": (
@@ -85,6 +90,10 @@ class DialogValidationPolicy:
         "organization_name": (
             "I couldn't recognize that talking newspaper. "
             "Say play from, followed by its full name."
+        ),
+        "publication_source": (
+            "I couldn't recognize that publication source. "
+            "Please say the publication, creator, or organization name again."
         ),
     }
 
@@ -130,6 +139,12 @@ class DialogValidationPolicy:
         ).strip()
         if active.get("type") == "search_confirmation" and original:
             speech = f"Did you want me to play {Speech.escape_ssml_lite(original)}? Please say yes or no."
+        elif active.get("type") == "feedback_continuation":
+            speech = AlexaFeedback.discovery_continuation_question(context)
+            return (
+                speech,
+                AlexaFeedback.discovery_continuation_reprompt(context),
+            )
         elif active.get("type") == "resume":
             title = Speech.escape_ssml_lite(
                 AlexaFeedback.subject_title(context, {"activePlayback": context})

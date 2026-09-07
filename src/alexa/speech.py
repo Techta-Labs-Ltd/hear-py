@@ -39,10 +39,13 @@ class Speech:
     COMMUNITY_LOCATION_DECLINED = "No problem. I can still play other Hear content, but I need a city to find content from your local area."
     COMMUNITY_LOCATION_SKIPPED = "No problem. You can continue as a guest, but I need a city before I can play local content. What else would you like to hear?"
     WELCOME_REPROMPT = (
-        "You can say play followed by a topic, or what's trending. What would you like?"
+        "Please say the name of a talking newspaper, creator, publication, or city "
+        "you would like to hear content from."
     )
-    RESUME_DECLINED_NEXT_OPTIONS = "Okay, I won't continue that recording. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
-    RESUME_DECLINED_NEXT_OPTIONS_REPROMPT = "You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
+    RESUME_DECLINED_NEXT_OPTIONS = (
+        f"Okay, I won't continue that recording. {WELCOME_REPROMPT}"
+    )
+    RESUME_DECLINED_NEXT_OPTIONS_REPROMPT = WELCOME_REPROMPT
     WELCOME_ERROR = "Welcome to Hear. I'm having a bit of trouble loading content at the moment. You can try again shortly."
     IDLE_NEXT_REPROMPT = "What would you like to listen to?"
     IDLE_DO_NEXT_REPROMPT = "What would you like to do next?"
@@ -121,9 +124,9 @@ class Speech:
     PLAY_NO_PENDING_LIST = (
         "Say what's trending first, then pick the first one or say play number one."
     )
-    FALLBACK_SPEECH = "Sorry, I didn't catch that. You can say play news, play from a creator by name, or what's trending. What would you like?"
+    FALLBACK_SPEECH = f"Sorry, I didn't catch that. {WELCOME_REPROMPT}"
     GOODBYE = "Thanks for listening to Hear. Goodbye."
-    ERROR_GENERIC = "Sorry, I didn't quite catch that. You can say play followed by a topic, or what's trending. What would you like?"
+    ERROR_GENERIC = f"Sorry, I didn't quite catch that. {WELCOME_REPROMPT}"
     ONBOARDING_ASK_PERMISSION = "Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright?"
     ONBOARDING_CONSENT_CARD_SENT = "Please open the Alexa app, find test development under Your Skills, then open Settings and Manage Permissions and enable Device Address. After that, relaunch Hear."
     ONBOARDING_LOCATION_DENIED = "No worries. Which city are you in?"
@@ -132,8 +135,8 @@ class Speech:
     LOCATION_NOT_FOUND = "Welcome back to Hear. I don't have a city for this Echo yet. You can tell me your city now, or say skip. To use your Echo's saved location instead, update Device Location in the Alexa app and relaunch Hear."
     LOCATION_DECLINED = "No problem. What would you like to listen to?"
     LOCATION_RETRY = "No problem. Which city should I set instead?"
-    WELCOME_RETURN_GENERIC = "Welcome back to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
-    LATEST_SOURCE_DECLINED = "No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
+    WELCOME_RETURN_GENERIC = f"Welcome back to Hear. {WELCOME_REPROMPT}"
+    LATEST_SOURCE_DECLINED = f"No problem. {WELCOME_REPROMPT}"
 
     @staticmethod
     def _build_queue_next(title, creator, position, total):
@@ -267,17 +270,17 @@ class Speech:
     @staticmethod
     def WELCOME_FIRST_HAS_CITY(name, city=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. You can say what's trending, play news, or play from a creator. What would you like?"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
             if name
-            else "Welcome to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
+            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
     def WELCOME_FIRST(name=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. You can say play news, or what's trending. What would you like?"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
             if name
-            else "Welcome to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
+            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
@@ -374,11 +377,11 @@ class Speech:
 
     @staticmethod
     def WELCOME_RETURN_NAMED(user_name, city=None):
-        return f"Welcome back to Hear, {Speech.escape_ssml_lite(user_name)}. You can say what's trending, play news, or play from a talking newspaper. What would you like?"
+        return f"Welcome back to Hear, {Speech.escape_ssml_lite(user_name)}. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def WELCOME_RETURN_CITY(city=None):
-        return "Welcome back to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
+        return f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def LATEST_SOURCE_OFFER(source):
