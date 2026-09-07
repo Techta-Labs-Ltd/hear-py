@@ -17,7 +17,7 @@ These were real design and coverage problems rather than one isolated bug. The c
 - The generated slot validator covers all four domain slots and enforces domain ownership and approved canonical collisions.
 - The cleaned imports contain 5,429 locations, 286 organisations, 14 creators, and 4,562 topics. The 276 organisation accounts copied into `HEAR_CREATOR` and the two generic talking-newspaper topics were removed.
 
-Verification completed with 712 passing tests, valid interaction-model JSON, successful byte-code compilation, clean Ruff checks, and a strict architecture audit with 0 errors and 0 warnings.
+Verification completed with 715 passing tests, valid interaction-model JSON, successful byte-code compilation, clean Ruff checks, and a strict architecture audit with 0 errors and 0 warnings.
 
 ### Final requirement re-verification — 7 September 2026
 
@@ -25,10 +25,10 @@ Verification completed with 712 passing tests, valid interaction-model JSON, suc
 | --- | --- |
 | Typed availability speech | One and multiple results use the returned organisation and creator types. A known requested or saved city is spoken by name. Coordinate-only results make no proximity claim. |
 | Mid-session feedback | The interrupted recording resumes from its saved offset. |
-| Return-time feedback | Hear asks whether to continue the exact organisation, creator, publication, topic, or location context before playing another recording. |
+| Return-time feedback | Hear asks about the exact organisation, creator, publication, topic, or location context. Selected publication names survive queueing and relaunch; legacy placeholder titles are rejected rather than spoken. |
 | Feedback recognition | Canonical and raw positive, neutral, negative, and dismissal phrases are normalized before routing. Both Alexa skip interpretations are intercepted while feedback is active. |
 | Queue continuation | `PlaybackNearlyFinished` produces an `ENQUEUE` directive with the matching previous token, including lazy page loading and subsequent queue items. |
-| Playback introductions | `short_description` remains metadata only. Unusable track titles do not become spoken titles, and discovery context supplies the introduction. |
+| Playback introductions | `short_description` remains metadata only. Unusable track titles do not become spoken titles, discovery context supplies the introduction, and choosing a publication speaks that publication rather than its parent organisation. |
 | Relaunch resume prompt | Topic searches retain “content on {topic}” and add the valid organisation or creator behind the current recording. The recording description is never substituted for that context. |
 | Generic recovery speech | Fallback, unmatched-intent, idle-recovery, resolver-unavailable, decline, and no-match paths use the shared listening prompt. |
 | Interaction model and resolver | Domain slots remain separate, generic source-kind requests are handled locally, known and raw names reach the resolver, and ambiguity stays typed. |

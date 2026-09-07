@@ -63,7 +63,7 @@ class Decline:
             DialogStateManager.clear(handler_input, "asr_repair")
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml("No problem. What would you like to listen to?")
+                    Ssml.ssml("Ok. What would you like to listen to?")
                 )
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
@@ -101,7 +101,7 @@ class Decline:
             self._deps.user.update(handler_input, {"awaitingCommunityPlayback": False})
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml("No problem. What would you like to listen to?")
+                    Ssml.ssml("Ok. What would you like to listen to?")
                 )
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
@@ -212,7 +212,7 @@ class Decline:
             DialogStateManager.clear(handler_input, "search_confirmation")
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml(f"No problem. {Speech.WELCOME_REPROMPT}")
+                    Ssml.ssml(f"Ok. {Speech.WELCOME_REPROMPT}")
                 )
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
@@ -283,7 +283,7 @@ class Decline:
         )
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml("No problem. What would you like to listen to instead?")
+                Ssml.ssml("Ok. What would you like to listen to instead?")
             )
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
@@ -296,7 +296,7 @@ class Decline:
         self._deps.user.update(handler_input, {"listModeActive": False})
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml("No problem. What would you like to listen to?")
+                Ssml.ssml("Ok. What would you like to listen to?")
             )
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
@@ -357,7 +357,7 @@ class Decline:
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(
-                    f"No problem. {Speech.WELCOME_REPROMPT}"
+                    f"Ok. {Speech.WELCOME_REPROMPT}"
                 )
             )
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))

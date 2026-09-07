@@ -410,9 +410,7 @@ class Availability:
                 "limit": 1,
             }
         payload = SearchPayload.with_identity(
-            payload,
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
-            listener_id=store.get("listenerId"),
+            payload, alexa_user_id=AlexaRequest.get_user_id(handler_input), listener_id=store.get("listenerId")
         )
         await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._deps.heara.search(
@@ -420,9 +418,11 @@ class Availability:
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
         result.setdefault("_search_payload", payload)
+        result.setdefault("_request_label", candidate.get("name"))
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
         DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+        source_name = source.get("name") if candidate.get("type") != "publication" else None
         return await Search.auto_play_first_from_search(
             handler_input,
             result,
@@ -432,7 +432,7 @@ class Availability:
                 "introOverride": AvailabilitySpeech.playing_choice(
                     candidate.get("name")
                     or ContentUtils.content_title_for_speech(result["results"][0]),
-                    source.get("name"),
+                    source_name,
                 ),
             },
             deps=self._deps,

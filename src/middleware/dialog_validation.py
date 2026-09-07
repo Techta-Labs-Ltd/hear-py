@@ -94,7 +94,7 @@ class DialogValidationPolicy:
             "Say play from, followed by its full name."
         ),
         "publication_source": (
-            "I couldn't recognize that publication. Please say its full name again."
+            "I couldn't recognize the publication name. Please say its full name again."
         ),
     }
 

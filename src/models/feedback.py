@@ -9,7 +9,7 @@ from src.models.dialog import DialogStateManager
 from src.models.user import User
 from src.services.alexa_reminder import AlexaReminderService
 from src.services.events import OutboundEventService
-from src.utils.content import ContentIdentity
+from src.utils.content import ContentIdentity, ContentUtils
 from src.utils.playback import PlaybackUtils
 from src.utils.playback_history import PlaybackHistoryUtils
 
@@ -103,8 +103,10 @@ class FeedbackService:
                 "subjectType": subject_type,
                 "contentId": content_id,
                 "publicationId": state.get("publicationId"),
-                "title": ContentIdentity.subject_title(state) or state.get("title"),
-                "publicationTitle": state.get("publicationTitle"),
+                "title": ContentUtils.publication_title(state)
+                if subject_type == "publication"
+                else state.get("title"),
+                "publicationTitle": ContentUtils.publication_title(state),
                 "creatorId": state.get("creatorId"),
                 "creatorName": state.get("creatorName"),
                 "organizationId": state.get("organizationId"),
@@ -321,7 +323,8 @@ class FeedbackService:
         progress = {
             **current,
             "publicationId": str(publication_id),
-            "publicationTitle": state.get("publicationTitle") or current.get("publicationTitle"),
+            "publicationTitle": ContentUtils.publication_title(state)
+            or ContentUtils.publication_title(current),
             "organizationId": state.get("organizationId") or current.get("organizationId"),
             "organizationName": state.get("organizationName") or current.get("organizationName"),
             "creatorId": state.get("creatorId") or current.get("creatorId"),
@@ -396,6 +399,10 @@ class FeedbackService:
             return None
         all_progress.pop(str(publication_id), None)
         updates = {"publicationFeedbackProgress": all_progress}
+        publication_title = ContentUtils.publication_title(progress)
+        if not publication_title:
+            User.update(handler_input, updates)
+            return None
         listened_ms = sum(
             (
                 FeedbackService._safe_int(track.get("listenedMs"))
@@ -413,8 +420,8 @@ class FeedbackService:
             "subjectType": "publication",
             "publicationId": str(publication_id),
             "contentIds": list((progress.get("tracks") or {}).keys()),
-            "title": progress.get("publicationTitle") or "that publication",
-            "publicationTitle": progress.get("publicationTitle"),
+            "title": publication_title,
+            "publicationTitle": publication_title,
             "creatorId": progress.get("creatorId"),
             "creatorName": progress.get("creatorName"),
             "organizationId": progress.get("organizationId"),

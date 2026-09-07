@@ -289,6 +289,31 @@ def test_publication_feedback_prefers_publication_title_in_speech_and_reprompt(
     assert "that track" not in reprompt
 
 
+def test_legacy_publication_placeholder_is_never_spoken(mock_handler_input):
+    _store(
+        mock_handler_input,
+        awaitingFeedback=True,
+        pendingFeedback={
+            "feedbackKey": "publication:publication-1",
+            "subjectType": "publication",
+            "publicationId": "publication-1",
+            "title": "that publication",
+            "organizationName": "Talking News Federation",
+            "completed": True,
+        },
+    )
+    from src.alexa.feedback import AlexaFeedback
+
+    AlexaFeedback.present_pending_feedback(
+        mock_handler_input,
+        mock_handler_input.attributes_manager.request_attributes["_store"],
+    )
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "You listened to a publication from Talking News Federation" in spoken
+    assert "that publication" not in spoken
+
+
 def test_publication_queue_records_expected_count_and_duration(mock_handler_input):
     _store(mock_handler_input)
     queue = PlaybackQueue(User()).initialize(
@@ -312,6 +337,60 @@ def test_publication_queue_records_expected_count_and_duration(mock_handler_inpu
     )["playbackQueue"]
     assert queue["publicationTrackCount"] == 2
     assert queue["publicationTotalDurationMs"] == 400000
+
+
+def test_selected_publication_label_survives_queue_and_relaunch_feedback(
+    mock_handler_input,
+):
+    _store(mock_handler_input)
+    item = {
+        "contentId": "track-test",
+        "publicationId": "publication-test",
+        "trackCount": 1,
+        "durationMs": 60000,
+        "organizationName": "Talking News Federation",
+        "audioUrl": "https://cdn.hear.media/track-test.mp3",
+    }
+    queue = PlaybackQueue(User()).initialize(
+        mock_handler_input,
+        [item],
+        source="publication",
+        search_payload={"query": "", "filter": {"publicationIds": ["publication-test"]}},
+        discovery_label="Test Pub for the seventh of September",
+    )["playbackQueue"]
+
+    assert queue["publicationTitle"] == "Test Pub for the seventh of September"
+    state = PlaybackQueue.apply_publication_context(
+        User.snapshot(mock_handler_input), item, queue_index=0
+    )
+    state.update(
+        {
+            "listenedMs": 60000,
+            "sessionId": "track-test-session",
+            "startedAt": 100,
+        }
+    )
+    FeedbackService.update_publication_progress(
+        mock_handler_input, state, completed=True
+    )
+    candidate = FeedbackService.finalize_publication(
+        mock_handler_input, "publication-test"
+    )
+
+    assert candidate["title"] == "Test Pub for the seventh of September"
+    assert candidate["publicationTitle"] == "Test Pub for the seventh of September"
+    User.update(
+        mock_handler_input,
+        {"awaitingFeedback": True, "pendingFeedback": candidate},
+    )
+    from src.alexa.feedback import AlexaFeedback
+
+    AlexaFeedback.present_pending_feedback(
+        mock_handler_input, User.snapshot(mock_handler_input)
+    )
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "You listened to Test Pub for the seventh of September" in spoken
+    assert "that publication" not in spoken
 
 
 def test_publication_boundary_activates_feedback_only_after_finalize(

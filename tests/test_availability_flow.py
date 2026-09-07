@@ -561,6 +561,73 @@ async def test_source_with_only_publications_lists_three_at_a_time(mock_handler_
 
 
 @pytest.mark.asyncio
+async def test_selecting_first_publication_speaks_publication_not_organization(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(
+        mock_handler_input,
+        "ClarifySelectionIntent",
+        {"selection": {"name": "selection", "value": "first"}},
+    )
+    publication = {
+        "type": "publication",
+        "id": "publication-test",
+        "name": "Test Pub for the seventh of September",
+    }
+    DialogStateManager.activate(
+        handler_input,
+        "availability",
+        context={
+            "kind": "publication",
+            "source": {
+                "type": "organization",
+                "id": "org-tnf",
+                "name": "Talking News Federation",
+            },
+            "candidates": [publication],
+            "choiceCandidates": [publication],
+            "displayedCandidates": [publication],
+            "offset": 0,
+        },
+    )
+    deps = AvailabilityTestSupport.dependencies(
+        {"failed": False},
+        {
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-test",
+                    "title": "Test publication track",
+                    "publicationId": "publication-test",
+                    "publicationTitle": "Test Pub",
+                    "organizationName": "Talking News Federation",
+                    "audioUrl": "https://cdn.hear.media/track-test.mp3",
+                }
+            ],
+            "total_hits": 1,
+        },
+    )
+    deps.playback = SimpleNamespace(
+        queue=SimpleNamespace(initialize=lambda *_args, **_kwargs: None),
+        start=AsyncMock(return_value={"shouldEndSession": True}),
+    )
+    deps.browse = SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None)
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
+
+    assert response == {"shouldEndSession": True}
+    assert deps.heara.search.await_args.args[0]["filter"] == {
+        "publicationIds": ["publication-test"]
+    }
+    options = deps.playback.start.await_args.args
+    assert options[2] == "Playing Test Pub for the seventh of September."
+    assert deps.heara.search.return_value["_request_label"] == (
+        "Test Pub for the seventh of September"
+    )
+    assert DialogStateManager.get_active(handler_input) is None
+
+
+@pytest.mark.asyncio
 async def test_source_without_publications_silently_searches_tracks(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
     playable = {

@@ -387,7 +387,7 @@ async def test_resume_no_abandons_playback_and_offers_next_listening_options():
     assert state["awaitingResume"] is False
     assert state["activeDialog"] is None
     assert response["shouldEndSession"] is False
-    assert "Okay, I won't continue that recording." in response["outputSpeech"]["ssml"]
+    assert "Okay." in response["outputSpeech"]["ssml"]
     assert Speech.WELCOME_REPROMPT in response["outputSpeech"]["ssml"]
     assert Speech.WELCOME_REPROMPT in response["reprompt"]["outputSpeech"]["ssml"]
 

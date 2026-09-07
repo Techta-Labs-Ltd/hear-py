@@ -151,7 +151,7 @@ class Permission:
         if purpose == PermissionConstants.NOTIFICATION_PURPOSE:
             return AlexaResponse.present_idle_next(
                 handler_input,
-                "No problem. Notifications will stay off.",
+                "Ok. Notifications will stay off.",
                 Speech.WELCOME_REPROMPT,
             )
         if purpose == PermissionConstants.PROFILE_PURPOSE:

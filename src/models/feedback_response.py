@@ -126,7 +126,7 @@ class FeedbackContinuation:
             {"awaitingFeedbackContinuation": False, "feedbackContinuation": None},
         )
         DialogStateManager.clear(handler_input, "feedback_continuation")
-        return AlexaResponse.present_idle_next(handler_input, "No problem.")
+        return AlexaResponse.present_idle_next(handler_input, "Ok.")
 
 
 class EnjoyedFeedback:
@@ -345,7 +345,7 @@ class SkipFeedback:
                 handler_input,
                 dict(store.get("reportContext") or {}),
                 store,
-                "No problem.",
+                "Ok.",
             )
             if continuation:
                 return continuation
@@ -374,7 +374,7 @@ class SkipFeedback:
             handler_input,
             dict(pending),
             store,
-            "No problem.",
+            "Ok.",
         )
         if continuation:
             return continuation

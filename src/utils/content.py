@@ -4,6 +4,10 @@ import re
 
 
 class ContentUtils:
+    PUBLICATION_PLACEHOLDER_TITLES = frozenset(
+        {"a publication", "publication", "that publication", "the publication", "unknown"}
+    )
+
     @staticmethod
     def repair_mojibake(value):
         text = ContentUtils.nullable_string(value)
@@ -267,6 +271,26 @@ class ContentUtils:
     @staticmethod
     def pick_summary(item: dict) -> str | None:
         return ContentUtils.nullable_string(item.get("shortDescription"))
+
+    @staticmethod
+    def publication_title(item: dict | None) -> str | None:
+        if not isinstance(item, dict):
+            return None
+        context = item.get("discoveryContext")
+        contextual = (
+            context.get("name")
+            if isinstance(context, dict) and context.get("kind") == "publication"
+            else None
+        )
+        for value in (item.get("publicationTitle"), item.get("subjectTitle"), contextual):
+            title = ContentUtils.nullable_string(value)
+            if (
+                title
+                and title.casefold() not in ContentUtils.PUBLICATION_PLACEHOLDER_TITLES
+                and not ContentUtils.is_id_like_label(title)
+            ):
+                return title
+        return None
 
     @staticmethod
     def content_title_for_speech(item: dict) -> str | None:
