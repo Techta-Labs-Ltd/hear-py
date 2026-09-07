@@ -167,7 +167,8 @@ class ConfirmationPolicy:
             "organization": slots.get("organizationName")
             or slots.get("organizationQuery")
             or slots.get("organization"),
-            "publication": slots.get("publicationSourceQuery"),
+            "publication": slots.get("publicationName")
+            or slots.get("publicationSourceQuery"),
             "city": slots.get("city") or slots.get("placeName"),
             "residual": str(slots.get("residualQuery") or "").strip(),
         }

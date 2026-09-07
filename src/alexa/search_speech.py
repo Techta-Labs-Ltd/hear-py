@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.alexa.speech import Speech
 from src.constants.discovery import DiscoveryConstants
+from src.utils.filters import SearchFilterUtils
 
 
 class SearchSpeech:
@@ -435,7 +436,7 @@ class SearchSpeech:
             if str(tag or "").strip()
         ]
         facets = list(dict.fromkeys(([category.replace("-", " ")] if category else []) + tags))
-        residual = str(slots.get("residualQuery") or "").strip()
+        residual = SearchFilterUtils.residual_without_conflicting_source(slots)
         if residual:
             facets.append(residual)
         return facets, category, residual

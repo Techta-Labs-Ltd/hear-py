@@ -218,6 +218,33 @@ class SearchFilterUtils:
         return SequenceMatcher(None, requested_name, canonical_name).ratio() >= 0.72
 
     @staticmethod
+    def residual_without_conflicting_source(slots: dict) -> str:
+        residual = str(slots.get("residualQuery") or "").strip()
+        canonical = next(
+            (
+                str(slots.get(name) or "").strip()
+                for name in ("organizationName", "creatorName", "publicationName")
+                if str(slots.get(name) or "").strip()
+            ),
+            "",
+        )
+        requested = next(
+            (
+                str(slots.get(name) or "").strip()
+                for name in ("organizationQuery", "creatorQuery", "publicationSourceQuery")
+                if str(slots.get(name) or "").strip()
+            ),
+            "",
+        )
+        requested_signature = SearchFilterUtils.source_name_signature(requested)
+        residual_signature = SearchFilterUtils.source_name_signature(residual)
+        conflicting = canonical and requested and not SearchFilterUtils.is_plausible_source_match(
+            requested, canonical
+        )
+        duplicated = requested_signature and requested_signature in residual_signature
+        return "" if residual and (conflicting or duplicated) else residual
+
+    @staticmethod
     def is_reserved_discovery_phrase(value: object) -> bool:
         return (
             SearchFilterUtils.normalize_discovery_phrase(value)

@@ -65,6 +65,8 @@ class DialogValidationPolicy:
         "ReportCreatorIntent",
         "ReportContentIntent",
         "SkipFeedbackIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
         "AMAZON.YesIntent",
         "AMAZON.NoIntent",
     }
@@ -78,8 +80,8 @@ class DialogValidationPolicy:
             "Say play from, followed by the talking newspaper's full name.",
         ),
         "publication_source": (
-            "Which publication, creator, or organization would you like?",
-            "Please say the name of a publication, creator, or organization.",
+            Speech.ASK_PUBLICATION,
+            Speech.ASK_PUBLICATION_REPROMPT,
         ),
     }
     _SOURCE_NAME_RECOVERY = {
@@ -92,8 +94,7 @@ class DialogValidationPolicy:
             "Say play from, followed by its full name."
         ),
         "publication_source": (
-            "I couldn't recognize that publication source. "
-            "Please say the publication, creator, or organization name again."
+            "I couldn't recognize that publication. Please say its full name again."
         ),
     }
 

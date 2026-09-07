@@ -31,7 +31,6 @@ from src.utils.content_normalizer import ContentNormalizer
 @pytest.mark.parametrize(
     "intent_name",
     [
-        "AMAZON.NextIntent",
         "AMAZON.PreviousIntent",
         "AMAZON.PauseIntent",
         "AMAZON.ResumeIntent",
@@ -54,7 +53,10 @@ def test_pending_feedback_does_not_block_transport_intents(mock_handler_input, i
     assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
-def test_pending_feedback_routes_bare_skip_to_feedback_gate(mock_handler_input):
+@pytest.mark.parametrize("intent_name", ["AMAZON.SkipIntent", "AMAZON.NextIntent"])
+def test_pending_feedback_routes_alexa_skip_variants_to_feedback_gate(
+    mock_handler_input, intent_name
+):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
@@ -66,14 +68,15 @@ def test_pending_feedback_routes_bare_skip_to_feedback_gate(mock_handler_input):
     }
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
-        {"type": "IntentRequest", "intent": {"name": "AMAZON.SkipIntent", "slots": {}}}
+        {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
     )
     assert FeedbackSkipGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is True
     assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
 @pytest.mark.asyncio
-async def test_bare_skip_dismisses_active_feedback(mock_handler_input):
+@pytest.mark.parametrize("intent_name", ["AMAZON.SkipIntent", "AMAZON.NextIntent"])
+async def test_alexa_skip_variants_dismiss_active_feedback(mock_handler_input, intent_name):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
         "awaitingFeedback": True,
@@ -85,7 +88,7 @@ async def test_bare_skip_dismisses_active_feedback(mock_handler_input):
     }
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
-        {"type": "IntentRequest", "intent": {"name": "AMAZON.SkipIntent", "slots": {}}}
+        {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
     )
     await FeedbackSkipGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)

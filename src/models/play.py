@@ -57,14 +57,9 @@ class PlayContent:
     @staticmethod
     def _publication_source_response(handler_input):
         PlayContent._await_publication_source(handler_input)
-        prompt = "Which publication, creator, or organization would you like?"
         return (
-            handler_input.response_builder.speak(Ssml.ssml(prompt))
-            .reprompt(
-                Ssml.ssml(
-                    "Please say the name of a publication, creator, or organization."
-                )
-            )
+            handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_PUBLICATION))
+            .reprompt(Ssml.ssml(Speech.ASK_PUBLICATION_REPROMPT))
             .add_directive(
                 DialogStateManager.source_capture_directive("publication_source")
             )

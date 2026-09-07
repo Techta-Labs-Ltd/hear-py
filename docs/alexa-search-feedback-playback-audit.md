@@ -11,15 +11,60 @@ These were real design and coverage problems rather than one isolated bug. The c
 - Playback queues retain the exact organisation, creator, publication, topic, or location discovery context.
 - Explicit mid-session feedback resumes the interrupted recording; return-time feedback asks whether to continue the exact previous discovery context.
 - Raw positive, neutral, negative, and skip feedback phrases are normalized before dispatch.
-- Bare `AMAZON.SkipIntent` dismisses an active feedback question instead of advancing playback.
+- Alexa's `AMAZON.SkipIntent` and `AMAZON.NextIntent` interpretations of “skip” dismiss an active feedback or report question instead of advancing playback.
 - Generic source requests use the static no-ID `HEAR_SOURCE_KIND` slot and then elicit a domain-specific name.
 - Unknown source names captured during an active organisation, creator, or publication dialog still go to the resolver.
 - The generated slot validator covers all four domain slots and enforces domain ownership and approved canonical collisions.
 - The cleaned imports contain 5,429 locations, 286 organisations, 14 creators, and 4,562 topics. The 276 organisation accounts copied into `HEAR_CREATOR` and the two generic talking-newspaper topics were removed.
 
-Verification completed with 692 passing tests, valid interaction-model JSON, successful byte-code compilation, clean Ruff checks, and a strict architecture audit with 0 errors and 0 warnings.
+Verification completed with 699 passing tests, valid interaction-model JSON, successful byte-code compilation, clean Ruff checks, and a strict architecture audit with 0 errors and 0 warnings.
 
 The remaining acceptance work is external: build the revised Alexa model, run the utterance profiler, upload the generated slot imports, and verify the critical utterances on the physical Echo Dot. Live queue incidents still require the matching Alexa and backend logs for the affected `queueId`.
+
+## Live development verification — 7 September 2026
+
+The deployed development skill was exercised through Alexa after the first corrective release. The results below distinguish application defects from catalogue and Alexa ASR limitations.
+
+### Verified working
+
+| Utterance | Alexa route | Verified response or outcome |
+| --- | --- | --- |
+| “Play from a talking newspaper” | `ChooseSourceKindIntent` | “Which talking newspaper would you like?” |
+| “Tynedale Talking News” after that prompt | `SelectOrganizationIntent` | Resolver canonicalised the name and Hear asked, “Did you want me to play content from Tynedale Talking Newspaper?” |
+| “Play from a creator” | `ChooseSourceKindIntent` | “Which creator would you like to hear?” |
+| “Play something on Premier League” | `PlayContentIntent` | The topic survived confirmation and playback began with “Playing content on Premier League.” |
+| “Play last week sport update” | `SearchContentIntent` | The resolver date range was spoken as “published from 30 August to 5 September 2026.” |
+| “Play yesterday’s sport” | `PlayContentIntent` | The resolved calendar date was retained in the confirmation. |
+| “What’s trending in sport?” | `WhatsTrendingIntent` | Trending semantics and the sport topic were retained. |
+| “Recommend sport” | `PlayRecommendationIntent` | Recommendation/trending semantics and the sport topic were retained. |
+| “Play the latest publication from Talking News Federation” | `PlayPublicationIntent` | Publication source and latest sort were retained. |
+| Explicit “rate this content”, followed by “I enjoyed it” | Feedback flow | The interrupted recording resumed at its saved position. |
+
+### Newly detected defects and corrections
+
+| Defect | Root cause | Required behaviour | Correction |
+| --- | --- | --- | --- |
+| Saying “skip” during feedback played the next recording. | The Echo mapped the spoken word to `AMAZON.NextIntent`; the feedback gate handled only `AMAZON.SkipIntent`. | During an active feedback or report question, both Alexa interpretations must mean “dismiss this question”. For an explicitly requested rating, resume the same recording. | The contextual feedback gate now accepts both intents, before the ordinary playback-next controller. |
+| “Play something from London” was confirmed correctly, but the availability response said “near you”. | `ResolutionBuilder` discarded the explicit-location marker before the yes-confirmation request. | “I found Test TN User near London. Would you like to listen?” | Pending resolutions now retain `requestedLocation`; availability can distinguish an explicitly requested city from the listener’s saved location. |
+| “Play a publication” asked for a publication, creator, or organisation. | The generic publication prompt reused broad source wording. | “Which publication would you like?” Reprompt: “Please say the publication name.” | The publication dialog now uses one shared, publication-specific speech constant. |
+| A conflicting Dorking/Orkney resolver combination produced “publication from … from …”. | The confirmation layer preferred the raw publication query and appended an untrusted residual beside a canonical publication. | When a structured publication is accepted, speak only its canonical name unless a separate trusted category or tag is present. Example: “Did you want me to play Orkney Talking Magazine?” | Canonical `publicationName` now takes priority. Conflicting or duplicated raw source words are removed from the spoken subject. |
+
+### External or catalogue findings
+
+- After Tynedale was resolved and confirmed, the content API returned no playable content. The correct response is: “I couldn’t find anything for content from Tynedale Talking Newspaper right now. What would you like to try instead?” This is an availability/catalogue result, not a slot-routing failure.
+- A bare unknown name such as “favor” after a creator prompt arrived as `AMAZON.FallbackIntent` with no slot text. Hear cannot send words to the resolver when Alexa supplies no transcript. Saying “play by favor” does provide `searchQuery` and reaches the resolver. Uploading the full generated creator slot improves recognition for known creators but cannot make custom slots a strict or unlimited vocabulary.
+- If the resolver confidently returns the wrong canonical entity, the speech layer now prevents duplicated or mixed wording but cannot invent the intended entity. That false match must be corrected in the resolver taxonomy, aliases, confidence policy, or generated Alexa slot lexicon.
+- The deployed development model contained only small sample sets, not the complete generated imports. Physical-device acceptance requires uploading all four generated domain slots and rebuilding the development model.
+- Console and phone success does not prove Echo Dot far-field recognition. The Echo Dot remains the acceptance device for names, acronyms, older voices, pace, and room noise.
+
+### Speech rules confirmed by the live run
+
+- A named organisation, creator, or publication is spoken using its canonical resolver name.
+- A general subject is introduced as “Playing content on {subject}.”
+- An explicit place is repeated as “near {city}”; “near you” is reserved for saved-device location searches.
+- A prompt asks only for the missing domain: talking newspaper, creator, publication, or city.
+- Resolver residual words never produce duplicated constructions such as “from {source} from {other source}”.
+- `short_description` is never used as the pre-playback introduction.
 
 ## 1. Search and availability speech
 
@@ -241,7 +286,7 @@ It appears in welcome reprompts, generic errors, search no-match responses, and 
 
 ### Correct shared wording
 
-> Please say the name of a talking newspaper, creator, publication, or city you would like to hear content from.
+> Please say the name of a talking newspaper, creator, publication, or city you would like to listen to.
 
 This shared wording should be used for generic fallback, no-input, error, idle-recovery, and no-match guidance.
 

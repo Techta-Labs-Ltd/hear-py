@@ -681,7 +681,11 @@ async def test_publication_rating_names_publication_when_prompting_and_resuming(
 
 
 @pytest.mark.asyncio
-async def test_skipping_requested_rating_resumes_active_audio():
+@pytest.mark.parametrize(
+    "intent_name",
+    ["SkipFeedbackIntent", "AMAZON.SkipIntent", "AMAZON.NextIntent"],
+)
+async def test_skipping_requested_rating_resumes_active_audio(intent_name):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
         "onboardingComplete": True,
@@ -702,7 +706,7 @@ async def test_skipping_requested_rating_resumes_active_audio():
         _event(
             {
                 "type": "IntentRequest",
-                "intent": {"name": "SkipFeedbackIntent", "slots": {}},
+                "intent": {"name": intent_name, "slots": {}},
             }
         ),
         None,
@@ -717,7 +721,11 @@ async def test_skipping_requested_rating_resumes_active_audio():
 
 
 @pytest.mark.asyncio
-async def test_requested_not_enjoyed_then_skip_resumes_active_audio():
+@pytest.mark.parametrize(
+    "intent_name",
+    ["SkipFeedbackIntent", "AMAZON.SkipIntent", "AMAZON.NextIntent"],
+)
+async def test_requested_not_enjoyed_then_skip_resumes_active_audio(intent_name):
     persistence = MemoryPersistenceAdapter()
     persistence._store[USER_ID] = {
         "onboardingComplete": True,
@@ -747,7 +755,7 @@ async def test_requested_not_enjoyed_then_skip_resumes_active_audio():
         _event(
             {
                 "type": "IntentRequest",
-                "intent": {"name": "SkipFeedbackIntent", "slots": {}},
+                "intent": {"name": intent_name, "slots": {}},
             }
         ),
         None,

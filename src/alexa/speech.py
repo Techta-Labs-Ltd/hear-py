@@ -40,7 +40,7 @@ class Speech:
     COMMUNITY_LOCATION_SKIPPED = "No problem. You can continue as a guest, but I need a city before I can play local content. What else would you like to hear?"
     WELCOME_REPROMPT = (
         "Please say the name of a talking newspaper, creator, publication, or city "
-        "you would like to hear content from."
+        "you would like to listen to."
     )
     RESUME_DECLINED_NEXT_OPTIONS = (
         f"Okay, I won't continue that recording. {WELCOME_REPROMPT}"
@@ -84,6 +84,8 @@ class Speech:
     )
     BROWSE_EXHAUSTED = "That's everything I found."
     ASK_TALKING_NEWSPAPER = "Which talking newspaper would you like?"
+    ASK_PUBLICATION = "Which publication would you like?"
+    ASK_PUBLICATION_REPROMPT = "Please say the publication name."
     TALKING_NEWSPAPER_ASR_REPAIR = "Did you mean a talking newspaper?"
     TALKING_NEWSPAPER_ASR_REPAIR_REPROMPT = (
         "Say yes if you meant a talking newspaper, or no to try another request."

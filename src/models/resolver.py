@@ -29,6 +29,11 @@ class ResolutionBuilder:
             "intent": nlp.get("intent") or "general",
             "confirmationLabel": confirmation_label,
             "searchPayload": SearchFilterUtils.normalize_search_payload(payload),
+            "requestedLocation": bool(
+                nlp.get("requestedLocation")
+                or slots.get("city")
+                or slots.get("placeName")
+            ),
             "resolvedEntities": list(nlp.get("entities") or []),
             "alternatives": list(nlp.get("alternatives") or []),
             "createdAt": timestamp,

@@ -3306,10 +3306,7 @@ async def test_generic_publication_pipeline_prompts_when_slot_has_no_value(
     response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
         mock_handler_input
     )
-    assert (
-        "Which publication, creator, or organization would you like"
-        in response["outputSpeech"]["ssml"]
-    )
+    assert "Which publication would you like?" in response["outputSpeech"]["ssml"]
     resolve.assert_not_awaited()
 
 

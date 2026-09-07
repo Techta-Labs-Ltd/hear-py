@@ -8,6 +8,7 @@ from src.middleware.confirmation import (
     ConfirmationMiddleware,
     SearchConfirmationGateHandler,
 )
+from src.models.availability_data import AvailabilityData
 from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolutionBuilder
 from src.models.user import User
@@ -152,6 +153,41 @@ def test_pending_resolution_stores_only_catalog_valid_query_and_sort():
         "query": "",
         "filter": {"organizationIds": ["org-wtn"]},
     }
+
+
+def test_pending_resolution_preserves_explicit_location_context():
+    pending = ResolutionBuilder.build(
+        {
+            "intent": "local",
+            "requestedLocation": True,
+            "slots": {"city": "London", "placeName": "London", "isLocal": True},
+            "searchPayload": {
+                "query": "",
+                "filter": {"city": "London", "isLocal": True},
+            },
+        },
+        "content in London",
+    )
+
+    assert pending["requestedLocation"] is True
+    assert AvailabilityData.requested_city(pending, pending["searchPayload"]) == "London"
+
+
+def test_structured_publication_name_wins_over_conflicting_raw_source_words():
+    assert (
+        ConfirmationPolicy.confirmation_speech(
+            {
+                "intent": "publication",
+                "slots": {
+                    "publicationIds": ["publication-orkney"],
+                    "publicationName": "Orkney Talking Magazine",
+                    "publicationSourceQuery": "Dorking Talking Magazine",
+                    "residualQuery": "Dorking Talking Magazine August",
+                },
+            }
+        )
+        == "Orkney Talking Magazine"
+    )
 
 
 def test_play_york_tn_still_requires_confirmation():
