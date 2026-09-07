@@ -24,10 +24,12 @@ from src.utils.search_payload import SearchPayload
 class Availability:
     logger = logging.getLogger(__name__)
     __slots__ = ("_deps",)
+
     def __init__(self, *, deps: object | None = None) -> None:
         if deps is None:
             raise RuntimeError("Availability requires injected dependencies")
         self._deps = deps
+
     @staticmethod
     def _response(handler_input, speech: str, reprompt: str, candidates=None):
         builder = (
@@ -133,7 +135,6 @@ class Availability:
             return await self._fallback_local_search(handler_input)
         location = AvailabilityData.location_from_payload(payload, User.snapshot(handler_input))
         requested_city = AvailabilityData.requested_city(resolved, payload)
-        requested_city = requested_city or str(location.get("city") or "").strip()
         if not location:
             User.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
             return self._response(
@@ -163,8 +164,7 @@ class Availability:
             return self._response(
                 handler_input,
                 AvailabilitySpeech.one_local_source(
-                    candidates[0]["name"],
-                    requested_city=requested_city,
+                    candidates[0]["name"], requested_city=requested_city
                 ),
                 "Say yes to hear it, or no to choose something else.",
                 candidates,
@@ -410,7 +410,9 @@ class Availability:
                 "limit": 1,
             }
         payload = SearchPayload.with_identity(
-            payload, alexa_user_id=AlexaRequest.get_user_id(handler_input), listener_id=store.get("listenerId")
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
         )
         await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._deps.heara.search(
@@ -418,11 +420,9 @@ class Availability:
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
         result.setdefault("_search_payload", payload)
-        result.setdefault("_request_label", candidate.get("name"))
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
         DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
-        source_name = source.get("name") if candidate.get("type") != "publication" else None
         return await Search.auto_play_first_from_search(
             handler_input,
             result,
@@ -432,7 +432,7 @@ class Availability:
                 "introOverride": AvailabilitySpeech.playing_choice(
                     candidate.get("name")
                     or ContentUtils.content_title_for_speech(result["results"][0]),
-                    source_name,
+                    source.get("name"),
                 ),
             },
             deps=self._deps,
@@ -599,7 +599,7 @@ class Availability:
             DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
             return self._response(
                 handler_input,
-                "No problem. What would you like to listen to instead?",
+                "Ok. What would you like to listen to instead?",
                 Speech.WELCOME_REPROMPT,
             )
         if intent_name == "AMAZON.YesIntent" and context.get("singleChoice"):
