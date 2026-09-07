@@ -14,6 +14,7 @@ from src.middleware.resolver import ResolverInterceptor
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
 from src.models.play import PlayCreator, PlayOrganization
+from src.models.resolver_workflow import ResolverWorkflow
 from src.models.user import User
 from src.utils.filters import SearchFilterUtils
 
@@ -850,6 +851,39 @@ async def test_search_query_fallback_accepts_close_source_name(
     assert nlp["intent"] == resolved_intent
     assert nlp["slots"][id_slot] == ["source-1"]
     assert "unresolvedReferences" not in nlp["slots"]
+
+
+def test_search_query_fallback_accepts_confident_resolver_alias():
+    result = {
+        "status": "resolved",
+        "intent": "organization",
+        "slots": {
+            "organizationIds": ["organization-tnf"],
+            "organizationName": "Talking News Federation",
+            "residualQuery": "",
+        },
+        "entities": [
+            {
+                "entityType": "organization",
+                "entityId": "organization-tnf",
+                "canonicalValue": "Talking News Federation",
+                "originalText": "tnf",
+                "confidence": 98,
+                "method": "bare_match",
+            }
+        ],
+        "ambiguities": [],
+    }
+
+    constrained = ResolverWorkflow.apply_alexa_constraints(
+        result,
+        "SearchContentIntent",
+        {"searchQuery": {"name": "searchQuery", "value": "tnf"}},
+    )
+
+    assert constrained["intent"] == "organization"
+    assert constrained["slots"]["organizationIds"] == ["organization-tnf"]
+    assert "unresolvedReferences" not in constrained["slots"]
 
 
 @pytest.mark.asyncio

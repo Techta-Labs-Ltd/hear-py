@@ -294,13 +294,11 @@ class ResolverResult:
         preferred = exact or candidates
         return preferred[0] if len(preferred) == 1 else None
 
-    def _standalone_unspecified_location(
+    def _fallback_unspecified_location(
         self,
-        slots: dict,
         filters: dict,
-        original_utterance: str,
     ) -> ResolvedEntity | None:
-        if filters or str(slots.get("residualQuery") or "").strip():
+        if filters:
             return None
         locations = ResolverResult._unique_search_locations(
             tuple(
@@ -313,16 +311,15 @@ class ResolverResult:
                 and entity.longitude is not None
             )
         )
-        meaningful_query = " ".join(
-            ResolverResult._fallback_query(original_utterance).casefold().split()
-        )
+        if not locations:
+            return None
+        highest_confidence = max(location.confidence for location in locations)
         candidates = tuple(
             location
             for location in locations
-            if meaningful_query
-            == " ".join(location.original_text.casefold().split())
+            if location.confidence == highest_confidence
         )
-        return max(candidates, key=lambda location: location.confidence, default=None)
+        return candidates[0] if len(candidates) == 1 else None
 
     def _location_payload(
         self,
@@ -330,7 +327,6 @@ class ResolverResult:
         filters: dict,
         sources: tuple[ResolvedEntity, ...],
         prefer_location: bool,
-        original_utterance: str,
     ) -> dict:
         keys = ("city", "placeName", "countryCode", "latitude", "longitude", "isLocal")
         for key in keys:
@@ -342,12 +338,8 @@ class ResolverResult:
         else:
             all_locations = self._credible_source_locations()
             if not all_locations:
-                standalone = self._standalone_unspecified_location(
-                    slots,
-                    filters,
-                    original_utterance,
-                )
-                all_locations = (standalone,) if standalone else ()
+                fallback = self._fallback_unspecified_location(filters)
+                all_locations = (fallback,) if fallback else ()
         locations = (
             all_locations
             if prefer_location
@@ -443,9 +435,10 @@ class ResolverResult:
             filters,
             sources,
             prefer_location,
-            original_utterance,
         )
         slots["ambiguousReferences"] = list(ambiguities)
+        if filters or ambiguities:
+            slots["residualQuery"] = ""
         search_plan = self._search_plan(slots, filters, original_utterance)
         slots["searchPlan"] = search_plan
         accepted_entities = {

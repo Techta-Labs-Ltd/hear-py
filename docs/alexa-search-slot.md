@@ -220,6 +220,27 @@ For every populated domain slot:
   availability, and the final search filters.
 - No Alexa entity ID is required or read for these four slots.
 
+The normalized resolver result uses structured matches before free text:
+
+1. If the resolver returns ambiguity candidates, the skill clears
+   `residualQuery`, asks the listener to choose, and performs no content search.
+2. Resolved creators, organizations, publications, categories, and tags become
+   backend search filters. If any such filter is usable, the skill clears
+   `residualQuery` and searches only with the structured filters.
+3. A location with an explicit source role is preferred over an
+   `unspecified` location.
+4. When no source, category, tag, or stronger location was selected, the
+   highest-confidence `unspecified` location at or above the resolver threshold
+   becomes the location filter. An equal-confidence tie is not guessed.
+5. `residualQuery` is used only when no usable entity and no ambiguity survives
+   normalization. It is never retried after a structured search returns no
+   content.
+
+For example, if the resolver recognizes `Barking` at confidence 100 but also
+returns the noisy residual text `and dagenham talking with repair`, the skill
+sends an empty query with the structured Barking coordinates and country
+filter. The residual words cannot override or broaden that entity match.
+
 Location capture uses two complementary routes. `TownCaptureIntent` owns a
 bare city that Alexa recognizes from `HEAR_LOCATION`. Explicit phrases such as
 `my city is Dorking`, `I live in Dorking`, and `set my location to Dorking`
@@ -300,11 +321,13 @@ carrier meaning (`play`, `play by`, `play from`, `play publication from`, or
 `my city is`) and send the complete captured phrase to the same Hear resolver.
 They are not a second catalogue and do not bypass resolution.
 
-When a free-text fallback resolves to a catalogue source, the skill compares
-the captured phrase with the resolver's canonical source name before asking
-for confirmation. Close speech variants remain valid, but an unrelated fuzzy
-result is converted to a clear not-found response. The skill never confirms or
-plays an unrelated creator, organisation, or publication as a substitute.
+When a free-text fallback produces a resolved primary source entity with an ID
+and confidence at or above the resolver's established source threshold, that
+structured resolver decision is authoritative. Short catalogue aliases such as
+`tnf` therefore do not need to resemble the canonical display name. The skill
+uses canonical-name comparison only for legacy or locally constructed results
+that do not contain resolver confidence metadata. Unverified results are still
+converted to a clear not-found response.
 
 Absence from a generated custom slot can still reduce ASR accuracy, so publish
 refreshed slot values when practical. Updating the Hear database or resolver

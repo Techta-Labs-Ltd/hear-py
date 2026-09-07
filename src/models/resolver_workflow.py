@@ -286,6 +286,29 @@ class ResolverWorkflow:
         return list(dict.fromkeys(names))
 
     @staticmethod
+    def _has_confident_primary_source(
+        result: dict, expected_types: tuple[str, ...]
+    ) -> bool:
+        if str(result.get("status") or "") != "resolved":
+            return False
+        resolved_type = str(result.get("intent") or "")
+        if resolved_type not in expected_types:
+            return False
+        for entity in result.get("entities") or []:
+            entity_type = entity.get("entityType") or entity.get("type")
+            entity_id = entity.get("entityId") or entity.get("id")
+            confidence = entity.get("confidence")
+            if (
+                entity_type == resolved_type
+                and entity_id
+                and isinstance(confidence, int)
+                and not isinstance(confidence, bool)
+                and confidence >= ResolverConstants.SECONDARY_FACET_MIN_CONFIDENCE
+            ):
+                return True
+        return False
+
+    @staticmethod
     def _reject_implausible_search_query_source(
         result: dict, alexa_intent: str, intent_slots: dict
     ) -> dict:
@@ -299,6 +322,8 @@ class ResolverWorkflow:
         requested = AlexaRequest.get_resolved_slot_value(intent_slots.get("searchQuery"))
         canonical_names = ResolverWorkflow._resolved_source_names(result)
         if not requested:
+            return result
+        if ResolverWorkflow._has_confident_primary_source(result, expected_types):
             return result
         verified = bool(canonical_names) and all(
             SearchFilterUtils.is_plausible_source_match(requested, canonical)
