@@ -55,6 +55,33 @@ def test_availability_path_applies_configured_prefix_once():
     assert client._build_api_path(client._build_alexa_availability_path()) == "/alexa/availability"
 
 
+@pytest.mark.parametrize(
+    "pagination",
+    [
+        {"totalPages": 1, "hasMore": True, "remaining": 1, "nextPage": 0},
+        {"totalPages": 1, "hasMore": False, "remaining": 0, "nextPage": 0},
+        {"totalPages": 1, "hasMore": True, "remaining": 0, "nextPage": None},
+    ],
+)
+def test_availability_does_not_offer_next_on_its_final_known_page(pagination):
+    from src.clients.availability import AvailabilityResponse
+
+    result = AvailabilityResponse.normalize(
+        {
+            "page": 0,
+            "limit": 3,
+            "total": 2,
+            "organizations": [{"id": "org-1", "name": "Talking News Federation"}],
+            "creators": [{"id": "creator-1", "name": "A Reader"}],
+            **pagination,
+        },
+        {"filter": {"location": {"city": "York"}}, "page": 0, "limit": 3},
+    )
+
+    assert result["has_more"] is False
+    assert result["next_page"] is None
+
+
 @pytest.mark.asyncio
 async def test_availability_sends_bridge_contract_and_normalizes_response(monkeypatch, caplog):
     captured = {}

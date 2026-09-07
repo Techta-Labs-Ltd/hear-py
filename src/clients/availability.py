@@ -117,6 +117,19 @@ class AvailabilityResponse:
         page = AvailabilityResponse.integer(data.get("page"))
         total_pages = AvailabilityResponse.integer(data.get("totalPages"))
         remaining = AvailabilityResponse.integer(data.get("remaining"))
+        raw_next_page = data.get("nextPage")
+        try:
+            next_page = int(raw_next_page) if raw_next_page is not None else None
+        except (TypeError, ValueError):
+            next_page = None
+        if next_page is not None and next_page <= page:
+            next_page = None
+        has_known_next_page = total_pages > 0 and page + 1 < total_pages
+        has_more = (
+            has_known_next_page
+            if total_pages > 0
+            else bool(data.get("hasMore") or next_page is not None or remaining > 0)
+        )
         return {
             "page": page,
             "limit": AvailabilityResponse.integer(
@@ -127,14 +140,8 @@ class AvailabilityResponse:
             "total": AvailabilityResponse.integer(data.get("total")),
             "total_pages": total_pages,
             "remaining": remaining,
-            "has_more": bool(
-                data.get("hasMore")
-                or data.get("nextPage") is not None
-                or remaining > 0
-                or total_pages > 0
-                and page + 1 < total_pages
-            ),
-            "next_page": data.get("nextPage"),
+            "has_more": has_more,
+            "next_page": next_page,
             "organizations": AvailabilityResponse.items(data, "organizations", "organization"),
             "creators": AvailabilityResponse.items(data, "creators", "creator"),
             "publications": publications,
