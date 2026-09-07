@@ -575,7 +575,7 @@ async def test_date_only_discovery_builds_date_filter_without_resolver_text(
             "PlayByCreatorIntent",
             "creatorQuery",
             "New Speaker",
-            "play by New Speaker",
+            "play something by New Speaker",
             "creator",
         ),
         (
@@ -662,7 +662,7 @@ async def test_out_of_catalog_source_name_still_reaches_backend_resolver(
         (
             "SearchCreatorIntent",
             "Unknown Speaker Collective",
-            "play by Unknown Speaker Collective",
+            "play something by Unknown Speaker Collective",
             "creator",
         ),
         (

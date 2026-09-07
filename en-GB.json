@@ -200,7 +200,7 @@
             }
           ],
           "samples": [
-            "play by {searchQuery}",
+            "play content by {searchQuery}",
             "play something by {searchQuery}",
             "play from creator {searchQuery}",
             "find creator {searchQuery}",
@@ -245,11 +245,6 @@
             }
           ],
           "samples": [
-            "my city is {searchQuery}",
-            "my town is {searchQuery}",
-            "I am in {searchQuery}",
-            "I live in {searchQuery}",
-            "my area is {searchQuery}",
             "set my location to {searchQuery}",
             "set my town to {searchQuery}",
             "change my location to {searchQuery}",
@@ -742,7 +737,7 @@
             }
           ],
           "samples": [
-            "play by {creatorQuery}",
+            "play content by {creatorQuery}",
             "play something by {creatorQuery}",
             "play a publication by {creatorQuery}",
             "find a publication by {creatorQuery}",
@@ -1273,20 +1268,17 @@
             }
           ],
           "samples": [
-            "{townName}"
+            "{townName}",
+            "my city is {townName}",
+            "my town is {townName}",
+            "I am in {townName}",
+            "I live in {townName}",
+            "my area is {townName}"
           ]
         },
         {
           "name": "SetLocationIntent",
-          "slots": [
-            {
-              "name": "location",
-              "type": "HEAR_LOCATION",
-              "samples": [
-                "{location}"
-              ]
-            }
-          ],
+          "slots": [],
           "samples": [
             "change my location",
             "change my town",
@@ -1707,22 +1699,6 @@
           ]
         },
         {
-          "name": "SetLocationIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "location",
-              "type": "HEAR_LOCATION",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.SetLocationIntent.location"
-              }
-            }
-          ]
-        },
-        {
           "name": "PlayByCreatorIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1834,15 +1810,6 @@
       },
       {
         "id": "Elicit.TownCaptureIntent.townName",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "Which city are you in?"
-          }
-        ]
-      },
-      {
-        "id": "Elicit.SetLocationIntent.location",
         "variations": [
           {
             "type": "PlainText",

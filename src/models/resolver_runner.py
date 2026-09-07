@@ -7,6 +7,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
+from src.constants.onboarding import OnboardingConstants
 from src.constants.resolver import ResolverConstants
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.resolver import ResolverUnavailable
@@ -49,6 +50,18 @@ class ResolverWorkflowRunner:
         }
 
     @staticmethod
+    def _location_capture_active(context: dict) -> bool:
+        store = context["store"]
+        dialog = context.get("dialog") or {}
+        dialog_context = dialog.get("context") or {}
+        stage = store.get("onboardingStage") or dialog_context.get("stage")
+        return stage in {
+            OnboardingConstants.ASK_PERMISSION,
+            OnboardingConstants.ASK_TOWN,
+            OnboardingConstants.AWAIT_LOCATION_CONFIRMATION,
+        }
+
+    @staticmethod
     def _capture_location(handler_input, context: dict) -> bool:
         alexa_intent = context["alexa_intent"]
         if alexa_intent in {
@@ -73,6 +86,20 @@ class ResolverWorkflowRunner:
             return True
         if alexa_intent != "TownCaptureIntent" or context["ambiguity_active"]:
             return False
+        if not ResolverWorkflowRunner._location_capture_active(context):
+            ResolverWorkflow._set_nlp(
+                handler_input,
+                {
+                    "intent": "general",
+                    "alexaIntent": "general",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": False,
+                    "needsRedirect": True,
+                    "confidence": "low",
+                    "slots": {},
+                },
+            )
+            return True
         town = AlexaRequest.get_resolved_slot_value(context["slots"].get("townName"))
         ResolverWorkflow._set_nlp(
             handler_input,
@@ -275,6 +302,7 @@ class ResolverWorkflowRunner:
         alexa_intent: str,
         raw: str | None,
         intent_slots: dict,
+        reported_alexa_intent: str | None = None,
     ) -> None:
         if not raw:
             ResolverWorkflowRunner._resolve_known_without_raw(handler_input, alexa_intent)
@@ -301,14 +329,15 @@ class ResolverWorkflowRunner:
             )
             actual = expected
             result = {**result, "intent": actual}
+        reported = reported_alexa_intent or alexa_intent
         ResolverWorkflow._set_nlp(
             handler_input,
             {
                 **result,
                 "alexaIntent": expected,
-                "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": actual == expected,
-                "needsRedirect": actual != expected,
+                "alexaRawIntent": reported,
+                "nlpMatchesAlexa": actual == expected and reported == alexa_intent,
+                "needsRedirect": actual != expected or reported != alexa_intent,
                 "localResolved": alexa_intent in ResolverWorkflow.SEARCH_INTENTS,
             },
         )
@@ -325,6 +354,19 @@ class ResolverWorkflowRunner:
         ):
             return
         if await self._resolve_follow_up(handler_input, context, raw, store):
+            return
+        if (
+            alexa_intent in {"SetLocationIntent", "TownCaptureIntent"}
+            and raw
+            and not ResolverWorkflowRunner._location_capture_active(context)
+        ):
+            await self._resolve_default(
+                handler_input,
+                "SearchContentIntent",
+                raw,
+                {"searchQuery": {"value": raw}},
+                reported_alexa_intent=alexa_intent,
+            )
             return
         if ResolverWorkflowRunner._capture_location(handler_input, context):
             return

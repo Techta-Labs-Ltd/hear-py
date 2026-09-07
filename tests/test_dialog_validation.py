@@ -300,7 +300,7 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     assert store["pendingAmbiguity"] is None
     assert store["activeDialog"] is None
     assert store["playbackQueue"] == playback_queue
-    assert "No problem" in response["outputSpeech"]["ssml"]
+    assert "Ok. What would you like to listen to instead?" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
 
 

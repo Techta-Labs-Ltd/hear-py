@@ -249,7 +249,7 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
                     },
                 }
             },
-            "play by Jane Smith",
+            "play something by Jane Smith",
         ),
     ],
 )
@@ -449,6 +449,132 @@ async def test_playback_location_is_search_filter_not_saved_location(
     assert store["locality"] == "Swindon"
     assert store["latitude"] == 51.5558
     assert store["longitude"] == -1.7797
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slot_name"),
+    [
+        ("TownCaptureIntent", "townName"),
+        ("SetLocationIntent", "location"),
+    ],
+)
+async def test_idle_bare_city_misclassification_routes_to_discovery_without_saving(
+    mock_handler_input, intent_name, slot_name
+):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "location_set",
+                "searchPayload": {
+                    "query": "",
+                    "filter": {"city": "Swindon"},
+                },
+                "slots": {"city": "Swindon", "isLocal": True},
+            }
+        )
+    )
+    container = ApplicationContainer(
+        resolver=resolver,
+        progressive=SimpleNamespace(send=AsyncMock(return_value=True)),
+    )
+    handler_input = _intent_request(
+        mock_handler_input,
+        intent_name,
+        {slot_name: {"name": slot_name, "value": "Swindon"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "userCity": "York",
+        "locality": "York",
+    }
+
+    await ResolverInterceptor(deps=container).process(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "play Swindon",
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "general"
+    assert nlp["alexaRawIntent"] == intent_name
+    assert nlp["needsRedirect"] is True
+    assert nlp["searchPayload"]["filter"] == {"city": "Swindon"}
+    store = User.snapshot(handler_input)
+    assert store["userCity"] == "York"
+    assert store["locality"] == "York"
+    assert store["onboardingStage"] is None
+
+
+@pytest.mark.asyncio
+async def test_active_location_change_owns_city_misclassified_as_local_search(
+    mock_handler_input,
+):
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock())
+    container = ApplicationContainer(resolver=resolver)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "PlayLocalIntent",
+        {"cityQuery": {"name": "cityQuery", "value": "Swindon"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "onboardingStage": "ask_town",
+    }
+
+    await ResolverInterceptor(deps=container).process(handler_input)
+
+    resolver.resolve_utterance.assert_not_awaited()
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"] == {"townName": "Swindon", "placeName": "Swindon"}
+    assert TownCaptureHandler(deps=container).can_handle(handler_input) is True
+
+
+@pytest.mark.asyncio
+async def test_explicit_location_change_command_opens_location_capture(mock_handler_input):
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock())
+    handler_input = _intent_request(mock_handler_input, "SetLocationIntent")
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+
+    await ResolverInterceptor(deps=ApplicationContainer(resolver=resolver)).process(
+        handler_input
+    )
+
+    resolver.resolve_utterance.assert_not_awaited()
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "location_set"
+    assert nlp["slots"] == {}
+
+
+@pytest.mark.asyncio
+async def test_explicit_one_turn_location_change_keeps_mutation_route(mock_handler_input):
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock())
+    handler_input = _intent_request(
+        mock_handler_input,
+        "SearchLocationIntent",
+        {"searchQuery": {"name": "searchQuery", "value": "Swindon"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+
+    await ResolverInterceptor(deps=ApplicationContainer(resolver=resolver)).process(
+        handler_input
+    )
+
+    resolver.resolve_utterance.assert_not_awaited()
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "location_set"
+    assert nlp["slots"] == {"townName": "Swindon"}
 
 
 @pytest.mark.asyncio
@@ -3116,7 +3242,7 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
             "SelectCreatorIntent",
             "awaitingCreatorName",
             "creator_name",
-            "Say play by, followed by the creator's full name",
+            "Please say the creator's full name",
         ),
         (
             "SelectOrganizationIntent",
@@ -3224,7 +3350,7 @@ def test_source_name_collision_rechains_the_active_capture_dialog(
         (
             "creator_name",
             "awaitingCreatorName",
-            "Say play by, followed by the creator's full name",
+            "Please say the creator's full name",
         ),
         (
             "organization_name",

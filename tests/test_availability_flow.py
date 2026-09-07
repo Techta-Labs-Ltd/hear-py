@@ -478,7 +478,8 @@ async def test_resolver_location_payload_routes_to_availability_instead_of_searc
         }
     }
     speech = AvailabilityTestSupport.speech(response)
-    assert "I found Talking News Federation near Swindon." in speech
+    assert "I found Talking News Federation." in speech
+    assert "near Swindon" not in speech
     assert "Would you like to listen?" in speech
     assert "I found one local source" not in speech
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"

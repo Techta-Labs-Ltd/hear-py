@@ -201,7 +201,7 @@ class ResolverWorkflow:
                     or not SearchFilterUtils.is_meaningful_creator_source(creator)
                 ):
                     return creator
-                return " ".join(value for value in ("play", topic, "by", creator) if value)
+                return " ".join(("play", topic or "something", "by", creator))
         if alexa_intent == "PlayLocalIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             location = AlexaRequest.get_resolved_slot_value(

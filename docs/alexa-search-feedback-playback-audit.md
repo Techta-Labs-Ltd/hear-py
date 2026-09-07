@@ -68,7 +68,7 @@ The deployed development skill was exercised through Alexa after the first corre
 ### External or catalogue findings
 
 - After Tynedale was resolved and confirmed, the content API returned no playable content. The correct response is: “I couldn’t find anything for content from Tynedale Talking Newspaper right now. What would you like to try instead?” This is an availability/catalogue result, not a slot-routing failure.
-- A bare unknown name such as “favor” after a creator prompt arrived as `AMAZON.FallbackIntent` with no slot text. Hear cannot send words to the resolver when Alexa supplies no transcript. Saying “play by favor” does provide `searchQuery` and reaches the resolver. Uploading the full generated creator slot improves recognition for known creators but cannot make custom slots a strict or unlimited vocabulary.
+- A bare unknown name such as “favor” after a creator prompt arrived as `AMAZON.FallbackIntent` with no slot text. Hear cannot send words to the resolver when Alexa supplies no transcript. Saying “play something by favor” does provide `searchQuery` and reaches the resolver. Uploading the full generated creator slot improves recognition for known creators but cannot make custom slots a strict or unlimited vocabulary.
 - If the resolver confidently returns the wrong canonical entity, the speech layer now prevents duplicated or mixed wording but cannot invent the intended entity. That false match must be corrected in the resolver taxonomy, aliases, confidence policy, or generated Alexa slot lexicon.
 - The deployed development model contained only small sample sets, not the complete generated imports. Physical-device acceptance requires uploading all four generated domain slots and rebuilding the development model.
 - Console and phone success does not prove Echo Dot far-field recognition. The Echo Dot remains the acceptance device for names, acronyms, older voices, pace, and room noise.
@@ -373,7 +373,7 @@ There should be one primary intent owner for each carrier phrase:
 | Carrier phrase | Owner |
 | --- | --- |
 | `play from …` | organisation flow |
-| `play by …` | creator flow |
+| `play something by …` | creator flow |
 | `play publication …` | publication flow |
 | `play …` | general topic/content flow |
 
@@ -386,6 +386,16 @@ The pre-cleanup model contained direct competition such as:
 - `play {organizationQuery}`
 
 Alexa does not provide a dependable manual priority between overlapping intents. The cleaned model assigns each carrier phrase to a primary owner and uses dialog state plus the resolver after Alexa selects the domain.
+
+Location routing follows the same ownership rule. `SetLocationIntent` owns only
+explicit commands such as “change my location” and has no city slot.
+`SearchLocationIntent` owns explicit one-turn mutations such as “change my
+location to Swindon.” `TownCaptureIntent` may recognize “Swindon” or “I live in
+Swindon,” but the backend treats it as an account update only during active
+onboarding or location change. At the normal listening prompt, the same city is
+sent through discovery without changing the saved location. While location
+capture is active, a city misclassified as content search is routed back to
+town capture and cannot begin playback.
 
 Amazon recommends testing utterance conflicts and using the utterance profiler:
 
@@ -450,7 +460,7 @@ Lowercase `tnf` is less reliable because Alexa can interpret it as a word. The r
 - “Play from a creator.”
 - “Play a publication.”
 - “Play from York Talking News.”
-- “Play by David Beard.”
+- “Play something by David Beard.”
 - Known and unknown custom-slot values.
 - `ER_SUCCESS_MATCH` and `ER_SUCCESS_NO_MATCH` request envelopes.
 - Slot and sample-utterance conflict checks.

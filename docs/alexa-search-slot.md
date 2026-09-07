@@ -160,8 +160,8 @@ backend generates fresh CSV files and before importing them into Alexa.
 | `PlayLocalIntent.localQuery` | `HEAR_LOCATION` |
 | `PlayLocalIntent.cityQuery` | `HEAR_LOCATION` |
 | `TownCaptureIntent.townName` | `HEAR_LOCATION` |
-| `SetLocationIntent.location` | `HEAR_LOCATION` |
-| `SearchLocationIntent.searchQuery` | `AMAZON.SearchQuery` runtime fallback |
+| `SetLocationIntent` | no slot; explicit location-change command only |
+| `SearchLocationIntent.searchQuery` | explicit location-change fallback |
 | `PlayByOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `SelectOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `PlayPublicationIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
@@ -261,19 +261,26 @@ returns the noisy residual text `and dagenham talking with repair`, the skill
 sends an empty query with the structured Barking coordinates and country
 filter. The residual words cannot override or broaden that entity match.
 
-Location capture uses two complementary routes. `TownCaptureIntent` owns a
-bare city that Alexa recognizes from `HEAR_LOCATION`. Explicit phrases such as
-`my city is Dorking`, `I live in Dorking`, and `set my location to Dorking`
-use `SearchLocationIntent`. Its `AMAZON.SearchQuery` value is sent to the same
-location resolver with `prefer_location: true`, including when the city is not
-present in `HEAR_LOCATION`. Both routes use the resolver result to stage the
-same spoken city confirmation before anything is saved.
+Location mutation is state-locked. `SetLocationIntent` has no slot and owns
+only explicit commands such as `change my location`; it opens the location
+capture state and asks for a city. `SearchLocationIntent` owns explicit
+one-turn commands such as `change my location to Dorking`. `TownCaptureIntent`
+owns bare or declarative city replies such as `Dorking` and `I live in
+Dorking`, but those replies update the account only while onboarding or an
+explicit location-change flow is active.
+
+Outside location capture, a bare city that Alexa misclassifies as
+`TownCaptureIntent` or `SetLocationIntent` is re-routed through general
+discovery and cannot update the saved city. In the opposite direction, while
+location capture is active, a city misclassified as a content or local-search
+intent is re-routed to town capture and cannot start playback. The resolver
+remains authoritative in both cases; conversation state decides whether the
+request is a search or an account mutation.
 
 Alexa's actual `AMAZON.FallbackIntent` request contains no slot and no raw
 transcript for the skill endpoint to recover. It cannot be forwarded to the
 resolver. During location capture, the skill therefore asks the listener to
-use the explicit carrier `my city is <city>` so Alexa can populate
-`SearchLocationIntent` and preserve the words. Saying `skip` can arrive as
+repeat the city so `TownCaptureIntent` can preserve the words. Saying `skip` can arrive as
 `AMAZON.NextIntent`, `AMAZON.SkipIntent`, or `SkipFeedbackIntent`; all three
 bypass the resolver and complete the current optional onboarding step.
 
@@ -315,7 +322,7 @@ unexpected intent collision stays in source capture instead of returning to
 the general welcome prompt. If Alexa classifies an unlisted bare name as
 `AMAZON.FallbackIntent` and supplies no slot text, the skill ends that capture
 attempt and asks the listener to repeat it with an explicit carrier phrase:
-`play by <creator>` or `play from <organization>`. That follow-up uses the
+`play something by <creator>` or `play from <organization>`. That follow-up uses the
 intent-specific `AMAZON.SearchQuery` route and reaches the Hear resolver.
 
 If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
@@ -335,7 +342,7 @@ raw text through the custom slot. Alexa can also select the right source intent
 without populating that custom slot. The interaction model therefore has
 intent-specific `AMAZON.SearchQuery` fallbacks for arbitrary content, creator,
 organization, publication, and location phrases. These fallbacks preserve the
-carrier meaning (`play`, `play by`, `play from`, `play publication from`, or
+carrier meaning (`play`, `play something by`, `play from`, `play publication from`, or
 `my city is`) and send the complete captured phrase to the same Hear resolver.
 They are not a second catalogue and do not bypass resolution.
 
