@@ -126,6 +126,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
                         "longitude": -1.78,
                     }
                 },
+                "alexaUserId": "amzn1.ask.account.TEST",
                 "page": 0,
                 "limit": 3,
             }
@@ -143,6 +144,8 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
                     "longitude": -1.78,
                 }
             },
+            "alexaUserId": "amzn1.ask.account.TEST",
+            "isLocal": True,
             "page": 0,
             "limit": 3,
         },
@@ -172,23 +175,102 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
     "availability_filter",
     [
         {},
-        {"creatorId": "creator-1", "organizationId": "org-1"},
         {"creatorIds": ["creator-1"]},
-        {"location": {"city": "Swindon"}, "creatorId": "creator-1"},
         {"location": {"city": "Swindon", "tags": ["news"]}},
+        {"creatorId": ""},
+        {"location": {}},
     ],
 )
-async def test_availability_rejects_non_exclusive_filters_without_an_http_call(
+async def test_availability_rejects_invalid_filters_without_an_http_call(
     monkeypatch, availability_filter
 ):
     request = AsyncMock()
     monkeypatch.setattr(HearApiClient, "_raw_request", request)
 
-    result = await HearApiClient().availability({"filter": availability_filter})
+    result = await HearApiClient().availability(
+        {
+            "filter": availability_filter,
+            "alexaUserId": "amzn1.ask.account.TEST",
+        }
+    )
 
     request.assert_not_awaited()
     assert result["failed"] is True
     assert result["_availability_payload"]["filter"] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("availability_filter", "is_local"),
+    [
+        ({"location": {"city": "Swindon"}}, True),
+        ({"creatorId": "creator-1"}, False),
+        ({"organizationId": "org-1"}, False),
+        (
+            {"creatorId": "creator-1", "organizationId": "org-1"},
+            False,
+        ),
+        (
+            {"location": {"city": "Swindon"}, "creatorId": "creator-1"},
+            True,
+        ),
+        (
+            {"location": {"city": "Swindon"}, "organizationId": "org-1"},
+            True,
+        ),
+        (
+            {
+                "location": {"city": "Swindon"},
+                "creatorId": "creator-1",
+                "organizationId": "org-1",
+            },
+            True,
+        ),
+    ],
+)
+async def test_availability_accepts_supported_contract_filters(
+    monkeypatch,
+    availability_filter,
+    is_local,
+):
+    captured = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        captured.update(body)
+        return 200, {"total": 0, "organizations": [], "creators": []}
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+
+    result = await HearApiClient().availability(
+        {
+            "filter": availability_filter,
+            "alexaUserId": "amzn1.ask.account.TEST",
+            "page": 0,
+            "limit": 20,
+        }
+    )
+
+    assert result["failed"] is False
+    assert captured == {
+        "filter": availability_filter,
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "isLocal": is_local,
+        "page": 0,
+        "limit": 20,
+    }
+
+
+@pytest.mark.asyncio
+async def test_availability_rejects_missing_alexa_user_id_without_an_http_call(monkeypatch):
+    request = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "_raw_request", request)
+
+    result = await HearApiClient().availability(
+        {"filter": {"creatorId": "creator-1"}}
+    )
+
+    request.assert_not_awaited()
+    assert result["failed"] is True
 
 
 @pytest.mark.asyncio

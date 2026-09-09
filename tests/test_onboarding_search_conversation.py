@@ -2137,20 +2137,15 @@ async def test_confirmed_source_with_multiple_publications_asks_for_publication(
             "expiresAt": 4102444800,
         },
     }
-    search = AsyncMock(
+    availability = AsyncMock(
         return_value={
             "failed": False,
-            "results": [
-                {
-                    "contentId": "track-1",
-                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
-                },
-                {
-                    "contentId": "track-2",
-                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
-                },
-            ],
-            "_publication_choices": [
+            "page": 0,
+            "total_pages": 1,
+            "has_more": False,
+            "publication_count": 2,
+            "standalone_track_count": 0,
+            "publications": [
                 {
                     "type": "publication",
                     "id": "publication-buxton",
@@ -2162,16 +2157,19 @@ async def test_confirmed_source_with_multiple_publications_asks_for_publication(
                     "name": "Daily Sermons",
                 },
             ],
-            "total_hits": 2,
         }
     )
+    search = AsyncMock()
     play = AsyncMock(return_value={"shouldEndSession": True})
+    monkeypatch.setattr(HearApiClient, "availability", availability)
     monkeypatch.setattr(HearApiClient, "search", search)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
 
     response = await YesIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
 
-    sent = search.await_args.args[0]
+    sent = availability.await_args.args[0]
+    assert sent["filter"] == {"organizationId": "org-tnf"}
+    assert sent["alexaUserId"] == "amzn1.ask.account.TEST"
     assert sent["limit"] == 3
     assert sent["page"] == 0
     assert "First, Buxton Talking Song" in response["outputSpeech"]["ssml"]
@@ -2179,9 +2177,11 @@ async def test_confirmed_source_with_multiple_publications_asks_for_publication(
     assert "Buxton Talking Song" in response["outputSpeech"]["ssml"]
     assert "Daily Sermons" in response["outputSpeech"]["ssml"]
     assert response["directives"][0]["type"] == "Dialog.UpdateDynamicEntities"
+    search.assert_not_awaited()
     play.assert_not_awaited()
-    pending = User.snapshot(mock_handler_input)["pendingAmbiguity"]
-    assert all(candidate["type"] == "publication" for candidate in pending["candidates"])
+    active = User.snapshot(mock_handler_input)["activeDialog"]
+    assert active["type"] == "availability"
+    assert all(candidate["type"] == "publication" for candidate in active["context"]["candidates"])
 
 
 @pytest.mark.asyncio
@@ -3524,10 +3524,13 @@ async def test_resolved_talking_newspaper_follow_up_requires_confirmation(
 
 
 @pytest.mark.asyncio
-async def test_location_follow_up_yes_executes_community_search(monkeypatch, mock_handler_input):
+async def test_location_follow_up_yes_checks_community_availability(
+    monkeypatch, mock_handler_input
+):
     from src.models.affirmative import Affirmative
 
     handler_input = _town_request(mock_handler_input, "Manchester")
+    handler_input.response_builder = ResponseBuilder()
     store = User.snapshot(handler_input)
     store.update(
         {
@@ -3553,16 +3556,32 @@ async def test_location_follow_up_yes_executes_community_search(monkeypatch, moc
         }
     )
     play = AsyncMock(return_value={"response": "playing"})
+    availability = AsyncMock(
+        return_value={
+            "failed": False,
+            "page": 0,
+            "total_pages": 1,
+            "has_more": False,
+            "organizations": [
+                {"type": "organization", "id": "org-1", "name": "Manchester Talking News"}
+            ],
+            "creators": [],
+        }
+    )
+    monkeypatch.setattr(HearApiClient, "availability", availability)
     monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
     response = await Affirmative(deps=ApplicationContainer())._handle_community_play_yes(
         handler_input, store
     )
-    assert response == {"response": "playing"}
+    assert "I found Manchester Talking News" in response["outputSpeech"]["ssml"]
     assert User.snapshot(handler_input)["awaitingCommunityPlayback"] is False
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["slots"]["city"] == "Manchester"
     assert nlp["slots"]["isLocal"] is True
+    availability.assert_awaited_once()
+    discover.assert_not_awaited()
+    play.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -3613,6 +3632,7 @@ async def test_local_location_confirmation_resumes_original_playback(
     from src.models.affirmative import Affirmative
 
     handler_input = _town_request(mock_handler_input, "yes")
+    handler_input.response_builder = ResponseBuilder()
     store = {
         **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
@@ -3640,17 +3660,32 @@ async def test_local_location_confirmation_resumes_original_playback(
         }
     )
     play = AsyncMock(return_value={"response": "playing-local"})
+    availability = AsyncMock(
+        return_value={
+            "failed": False,
+            "page": 0,
+            "total_pages": 1,
+            "has_more": False,
+            "organizations": [
+                {"type": "organization", "id": "org-york", "name": "York Talking News"}
+            ],
+            "creators": [],
+        }
+    )
+    monkeypatch.setattr(HearApiClient, "availability", availability)
     monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
     result = await Affirmative(deps=ApplicationContainer())._confirm_location(
         handler_input, store
     )
-    assert result == {"response": "playing-local"}
+    assert "I found York Talking News" in result["outputSpeech"]["ssml"]
     updated = User.snapshot(handler_input)
     assert updated["userCity"] == "York"
     assert updated["awaitingCommunityPlayback"] is False
     assert updated["awaitingProfilePermission"] is False
-    discover.assert_awaited_once()
+    availability.assert_awaited_once()
+    discover.assert_not_awaited()
+    play.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -3705,6 +3740,7 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
     from src.middleware.onboarding_gate import OnboardingGateHandler
 
     handler_input = _town_request(mock_handler_input, "yes")
+    handler_input.response_builder = ResponseBuilder()
     handler_input.request_envelope.request.intent.name = "AMAZON.YesIntent"
     handler_input.attributes_manager.request_attributes["_store"] = {**StateSchema.DEFAULT_STORE}
     session = {
@@ -3728,10 +3764,26 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
         }
     )
     play = AsyncMock(return_value={"response": "playing"})
+    availability = AsyncMock(
+        return_value={
+            "failed": False,
+            "page": 0,
+            "total_pages": 1,
+            "has_more": False,
+            "organizations": [
+                {"type": "organization", "id": "org-york", "name": "York Talking News"}
+            ],
+            "creators": [],
+        }
+    )
+    monkeypatch.setattr(HearApiClient, "availability", availability)
     monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
     assert OnboardingGateHandler(deps=ApplicationContainer()).can_handle(handler_input) is False
     response = await YesIntentHandler(deps=ApplicationContainer()).handle(handler_input)
-    assert response == {"response": "playing"}
+    assert "I found York Talking News" in response["outputSpeech"]["ssml"]
     assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"]["city"] == "York"
     assert session["awaitingCommunityPlayback"] is False
+    availability.assert_awaited_once()
+    discover.assert_not_awaited()
+    play.assert_not_awaited()

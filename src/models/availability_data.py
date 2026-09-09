@@ -44,14 +44,17 @@ class AvailabilityData:
         }
         if active_keys - allowed_keys or str(payload.get("query") or "").strip():
             return None
-        source_count = sum(
-            len(value if isinstance(value, list) else [value])
-            for key in source_keys
-            if AvailabilityData._has_value(value := filters.get(key))
-        )
-        if source_count > 1 or payload.get("isRecommended"):
+        source_count = 0
+        for key in source_keys:
+            value = filters.get(key)
+            values = value if isinstance(value, list) else [value]
+            populated = [item for item in values if AvailabilityData._has_value(item)]
+            if len(populated) > 1:
+                return None
+            source_count += len(populated)
+        if payload.get("isRecommended"):
             return None
-        if source_count == 1:
+        if source_count > 0:
             return None if payload.get("sort") else AvailabilityConstants.SOURCE_KIND
         if active_keys & AvailabilityConstants.LOCATION_FILTER_KEYS or payload.get("isLocal"):
             return AvailabilityConstants.LOCATION_KIND
@@ -84,9 +87,12 @@ class AvailabilityData:
                 source_id = str(value or "").strip()
                 if source_id:
                     found.append((entity_type, source_id))
-        if len(found) != 1:
+        if not found:
             return None
-        entity_type, source_id = found[0]
+        entity_type, source_id = next(
+            (item for item in found if item[0] == "creator"),
+            found[0],
+        )
         entity = next(
             (
                 item
@@ -102,6 +108,36 @@ class AvailabilityData:
             or AvailabilityData.clean_source_name(resolution.get("confirmationLabel") or "")
         ).strip()
         return {"type": entity_type, "id": source_id, "name": name or "that source"}
+
+    @staticmethod
+    def availability_filter(payload: dict, store: dict | None = None) -> dict | None:
+        if AvailabilityData.request_scope(payload) is None:
+            return None
+        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        output = {}
+        for source_type, output_key in (
+            ("creator", "creatorId"),
+            ("organization", "organizationId"),
+        ):
+            source_key = SearchConstants.SEARCH_SOURCE_FILTERS[source_type]
+            value = filters.get(source_key)
+            values = value if isinstance(value, list) else [value]
+            populated = [str(item).strip() for item in values if AvailabilityData._has_value(item)]
+            if len(populated) > 1:
+                return None
+            if populated:
+                output[output_key] = populated[0]
+
+        has_location_request = payload.get("isLocal") or any(
+            AvailabilityData._has_value(filters.get(key))
+            for key in AvailabilityConstants.LOCATION_FILTER_KEYS
+        )
+        if has_location_request:
+            location = AvailabilityData.location_from_payload(payload, store or {})
+            if not location:
+                return None
+            output["location"] = location
+        return output or None
 
     @staticmethod
     def location_from_payload(payload: dict, store: dict) -> dict:

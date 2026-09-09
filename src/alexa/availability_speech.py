@@ -6,6 +6,26 @@ from src.constants.discovery import DiscoveryConstants
 
 class AvailabilitySpeech:
     @staticmethod
+    def no_results(city: str | None = None, source_name: str | None = None) -> str:
+        if source_name:
+            safe_source = Speech.escape_ssml_lite(source_name)
+            return (
+                f"I couldn't find anything currently available from {safe_source}. "
+                f"{Speech.WELCOME_REPROMPT}"
+            )
+        if city:
+            safe_city = Speech.escape_ssml_lite(city)
+            return (
+                "I couldn't find a talking newspaper or creator currently available "
+                f"in {safe_city}. {Speech.WELCOME_REPROMPT}"
+            )
+        return f"I couldn't find anything currently available. {Speech.WELCOME_REPROMPT}"
+
+    @staticmethod
+    def unavailable() -> str:
+        return f"I couldn't check availability just now. {Speech.WELCOME_REPROMPT}"
+
+    @staticmethod
     def _count_label(value: int) -> str:
         words = (
             "zero",

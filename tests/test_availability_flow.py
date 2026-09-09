@@ -94,20 +94,24 @@ async def test_no_leaves_multiple_availability_choices_and_returns_to_search(
     assert User.snapshot(handler_input)["activeDialog"] is None
 
 
-def test_availability_requires_exactly_one_resolved_source():
-    assert (
-        AvailabilityData.source_from_resolution(
-            {
-                "searchPayload": {
-                    "filter": {
-                        "creatorIds": ["creator-1"],
-                        "organizationIds": ["org-1"],
-                    }
+def test_availability_accepts_one_creator_and_one_organization():
+    assert AvailabilityData.source_from_resolution(
+        {
+            "searchPayload": {
+                "filter": {
+                    "creatorIds": ["creator-1"],
+                    "organizationIds": ["org-1"],
                 }
-            }
-        )
-        is None
-    )
+            },
+            "resolvedEntities": [
+                {
+                    "type": "creator",
+                    "id": "creator-1",
+                    "canonicalValue": "A Reader",
+                }
+            ],
+        }
+    ) == {"type": "creator", "id": "creator-1", "name": "A Reader"}
     assert (
         AvailabilityData.source_from_resolution(
             {"searchPayload": {"filter": {"creatorIds": ["creator-1", "creator-2"]}}}
@@ -180,13 +184,60 @@ def test_availability_requires_exactly_one_resolved_source():
                     "organizationIds": ["org-1"],
                 },
             },
-            None,
+            "source",
         ),
         ({"query": "council", "filter": {}}, None),
     ],
 )
-def test_availability_scope_only_accepts_location_or_one_source(payload, expected):
+def test_availability_scope_accepts_supported_filter_combinations(payload, expected):
     assert AvailabilityData.request_scope(payload) == expected
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        (
+            {"filter": {"city": "Swindon"}},
+            {"location": {"city": "Swindon"}},
+        ),
+        (
+            {"filter": {"creatorIds": ["creator-1"]}},
+            {"creatorId": "creator-1"},
+        ),
+        (
+            {"filter": {"organizationIds": ["org-1"]}},
+            {"organizationId": "org-1"},
+        ),
+        (
+            {"filter": {"creatorIds": ["creator-1"], "organizationIds": ["org-1"]}},
+            {"creatorId": "creator-1", "organizationId": "org-1"},
+        ),
+        (
+            {"filter": {"city": "Swindon", "creatorIds": ["creator-1"]}},
+            {"creatorId": "creator-1", "location": {"city": "Swindon"}},
+        ),
+        (
+            {"filter": {"city": "Swindon", "organizationIds": ["org-1"]}},
+            {"organizationId": "org-1", "location": {"city": "Swindon"}},
+        ),
+        (
+            {
+                "filter": {
+                    "city": "Swindon",
+                    "creatorIds": ["creator-1"],
+                    "organizationIds": ["org-1"],
+                }
+            },
+            {
+                "creatorId": "creator-1",
+                "organizationId": "org-1",
+                "location": {"city": "Swindon"},
+            },
+        ),
+    ],
+)
+def test_availability_filter_serializes_supported_combinations(payload, expected):
+    assert AvailabilityData.availability_filter(payload, {}) == expected
 
 
 @pytest.mark.asyncio
@@ -217,7 +268,7 @@ async def test_mixed_searches_bypass_availability(mock_handler_input, payload):
 
 
 @pytest.mark.asyncio
-async def test_location_and_one_organization_uses_only_organization_availability(
+async def test_location_and_one_organization_preserves_both_availability_filters(
     mock_handler_input,
 ):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
@@ -247,8 +298,15 @@ async def test_location_and_one_organization_uses_only_organization_availability
         "Local Voice",
     )
 
-    assert deps.heara.availability.await_args.args[0]["filter"] == {
-        "organizationId": "org-1"
+    assert deps.heara.availability.await_args.args[0] == {
+        "filter": {
+            "organizationId": "org-1",
+            "location": {"city": "Swindon"},
+        },
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "isLocal": True,
+        "page": 0,
+        "limit": 3,
     }
 
 
@@ -312,6 +370,8 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
         "latitude": 51.56,
         "longitude": -1.78,
     }
+    assert body["alexaUserId"] == "amzn1.ask.account.TEST"
+    assert body["isLocal"] is True
     speech = AvailabilityTestSupport.speech(response)
     assert "Here are the talking newspapers and creators closest to Swindon" in speech
     assert "Here are the local sources I found" not in speech
@@ -324,15 +384,113 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
 
 
+@pytest.mark.asyncio
+async def test_empty_local_availability_stops_without_search_or_playback_mutation(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    playback_state = {
+        "activePlayback": {"token": "existing-token", "offsetInMilliseconds": 42000},
+        "playbackQueue": {"items": [{"contentId": "existing-track"}]},
+        "lastToken": "existing-token",
+        "lastOffsetMs": 42000,
+    }
+    User.update(handler_input, playback_state)
+    before = {key: User.snapshot(handler_input).get(key) for key in playback_state}
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "page": 0,
+            "total_pages": 0,
+            "has_more": False,
+            "total": 0,
+            "organizations": [],
+            "creators": [],
+            "publications": [],
+            "publication_count": 0,
+            "standalone_track_count": 0,
+        }
+    )
+
+    response = await Availability(deps=deps).begin_local(
+        handler_input,
+        {
+            "intent": "local",
+            "requestedLocation": True,
+            "slots": {
+                "city": "Shalfleet",
+                "countryCode": "gb",
+                "latitude": 50.7011,
+                "longitude": -1.4152,
+                "isLocal": True,
+            },
+        },
+    )
+
+    assert deps.heara.availability.await_args.args[0] == {
+        "filter": {
+            "location": {
+                "city": "Shalfleet",
+                "countryCode": "gb",
+                "latitude": 50.7011,
+                "longitude": -1.4152,
+            }
+        },
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "isLocal": True,
+        "page": 0,
+        "limit": 3,
+    }
+    deps.heara.search.assert_not_awaited()
+    assert "currently available in Shalfleet" in AvailabilityTestSupport.speech(response)
+    assert response.get("directives") in (None, [])
+    after = User.snapshot(handler_input)
+    assert {key: after.get(key) for key in playback_state} == before
+
+
+@pytest.mark.asyncio
+async def test_empty_source_availability_stops_without_search(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "publication_count": 0,
+            "standalone_track_count": 0,
+            "publications": [],
+        }
+    )
+
+    response = await Availability(deps=deps)._begin_source(
+        handler_input,
+        {"type": "organization", "id": "org-1", "name": "Local Voice"},
+        {"query": "", "filter": {"organizationIds": ["org-1"]}},
+    )
+
+    deps.heara.search.assert_not_awaited()
+    assert "currently available from Local Voice" in AvailabilityTestSupport.speech(response)
+    assert response.get("directives") in (None, [])
+
+
+@pytest.mark.asyncio
+async def test_failed_availability_stops_without_search(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    deps = AvailabilityTestSupport.dependencies({"failed": True})
+
+    response = await Availability(deps=deps)._begin_source(
+        handler_input,
+        {"type": "creator", "id": "creator-1", "name": "A Reader"},
+        {"query": "", "filter": {"creatorIds": ["creator-1"]}},
+    )
+
+    deps.heara.search.assert_not_awaited()
+    assert "couldn't check availability just now" in AvailabilityTestSupport.speech(response)
+
+
 def test_source_candidates_keep_same_name_in_distinct_domains():
     candidates = AvailabilityData.source_candidates(
         {
-            "organizations": [
-                {"type": "organization", "id": "org-1", "name": "Community Voice"}
-            ],
-            "creators": [
-                {"type": "creator", "id": "creator-1", "name": "Community Voice"}
-            ],
+            "organizations": [{"type": "organization", "id": "org-1", "name": "Community Voice"}],
+            "creators": [{"type": "creator", "id": "creator-1", "name": "Community Voice"}],
         }
     )
     assert [(item["type"], item["id"]) for item in candidates] == [
