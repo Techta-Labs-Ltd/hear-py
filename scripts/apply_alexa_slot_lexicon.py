@@ -16,8 +16,6 @@ class AlexaSlotLexicon:
         "HEAR_CREATOR",
         "HEAR_TOPIC",
     )
-    DISCOVERY_SLOT_NAME = "HEAR_DISCOVERY_QUERY"
-    DISCOVERY_VALUES_PER_DOMAIN = 1000
     GENERIC_TOPIC_VALUES = frozenset(
         {"creator", "organization", "organisation", "publication", "talking news", "talking newspaper"}
     )
@@ -124,46 +122,6 @@ class AlexaSlotLexicon:
         return [row for row in rows if row[0].strip().casefold() not in reference_values]
 
     @staticmethod
-    def _representative_rows(
-        rows: list[list[str]], limit: int, preferred: set[str]
-    ) -> list[list[str]]:
-        if len(rows) <= limit:
-            return rows
-        indexes = {
-            round(index * (len(rows) - 1) / (limit - 1))
-            for index in range(limit)
-        }
-        indexes.update(
-            index
-            for index, row in enumerate(rows)
-            if row[0].strip().casefold() in preferred
-        )
-        return [row for index, row in enumerate(rows) if index in indexes]
-
-    @staticmethod
-    def _discovery_rows(
-        slots: dict[str, list[list[str]]], preferred: set[str] | None = None
-    ) -> list[list[str]]:
-        """Build a bounded carrierless vocabulary without duplicating synonym sets."""
-        preferred = preferred or set()
-        seen: set[str] = set()
-        rows: list[list[str]] = []
-        for slot_name in AlexaSlotLexicon.SLOT_NAMES:
-            representative = AlexaSlotLexicon._representative_rows(
-                slots[slot_name],
-                AlexaSlotLexicon.DISCOVERY_VALUES_PER_DOMAIN,
-                preferred,
-            )
-            for row in representative:
-                canonical = row[0].strip()
-                key = canonical.casefold()
-                if not canonical or key in seen:
-                    continue
-                seen.add(key)
-                rows.append([canonical, ""])
-        return rows
-
-    @staticmethod
     def _write_atomic(path: Path, rows: list[list[str]]) -> None:
         with tempfile.NamedTemporaryFile(
             "w", encoding="utf-8", newline="", dir=path.parent, delete=False
@@ -199,21 +157,7 @@ class AlexaSlotLexicon:
         for slot_name, rows in slots.items():
             path = directory / f"{slot_name}.csv"
             cls._write_atomic(path, rows)
-        preferred = {
-            str(value).strip().casefold()
-            for value in manifest.get("carrierlessPreferredValues", [])
-            if str(value).strip()
-        }
-        discovery_rows = cls._discovery_rows(slots, preferred)
-        cls._validate(discovery_rows, cls.DISCOVERY_SLOT_NAME)
-        cls._write_atomic(
-            directory / f"{cls.DISCOVERY_SLOT_NAME}.csv",
-            discovery_rows,
-        )
-        return {
-            **{slot_name: len(rows) for slot_name, rows in slots.items()},
-            cls.DISCOVERY_SLOT_NAME: len(discovery_rows),
-        }
+        return {slot_name: len(rows) for slot_name, rows in slots.items()}
 
 
 class AlexaSlotLexiconCommand:

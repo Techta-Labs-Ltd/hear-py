@@ -47,7 +47,7 @@ class ConfirmationPolicy:
     )
     SLOT_PRIORITY = {
         "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
-        "CarrierlessDiscoveryIntent": ("query",),
+        "CarrierlessDiscoveryIntent": ("topic",),
         "SearchContentIntent": ("searchQuery",),
         "SearchCreatorIntent": ("searchQuery",),
         "SearchOrganizationIntent": ("searchQuery",),

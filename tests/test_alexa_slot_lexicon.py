@@ -12,39 +12,6 @@ def test_all_generated_domain_slots_are_validated():
         "HEAR_CREATOR",
         "HEAR_TOPIC",
     )
-    assert AlexaSlotLexicon.DISCOVERY_SLOT_NAME == "HEAR_DISCOVERY_QUERY"
-
-
-def test_carrierless_discovery_slot_is_a_canonical_union_without_duplicates():
-    slots = {
-        "HEAR_LOCATION": [["York", "", "City of York"]],
-        "HEAR_ORGANIZATION": [["York Talking News", "", "Y T N"]],
-        "HEAR_CREATOR": [["David Beard", "", "David"]],
-        "HEAR_TOPIC": [["Sport", "", "Sports"]],
-    }
-
-    assert AlexaSlotLexicon._discovery_rows(slots) == [
-        ["York", ""],
-        ["York Talking News", ""],
-        ["David Beard", ""],
-        ["Sport", ""],
-    ]
-
-    slots["HEAR_TOPIC"].append(["york", ""])
-    assert AlexaSlotLexicon._discovery_rows(slots).count(["York", ""]) == 1
-
-
-def test_carrierless_discovery_sampling_keeps_range_and_preferred_values():
-    rows = [[f"Value {index}", ""] for index in range(10)]
-
-    selected = AlexaSlotLexicon._representative_rows(rows, 3, {"value 3"})
-
-    assert selected == [
-        ["Value 0", ""],
-        ["Value 3", ""],
-        ["Value 4", ""],
-        ["Value 9", ""],
-    ]
 
 
 def test_generic_source_kinds_are_rejected_from_topic_slot():

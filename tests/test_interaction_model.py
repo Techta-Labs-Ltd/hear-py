@@ -57,7 +57,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
-        "CarrierlessDiscoveryIntent": {"query": "HEAR_DISCOVERY_QUERY"},
+        "CarrierlessDiscoveryIntent": {"topic": "HEAR_TOPIC"},
         "TownCaptureIntent": {"townName": "HEAR_LOCATION"},
         "SetLocationIntent": {},
         "SearchLocationIntent": {"searchQuery": "AMAZON.SearchQuery"},
@@ -123,19 +123,20 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert "SetLocationIntent" not in dialog_intents
 
 
-def test_carrierless_intent_owns_bare_discovery_and_town_keeps_dialog_samples():
+def test_existing_domain_slots_accept_bare_discovery_requests():
     model = _model()["interactionModel"]["languageModel"]
     intents = {item["name"]: item for item in model["intents"]}
     city_type = next((item for item in model["types"] if item["name"] == "HEAR_LOCATION"))
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
     assert set(intents["TownCaptureIntent"]["samples"]) == {
+        "{townName}",
         "my city is {townName}",
         "my town is {townName}",
         "I am in {townName}",
         "I live in {townName}",
         "my area is {townName}",
     }
-    assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{query}"]
+    assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     assert intents["TownCaptureIntent"]["slots"][0]["samples"] == ["{townName}"]
     assert intents["SetLocationIntent"]["slots"] == []
     assert all("{" not in sample for sample in intents["SetLocationIntent"]["samples"])
@@ -336,8 +337,7 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
     assert "Tynedale Talking Newspaper" in organization_values
     assert "play from {organizationQuery}" in organization_slot["samples"]
     assert intents["SelectOrganizationIntent"]["slots"][0]["type"] == "HEAR_ORGANIZATION"
-    assert "{organizationQuery}" not in intents["SelectOrganizationIntent"]["samples"]
-    assert "talking newspaper {organizationQuery}" in intents["SelectOrganizationIntent"]["samples"]
+    assert "{organizationQuery}" in intents["SelectOrganizationIntent"]["samples"]
     tynedale = next(
         item
         for item in types["HEAR_ORGANIZATION"]["values"]
@@ -434,37 +434,28 @@ def test_generated_domain_slots_have_id_free_backend_replaceable_values():
     }
     assert generated.issubset(types)
     assert "HEAR_SEARCH_QUERY" not in types
+    assert "HEAR_DISCOVERY_QUERY" not in types
     for slot_name in generated:
         assert types[slot_name]["values"]
         assert all("id" not in item for item in types[slot_name]["values"])
         assert all(item["name"]["value"].strip() for item in types[slot_name]["values"])
 
-    discovery_values = {
-        item["name"]["value"].casefold()
-        for item in types["HEAR_DISCOVERY_QUERY"]["values"]
-    }
-    domain_values = {
-        item["name"]["value"].casefold()
-        for slot_name in generated
-        for item in types[slot_name]["values"]
-    }
-    assert domain_values.issubset(discovery_values)
-    assert {"swindon", "york"}.issubset(discovery_values)
-    assert all("id" not in item for item in types["HEAR_DISCOVERY_QUERY"]["values"])
 
-
-def test_carrierless_discovery_is_the_only_global_bare_domain_intent():
+def test_carrierless_discovery_reuses_existing_domain_slots():
     intents = {
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
-    assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{query}"]
+    assert intents["CarrierlessDiscoveryIntent"]["slots"] == [
+        {"name": "topic", "type": "HEAR_TOPIC"}
+    ]
+    assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     for intent_name, bare_sample in {
         "TownCaptureIntent": "{townName}",
         "SelectCreatorIntent": "{creatorQuery}",
         "SelectOrganizationIntent": "{organizationQuery}",
         "SelectPublicationSourceIntent": "{publicationSourceQuery}",
     }.items():
-        assert bare_sample not in intents[intent_name]["samples"]
+        assert bare_sample in intents[intent_name]["samples"]
 
 
 def test_clarification_slot_has_format_and_ordinal_fallback_values():

@@ -60,19 +60,6 @@
       "HEAR_ORGANIZATION"
     ]
   },
-  "carrierlessPreferredValues": [
-    "Herne Bay",
-    "London",
-    "Swindon",
-    "York",
-    "Talking News Federation",
-    "Tynedale Talking Newspaper",
-    "York Talking News",
-    "Crawley Audio News",
-    "Sport",
-    "Local News",
-    "Premier League"
-  ],
   "allowCrossSlotCollisions": [
     "Beer",
     "Law",

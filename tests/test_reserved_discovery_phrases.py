@@ -197,8 +197,8 @@ async def test_carrierless_discovery_forwards_the_complete_query_unchanged(
             "intent": {
                 "name": "CarrierlessDiscoveryIntent",
                 "slots": {
-                    "query": {
-                        "name": "query",
+                    "topic": {
+                        "name": "topic",
                         "value": "latest sport in Swindon from TNF",
                     }
                 },
@@ -250,8 +250,8 @@ async def test_carrierless_name_reply_respects_active_organization_dialog(
             "intent": {
                 "name": "CarrierlessDiscoveryIntent",
                 "slots": {
-                    "query": {
-                        "name": "query",
+                    "topic": {
+                        "name": "topic",
                         "value": "Talking News Federation",
                     }
                 },
@@ -305,7 +305,7 @@ async def test_carrierless_town_reply_respects_active_onboarding(
             "locale": "en-GB",
             "intent": {
                 "name": "CarrierlessDiscoveryIntent",
-                "slots": {"query": {"name": "query", "value": "Swindon"}},
+                "slots": {"topic": {"name": "topic", "value": "Swindon"}},
             },
         }
     )
