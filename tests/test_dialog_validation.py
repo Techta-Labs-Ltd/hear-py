@@ -348,7 +348,8 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     assert response["shouldEndSession"] is False
 
 
-def test_search_confirmation_rejects_new_search(mock_handler_input):
+@pytest.mark.parametrize("intent_name", ["SearchContentIntent", "PlayContentIntent"])
+def test_search_confirmation_allows_a_new_discovery_reply(mock_handler_input, intent_name):
     User.update(
         mock_handler_input,
         {
@@ -360,11 +361,9 @@ def test_search_confirmation_rejects_new_search(mock_handler_input):
             },
         },
     )
-    _intent(mock_handler_input, "PlayContentIntent")
+    _intent(mock_handler_input, intent_name)
     failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
-    assert failure["dialogType"] == "search_confirmation"
-    assert "Daily Sermons" in failure["speech"]
-    assert "yes or no" in failure["speech"]
+    assert failure is None
 
 
 def test_resume_validation_repeats_publication_title(mock_handler_input):

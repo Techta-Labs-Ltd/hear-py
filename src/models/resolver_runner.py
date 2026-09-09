@@ -9,6 +9,7 @@ from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.onboarding import OnboardingConstants
 from src.constants.resolver import ResolverConstants
+from src.models.confirmation import ConfirmationPolicy
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.resolver import ResolverUnavailable
 from src.models.resolver_workflow import ResolverWorkflow
@@ -349,6 +350,14 @@ class ResolverWorkflowRunner:
         alexa_intent = context["alexa_intent"]
         raw = ResolverWorkflow._extract_raw_utterance(handler_input, alexa_intent)
         store = User.snapshot(handler_input)
+        dialog_type = (context.get("dialog") or {}).get("type")
+        if ConfirmationPolicy.prepare_search_confirmation_reply(
+            handler_input,
+            dialog_type,
+            alexa_intent,
+            raw,
+        ):
+            return
         if await self._resolve_ambiguity(
             handler_input, context, raw, store.get("pendingAmbiguity")
         ):

@@ -4,11 +4,52 @@ from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.constants.dialog import DialogConstants
+from src.models.dialog import DialogStateManager
 from src.models.resolver import ResolutionBuilder
 from src.utils.filters import SearchFilterUtils
 
 
 class ConfirmationPolicy:
+    AFFIRMATIVE_REPLIES = frozenset(
+        {
+            "absolutely",
+            "affirmative",
+            "correct",
+            "definitely",
+            "do it",
+            "go ahead",
+            "i did",
+            "of course",
+            "right",
+            "sure",
+            "uh huh",
+            "yeah",
+            "yep",
+            "yes",
+            "yes i did",
+            "yes please",
+        }
+    )
+    NEGATIVE_REPLIES = frozenset(
+        {
+            "absolutely not",
+            "i didn't",
+            "i don't think so",
+            "nah",
+            "negative",
+            "neither of those",
+            "no",
+            "no i didn't",
+            "no thanks",
+            "no way",
+            "none of those",
+            "nope",
+            "not at all",
+            "not really",
+            "not those",
+            "wrong",
+        }
+    )
     RESOLVED_INTENTS = frozenset(
         {
             "local",
@@ -124,6 +165,46 @@ class ConfirmationPolicy:
             return False
         slots = nlp.get("slots") or {}
         return bool(nlp.get("ambiguities") or slots.get("ambiguousReferences"))
+
+    @staticmethod
+    def allows_search_replacement(dialog_type: str | None, alexa_intent: str | None) -> bool:
+        return bool(
+            dialog_type == "search_confirmation"
+            and alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
+        )
+
+    @staticmethod
+    def prepare_search_confirmation_reply(
+        handler_input,
+        dialog_type: str | None,
+        alexa_intent: str | None,
+        raw: str | None,
+    ) -> bool:
+        if not ConfirmationPolicy.allows_search_replacement(dialog_type, alexa_intent):
+            return False
+        normalized = SearchFilterUtils.normalize_discovery_phrase(raw)
+        captured = None
+        if alexa_intent == "SearchContentIntent":
+            if normalized in ConfirmationPolicy.AFFIRMATIVE_REPLIES:
+                captured = True
+            elif normalized in ConfirmationPolicy.NEGATIVE_REPLIES:
+                captured = False
+        if captured is not None:
+            RequestContext.set_value(
+                handler_input,
+                DialogConstants.CAPTURED_SEARCH_CONFIRMATION,
+                captured,
+            )
+            return True
+        DialogStateManager.clear_transient_discovery(handler_input)
+        return False
+
+    @staticmethod
+    def captured_search_confirmation(handler_input) -> bool | None:
+        return RequestContext.value(
+            handler_input,
+            DialogConstants.CAPTURED_SEARCH_CONFIRMATION,
+        )
 
     @staticmethod
     def _has_meaningful_general_request(nlp: dict, raw: str | None) -> bool:
@@ -373,6 +454,8 @@ class ConfirmationPolicy:
 
     @staticmethod
     def apply(handler_input) -> None:
+        if ConfirmationPolicy.captured_search_confirmation(handler_input) is not None:
+            return
         attrs = RequestContext.request(handler_input)
         nlp = attrs.get("_nlp")
         if not ConfirmationPolicy._eligible(handler_input, nlp):

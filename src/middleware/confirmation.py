@@ -16,6 +16,8 @@ class ConfirmationMiddleware(AbstractRequestInterceptor):
 
 class SearchConfirmationGateHandler(AbstractRequestHandler):
     def can_handle(self, handler_input) -> bool:
+        if ConfirmationPolicy.captured_search_confirmation(handler_input) is not None:
+            return False
         intent = AlexaRequest.get_intent_name(handler_input)
         if (
             AlexaRequest.get_request_type(handler_input) != "IntentRequest"

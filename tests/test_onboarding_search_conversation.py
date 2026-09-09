@@ -92,6 +92,109 @@ def _intent_request(mock_handler_input, intent_name: str, slots: dict | None = N
 
 
 @pytest.mark.asyncio
+async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
+    monkeypatch, mock_handler_input
+):
+    from src.controllers.intent_dispatch import IntentDispatchGateHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    _intent_request(
+        mock_handler_input,
+        "SearchContentIntent",
+        {"searchQuery": {"name": "searchQuery", "value": "Sevenoaks"}},
+    )
+    old_resolution = {
+        "confirmationLabel": "content in Swindon",
+        "searchPayload": {"query": "", "filter": {"city": "Swindon"}},
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": old_resolution,
+        "activeDialog": {
+            "type": "search_confirmation",
+            "context": old_resolution,
+            "expiresAt": 4102444800,
+        },
+    }
+    resolved = {
+        "version": 1,
+        "status": "resolved",
+        "intent": "search",
+        "confidence": "high",
+        "confirmationLabel": "content in Sevenoaks",
+        "searchPayload": {"query": "", "filter": {"city": "Sevenoaks"}},
+        "slots": {
+            "city": "Sevenoaks",
+            "placeName": "Sevenoaks",
+            "residualQuery": "",
+        },
+    }
+    resolve = AsyncMock(return_value=resolved)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    DialogValidationInterceptor().process(mock_handler_input)
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    assert resolve.await_args.args[0] == "play Sevenoaks"
+    assert "Did you want me to play content in Sevenoaks?" in response["outputSpeech"]["ssml"]
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingResolution"]["confirmationLabel"] == "content in Sevenoaks"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("spoken", "expected"),
+    [("yes", True), ("no", False)],
+)
+async def test_search_capture_keeps_normal_yes_and_no_handlers(
+    monkeypatch, mock_handler_input, spoken, expected
+):
+    from src.controllers.confirmation import NoIntentHandler, YesIntentHandler
+    from src.middleware.confirmation import SearchConfirmationGateHandler
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+    from src.models.confirmation import ConfirmationPolicy
+
+    _intent_request(
+        mock_handler_input,
+        "SearchContentIntent",
+        {"searchQuery": {"name": "searchQuery", "value": spoken}},
+    )
+    pending = {
+        "confirmationLabel": "content in Swindon",
+        "searchPayload": {"query": "", "filter": {"city": "Swindon"}},
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": pending,
+        "activeDialog": {
+            "type": "search_confirmation",
+            "context": pending,
+            "expiresAt": 4102444800,
+        },
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    DialogValidationInterceptor().process(mock_handler_input)
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    assert ConfirmationPolicy.captured_search_confirmation(mock_handler_input) is expected
+    assert SearchConfirmationGateHandler().can_handle(mock_handler_input) is False
+    assert YesIntentHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is expected
+    assert NoIntentHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is not expected
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_external_resolver_call_sends_interpretation_progressive(mock_handler_input):
     resolver = SimpleNamespace(
         resolve_utterance=AsyncMock(

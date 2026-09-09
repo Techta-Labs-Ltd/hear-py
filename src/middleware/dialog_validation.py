@@ -16,6 +16,7 @@ from src.alexa.ssml import Ssml
 from src.constants.dialog import DialogConstants
 from src.constants.notifications import NotificationConstants
 from src.constants.playback import PlaybackConstants
+from src.models.confirmation import ConfirmationPolicy
 from src.models.dialog import DialogSelection, DialogStateManager
 
 
@@ -221,6 +222,7 @@ class DialogValidationPolicy:
         elif (
             dialog_type in DialogValidationPolicy._BINARY_DIALOGS
             and intent_name not in DialogValidationPolicy._BINARY_INTENTS
+            and not ConfirmationPolicy.allows_search_replacement(dialog_type, intent_name)
         ):
             speech, reprompt = DialogValidationPolicy._binary_prompt(active)
         elif (
