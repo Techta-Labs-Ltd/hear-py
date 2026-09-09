@@ -8,6 +8,12 @@ def _model():
     return json.loads((Path(__file__).parents[1] / "en-GB.json").read_text(encoding="utf-8"))
 
 
+def test_fallback_sensitivity_allows_unresolved_domain_slots_to_win():
+    configuration = _model()["interactionModel"]["languageModel"]["modelConfiguration"]
+
+    assert configuration["fallbackIntentSensitivity"]["level"] == "LOW"
+
+
 def test_constrained_latest_utterances_preserve_the_full_topic_slot():
     model = _model()
     intents = {item["name"]: item for item in model["interactionModel"]["languageModel"]["intents"]}
