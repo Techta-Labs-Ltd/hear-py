@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 import re
+from difflib import SequenceMatcher
 
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 
 
 class SearchFilterUtils:
+    SOURCE_DESCRIPTOR_WORDS = frozenset(
+        {
+            "a",
+            "an",
+            "and",
+            "audio",
+            "by",
+            "creator",
+            "from",
+            "magazine",
+            "news",
+            "newspaper",
+            "of",
+            "organisation",
+            "organization",
+            "paper",
+            "publication",
+            "talking",
+            "the",
+        }
+    )
     STRIP_PATTERNS = [
         re.compile(p, re.I)
         for p in [
@@ -167,6 +189,60 @@ class SearchFilterUtils:
     @staticmethod
     def normalize_discovery_phrase(value: object) -> str:
         return re.sub("\\s+", " ", str(value or "").casefold()).strip()
+
+    @staticmethod
+    def source_name_signature(value: object) -> str:
+        tokens = re.findall("[a-z0-9]+", SearchFilterUtils.normalize_discovery_phrase(value))
+        distinctive = [
+            token for token in tokens if token not in SearchFilterUtils.SOURCE_DESCRIPTOR_WORDS
+        ]
+        return " ".join(distinctive or tokens)
+
+    @staticmethod
+    def is_plausible_source_match(requested: object, canonical: object) -> bool:
+        requested_name = SearchFilterUtils.source_name_signature(requested)
+        canonical_name = SearchFilterUtils.source_name_signature(canonical)
+        if not requested_name or not canonical_name:
+            return False
+        if requested_name == canonical_name:
+            return True
+        if requested_name in canonical_name or canonical_name in requested_name:
+            return True
+        requested_tokens = set(requested_name.split())
+        canonical_tokens = set(canonical_name.split())
+        overlap = len(requested_tokens & canonical_tokens) / max(
+            1, min(len(requested_tokens), len(canonical_tokens))
+        )
+        if overlap >= 0.67:
+            return True
+        return SequenceMatcher(None, requested_name, canonical_name).ratio() >= 0.72
+
+    @staticmethod
+    def residual_without_conflicting_source(slots: dict) -> str:
+        residual = str(slots.get("residualQuery") or "").strip()
+        canonical = next(
+            (
+                str(slots.get(name) or "").strip()
+                for name in ("organizationName", "creatorName", "publicationName")
+                if str(slots.get(name) or "").strip()
+            ),
+            "",
+        )
+        requested = next(
+            (
+                str(slots.get(name) or "").strip()
+                for name in ("organizationQuery", "creatorQuery", "publicationSourceQuery")
+                if str(slots.get(name) or "").strip()
+            ),
+            "",
+        )
+        requested_signature = SearchFilterUtils.source_name_signature(requested)
+        residual_signature = SearchFilterUtils.source_name_signature(residual)
+        conflicting = canonical and requested and not SearchFilterUtils.is_plausible_source_match(
+            requested, canonical
+        )
+        duplicated = requested_signature and requested_signature in residual_signature
+        return "" if residual and (conflicting or duplicated) else residual
 
     @staticmethod
     def is_reserved_discovery_phrase(value: object) -> bool:

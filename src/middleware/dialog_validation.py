@@ -37,6 +37,7 @@ class DialogValidationPolicy:
         "FeedbackEnjoyedIntent",
         "FeedbackSomewhatIntent",
         "FeedbackNotEnjoyedIntent",
+        "FeedbackResponseIntent",
         "RateContentIntent",
         "SkipFeedbackIntent",
         "AMAZON.YesIntent",
@@ -49,19 +50,52 @@ class DialogValidationPolicy:
         "resume",
         "latest_source",
         "asr_repair",
+        "feedback_continuation",
     }
     _NOTIFICATION_INTENTS = _BINARY_INTENTS | PlaybackConstants.TRANSPORT_INTENTS
     _LOCATION_ONBOARDING_INTENTS = _BINARY_INTENTS | {
         "TownCaptureIntent",
         "SetLocationIntent",
+        "SearchLocationIntent",
         "SkipFeedbackIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
     }
     _REPORT_DECISION_INTENTS = _EXIT_INTENTS | {
         "ReportCreatorIntent",
         "ReportContentIntent",
         "SkipFeedbackIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
         "AMAZON.YesIntent",
         "AMAZON.NoIntent",
+    }
+    _SOURCE_NAME_PROMPTS = {
+        "creator_name": (
+            "Which creator would you like to hear?",
+            "Please say the creator's full name. For example, play something by David Beard.",
+        ),
+        "organization_name": (
+            Speech.ASK_TALKING_NEWSPAPER,
+            "Say play from, followed by the talking newspaper's full name.",
+        ),
+        "publication_source": (
+            Speech.ASK_PUBLICATION,
+            Speech.ASK_PUBLICATION_REPROMPT,
+        ),
+    }
+    _SOURCE_NAME_RECOVERY = {
+        "creator_name": (
+            "I couldn't recognize that creator. "
+            "Please say the creator's full name. For example, play something by David Beard."
+        ),
+        "organization_name": (
+            "I couldn't recognize that talking newspaper. "
+            "Say play from, followed by its full name."
+        ),
+        "publication_source": (
+            "I couldn't recognize the publication name. Please say its full name again."
+        ),
     }
 
     @staticmethod
@@ -106,6 +140,12 @@ class DialogValidationPolicy:
         ).strip()
         if active.get("type") == "search_confirmation" and original:
             speech = f"Did you want me to play {Speech.escape_ssml_lite(original)}? Please say yes or no."
+        elif active.get("type") == "feedback_continuation":
+            speech = AlexaFeedback.discovery_continuation_question(context)
+            return (
+                speech,
+                AlexaFeedback.discovery_continuation_reprompt(context),
+            )
         elif active.get("type") == "resume":
             title = Speech.escape_ssml_lite(
                 AlexaFeedback.subject_title(context, {"activePlayback": context})
@@ -138,16 +178,32 @@ class DialogValidationPolicy:
         context = active.get("context") or {}
         onboarding_stage = str(context.get("stage") or "")
         if (
+            dialog_type in DialogValidationPolicy._SOURCE_NAME_PROMPTS
+            and intent_name not in DialogValidationPolicy._EXIT_INTENTS
+            and not any(
+                AlexaRequest.get_resolved_slot_value(slot)
+                for slot in DialogSelection.request_slots(handler_input).values()
+            )
+        ):
+            if intent_name == "AMAZON.FallbackIntent":
+                recovery = DialogValidationPolicy._SOURCE_NAME_RECOVERY[dialog_type]
+                return {
+                    "dialogType": dialog_type,
+                    "speech": recovery,
+                    "reprompt": recovery,
+                    "endSourceCapture": True,
+                }
+            speech, reprompt = DialogValidationPolicy._SOURCE_NAME_PROMPTS[dialog_type]
+            return {
+                "dialogType": dialog_type,
+                "speech": speech,
+                "reprompt": reprompt,
+                "captureSource": True,
+            }
+        if (
             dialog_type == "onboarding"
             and onboarding_stage in {"ask_permission", "await_location_confirm"}
-            and (
-                intent_name
-                not in (
-                    DialogValidationPolicy._LOCATION_ONBOARDING_INTENTS
-                    if onboarding_stage == "ask_permission"
-                    else DialogValidationPolicy._BINARY_INTENTS
-                )
-            )
+            and intent_name not in DialogValidationPolicy._LOCATION_ONBOARDING_INTENTS
         ):
             speech, reprompt = DialogValidationPolicy._onboarding_binary_prompt(onboarding_stage)
         elif (
@@ -211,9 +267,27 @@ class DialogValidationGateHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         failure = RequestContext.request(handler_input)[DialogConstants.VALIDATION_FAILURE]
-        return (
+        if failure.get("endSourceCapture"):
+            DialogStateManager.clear(handler_input, failure["dialogType"])
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
+                .reprompt(Ssml.ssml(failure["reprompt"]))
+                .set_should_end_session(False)
+                .response
+            )
+        if failure.get("captureSource"):
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
+                .reprompt(Ssml.ssml(failure["reprompt"]))
+                .add_directive(
+                    DialogStateManager.source_capture_directive(failure["dialogType"])
+                )
+                .set_should_end_session(False)
+                .response
+            )
+        builder = (
             handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
             .reprompt(Ssml.ssml(failure["reprompt"]))
             .set_should_end_session(False)
-            .response
         )
+        return builder.response

@@ -31,7 +31,8 @@ class PlayByCreatorHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             AlexaRequest.get_request_type(handler_input) == "IntentRequest"
-            and AlexaRequest.get_intent_name(handler_input) == "PlayByCreatorIntent"
+            and AlexaRequest.get_intent_name(handler_input)
+            in {"PlayByCreatorIntent", "SelectCreatorIntent"}
         )
 
     async def handle(self, handler_input: HandlerInput):
@@ -45,7 +46,8 @@ class PlayByOrganizationHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             AlexaRequest.get_request_type(handler_input) == "IntentRequest"
-            and AlexaRequest.get_intent_name(handler_input) == "PlayByOrganizationIntent"
+            and AlexaRequest.get_intent_name(handler_input)
+            in {"PlayByOrganizationIntent", "SelectOrganizationIntent"}
         )
 
     async def handle(self, handler_input: HandlerInput):

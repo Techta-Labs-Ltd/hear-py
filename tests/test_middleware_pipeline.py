@@ -19,6 +19,7 @@ def test_pipeline_declarations_preserve_behavioral_order():
         "CanFulfillIntentHandler",
         "DialogValidationGateHandler",
         "AvailabilityDialogHandler",
+        "FeedbackSkipGateHandler",
         "FeedbackGateHandler",
         "OnboardingGateHandler",
         "TownCaptureHandler",

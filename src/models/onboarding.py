@@ -54,6 +54,8 @@ class TownCapture:
         if intent_name in (
             "AMAZON.NoIntent",
             "SkipFeedbackIntent",
+            "AMAZON.NextIntent",
+            "AMAZON.SkipIntent",
             "AMAZON.CancelIntent",
         ):
             return Onboarding.finalize_town_skipped(handler_input, store, deps=self._deps)

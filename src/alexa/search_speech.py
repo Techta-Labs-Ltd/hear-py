@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.alexa.speech import Speech
 from src.constants.discovery import DiscoveryConstants
+from src.utils.filters import SearchFilterUtils
 
 
 class SearchSpeech:
@@ -22,13 +23,8 @@ class SearchSpeech:
     @staticmethod
     def search_no_match(query) -> str:
         safe = Speech.escape_ssml_lite(query)
-        return (
-            f"I couldn't find anything matching {safe}. Try saying play followed by "
-            "a different topic, creator, publication, or city."
-            if safe
-            else "I couldn't find anything matching that. Try saying play followed by "
-            "a topic, creator, publication, or city."
-        )
+        subject = safe or "that"
+        return f"I couldn't find anything matching {subject}. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def unresolved_reference_message(phrase: str, expected_types: list[str]) -> str:
@@ -44,8 +40,9 @@ class SearchSpeech:
             kind = f"{', '.join(expected[:-1])} or {expected[-1]}"
         else:
             kind = expected[0] if expected else "name"
+        article = "an" if kind[:1].casefold() in {"a", "e", "i", "o", "u"} else "a"
         return (
-            f"I couldn't find a {kind} named {safe}. Please try the full name, "
+            f"I couldn't find {article} {kind} named {safe}. Please try the full name, "
             "or ask for a different one."
         )
 
@@ -288,7 +285,7 @@ class SearchSpeech:
         return list(dict.fromkeys(values))
 
     @staticmethod
-    def _clean_result_subject(value: object) -> tuple[str, str]:
+    def clean_result_subject(value: object) -> tuple[str, str]:
         subject = " ".join(str(value or "").strip().split())
         lowered = subject.casefold()
         for prefix in ("the latest content on ", "content on "):
@@ -301,6 +298,14 @@ class SearchSpeech:
             if lowered.startswith(prefix):
                 return "from", subject[len(prefix) :].strip()
         for prefix in ("the latest content from ", "content from "):
+            if lowered.startswith(prefix):
+                return "from", subject[len(prefix) :].strip()
+        for prefix in (
+            "the latest recordings from ",
+            "recordings from ",
+            "the latest content by ",
+            "content by ",
+        ):
             if lowered.startswith(prefix):
                 return "from", subject[len(prefix) :].strip()
         if lowered.startswith("the latest "):
@@ -322,7 +327,7 @@ class SearchSpeech:
     ) -> tuple[str, str]:
         payload = search_payload if isinstance(search_payload, dict) else {}
         filters = SearchSpeech._search_filter(payload)
-        relation, subject = SearchSpeech._clean_result_subject(request_label)
+        relation, subject = SearchSpeech.clean_result_subject(request_label)
         labels = SearchSpeech._filter_labels(filters)
         query = str(payload.get("query") or payload.get("q") or "").strip()
         if query and query.casefold() not in {value.casefold() for value in labels}:
@@ -351,25 +356,18 @@ class SearchSpeech:
         title: object = None,
         credit: object = None,
     ) -> str:
-        total = max(0, int(count or 0))
-        noun = "story" if total == 1 else "stories"
-        count_label = "one" if total == 1 else str(total)
         if SearchSpeech._has_source_filter(search_payload):
-            intro = f"I found {count_label} {noun}."
-            safe_title = Speech.escape_ssml_lite(str(title).strip()) if title else ""
-            safe_credit = Speech.escape_ssml_lite(str(credit).strip()) if credit else ""
-            if safe_title and safe_credit:
-                return f"{intro} Now playing {safe_title}, by {safe_credit}."
-            if safe_title:
-                return f"{intro} Now playing {safe_title}."
-            return f"{intro} Now playing the first one."
+            _, subject = SearchSpeech.clean_result_subject(request_label)
+            source = subject or str(credit or "").strip()
+            if source:
+                return f"Playing {Speech.escape_ssml_lite(source)}."
+            return "Playing the first recording."
         relation, subject = SearchSpeech._broad_result_context(search_payload, request_label)
-        detail = ""
         if subject:
             safe_subject = Speech.escape_ssml_lite(subject)
-            detail = f" {relation} {safe_subject}" if relation else f" {safe_subject}"
-        intro = f"Here {'is' if total == 1 else 'are'} {count_label} {noun}{detail}."
-        return intro if total == 1 else f"{intro} Here's the first one."
+            preposition = "from" if relation == "from" else "on"
+            return f"Playing content {preposition} {safe_subject}."
+        return "Playing content."
 
     @staticmethod
     def talking_newspaper_not_recognized(name) -> str:
@@ -433,7 +431,7 @@ class SearchSpeech:
             if str(tag or "").strip()
         ]
         facets = list(dict.fromkeys(([category.replace("-", " ")] if category else []) + tags))
-        residual = str(slots.get("residualQuery") or "").strip()
+        residual = SearchFilterUtils.residual_without_conflicting_source(slots)
         if residual:
             facets.append(residual)
         return facets, category, residual

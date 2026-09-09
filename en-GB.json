@@ -4,7 +4,7 @@
       "invocationName": "test development",
       "modelConfiguration": {
         "fallbackIntentSensitivity": {
-          "level": "LOW"
+          "level": "HIGH"
         }
       },
       "intents": [
@@ -178,6 +178,117 @@
           "name": "AMAZON.FallbackIntent"
         },
         {
+          "name": "SearchContentIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play {searchQuery}",
+            "find {searchQuery}",
+            "listen to {searchQuery}"
+          ]
+        },
+        {
+          "name": "SearchCreatorIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play content by {searchQuery}",
+            "play something by {searchQuery}",
+            "play from creator {searchQuery}",
+            "find creator {searchQuery}",
+            "find the creator {searchQuery}"
+          ]
+        },
+        {
+          "name": "SearchOrganizationIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play from {searchQuery}",
+            "find organization {searchQuery}",
+            "find organisation {searchQuery}",
+            "find talking newspaper {searchQuery}"
+          ]
+        },
+        {
+          "name": "SearchPublicationIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "play publication from {searchQuery}",
+            "play a publication from {searchQuery}",
+            "find publication from {searchQuery}"
+          ]
+        },
+        {
+          "name": "SearchLocationIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "set my location to {searchQuery}",
+            "set my town to {searchQuery}",
+            "change my location to {searchQuery}",
+            "update my location to {searchQuery}",
+            "I've moved to {searchQuery}",
+            "I moved to {searchQuery}",
+            "I now live in {searchQuery}",
+            "change my town to {searchQuery}",
+            "change my city to {searchQuery}",
+            "update my town to {searchQuery}"
+          ]
+        },
+        {
+          "name": "ChooseSourceKindIntent",
+          "slots": [
+            {
+              "name": "sourceKind",
+              "type": "HEAR_SOURCE_KIND"
+            },
+            {
+              "name": "publicationSort",
+              "type": "HEAR_PUBLICATION_SORT"
+            }
+          ],
+          "samples": [
+            "play from a {sourceKind}",
+            "play from {sourceKind}",
+            "play something from a {sourceKind}",
+            "play something from {sourceKind}",
+            "play me something from a {sourceKind}",
+            "play me something from {sourceKind}",
+            "play a {sourceKind}",
+            "play {sourceKind}",
+            "find a {sourceKind}",
+            "find {sourceKind}",
+            "give me a {sourceKind}",
+            "put on a {sourceKind}",
+            "I want a {sourceKind}",
+            "I want {sourceKind}",
+            "play {publicationSort} {sourceKind}",
+            "play the {publicationSort} {sourceKind}"
+          ]
+        },
+        {
           "name": "PlayContentIntent",
           "slots": [
             {
@@ -200,6 +311,8 @@
           ],
           "samples": [
             "play {dateQuery} content",
+            "play {dateQuery} {topic}",
+            "play {topic} from {dateQuery}",
             "find me {topic}",
             "play {topic}",
             "listen to {topic}",
@@ -480,6 +593,8 @@
                 "{organizationQuery}",
                 "the {organizationQuery}",
                 "from {organizationQuery}",
+                "play {organizationQuery}",
+                "play from {organizationQuery}",
                 "I want {organizationQuery}"
               ]
             },
@@ -493,15 +608,7 @@
             }
           ],
           "samples": [
-            "play from a talking newspaper",
-            "play from a talking news paper",
-            "play from talking news",
-            "play from a talking paper",
-            "play from an audio newspaper",
-            "play something from a talking newspaper",
-            "play something from a talking news paper",
-            "play something from talking news",
-            "play me a talking newspaper",
+            "play {organizationQuery}",
             "play from {organizationQuery}",
             "play something from {organizationQuery}",
             "play {topic} from {organizationQuery}",
@@ -539,22 +646,55 @@
           ],
           "samples": [
             "play {dateQuery} publication",
-            "play a publication",
-            "play publications",
-            "play something from a publication",
-            "find a publication",
-            "find publications",
-            "give me a publication",
-            "put on a publication",
-            "latest publication",
-            "play the latest publication",
+            "play {dateQuery} publication from {publicationSourceQuery}",
+            "play publication from {publicationSourceQuery} from {dateQuery}",
             "play {publicationSort} publications",
             "play the {publicationSort} publication",
+            "play {publicationSort} publication from {publicationSourceQuery}",
+            "play the {publicationSort} publication from {publicationSourceQuery}",
             "play publication from {publicationSourceQuery}",
             "play a publication from {publicationSourceQuery}",
             "play publications from {publicationSourceQuery}",
             "find publications from {publicationSourceQuery}",
             "give me a publication from {publicationSourceQuery}"
+          ]
+        },
+        {
+          "name": "SelectOrganizationIntent",
+          "slots": [
+            {
+              "name": "organizationQuery",
+              "type": "HEAR_ORGANIZATION",
+              "samples": [
+                "{organizationQuery}",
+                "the {organizationQuery}",
+                "I want {organizationQuery}"
+              ]
+            }
+          ],
+          "samples": [
+            "{organizationQuery}",
+            "the {organizationQuery}",
+            "{organizationQuery} please"
+          ]
+        },
+        {
+          "name": "SelectPublicationSourceIntent",
+          "slots": [
+            {
+              "name": "publicationSourceQuery",
+              "type": "HEAR_ORGANIZATION",
+              "samples": [
+                "{publicationSourceQuery}",
+                "the {publicationSourceQuery}",
+                "I want {publicationSourceQuery}"
+              ]
+            }
+          ],
+          "samples": [
+            "{publicationSourceQuery}",
+            "the {publicationSourceQuery}",
+            "{publicationSourceQuery} please"
           ]
         },
         {
@@ -597,10 +737,7 @@
             }
           ],
           "samples": [
-            "play from a creator",
-            "play something from a creator",
-            "play me something from a creator",
-            "play by {creatorQuery}",
+            "play content by {creatorQuery}",
             "play something by {creatorQuery}",
             "play a publication by {creatorQuery}",
             "find a publication by {creatorQuery}",
@@ -637,6 +774,25 @@
             "let me hear what's new",
             "show me what you've got",
             "what's going on today"
+          ]
+        },
+        {
+          "name": "SelectCreatorIntent",
+          "slots": [
+            {
+              "name": "creatorQuery",
+              "type": "HEAR_CREATOR",
+              "samples": [
+                "{creatorQuery}",
+                "the {creatorQuery}",
+                "I want {creatorQuery}"
+              ]
+            }
+          ],
+          "samples": [
+            "{creatorQuery}",
+            "the {creatorQuery}",
+            "{creatorQuery} please"
           ]
         },
         {
@@ -902,137 +1058,18 @@
           ]
         },
         {
-          "name": "FeedbackEnjoyedIntent",
-          "slots": [],
+          "name": "FeedbackResponseIntent",
+          "slots": [
+            {
+              "name": "feedback",
+              "type": "HEAR_FEEDBACK",
+              "samples": [
+                "{feedback}"
+              ]
+            }
+          ],
           "samples": [
-            "enjoyed",
-            "I enjoyed it",
-            "I enjoyed this",
-            "I really enjoyed it",
-            "yes I enjoyed it",
-            "I liked it",
-            "I liked this",
-            "yes it was good",
-            "that was great",
-            "loved it",
-            "great",
-            "good one",
-            "brilliant",
-            "amazing",
-            "fantastic",
-            "that was good",
-            "really good",
-            "excellent",
-            "wonderful",
-            "superb",
-            "I loved that",
-            "that was brilliant",
-            "very good",
-            "top notch",
-            "smashing",
-            "cracking",
-            "well done",
-            "that was lovely",
-            "really enjoyed that",
-            "thoroughly enjoyed it",
-            "that was ace",
-            "absolutely loved it",
-            "five stars",
-            "thumbs up",
-            "positive feedback",
-            "I'd rate it highly",
-            "I thought it was great",
-            "that was interesting",
-            "it was fire",
-            "that slapped",
-            "that was class",
-            "proper good",
-            "mint",
-            "wicked",
-            "sick",
-            "big up",
-            "quality",
-            "banger"
-          ]
-        },
-        {
-          "name": "FeedbackSomewhatIntent",
-          "slots": [],
-          "samples": [
-            "somewhat",
-            "it was okay",
-            "it was just okay",
-            "kind of",
-            "sort of",
-            "not bad",
-            "alright",
-            "so so",
-            "average",
-            "it was alright",
-            "it was alright I suppose",
-            "it was fine",
-            "could be better",
-            "fair enough",
-            "decent",
-            "middling",
-            "passable",
-            "nothing special",
-            "it was okay I suppose",
-            "not great not terrible",
-            "meh",
-            "mixed feelings",
-            "neither good nor bad",
-            "it was reasonable",
-            "fairly good",
-            "it was mid",
-            "mid",
-            "on the fence",
-            "I can take it or leave it",
-            "six out of ten",
-            "three stars",
-            "it was standard"
-          ]
-        },
-        {
-          "name": "FeedbackNotEnjoyedIntent",
-          "slots": [],
-          "samples": [
-            "not enjoyed",
-            "did not enjoy it",
-            "I did not enjoy this",
-            "did not like it",
-            "bad",
-            "not for me",
-            "terrible",
-            "not interested",
-            "awful",
-            "dreadful",
-            "rubbish",
-            "boring",
-            "didn't enjoy it",
-            "I didn't enjoy this",
-            "didn't like it",
-            "I don't like it",
-            "I don't like this",
-            "not my cup of tea",
-            "disliked it",
-            "I disliked this",
-            "that was poor",
-            "waste of time",
-            "not good",
-            "I hated that",
-            "that was dull",
-            "thumbs down",
-            "one star",
-            "I didn't care for that",
-            "no good",
-            "that was naff",
-            "that was trash",
-            "not my thing",
-            "I'll pass on that",
-            "dead",
-            "that was dead",
-            "that was pants"
+            "{feedback}"
           ]
         },
         {
@@ -1216,6 +1253,8 @@
             "the {selection} one",
             "choose {selection}",
             "select {selection}",
+            "pick {selection}",
+            "play {selection}",
             "{selection} please"
           ]
         },
@@ -1226,45 +1265,23 @@
               "name": "townName",
               "type": "HEAR_LOCATION",
               "samples": [
-                "{townName}",
-                "I am in {townName}",
-                "I live in {townName}"
+                "{townName}"
               ]
             }
           ],
           "samples": [
             "{townName}",
+            "my city is {townName}",
+            "my town is {townName}",
             "I am in {townName}",
             "I live in {townName}",
-            "my town is {townName}",
-            "my city is {townName}"
+            "my area is {townName}"
           ]
         },
         {
           "name": "SetLocationIntent",
-          "slots": [
-            {
-              "name": "location",
-              "type": "HEAR_LOCATION",
-              "samples": [
-                "{location}",
-                "I am in {location}",
-                "I live in {location}"
-              ]
-            }
-          ],
+          "slots": [],
           "samples": [
-            "set my location to {location}",
-            "set my town to {location}",
-            "change my location to {location}",
-            "update my location to {location}",
-            "my area is {location}",
-            "I've moved to {location}",
-            "I moved to {location}",
-            "I now live in {location}",
-            "change my town to {location}",
-            "change my city to {location}",
-            "update my town to {location}",
             "change my location",
             "change my town",
             "change my city",
@@ -1325,8 +1342,10 @@
               "name": {
                 "value": "Tynedale Talking Newspaper",
                 "synonyms": [
-                  "Tynedale Talking News",
-                  "Tynedale Talking News Paper"
+                  "Tynedale",
+                  "Tyndale",
+                  "Tyne Dale",
+                  "Tynedale Talking News"
                 ]
               }
             },
@@ -1334,7 +1353,19 @@
               "name": {
                 "value": "York Talking News",
                 "synonyms": [
+                  "York",
                   "York Talking Newspaper"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "Talking News Federation",
+                "synonyms": [
+                  "Talking Newspaper Federation",
+                  "TNF",
+                  "T. N. F.",
+                  "tee en eff"
                 ]
               }
             }
@@ -1345,7 +1376,10 @@
           "values": [
             {
               "name": {
-                "value": "Sample Creator"
+                "value": "Crawley Audio News",
+                "synonyms": [
+                  "Crawley News"
+                ]
               }
             }
           ]
@@ -1367,6 +1401,16 @@
                 "value": "local news",
                 "synonyms": [
                   "community news"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "Premier League",
+                "synonyms": [
+                  "English Premier League",
+                  "premiership",
+                  "E. P. L."
                 ]
               }
             }
@@ -1462,25 +1506,198 @@
                 "value": "Sussex Coast",
                 "synonyms": ["sussex"]
               }
+            },
+            {
+              "name": {
+                "value": "publications",
+                "synonyms": ["publication", "a publication", "the publication"]
+              }
+            },
+            {
+              "name": {
+                "value": "tracks",
+                "synonyms": ["track", "a track", "individual tracks"]
+              }
+            },
+            {
+              "name": {
+                "value": "first",
+                "synonyms": [
+                  "one",
+                  "1",
+                  "1st",
+                  "the first",
+                  "the first one",
+                  "first one",
+                  "first option",
+                  "first choice",
+                  "option one",
+                  "option 1",
+                  "choice one",
+                  "choice 1",
+                  "number one",
+                  "number 1"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "second",
+                "synonyms": [
+                  "two",
+                  "2",
+                  "2nd",
+                  "the second",
+                  "the second one",
+                  "second one",
+                  "second option",
+                  "second choice",
+                  "option two",
+                  "option 2",
+                  "choice two",
+                  "choice 2",
+                  "number two",
+                  "number 2"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "third",
+                "synonyms": [
+                  "three",
+                  "3",
+                  "3rd",
+                  "the third",
+                  "the third one",
+                  "third one",
+                  "third option",
+                  "third choice",
+                  "option three",
+                  "option 3",
+                  "choice three",
+                  "choice 3",
+                  "number three",
+                  "number 3"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_SOURCE_KIND",
+          "values": [
+            {
+              "name": {
+                "value": "talking newspaper",
+                "synonyms": [
+                  "talking news paper",
+                  "talking news",
+                  "audio newspaper",
+                  "audio news paper",
+                  "talking paper",
+                  "local talking newspaper"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "publication",
+                "synonyms": [
+                  "publications",
+                  "edition",
+                  "editions",
+                  "issue",
+                  "issues"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "creator",
+                "synonyms": [
+                  "creators",
+                  "author",
+                  "authors",
+                  "narrator",
+                  "narrators",
+                  "reader",
+                  "readers",
+                  "contributor",
+                  "contributors"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_FEEDBACK",
+          "values": [
+            {
+              "name": {
+                "value": "enjoyed",
+                "synonyms": [
+                  "I enjoyed it",
+                  "I enjoyed this",
+                  "I enjoyed that",
+                  "I really enjoyed it",
+                  "yes I enjoyed it",
+                  "I liked it",
+                  "I liked this",
+                  "I liked that",
+                  "that was great",
+                  "loved it",
+                  "that was good",
+                  "it was good",
+                  "really good",
+                  "very good",
+                  "brilliant",
+                  "five stars",
+                  "thumbs up"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "somewhat",
+                "synonyms": [
+                  "it was okay",
+                  "it was just okay",
+                  "not bad",
+                  "it was alright",
+                  "it was fine",
+                  "could be better",
+                  "nothing special",
+                  "mixed feelings",
+                  "three stars"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "not enjoyed",
+                "synonyms": [
+                  "did not enjoy it",
+                  "I did not enjoy this",
+                  "did not like it",
+                  "not for me",
+                  "didn't enjoy it",
+                  "I didn't enjoy that",
+                  "I didn't enjoy this",
+                  "didn't like it",
+                  "I don't like it",
+                  "I don't like this",
+                  "that was poor",
+                  "thumbs down",
+                  "one star"
+                ]
+              }
             }
           ]
         },
         {
           "name": "ContentFormat",
           "values": [
-            {
-              "name": {
-                "value": "newspaper",
-                "synonyms": [
-                  "talking newspaper",
-                  "news paper",
-                  "talking news",
-                  "talking paper",
-                  "audio newspaper",
-                  "audio news paper"
-                ]
-              }
-            },
             {
               "name": {
                 "value": "podcast",
@@ -1529,22 +1746,6 @@
           ]
         },
         {
-          "name": "SetLocationIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "location",
-              "type": "HEAR_LOCATION",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.SetLocationIntent.location"
-              }
-            }
-          ]
-        },
-        {
           "name": "PlayByCreatorIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1562,6 +1763,40 @@
         },
         {
           "name": "PlayByOrganizationIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "organizationQuery",
+              "type": "HEAR_ORGANIZATION",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.PlayByOrganizationIntent.organizationQuery"
+              }
+            }
+          ]
+        },
+        {
+          "name": "SelectCreatorIntent",
+          "delegationStrategy": "SKILL_RESPONSE",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "creatorQuery",
+              "type": "HEAR_CREATOR",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.PlayByCreatorIntent.creatorQuery"
+              }
+            }
+          ]
+        },
+        {
+          "name": "SelectOrganizationIntent",
+          "delegationStrategy": "SKILL_RESPONSE",
           "confirmationRequired": false,
           "prompts": {},
           "slots": [
@@ -1622,15 +1857,6 @@
       },
       {
         "id": "Elicit.TownCaptureIntent.townName",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "Which city are you in?"
-          }
-        ]
-      },
-      {
-        "id": "Elicit.SetLocationIntent.location",
         "variations": [
           {
             "type": "PlainText",

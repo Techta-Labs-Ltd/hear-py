@@ -46,6 +46,27 @@ class PlayContent:
             or store.get("devicePostalCode")
         )
 
+    @staticmethod
+    def _await_publication_source(handler_input) -> None:
+        DialogStateManager.activate(
+            handler_input,
+            "publication_source",
+            context={"slotName": "publicationSourceQuery"},
+        )
+
+    @staticmethod
+    def _publication_source_response(handler_input):
+        PlayContent._await_publication_source(handler_input)
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_PUBLICATION))
+            .reprompt(Ssml.ssml(Speech.ASK_PUBLICATION_REPROMPT))
+            .add_directive(
+                DialogStateManager.source_capture_directive("publication_source")
+            )
+            .set_should_end_session(False)
+            .response
+        )
+
     async def _search(self, handler_input, query: str | None) -> dict:
         if query:
             return await Search.discover_content_via_search(
@@ -59,6 +80,9 @@ class PlayContent:
         if not AlexaRequest.get_user_id(handler_input):
             return PlayContent._error_response(handler_input)
         store = User.snapshot(handler_input)
+        nlp = RequestContext.request(handler_input).get("_nlp") or {}
+        if (nlp.get("slots") or {}).get("genericPublicationRequest"):
+            return PlayContent._publication_source_response(handler_input)
         raw = Search._raw_search_phrase(handler_input)
         query = Search._extract_slot_value(handler_input, "query") or raw
         if AlexaRequest.wants_play_from_followed_creators(handler_input, query or raw or ""):
@@ -116,6 +140,28 @@ class PlayCreator:
     def __init__(self, *, deps: object | None = None):
         self._deps = Search._dependencies(deps)
 
+    @staticmethod
+    def _await_name(handler_input) -> None:
+        DialogStateManager.activate(
+            handler_input,
+            "creator_name",
+            context={"slotName": "creatorQuery"},
+        )
+
+    @staticmethod
+    def _name_retry_response(handler_input):
+        DialogStateManager.clear(handler_input, "creator_name")
+        prompt = (
+            "I couldn't recognize that creator. Please say the creator's full name. "
+            "For example, play something by David Beard."
+        )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(prompt))
+            .reprompt(Ssml.ssml(prompt))
+            .set_should_end_session(False)
+            .response
+        )
+
     async def execute(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
             return (
@@ -158,13 +204,17 @@ class PlayCreator:
                 .response
             )
         if generic_creator_request or (not creator_query and (not resolved_creator)):
-            User.update(handler_input, {"awaitingCreatorName": True})
+            if AlexaRequest.get_intent_name(handler_input) == "SelectCreatorIntent":
+                return PlayCreator._name_retry_response(handler_input)
+            PlayCreator._await_name(handler_input)
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml("Which creator would you like to hear?")
                 )
                 .reprompt(Ssml.ssml("Just say their name."))
-                .add_directive({"type": "Dialog.ElicitSlot", "slotToElicit": "creatorQuery"})
+                .add_directive(
+                    DialogStateManager.source_capture_directive("creator_name")
+                )
                 .set_should_end_session(False)
                 .response
             )
@@ -178,6 +228,8 @@ class PlayCreator:
             deps=self._deps,
         )
         if not search_result.get("results"):
+            if search_result.get("client_message"):
+                return Search._build_search_outcome_response(handler_input, search_result)
             fallback = await Search._discover_content_avoiding_recent(
                 handler_input, {"q": ""}, deps=self._deps
             )
@@ -209,7 +261,6 @@ class PlayCreator:
                 )
         except Exception:
             pass
-        was_relaxed = bool(search_result.get("search_relaxation"))
         response = await Search.auto_play_first_from_search(
             handler_input,
             search_result,
@@ -217,9 +268,7 @@ class PlayCreator:
                 "discoveryIntent": "PlayByCreatorIntent",
                 "q": creator_query,
                 "locality": User.snapshot(handler_input).get("locality"),
-                "introOverride": None
-                if was_relaxed
-                else f"Here is what I found for {Speech.escape_ssml_lite(creator_label)}.",
+                "introOverride": None,
             },
             deps=self._deps,
         )
@@ -229,6 +278,25 @@ class PlayCreator:
 class PlayOrganization:
     def __init__(self, *, deps: object | None = None):
         self._deps = Search._dependencies(deps)
+
+    @staticmethod
+    def _await_name(handler_input) -> None:
+        DialogStateManager.activate(
+            handler_input,
+            "organization_name",
+            context={"slotName": "organizationQuery"},
+        )
+
+    @staticmethod
+    def _name_retry_response(handler_input):
+        DialogStateManager.clear(handler_input, "organization_name")
+        prompt = "I couldn't recognize that talking newspaper. Say play from, followed by its full name."
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(prompt))
+            .reprompt(Ssml.ssml(prompt))
+            .set_should_end_session(False)
+            .response
+        )
 
     async def execute(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
@@ -290,11 +358,15 @@ class PlayOrganization:
                 .response
             )
         if generic_request or (not org_query and (not resolved_org)):
-            User.update(handler_input, {"awaitingOrganizationName": True})
+            if AlexaRequest.get_intent_name(handler_input) == "SelectOrganizationIntent":
+                return PlayOrganization._name_retry_response(handler_input)
+            PlayOrganization._await_name(handler_input)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
                 .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
-                .add_directive({"type": "Dialog.ElicitSlot", "slotToElicit": "organizationQuery"})
+                .add_directive(
+                    DialogStateManager.source_capture_directive("organization_name")
+                )
                 .set_should_end_session(False)
                 .response
             )
@@ -315,7 +387,7 @@ class PlayOrganization:
                 .response
             )
         if not resolved_org:
-            User.update(handler_input, {"awaitingOrganizationName": True})
+            PlayOrganization._await_name(handler_input)
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml(SearchSpeech.talking_newspaper_not_recognized(org_query))

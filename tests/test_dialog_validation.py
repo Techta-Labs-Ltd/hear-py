@@ -266,6 +266,50 @@ def test_ambiguity_name_matching_is_limited_to_the_current_page(mock_handler_inp
     )
 
 
+@pytest.mark.parametrize(
+    "spoken, expected_id",
+    [
+        ("play first", "creator-1"),
+        ("the first one", "creator-1"),
+        ("pick option two", "creator-2"),
+        ("number 2", "creator-2"),
+        ("select choice 3", "creator-3"),
+        ("3rd option", "creator-3"),
+    ],
+)
+def test_ambiguity_ordinal_variants_select_current_spoken_choice(
+    mock_handler_input, spoken, expected_id
+):
+    pending = {
+        "displayedCandidates": [
+            {"type": "creator", "id": f"creator-{index}", "name": f"Creator {index}"}
+            for index in range(1, 4)
+        ]
+    }
+
+    candidate = DialogSelection.match_pending_candidate(
+        mock_handler_input, pending, spoken
+    )
+
+    assert candidate["id"] == expected_id
+
+
+def test_ambiguity_gibberish_does_not_select_an_ordinal(mock_handler_input):
+    pending = {
+        "displayedCandidates": [
+            {"type": "creator", "id": f"creator-{index}", "name": f"Creator {index}"}
+            for index in range(1, 4)
+        ]
+    }
+
+    assert (
+        DialogSelection.match_pending_candidate(
+            mock_handler_input, pending, "something unrelated"
+        )
+        is None
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("intent_name", ["AMAZON.NoIntent", "SkipFeedbackIntent"])
 async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
@@ -300,7 +344,7 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     assert store["pendingAmbiguity"] is None
     assert store["activeDialog"] is None
     assert store["playbackQueue"] == playback_queue
-    assert "No problem" in response["outputSpeech"]["ssml"]
+    assert "Ok. What would you like to listen to instead?" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
 
 
@@ -459,12 +503,20 @@ def test_onboarding_permission_accepts_spoken_location_reply(mock_handler_input)
             },
         },
     )
-    _intent(mock_handler_input, "TownCaptureIntent")
-    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
-    assert failure is None
+    for allowed in (
+        "TownCaptureIntent",
+        "SetLocationIntent",
+        "SearchLocationIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
+    ):
+        _intent(mock_handler_input, allowed)
+        assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
 
 
-def test_onboarding_town_confirmation_accepts_only_yes_or_no(mock_handler_input):
+def test_onboarding_town_confirmation_accepts_location_correction_and_skip(
+    mock_handler_input,
+):
     User.update(
         mock_handler_input,
         {
@@ -475,7 +527,15 @@ def test_onboarding_town_confirmation_accepts_only_yes_or_no(mock_handler_input)
             },
         },
     )
-    for allowed in ("AMAZON.YesIntent", "AMAZON.NoIntent"):
+    for allowed in (
+        "AMAZON.YesIntent",
+        "AMAZON.NoIntent",
+        "TownCaptureIntent",
+        "SetLocationIntent",
+        "SearchLocationIntent",
+        "AMAZON.NextIntent",
+        "AMAZON.SkipIntent",
+    ):
         _intent(mock_handler_input, allowed)
         assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
     _intent(mock_handler_input, "PlayByCreatorIntent")

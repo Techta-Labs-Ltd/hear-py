@@ -37,6 +37,7 @@ class UserStateCollections:
                 "createdAt",
                 "creatorId",
                 "creatorName",
+                "discoveryContext",
                 "expectedTrackCount",
                 "feedbackKey",
                 "listenedMs",

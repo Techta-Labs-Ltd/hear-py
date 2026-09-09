@@ -128,7 +128,7 @@ async def test_denied_location_consent_explains_denial_and_voice_fallback():
     response = await Permission(deps=deps).resume(handler_input)
     speech = response["outputSpeech"]["ssml"]
     assert "permission is currently turned off" in speech
-    assert "say the name of your city" in speech
+    assert "say my city is followed by your city" in speech
     deps.onboarding.decline_permission.assert_called_once_with(handler_input)
 
 

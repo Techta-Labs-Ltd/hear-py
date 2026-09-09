@@ -8,14 +8,14 @@ class Speech:
     CHOICE_EXIT_INSTRUCTION = (
         "Say no, none of these, or something else to return to search."
     )
-    CHOICES_DISMISSED = "No problem. What would you like to listen to instead?"
+    CHOICES_DISMISSED = "Ok. What would you like to listen to instead?"
     ONBOARDING_LOCATION_REASON = "Your location helps Hear find nearby news, sport, publications, and talking newspapers. Alexa will now ask whether you give Hear permission to use your location."
-    LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say the name of your city, or say skip to continue as a guest."
-    LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say the name of your city, or say skip to continue as a guest."
-    LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check your device location right now. Please say the name of your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say my city is followed by your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say my city is followed by your city, or say skip to continue as a guest."
+    LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check your device location right now. Please say my city is followed by your city, or say skip to continue as a guest."
     PROFILE_PERMISSION_OFFER = "Would you like to share your name and email so I can set up your Hear listener profile? You can say yes or skip."
     PROFILE_PERMISSION_REASON = "Your name lets me personalise Hear, and your email identifies your listener account. Alexa will now ask whether you give Hear permission to share them."
-    PROFILE_PERMISSION_SKIPPED = "No problem. You can continue using Hear as a guest. What would you like to listen to?"
+    PROFILE_PERMISSION_SKIPPED = "Ok. You can continue using Hear as a guest. What would you like to listen to?"
     PROFILE_PERMISSION_DENIED = "I couldn't set up your listener profile because permission to share your name and email was not granted."
     PROFILE_PERMISSION_NOT_ANSWERED = "I couldn't set up your listener profile because the permission question was not answered."
     PROFILE_PERMISSION_APP_REQUIRED = "Alexa couldn't complete the permission request by voice, so your listener profile was not set up."
@@ -24,27 +24,30 @@ class Speech:
     PROFILE_PERMISSION_GUEST_CONTINUE = "You can continue using Hear as a guest. What would you like to listen to?"
     PROFILE_PERMISSION_COMPLETE = "Thanks. Your Hear listener account is ready. What would you like to listen to?"
     TOWN_SKIPPED = "Okay. What would you like to listen to?"
-    TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say the full city name, or say skip to continue without one."
+    TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say my city is followed by the full city name, or say skip to continue without one."
     TOWN_LOOKUP_UNAVAILABLE_RETRY = (
         "I can't check that city right now. Please try the city name again."
     )
     TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
     CITY_SETUP_GUIDANCE = "Sorry, I still couldn't identify your city. You can update Device Location for this Echo in the Alexa app and then relaunch Hear, try saying your city again, or say skip to continue."
     REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
-    REPROMPT_ASK_TOWN = "Which city are you in? You can also say skip."
+    REPROMPT_ASK_TOWN = "Say my city is followed by your city. You can also say skip."
     ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which city are you in?"
     COMMUNITY_NEEDS_TOWN = (
         "I'll need your city to find local content. Would you like to set that up?"
     )
-    COMMUNITY_LOCATION_DECLINED = "No problem. I can still play other Hear content, but I need a city to find content from your local area."
-    COMMUNITY_LOCATION_SKIPPED = "No problem. You can continue as a guest, but I need a city before I can play local content. What else would you like to hear?"
+    COMMUNITY_LOCATION_DECLINED = "Ok. I can still play other Hear content, but I need a city to find content from your local area."
+    COMMUNITY_LOCATION_SKIPPED = "Ok. You can continue as a guest, but I need a city before I can play local content. What else would you like to hear?"
     WELCOME_REPROMPT = (
-        "You can say play followed by a topic, or what's trending. What would you like?"
+        "Please say the name of a talking newspaper, creator, publication, or city "
+        "you would like to listen to."
     )
-    RESUME_DECLINED_NEXT_OPTIONS = "Okay, I won't continue that recording. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
-    RESUME_DECLINED_NEXT_OPTIONS_REPROMPT = "You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
+    RESUME_DECLINED_NEXT_OPTIONS = (
+        f"Okay. {WELCOME_REPROMPT}"
+    )
+    RESUME_DECLINED_NEXT_OPTIONS_REPROMPT = WELCOME_REPROMPT
     WELCOME_ERROR = "Welcome to Hear. I'm having a bit of trouble loading content at the moment. You can try again shortly."
-    IDLE_NEXT_REPROMPT = "What would you like to listen to?"
+    IDLE_NEXT_REPROMPT = WELCOME_REPROMPT
     IDLE_DO_NEXT_REPROMPT = "What would you like to do next?"
     SEARCH_UNAVAILABLE = (
         "I'm having a bit of trouble reaching Hear right now. You can try again in a moment."
@@ -71,7 +74,7 @@ class Speech:
     NOTIFICATION_CONTENT_UNAVAILABLE = (
         "That update is no longer available. What would you like to listen to instead?"
     )
-    NOTIFICATION_DECLINED = "No problem. I'll leave that update for now."
+    NOTIFICATION_DECLINED = "Ok. I'll leave that update for now."
     NOTIFICATION_PERMISSION_REASON = "Hear can let you know when sources you follow publish something new. Alexa will now ask whether you want to allow notifications."
     NOTIFICATIONS_ENABLED = (
         "Notifications are on. Hear can now let you know when followed sources publish."
@@ -81,6 +84,8 @@ class Speech:
     )
     BROWSE_EXHAUSTED = "That's everything I found."
     ASK_TALKING_NEWSPAPER = "Which talking newspaper would you like?"
+    ASK_PUBLICATION = "Which publication would you like?"
+    ASK_PUBLICATION_REPROMPT = "Please say the publication name."
     TALKING_NEWSPAPER_ASR_REPAIR = "Did you mean a talking newspaper?"
     TALKING_NEWSPAPER_ASR_REPAIR_REPROMPT = (
         "Say yes if you meant a talking newspaper, or no to try another request."
@@ -89,10 +94,10 @@ class Speech:
     NO_CONTENT_AVAILABLE = "There's no content available at the moment. You can try again shortly."
     CONTENT_NOT_READY = "That one isn't ready to play yet. Try another number."
     CREATOR_CREDIT_UNKNOWN = "I do not have creator information for the current content."
-    FEEDBACK_FOLLOW_DECLINED = "No problem. What would you like to listen to next?"
+    FEEDBACK_FOLLOW_DECLINED = "Ok. What would you like to listen to next?"
     FEEDBACK_SOMEWHAT = "Thanks for the feedback — we'll use that to improve your recommendations. What would you like to listen to next?"
     FEEDBACK_NOT_ENJOYED = "Sorry to hear that. If you feel the content was inappropriate, say report this content and we'll flag it for review. Otherwise say skip to carry on."
-    FEEDBACK_SKIP_INTRO = "No problem. What would you like to listen to next?"
+    FEEDBACK_SKIP_INTRO = "Ok. What would you like to listen to next?"
     FEEDBACK_AWAITING_REPROMPT = (
         "Did you enjoy that track? Say enjoyed, it was okay, not enjoyed, or skip."
     )
@@ -101,7 +106,7 @@ class Speech:
     )
     RATE_CONTENT_NOTHING = "There isn't any content to rate right now."
     RATE_CONTENT_SAVED_RESUMING = "Thanks for the feedback. Resuming."
-    RATE_CONTENT_SKIPPED_RESUMING = "No problem. Resuming."
+    RATE_CONTENT_SKIPPED_RESUMING = "Ok. Resuming."
     FEEDBACK_REPORT_REPROMPT = "Say report this content, or skip to continue."
     FOLLOW_CREATOR_REPROMPT = (
         "Say next to hear something else, or unfollow this creator to stop following."
@@ -121,19 +126,19 @@ class Speech:
     PLAY_NO_PENDING_LIST = (
         "Say what's trending first, then pick the first one or say play number one."
     )
-    FALLBACK_SPEECH = "Sorry, I didn't catch that. You can say play news, play from a creator by name, or what's trending. What would you like?"
+    FALLBACK_SPEECH = f"Sorry, I didn't catch that. {WELCOME_REPROMPT}"
     GOODBYE = "Thanks for listening to Hear. Goodbye."
-    ERROR_GENERIC = "Sorry, I didn't quite catch that. You can say play followed by a topic, or what's trending. What would you like?"
+    ERROR_GENERIC = f"Sorry, I didn't quite catch that. {WELCOME_REPROMPT}"
     ONBOARDING_ASK_PERMISSION = "Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright?"
     ONBOARDING_CONSENT_CARD_SENT = "Please open the Alexa app, find test development under Your Skills, then open Settings and Manage Permissions and enable Device Address. After that, relaunch Hear."
     ONBOARDING_LOCATION_DENIED = "No worries. Which city are you in?"
     ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
     CONSENT_CARD_THANKS = "Thanks — you're all set. What would you like to listen to?"
     LOCATION_NOT_FOUND = "Welcome back to Hear. I don't have a city for this Echo yet. You can tell me your city now, or say skip. To use your Echo's saved location instead, update Device Location in the Alexa app and relaunch Hear."
-    LOCATION_DECLINED = "No problem. What would you like to listen to?"
-    LOCATION_RETRY = "No problem. Which city should I set instead?"
-    WELCOME_RETURN_GENERIC = "Welcome back to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
-    LATEST_SOURCE_DECLINED = "No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
+    LOCATION_DECLINED = "Ok. What would you like to listen to?"
+    LOCATION_RETRY = "Ok. Which city should I set instead?"
+    WELCOME_RETURN_GENERIC = f"Welcome back to Hear. {WELCOME_REPROMPT}"
+    LATEST_SOURCE_DECLINED = f"Ok. {WELCOME_REPROMPT}"
 
     @staticmethod
     def _build_queue_next(title, creator, position, total):
@@ -259,25 +264,25 @@ class Speech:
     @staticmethod
     def WELCOME_FIRST_ASK_TOWN(name):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. Which city are you in?"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. Say my city is followed by your city."
             if name
-            else "Hello, welcome to Hear. Which city are you in?"
+            else "Hello, welcome to Hear. Say my city is followed by your city."
         )
 
     @staticmethod
     def WELCOME_FIRST_HAS_CITY(name, city=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. You can say what's trending, play news, or play from a creator. What would you like?"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
             if name
-            else "Welcome to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
+            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
     def WELCOME_FIRST(name=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. You can say play news, or what's trending. What would you like?"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
             if name
-            else "Welcome to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
+            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
@@ -374,11 +379,11 @@ class Speech:
 
     @staticmethod
     def WELCOME_RETURN_NAMED(user_name, city=None):
-        return f"Welcome back to Hear, {Speech.escape_ssml_lite(user_name)}. You can say what's trending, play news, or play from a talking newspaper. What would you like?"
+        return f"Welcome back to Hear, {Speech.escape_ssml_lite(user_name)}. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def WELCOME_RETURN_CITY(city=None):
-        return "Welcome back to Hear. You can say play from a talking newspaper, play news, or what's trending. What would you like to listen to?"
+        return f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def LATEST_SOURCE_OFFER(source):

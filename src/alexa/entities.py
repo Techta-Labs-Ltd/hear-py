@@ -39,6 +39,7 @@ class AlexaEntities:
                     synonyms.append(suffix)
             if index < len(ordinal_synonyms):
                 synonyms.extend(ordinal_synonyms[index])
+            synonyms = list(dict.fromkeys(synonyms))
             values.append(
                 {
                     "id": str(candidate.get("id") or f"choice-{index + 1}"),

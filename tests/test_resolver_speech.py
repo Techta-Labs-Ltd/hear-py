@@ -1,3 +1,6 @@
+import pytest
+
+from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.search_speech import SearchSpeech
 
 
@@ -5,7 +8,15 @@ def test_no_match_names_request_and_explains_how_to_retry():
     message = SearchSpeech.search_no_match("Roman Empire")
 
     assert "couldn't find anything matching Roman Empire" in message
-    assert "different topic, creator, publication, or city" in message
+    assert "Please say the name of a talking newspaper, creator, publication, or city" in message
+
+
+def test_unresolved_organization_uses_correct_article():
+    message = SearchSpeech.unresolved_reference_message(
+        "Unknown Voice Network", ["organization"]
+    )
+
+    assert "couldn't find an organisation named Unknown Voice Network" in message
 
 
 def test_ambiguous_reference_message_does_not_speak_raw_alias():
@@ -114,10 +125,7 @@ def test_broad_search_intro_names_the_request_without_first_result_metadata():
         "Wallingford and District Talking Newspaper",
     )
 
-    assert (
-        message
-        == "Here are 37 stories about local transport in Herne Bay. Here's the first one."
-    )
+    assert message == "Playing content on local transport in Herne Bay."
     assert "Oxfordshire" not in message
     assert "Wallingford" not in message
 
@@ -128,7 +136,7 @@ def test_broad_category_intro_uses_filter_when_no_request_label_is_available():
         {"query": "", "filter": {"categorySlugs": ["local-history"]}},
     )
 
-    assert message == "Here are 4 stories about local history. Here's the first one."
+    assert message == "Playing content on local history."
 
 
 def test_broad_category_intro_keeps_the_residual_search_terms():
@@ -138,10 +146,7 @@ def test_broad_category_intro_keeps_the_residual_search_terms():
         "community services",
     )
 
-    assert (
-        message
-        == "Here are 9 stories about community services and heatwave. Here's the first one."
-    )
+    assert message == "Playing content on community services and heatwave."
 
 
 def test_location_only_intro_uses_natural_source_wording():
@@ -151,7 +156,7 @@ def test_location_only_intro_uses_natural_source_wording():
         "content in Herne Bay",
     )
 
-    assert message == "Here are 6 stories from Herne Bay. Here's the first one."
+    assert message == "Playing content from Herne Bay."
 
 
 def test_source_specific_intro_keeps_first_result_context():
@@ -163,7 +168,25 @@ def test_source_specific_intro_keeps_first_result_context():
         "York Talking News",
     )
 
-    assert message == "I found 2 stories. Now playing Community update, by York Talking News."
+    assert message == "Playing York Talking News."
+
+
+@pytest.mark.parametrize(
+    ("context", "expected"),
+    [
+        ({"kind": "organization", "name": "York Talking News"}, "Playing York Talking News."),
+        ({"kind": "creator", "name": "David Beard"}, "Playing David Beard."),
+        ({"kind": "publication", "name": "The Weekly Edition"}, "Playing The Weekly Edition."),
+        ({"kind": "topic", "name": "sport"}, "Playing content on sport."),
+        ({"kind": "location", "name": "York"}, "Playing content from York."),
+    ],
+)
+def test_playback_intro_uses_exact_discovery_context(context, expected):
+    assert DiscoverySpeech.playback_intro(context, "Track 0001") == expected
+
+
+def test_playback_intro_uses_neutral_fallback_without_context_or_title():
+    assert DiscoverySpeech.playback_intro(None, None) == "Playing the next recording."
 
 
 def test_trending_intro_does_not_attribute_the_whole_list_to_the_first_source():

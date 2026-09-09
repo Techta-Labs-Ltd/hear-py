@@ -12,6 +12,7 @@ from src.constants.availability import AvailabilityConstants
 from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.models.availability_data import AvailabilityData
+from src.models.availability_request import AvailabilityRequest
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.search import Search
 from src.models.user import User
@@ -42,43 +43,35 @@ class Availability:
             builder.add_directive(directive)
         return builder.response
 
-    @staticmethod
-    def _local_payload(handler_input, nlp: dict) -> dict:
-        store = User.snapshot(handler_input)
-        slots = nlp.get("slots") if isinstance(nlp.get("slots"), dict) else {}
-        existing = nlp.get("searchPayload") or slots.get("searchPlan") or {}
-        if existing:
-            payload = SearchPayload.with_pagination(existing, DiscoveryConstants.CHOICE_PAGE_SIZE)
-            payload["limit"] = DiscoveryConstants.CHOICE_PAGE_SIZE
-            filters = SearchPayload.resolution_filter(slots, payload.get("filter"))
-            payload["filter"] = SearchFilters.clean(filters)
-            payload["isLocal"] = True
-        else:
-            filters = SearchPayload.resolution_filter(slots, {"isLocal": True})
-            payload = SearchPayload.build(
-                AlexaRequest.get_user_id(handler_input),
-                store,
-                q=str(slots.get("residualQuery") or ""),
-                limit=DiscoveryConstants.CHOICE_PAGE_SIZE,
-                page=0,
-                sort="nearest",
-                nlp_filter=filters,
-            )
-        return SearchPayload.with_identity(
-            payload,
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
-            listener_id=store.get("listenerId"),
-        )
-
     async def _availability(self, handler_input, availability_filter: dict, page: int) -> dict:
+        payload = {
+            "filter": availability_filter,
+            "alexaUserId": AlexaRequest.get_user_id(handler_input),
+            "page": max(0, int(page or 0)),
+            "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
+        }
+        if "location" not in availability_filter:
+            payload["isLocal"] = False
         return await self._deps.heara.availability(
-            {
-                "filter": availability_filter,
-                "page": max(0, int(page or 0)),
-                "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
-            },
+            payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
+
+    def _terminal_response(
+        self,
+        handler_input,
+        *,
+        failed: bool = False,
+        city: str | None = None,
+        source_name: str | None = None,
+    ):
+        DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+        speech = (
+            AvailabilitySpeech.unavailable(city=city, source_name=source_name)
+            if failed
+            else AvailabilitySpeech.no_results(city=city, source_name=source_name)
+        )
+        return self._response(handler_input, speech, Speech.WELCOME_REPROMPT)
 
     def _activate(self, handler_input, context: dict) -> None:
         context["displayedCandidates"] = AvailabilityData.displayed(context)
@@ -130,12 +123,15 @@ class Availability:
 
     async def begin_local(self, handler_input, nlp: dict | None = None):
         resolved = dict(nlp or RequestContext.request(handler_input).get("_nlp") or {})
-        payload = self._local_payload(handler_input, resolved)
+        payload = AvailabilityRequest.local_payload(handler_input, resolved)
         if AvailabilityData.request_scope(payload) != AvailabilityConstants.LOCATION_KIND:
-            return await self._fallback_local_search(handler_input)
-        location = AvailabilityData.location_from_payload(payload, User.snapshot(handler_input))
+            return await self._search_mixed_local_request(handler_input)
+        availability_filter = AvailabilityData.availability_filter(
+            payload,
+            User.snapshot(handler_input),
+        )
         requested_city = AvailabilityData.requested_city(resolved, payload)
-        if not location:
+        if not availability_filter or "location" not in availability_filter:
             User.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
             return self._response(
                 handler_input,
@@ -143,10 +139,16 @@ class Availability:
                 Speech.REPROMPT_ASK_TOWN,
             )
         await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
-        result = await self._availability(handler_input, {"location": location}, 0)
+        result = await self._availability(handler_input, availability_filter, 0)
         candidates = AvailabilityData.source_candidates(result)
-        if result.get("failed") or not candidates:
-            return await self._fallback_local_search(handler_input)
+        if result.get("failed"):
+            return self._terminal_response(
+                handler_input,
+                failed=True,
+                city=requested_city,
+            )
+        if not candidates:
+            return self._terminal_response(handler_input, city=requested_city)
         context = {
             "kind": AvailabilityConstants.SOURCE_KIND,
             "candidates": candidates,
@@ -154,7 +156,7 @@ class Availability:
             "apiPage": int(result.get("page") or 0),
             "totalPages": int(result.get("total_pages") or 0),
             "hasMore": bool(result.get("has_more")),
-            "availabilityFilter": {"location": location},
+            "availabilityFilter": availability_filter,
             "baseSearchPayload": payload,
             "requestedCity": requested_city,
         }
@@ -175,8 +177,19 @@ class Availability:
         scope = AvailabilityData.request_scope(payload)
         source = AvailabilityData.source_from_resolution(resolution) if scope else None
         if scope == AvailabilityConstants.SOURCE_KIND and source:
+            availability_filter = AvailabilityData.availability_filter(
+                payload,
+                User.snapshot(handler_input),
+            )
+            if not availability_filter:
+                return None
             await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
-            return await self._begin_source(handler_input, source, payload)
+            return await self._begin_source(
+                handler_input,
+                source,
+                payload,
+                availability_filter,
+            )
         if scope == AvailabilityConstants.LOCATION_KIND and (
             resolution.get("intent") == "local" or AvailabilityData.has_location_payload(payload)
         ):
@@ -199,22 +212,35 @@ class Availability:
         key = "organizationId" if source.get("type") == "organization" else "creatorId"
         return {key: source.get("id")}
 
-    async def _begin_source(self, handler_input, source: dict, base_payload: dict):
+    async def _begin_source(
+        self,
+        handler_input,
+        source: dict,
+        base_payload: dict,
+        availability_filter: dict | None = None,
+    ):
+        requested_filter = availability_filter or self._source_availability_filter(source)
         result = await self._availability(
-            handler_input, self._source_availability_filter(source), 0
+            handler_input,
+            requested_filter,
+            0,
         )
         if result.get("failed"):
-            return await self._fallback_search(
+            return self._terminal_response(
                 handler_input,
-                base_payload,
-                source.get("type") or "search",
-                source.get("name"),
+                failed=True,
+                source_name=source.get("name"),
             )
         publication_count = int(result.get("publication_count") or 0)
         track_count = int(result.get("standalone_track_count") or 0)
         publications = AvailabilityData.publication_candidates(result)
         if publication_count <= 0:
-            return await self._play_source_directly(handler_input, source, base_payload)
+            if track_count > 0:
+                return await self._play_source_directly(handler_input, source, base_payload)
+            return self._terminal_response(
+                handler_input,
+                source_name=source.get("name"),
+            )
         publication_context = {
             "kind": AvailabilityConstants.PUBLICATION_KIND,
             "source": source,
@@ -223,14 +249,17 @@ class Availability:
             "apiPage": int(result.get("page") or 0),
             "totalPages": int(result.get("total_pages") or 0),
             "hasMore": bool(result.get("has_more")),
-            "availabilityFilter": self._source_availability_filter(source),
+            "availabilityFilter": requested_filter,
             "baseSearchPayload": base_payload,
             "publicationCount": publication_count,
             "trackCount": track_count,
         }
         if track_count <= 0:
             if not publications:
-                return await self._play_source_directly(handler_input, source, base_payload)
+                return self._terminal_response(
+                    handler_input,
+                    source_name=source.get("name"),
+                )
             return self._choice_response(handler_input, publication_context)
         format_candidates = [
             {
@@ -324,39 +353,7 @@ class Availability:
             deps=self._deps,
         )
 
-    async def _fallback_search(
-        self,
-        handler_input,
-        payload: dict,
-        intent: str,
-        request_label: str | None = None,
-    ):
-        result = await self._deps.heara.search(
-            payload,
-            timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
-        )
-        result.setdefault("_search_payload", payload)
-        if request_label:
-            result.setdefault("_request_label", request_label)
-        result = Search.apply_publication_result_ambiguity(
-            handler_input,
-            result,
-            intent=intent,
-            request_label=request_label,
-        )
-        if not result.get("results"):
-            return Search._build_search_outcome_response(handler_input, result)
-        return await Search.auto_play_first_from_search(
-            handler_input,
-            result,
-            {
-                "discoveryIntent": intent,
-                "q": payload.get("query") or "",
-            },
-            deps=self._deps,
-        )
-
-    async def _fallback_local_search(self, handler_input):
+    async def _search_mixed_local_request(self, handler_input):
         result = await Search.discover_content_via_search(
             handler_input,
             {"q": "", "intent": "local"},
@@ -410,9 +407,7 @@ class Availability:
                 "limit": 1,
             }
         payload = SearchPayload.with_identity(
-            payload,
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
-            listener_id=store.get("listenerId"),
+            payload, alexa_user_id=AlexaRequest.get_user_id(handler_input), listener_id=store.get("listenerId")
         )
         await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._deps.heara.search(
@@ -420,9 +415,11 @@ class Availability:
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
         result.setdefault("_search_payload", payload)
+        result.setdefault("_request_label", candidate.get("name"))
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
         DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+        source_name = source.get("name") if candidate.get("type") != "publication" else None
         return await Search.auto_play_first_from_search(
             handler_input,
             result,
@@ -432,7 +429,7 @@ class Availability:
                 "introOverride": AvailabilitySpeech.playing_choice(
                     candidate.get("name")
                     or ContentUtils.content_title_for_speech(result["results"][0]),
-                    source.get("name"),
+                    source_name,
                 ),
             },
             deps=self._deps,
@@ -599,7 +596,7 @@ class Availability:
             DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
             return self._response(
                 handler_input,
-                "No problem. What would you like to listen to instead?",
+                "Ok. What would you like to listen to instead?",
                 Speech.WELCOME_REPROMPT,
             )
         if intent_name == "AMAZON.YesIntent" and context.get("singleChoice"):

@@ -340,10 +340,11 @@ def test_new_integer_confidence_contract_discards_partial_phonetic_location():
         }
     ]
     assert result["searchPayload"] == {
-        "query": "breifing",
+        "query": "",
         "sort": "latest",
         "filter": {"categorySlugs": ["sports"]},
     }
+    assert result["slots"]["residualQuery"] == ""
     assert result["resolution"]["match"] is None
     assert "city" not in result["slots"]
     assert "isLocal" not in result["slots"]
@@ -393,6 +394,8 @@ def test_category_intent_discards_location_even_at_full_confidence():
     )
     result = ResolverResult.from_payload(payload).to_alexa_payload()
     assert [entity["entityType"] for entity in result["entities"]] == ["category"]
+    assert result["searchPayload"]["query"] == ""
+    assert result["slots"]["residualQuery"] == ""
     assert result["searchPayload"]["filter"] == {"categorySlugs": ["sport"]}
     assert result["resolution"]["match"] is None
     for key in ("city", "placeName", "countryCode", "latitude", "longitude", "isLocal"):
@@ -755,6 +758,46 @@ def test_search_accepts_single_whole_query_unspecified_location(utterance, start
     assert [entity["canonicalValue"] for entity in result["entities"]] == ["York"]
 
 
+def test_search_uses_ranked_unspecified_location_and_discards_residual_noise():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-1826566262",
+            "canonicalValue": "Barking",
+            "originalText": "barking",
+            "confidence": 100,
+            "method": "bare_match",
+            "start": 5,
+            "end": 12,
+            "latitude": 51.54,
+            "longitude": 0.08,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        }
+    ]
+    payload["slots"].update(
+        {"residualQuery": "and dagenham talking with repair", "sort": "relevance"}
+    )
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play barking and dagenham talking with repair"
+    )
+
+    assert result["searchPayload"] == {
+        "query": "",
+        "filter": {
+            "city": "Barking",
+            "countryCode": "gb",
+            "latitude": 51.54,
+            "longitude": 0.08,
+        },
+    }
+    assert result["slots"]["residualQuery"] == ""
+    assert result["slots"]["isLocal"] is True
+    assert [entity["canonicalValue"] for entity in result["entities"]] == ["Barking"]
+
+
 @pytest.mark.parametrize(("confidence", "accepted"), [(75, True), (74, False)])
 def test_standalone_unspecified_location_confidence_boundary(confidence, accepted):
     payload = _response(intent="search")
@@ -947,7 +990,7 @@ def test_search_does_not_choose_between_two_equally_credible_source_locations():
     assert result["entities"] == []
 
 
-def test_search_drops_unspecified_location_even_at_full_confidence():
+def test_search_uses_ranked_unspecified_location_instead_of_residual_words():
     payload = _response(intent="search")
     payload["entities"] = [
         {
@@ -971,8 +1014,17 @@ def test_search_drops_unspecified_location_even_at_full_confidence():
         original_utterance="play reading skills"
     )
 
-    assert result["searchPayload"] == {"query": "reading skills", "filter": {}}
-    assert result["entities"] == []
+    assert result["searchPayload"] == {
+        "query": "",
+        "filter": {
+            "city": "Reading",
+            "countryCode": "gb",
+            "latitude": 51.456,
+            "longitude": -0.971,
+        },
+    }
+    assert result["slots"]["residualQuery"] == ""
+    assert [entity["canonicalValue"] for entity in result["entities"]] == ["Reading"]
 
 
 @pytest.mark.parametrize("resolver_intent,entity_type", [("tag", "tag"), ("location", "location")])
@@ -1004,7 +1056,7 @@ def test_resolver_facet_intents_are_canonicalized_to_dispatchable_search(
     assert result["searchPayload"]["filter"]
 
 
-def test_rejected_only_entity_falls_back_to_clean_original_query():
+def test_ranked_unspecified_location_takes_priority_over_original_query():
     payload = _response(intent="search")
     payload["entities"] = [
         {
@@ -1028,8 +1080,17 @@ def test_rejected_only_entity_falls_back_to_clean_original_query():
         original_utterance="find me content on roman history"
     )
 
-    assert result["searchPayload"] == {"query": "roman history", "filter": {}}
-    assert result["entities"] == []
+    assert result["searchPayload"] == {
+        "query": "",
+        "filter": {
+            "city": "Rhymney",
+            "countryCode": "gb",
+            "latitude": 51.759,
+            "longitude": -3.283,
+        },
+    }
+    assert result["slots"]["residualQuery"] == ""
+    assert [entity["canonicalValue"] for entity in result["entities"]] == ["Rhymney"]
 
 
 def test_latest_multiword_fallback_keeps_sort_out_of_query():
@@ -1224,6 +1285,7 @@ def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
             ],
         }
     ]
+    payload["slots"]["residualQuery"] = "untrusted transcript words"
     result = ResolverResult.from_payload(payload).to_alexa_payload()
     expected = [
         {
@@ -1249,6 +1311,9 @@ def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
     ]
     assert result["ambiguities"] == expected
     assert result["slots"]["ambiguousReferences"] == expected
+    assert result["slots"]["residualQuery"] == ""
+    assert result["searchPayload"]["query"] == ""
+    assert result["searchPayload"]["filter"] == {}
 
 
 def test_flat_creator_ambiguities_are_grouped_and_marked_ambiguous():

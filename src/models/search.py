@@ -15,6 +15,7 @@ from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
+from src.constants.search import SearchConstants
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.playback_state import PlaybackQueue
 from src.models.user import User
@@ -28,7 +29,6 @@ from src.utils.search_payload import SearchPayload
 
 class Search:
     logger = logging.getLogger(__name__)
-
     @staticmethod
     def initial_search_queue_items(
         search_result: dict[str, Any],
@@ -314,6 +314,10 @@ class Search:
 
     @staticmethod
     def _search_sort(handler_input, slots: dict, filters: dict) -> str | None:
+        search_plan = slots.get("searchPlan") or {}
+        requested_sort = slots.get("sort") or search_plan.get("sort")
+        if requested_sort in SearchConstants.ALLOWED_SEARCH_SORTS:
+            return requested_sort
         latest = bool(slots.get("latest"))
         if not latest:
             try:
@@ -482,7 +486,7 @@ class Search:
             handler_input,
             queue_items,
             source=intent or "search",
-            locality=store.get("locality"),
+            discovery_label=search_result.get("_request_label") or q,
             start_index=0,
             **Search.search_queue_pagination(search_result),
         )
@@ -513,7 +517,7 @@ class Search:
                 handler_input,
                 items,
                 source=discovery_intent or "search",
-                locality=store.get("locality"),
+                discovery_label=search_result.get("_request_label") or options.get("q"),
                 start_index=i,
             )
             return await d.playback.start(
@@ -625,7 +629,7 @@ class Search:
             handler_input,
             queue_items,
             source=intent,
-            locality=store.get("locality"),
+            discovery_label=search_result.get("_request_label") or label,
             start_index=0,
             **Search.search_queue_pagination(search_result),
         )

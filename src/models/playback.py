@@ -6,6 +6,7 @@ from typing import Any
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
+from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.playback import AlexaPlayback, PlayDirective
 from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.request import AlexaRequest
@@ -625,8 +626,15 @@ class Playback:
         if not content:
             return None
         title = ContentUtils.content_title_for_speech(content)
-        credit = ContentUtils.pick_content_credit(content)
-        intro = Speech.LOCAL_CONTENT_FALLBACK(title, credit) if speak_intro else ""
+        queue = PlaybackQueue.read(User.snapshot(handler_input))
+        intro = (
+            DiscoverySpeech.playback_intro(
+                (queue or {}).get("discoveryContext"),
+                title,
+            )
+            if speak_intro
+            else ""
+        )
         if intro_prefix:
             intro = f"{intro_prefix} {intro}".strip()
         return await Playback.start_playback(handler_input, content, intro, reminders=reminders)

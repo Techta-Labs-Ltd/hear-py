@@ -55,6 +55,33 @@ def test_availability_path_applies_configured_prefix_once():
     assert client._build_api_path(client._build_alexa_availability_path()) == "/alexa/availability"
 
 
+@pytest.mark.parametrize(
+    "pagination",
+    [
+        {"totalPages": 1, "hasMore": True, "remaining": 1, "nextPage": 0},
+        {"totalPages": 1, "hasMore": False, "remaining": 0, "nextPage": 0},
+        {"totalPages": 1, "hasMore": True, "remaining": 0, "nextPage": None},
+    ],
+)
+def test_availability_does_not_offer_next_on_its_final_known_page(pagination):
+    from src.clients.availability import AvailabilityResponse
+
+    result = AvailabilityResponse.normalize(
+        {
+            "page": 0,
+            "limit": 3,
+            "total": 2,
+            "organizations": [{"id": "org-1", "name": "Talking News Federation"}],
+            "creators": [{"id": "creator-1", "name": "A Reader"}],
+            **pagination,
+        },
+        {"filter": {"location": {"city": "York"}}, "page": 0, "limit": 3},
+    )
+
+    assert result["has_more"] is False
+    assert result["next_page"] is None
+
+
 @pytest.mark.asyncio
 async def test_availability_sends_bridge_contract_and_normalizes_response(monkeypatch, caplog):
     captured = {}
@@ -99,6 +126,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
                         "longitude": -1.78,
                     }
                 },
+                "alexaUserId": "amzn1.ask.account.TEST",
                 "page": 0,
                 "limit": 3,
             }
@@ -116,6 +144,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
                     "longitude": -1.78,
                 }
             },
+            "alexaUserId": "amzn1.ask.account.TEST",
             "page": 0,
             "limit": 3,
         },
@@ -145,23 +174,104 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
     "availability_filter",
     [
         {},
-        {"creatorId": "creator-1", "organizationId": "org-1"},
         {"creatorIds": ["creator-1"]},
-        {"location": {"city": "Swindon"}, "creatorId": "creator-1"},
         {"location": {"city": "Swindon", "tags": ["news"]}},
+        {"creatorId": ""},
+        {"location": {}},
     ],
 )
-async def test_availability_rejects_non_exclusive_filters_without_an_http_call(
+async def test_availability_rejects_invalid_filters_without_an_http_call(
     monkeypatch, availability_filter
 ):
     request = AsyncMock()
     monkeypatch.setattr(HearApiClient, "_raw_request", request)
 
-    result = await HearApiClient().availability({"filter": availability_filter})
+    result = await HearApiClient().availability(
+        {
+            "filter": availability_filter,
+            "alexaUserId": "amzn1.ask.account.TEST",
+        }
+    )
 
     request.assert_not_awaited()
     assert result["failed"] is True
     assert result["_availability_payload"]["filter"] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("availability_filter", "is_local"),
+    [
+        ({"location": {"city": "Swindon"}}, True),
+        ({"creatorId": "creator-1"}, False),
+        ({"organizationId": "org-1"}, False),
+        (
+            {"creatorId": "creator-1", "organizationId": "org-1"},
+            False,
+        ),
+        (
+            {"location": {"city": "Swindon"}, "creatorId": "creator-1"},
+            True,
+        ),
+        (
+            {"location": {"city": "Swindon"}, "organizationId": "org-1"},
+            True,
+        ),
+        (
+            {
+                "location": {"city": "Swindon"},
+                "creatorId": "creator-1",
+                "organizationId": "org-1",
+            },
+            True,
+        ),
+    ],
+)
+async def test_availability_accepts_supported_contract_filters(
+    monkeypatch,
+    availability_filter,
+    is_local,
+):
+    captured = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        captured.update(body)
+        return 200, {"total": 0, "organizations": [], "creators": []}
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+
+    result = await HearApiClient().availability(
+        {
+            "filter": availability_filter,
+            "alexaUserId": "amzn1.ask.account.TEST",
+            "page": 0,
+            "limit": 20,
+        }
+    )
+
+    assert result["failed"] is False
+    expected = {
+        "filter": availability_filter,
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "page": 0,
+        "limit": 20,
+    }
+    if "location" not in availability_filter:
+        expected["isLocal"] = is_local
+    assert captured == expected
+
+
+@pytest.mark.asyncio
+async def test_availability_rejects_missing_alexa_user_id_without_an_http_call(monkeypatch):
+    request = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "_raw_request", request)
+
+    result = await HearApiClient().availability(
+        {"filter": {"creatorId": "creator-1"}}
+    )
+
+    request.assert_not_awaited()
+    assert result["failed"] is True
 
 
 @pytest.mark.asyncio
@@ -340,10 +450,7 @@ async def test_broad_search_playback_intro_uses_request_not_first_item_metadata(
         deps=ApplicationContainer(),
     )
 
-    assert (
-        start.await_args.args[2]
-        == "Here are 37 stories about local transport in Herne Bay. Here's the first one."
-    )
+    assert start.await_args.args[2] == "Playing content on local transport in Herne Bay."
 
 
 @pytest.mark.asyncio
@@ -373,9 +480,7 @@ async def test_broad_search_fallback_does_not_announce_later_item_source(
     )
 
     assert result == {"response": "play"}
-    assert start.await_args.args[2] == (
-        "Here are 12 stories about local history. Here's the first one."
-    )
+    assert start.await_args.args[2] == "Playing content on local history."
 
 
 @pytest.mark.asyncio

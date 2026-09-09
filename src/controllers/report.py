@@ -12,6 +12,7 @@ from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DeferredIntentManager, DialogStateManager
+from src.models.feedback_response import FeedbackContinuation
 from src.models.playback_controls import PlaybackControls
 from src.models.report import Report
 
@@ -75,6 +76,16 @@ class ReportContentHandler(AbstractRequestHandler):
         report: dict,
         store: dict,
     ):
+        if not report.get("requested") and report.get("discoveryContext"):
+            await self._deps.feedback.clear(handler_input)
+            continuation = FeedbackContinuation.present(
+                handler_input,
+                report,
+                store,
+                Speech.REPORT_CONTENT_CONFIRM,
+            )
+            if continuation:
+                return continuation
         self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": True})
         directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
         question = AlexaFeedback.keep_listening_question(report, store)

@@ -7,6 +7,65 @@ from src.utils.filters import SearchFilters, SearchFilterUtils
 
 class SearchPayload:
     @staticmethod
+    def discovery_context(
+        source: object,
+        payload: dict | None,
+        label: object,
+        items: list | None = None,
+    ) -> dict:
+        source_name = str(source or "search").strip()
+        lowered = source_name.casefold()
+        filters = (
+            payload.get("filter")
+            if isinstance(payload, dict) and isinstance(payload.get("filter"), dict)
+            else {}
+        )
+        kind = (
+            "publication"
+            if "publication" in lowered or filters.get("publicationIds")
+            else "organization"
+            if "organization" in lowered or filters.get("organizationIds")
+            else "creator"
+            if "creator" in lowered or filters.get("creatorIds")
+            else "location"
+            if "local" in lowered
+            or filters.get("city")
+            or filters.get("latitude") is not None
+            or filters.get("longitude") is not None
+            or filters.get("isLocal")
+            else "topic"
+        )
+        first = next((item for item in items or [] if isinstance(item, dict)), {})
+        raw_label = " ".join(str(label or "").strip().split())
+        if kind == "publication":
+            name = first.get("publicationTitle") or raw_label
+        elif kind == "organization":
+            name = first.get("organizationName") or raw_label
+        elif kind == "creator":
+            name = first.get("creatorName") or raw_label
+        elif kind == "location":
+            name = str(filters.get("city") or raw_label).strip()
+        else:
+            name = raw_label or str((payload or {}).get("query") or "").strip()
+            if not name:
+                values = filters.get("categorySlugs") or filters.get("tags") or []
+                values = values if isinstance(values, list) else [values]
+                name = " and ".join(
+                    str(value).strip().replace("-", " ")
+                    for value in values
+                    if str(value or "").strip()
+                )
+            if not name:
+                name = str(filters.get("city") or "").strip()
+                kind = "location" if name else kind
+        return {
+            "kind": kind,
+            "name": str(name or "content").strip(),
+            "source": source_name,
+            "searchPayload": dict(payload or {}),
+        }
+
+    @staticmethod
     def selected_resolution(nlp: dict | None) -> dict:
         source = nlp if isinstance(nlp, dict) else {}
         payload = source.get("searchPayload")

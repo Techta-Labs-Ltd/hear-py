@@ -5,7 +5,6 @@ import ast
 import hashlib
 import io
 import re
-import sys
 import tokenize
 from collections import Counter, defaultdict
 from dataclasses import dataclass

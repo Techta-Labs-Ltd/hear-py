@@ -4,6 +4,10 @@ import re
 
 
 class ContentUtils:
+    PUBLICATION_PLACEHOLDER_TITLES = frozenset(
+        {"a publication", "publication", "that publication", "the publication", "unknown"}
+    )
+
     @staticmethod
     def repair_mojibake(value):
         text = ContentUtils.nullable_string(value)
@@ -117,13 +121,12 @@ class ContentUtils:
     @staticmethod
     def _pick_curated_title(item: dict) -> str | None:
         return ContentUtils.prefer_readable(
-            ContentUtils.nullable_string(item.get("shortDescription")),
             ContentUtils._first_search_phrase(item),
             ContentUtils._themes_label(item),
         )
 
     @staticmethod
-    def _pick_display_title(item: dict) -> str:
+    def _pick_display_title(item: dict) -> str | None:
         actual = ContentUtils.prefer_readable(
             item.get("displayTitle"), item.get("spokenTitle"), item.get("title")
         )
@@ -140,11 +143,14 @@ class ContentUtils:
             and (not ContentUtils.is_id_like_label(curated))
         ):
             return curated
-        return actual or curated or "a local recording"
+        return None
 
     @staticmethod
-    def pick_spoken_title(item: dict) -> str:
-        return ContentUtils._pick_display_title(item)
+    def pick_spoken_title(item: dict) -> str | None:
+        title = ContentUtils._pick_display_title(item)
+        if not title or ContentUtils.is_id_like_label(title) or ContentUtils.is_weak_title(title):
+            return None
+        return title
 
     @staticmethod
     def is_bad_credit_name(value) -> bool:
@@ -267,6 +273,26 @@ class ContentUtils:
         return ContentUtils.nullable_string(item.get("shortDescription"))
 
     @staticmethod
+    def publication_title(item: dict | None) -> str | None:
+        if not isinstance(item, dict):
+            return None
+        context = item.get("discoveryContext")
+        contextual = (
+            context.get("name")
+            if isinstance(context, dict) and context.get("kind") == "publication"
+            else None
+        )
+        for value in (item.get("publicationTitle"), item.get("subjectTitle"), contextual):
+            title = ContentUtils.nullable_string(value)
+            if (
+                title
+                and title.casefold() not in ContentUtils.PUBLICATION_PLACEHOLDER_TITLES
+                and not ContentUtils.is_id_like_label(title)
+            ):
+                return title
+        return None
+
+    @staticmethod
     def content_title_for_speech(item: dict) -> str | None:
         if not isinstance(item, dict):
             return None
@@ -288,7 +314,7 @@ class ContentUtils:
             and (not ContentUtils.is_id_like_label(curated))
         ):
             return ContentUtils._humanize_spoken_title_safe(curated) or curated
-        return curated or "a local recording"
+        return None
 
     @staticmethod
     def _humanize_spoken_title_safe(value: str) -> str | None:

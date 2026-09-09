@@ -64,6 +64,11 @@ class Report:
             "creatorName": saved.get("creatorName")
             or pending.get("creatorName")
             or active.get("creatorName"),
+            "requested": bool(saved.get("requested") or pending.get("requested")),
+            "discoveryContext": saved.get("discoveryContext")
+            or pending.get("discoveryContext")
+            or active.get("discoveryContext")
+            or (store.get("playbackQueue") or {}).get("discoveryContext"),
         }
 
     @staticmethod

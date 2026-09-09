@@ -228,28 +228,34 @@ class HearApiClient:
     ) -> dict:
         requested = payload if isinstance(payload, dict) else {}
         availability_filter = AvailabilityResponse.normalize_filter(requested.get("filter"))
+        alexa_user_id = str(requested.get("alexaUserId") or "").strip()
         body = {
             "filter": availability_filter or {},
+            "alexaUserId": alexa_user_id,
             "page": AvailabilityResponse.integer(requested.get("page")),
             "limit": AvailabilityResponse.integer(
                 requested.get("limit"), DiscoveryConstants.CHOICE_PAGE_SIZE, 1
             ),
         }
-        if availability_filter is None:
+        if availability_filter and "location" not in availability_filter:
+            body["isLocal"] = bool(requested.get("isLocal"))
+        if availability_filter is None or not alexa_user_id:
             supplied_filter = requested.get("filter")
             HearApiSupport.logger.warning(
-                "Hear API availability request rejected invalid filterKeys=%s",
+                "Hear API availability request rejected invalid filterKeys=%s alexaUserIdPresent=%s",
                 sorted(supplied_filter.keys()) if isinstance(supplied_filter, dict) else [],
+                bool(alexa_user_id),
             )
             return AvailabilityResponse.failed(body)
         path = self._build_alexa_availability_path()
         HearApiSupport.logger.info(
-            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s query=%s",
+            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s query=%s isLocal=%s",
             path,
             body["page"],
             body["limit"],
             sorted(body["filter"].keys()),
             AvailabilityResponse.log_filter(body["filter"]),
+            body.get("isLocal", "omitted"),
         )
         for attempt in range(self._retry_count + 1):
             status, data = await self._raw_request("POST", path, body, timeout_ms)

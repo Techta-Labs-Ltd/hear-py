@@ -9,7 +9,7 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogStateManager
 from src.models.feedback import FeedbackService
-from src.models.feedback_response import NotEnjoyedFeedback, SkipFeedback
+from src.models.feedback_response import FeedbackContinuation, NotEnjoyedFeedback, SkipFeedback
 from src.models.playback import Playback
 
 
@@ -63,7 +63,7 @@ class Decline:
             DialogStateManager.clear(handler_input, "asr_repair")
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml("No problem. What would you like to listen to?")
+                    Ssml.ssml("Ok. What would you like to listen to?")
                 )
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
@@ -101,7 +101,7 @@ class Decline:
             self._deps.user.update(handler_input, {"awaitingCommunityPlayback": False})
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml("No problem. What would you like to listen to?")
+                    Ssml.ssml("Ok. What would you like to listen to?")
                 )
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
@@ -121,6 +121,8 @@ class Decline:
             and store.get("awaitingReportDecision")
         ):
             return await SkipFeedback(deps=self._deps).execute(handler_input)
+        if dialog_type == "feedback_continuation":
+            return FeedbackContinuation.decline(handler_input)
         if dialog_type == "feedback" or not dialog_type and store.get("awaitingFeedback"):
             return await NotEnjoyedFeedback(deps=self._deps).execute(handler_input)
         if dialog_type == "resume" or not dialog_type and store.get("awaitingResume"):
@@ -139,28 +141,15 @@ class Decline:
                 Speech.WELCOME_REPROMPT,
             )
         if store.get("awaitingProfilePermission"):
-            self._deps.user.update(
-                handler_input,
-                {"awaitingProfilePermission": False, "listenerType": "guest"},
-            )
-            try:
-                await self._deps.listener_sync.sync_for_launch(handler_input)
-            except Exception:
-                pass
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.PROFILE_PERMISSION_SKIPPED)
-                )
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
-            )
+            return await self.finalize_profile_skipped(handler_input)
         if store.get("listModeActive"):
             return self._handle_list_mode_no(handler_input, store)
         if store.get("awaitingStillListening"):
             return self._handle_still_listening_no(handler_input)
         if store.get("awaitingNotificationChoice"):
             return await self._deps.notifications.decline(handler_input)
+        if store.get("awaitingFeedbackContinuation"):
+            return FeedbackContinuation.decline(handler_input)
         if store.get("awaitingContinueAfterFlag"):
             self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": False})
             return await Playback.play_queue_delta(
@@ -188,6 +177,24 @@ class Decline:
         response = response or await self._state_response(handler_input, store)
         return response or Decline._generic_response(handler_input)
 
+    async def finalize_profile_skipped(self, handler_input: HandlerInput):
+        self._deps.user.update(
+            handler_input,
+            {"awaitingProfilePermission": False, "listenerType": "guest"},
+        )
+        try:
+            await self._deps.listener_sync.sync_for_launch(handler_input)
+        except Exception:
+            pass
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(Speech.PROFILE_PERMISSION_SKIPPED)
+            )
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
+
     def _handle_search_no(self, handler_input, store, session_attrs):
         """Cycle through search suggestions or give up."""
         if store.get("pendingResolution") or session_attrs.get("pendingResolution"):
@@ -205,15 +212,9 @@ class Decline:
             DialogStateManager.clear(handler_input, "search_confirmation")
             return (
                 handler_input.response_builder.speak(
-                    Ssml.ssml(
-                        "No problem. You can ask for news or sport, play from a talking newspaper, or say what's trending. What would you like to listen to?"
-                    )
+                    Ssml.ssml(f"Ok. {Speech.WELCOME_REPROMPT}")
                 )
-                .reprompt(
-                    Ssml.ssml(
-                        "You can ask for news or sport, a talking newspaper, or what's trending."
-                    )
-                )
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
                 .response
             )
@@ -282,7 +283,7 @@ class Decline:
         )
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml("No problem. What would you like to listen to instead?")
+                Ssml.ssml("Ok. What would you like to listen to instead?")
             )
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
@@ -295,7 +296,7 @@ class Decline:
         self._deps.user.update(handler_input, {"listModeActive": False})
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml("No problem. What would you like to listen to?")
+                Ssml.ssml("Ok. What would you like to listen to?")
             )
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
@@ -356,10 +357,10 @@ class Decline:
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(
-                    "No problem. You can say what's trending, play followed by a topic, or play from a creator."
+                    f"Ok. {Speech.WELCOME_REPROMPT}"
                 )
             )
-            .reprompt(Ssml.ssml("Try saying what's trending, or play news."))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
             .response
         )

@@ -10,7 +10,7 @@ from src.alexa.request import AlexaRequest
 from src.constants.discovery import DiscoveryConstants
 from src.constants.playback import PlaybackConstants
 from src.models.user import User
-from src.utils.content import ContentIdentity
+from src.utils.content import ContentIdentity, ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
@@ -85,6 +85,7 @@ class PlaybackState:
             "organizationName": content.get("organizationName"),
             "summary": content.get("summary") or content.get("shortDescription"),
             "discoverySource": discovery_source,
+            "discoveryContext": dict(queue.get("discoveryContext") or {}),
             "playbackSpeeds": content.get("playbackSpeeds") or [],
             "publicationId": content.get("publicationId"),
             "publicationTitle": content.get("publicationTitle"),
@@ -472,18 +473,26 @@ class PlaybackQueue:
                 and all((isinstance(value, (int, float)) and value > 0 for value in durations))
             ):
                 publication_total_duration_ms = sum((int(value) for value in durations))
+        discovery_context = SearchPayload.discovery_context(
+            source,
+            search_payload,
+            options.get("discovery_label"),
+            [item for item in items or [] if isinstance(item, dict)],
+        )
+        publication_title = (
+            next(iter(publication_titles)) if len(publication_titles) == 1 else None
+        ) or ContentUtils.publication_title({"discoveryContext": discovery_context})
         queue = {
             "queueId": uuid.uuid4().hex,
             "source": source or "search",
             "publicationId": next(iter(publication_ids)) if len(publication_ids) == 1 else None,
-            "publicationTitle": next(iter(publication_titles))
-            if len(publication_titles) == 1
-            else None,
+            "publicationTitle": publication_title if len(publication_ids) == 1 else None,
             "publicationTrackCount": publication_track_count,
             "publicationTotalDurationMs": publication_total_duration_ms,
             "orderedContentIds": content_ids,
             "currentIndex": max(0, min(int(start_index or 0), max(len(content_ids) - 1, 0))),
             "createdAt": int(time.time() * 1000),
+            "discoveryContext": discovery_context,
         }
         if (
             isinstance(search_payload, dict)

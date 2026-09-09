@@ -5,6 +5,7 @@ from typing import Any, Dict
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
+from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.entities import AlexaEntities
 from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
@@ -12,6 +13,7 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
 from src.models.dialog import DialogSelection, DialogStateManager
+from src.models.playback_state import PlaybackQueue
 from src.models.user import User
 from src.utils.browse import BrowseUtils
 from src.utils.content import ContentUtils
@@ -533,11 +535,11 @@ class Browse:
         if content:
             if ContentNormalizer.is_playable_content_item(content):
                 title = ContentUtils.content_title_for_speech(content)
-                credit = ContentUtils.pick_content_credit(content)
-                intro = (
-                    f"Next up: {Speech.escape_ssml_lite(title)}, by {Speech.escape_ssml_lite(credit)}."
-                    if title and credit
-                    else "Next story."
+                queue = PlaybackQueue.read(self.snapshot(handler_input))
+                intro = DiscoverySpeech.playback_intro(
+                    (queue or {}).get("discoveryContext"),
+                    title,
+                    lead="Next up:",
                 )
                 catalog["spokenOffset"] = offset + 1
                 self.dependencies.browse.set_catalog(

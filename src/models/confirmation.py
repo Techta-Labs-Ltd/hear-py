@@ -25,10 +25,18 @@ class ConfirmationPolicy:
     )
     ALEXA_INTENTS = frozenset(
         {
+            "ChooseSourceKindIntent",
             "PlayContentIntent",
+            "SearchContentIntent",
             "PlayByCreatorIntent",
+            "SearchCreatorIntent",
+            "SelectCreatorIntent",
             "PlayByOrganizationIntent",
+            "SearchOrganizationIntent",
+            "SelectOrganizationIntent",
             "PlayPublicationIntent",
+            "SelectPublicationSourceIntent",
+            "SearchPublicationIntent",
             "BrowseContentIntent",
             "BrowseByCategoryIntent",
             "WhatsTrendingIntent",
@@ -37,7 +45,20 @@ class ConfirmationPolicy:
         }
     )
     SLOT_PRIORITY = {
+        "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
+        "SearchContentIntent": ("searchQuery",),
+        "SearchCreatorIntent": ("searchQuery",),
+        "SearchOrganizationIntent": ("searchQuery",),
+        "SearchPublicationIntent": ("searchQuery",),
         "PlayByCreatorIntent": (
+            "creatorQuery",
+            "topic",
+            "organizationQuery",
+            "listPickPhrase",
+            "category",
+            "feedbackPhrase",
+        ),
+        "SelectCreatorIntent": (
             "creatorQuery",
             "topic",
             "organizationQuery",
@@ -53,7 +74,23 @@ class ConfirmationPolicy:
             "category",
             "feedbackPhrase",
         ),
+        "SelectOrganizationIntent": (
+            "organizationQuery",
+            "topic",
+            "creatorQuery",
+            "listPickPhrase",
+            "category",
+            "feedbackPhrase",
+        ),
         "PlayPublicationIntent": (
+            "publicationSourceQuery",
+            "topic",
+            "creatorQuery",
+            "organizationQuery",
+            "listPickPhrase",
+            "category",
+        ),
+        "SelectPublicationSourceIntent": (
             "publicationSourceQuery",
             "topic",
             "creatorQuery",
@@ -130,7 +167,8 @@ class ConfirmationPolicy:
             "organization": slots.get("organizationName")
             or slots.get("organizationQuery")
             or slots.get("organization"),
-            "publication": slots.get("publicationSourceQuery"),
+            "publication": slots.get("publicationName")
+            or slots.get("publicationSourceQuery"),
             "city": slots.get("city") or slots.get("placeName"),
             "residual": str(slots.get("residualQuery") or "").strip(),
         }
@@ -166,16 +204,20 @@ class ConfirmationPolicy:
                 return f"{latest}{category} nearest to {city}"
             if city:
                 return f"{latest}from {city}" if latest else f"content from {city}"
-            return f"{latest}{category} in your community" if category else "tracks near you"
+            return (
+                f"{latest}{category} in your community"
+                if category
+                else "content from your community"
+            )
         if intent == "trending":
             suffix = f" in {category}" if category else ""
             suffix += f" near {city}" if city else ""
-            return f"whatâ€™s trending{suffix}" if suffix else "whatâ€™s trending right now"
+            return f"what's trending{suffix}" if suffix else "what's trending right now"
         if intent == "browse":
             if category and city:
                 return f"new {category} near {city}"
             if category or city:
-                return f"new in {category}" if category else f"whatâ€™s new near {city}"
+                return f"new in {category}" if category else f"what's new near {city}"
             return "browse content"
         if intent == "following":
             return (
@@ -292,6 +334,7 @@ class ConfirmationPolicy:
         slots = nlp.get("slots") or {}
         return bool(
             ConfirmationPolicy.has_pending_ambiguity(nlp)
+            or slots.get("unresolvedReferences")
             or nlp.get("directDiscoveryRequest")
             or (
                 nlp.get("ambiguityResolution")
@@ -299,16 +342,14 @@ class ConfirmationPolicy:
             )
             or (nlp.get("intent") == "creator" and slots.get("genericCreatorRequest"))
             or (nlp.get("intent") == "organization" and slots.get("genericOrganizationRequest"))
+            or (
+                nlp.get("intent") == "publication"
+                and slots.get("genericPublicationRequest")
+            )
         )
 
     @staticmethod
     def _clarification(nlp: dict, raw: str | None) -> dict | None:
-        if nlp.get("publicationSourceRequired"):
-            return {
-                "speech": "Which publication, creator, or organization would you like?",
-                "reprompt": "Please say the name of a publication, creator, or organization.",
-                "elicitSlot": "publicationSourceQuery",
-            }
         if ConfirmationPolicy.requires_clarification(nlp, raw):
             return {
                 "speech": "Sorry, I didn't catch that. Please say your request again.",

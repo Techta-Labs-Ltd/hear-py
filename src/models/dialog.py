@@ -29,7 +29,13 @@ class DialogSelection:
         raw = DialogSelection.normalize(value)
         raw = raw.replace("1st", "first").replace("2nd", "second").replace("3rd", "third")
         raw = raw.replace("4th", "fourth").replace("5th", "fifth").replace("6th", "sixth")
+        raw = re.sub(
+            r"^(?:(?:please\s+)?(?:play|choose|select|pick)|i\s+meant)\s+",
+            "",
+            raw,
+        )
         raw = re.sub("^(?:the\\s+)", "", raw)
+        raw = re.sub(r"^(?:option|choice|number)\s+", "", raw)
         return re.sub("\\s+(?:one|option|choice)$", "", raw)
 
     @staticmethod
@@ -184,7 +190,7 @@ class DialogSelection:
         resolved = DialogSelection._resolved_candidate(handler_input, displayed)
         if resolved:
             return resolved
-        raw_key = DialogSelection.normalize_ordinal(raw)
+        raw_key = DialogSelection._selection_text(raw)
         ordinal = DiscoveryConstants.ORDINAL_INDEX.get(raw_key)
         if ordinal is not None and ordinal < len(displayed):
             return displayed[ordinal]
@@ -245,6 +251,25 @@ class DialogStateManager:
         return DialogStateManager.active_from_store(User.snapshot(handler_input))
 
     @staticmethod
+    def source_capture_directive(dialog_type: str) -> dict:
+        capture = DialogConstants.SOURCE_CAPTURE[dialog_type]
+        slot_name = capture["slotName"]
+        return {
+            "type": "Dialog.ElicitSlot",
+            "slotToElicit": slot_name,
+            "updatedIntent": {
+                "name": capture["intentName"],
+                "confirmationStatus": "NONE",
+                "slots": {
+                    slot_name: {
+                        "name": slot_name,
+                        "confirmationStatus": "NONE",
+                    }
+                },
+            },
+        }
+
+    @staticmethod
     def activate(
         handler_input,
         dialog_type: str,
@@ -299,6 +324,7 @@ class DialogStateManager:
             "excludedSuggestions": [],
             "awaitingOrganizationName": False,
             "awaitingCreatorName": False,
+            "awaitingPublicationSource": False,
             "_requiresReliableSave": True,
         }
         if active_type in DialogConstants.TRANSIENT_DISCOVERY_DIALOGS or (

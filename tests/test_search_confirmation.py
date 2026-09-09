@@ -8,8 +8,22 @@ from src.middleware.confirmation import (
     ConfirmationMiddleware,
     SearchConfirmationGateHandler,
 )
+from src.models.availability_data import AvailabilityData
+from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolutionBuilder
 from src.models.user import User
+
+
+def test_topic_trending_confirmation_uses_clean_spoken_text():
+    assert (
+        ConfirmationPolicy.confirmation_speech(
+            {
+                "intent": "trending",
+                "slots": {"category": "sport", "isRecommended": True},
+            }
+        )
+        == "what's trending in sport"
+    )
 
 
 def test_full_resolved_search_is_spoken_before_backend_search():
@@ -139,6 +153,41 @@ def test_pending_resolution_stores_only_catalog_valid_query_and_sort():
         "query": "",
         "filter": {"organizationIds": ["org-wtn"]},
     }
+
+
+def test_pending_resolution_preserves_explicit_location_context():
+    pending = ResolutionBuilder.build(
+        {
+            "intent": "local",
+            "requestedLocation": True,
+            "slots": {"city": "London", "placeName": "London", "isLocal": True},
+            "searchPayload": {
+                "query": "",
+                "filter": {"city": "London", "isLocal": True},
+            },
+        },
+        "content in London",
+    )
+
+    assert pending["requestedLocation"] is True
+    assert AvailabilityData.requested_city(pending, pending["searchPayload"]) == "London"
+
+
+def test_structured_publication_name_wins_over_conflicting_raw_source_words():
+    assert (
+        ConfirmationPolicy.confirmation_speech(
+            {
+                "intent": "publication",
+                "slots": {
+                    "publicationIds": ["publication-orkney"],
+                    "publicationName": "Orkney Talking Magazine",
+                    "publicationSourceQuery": "Dorking Talking Magazine",
+                    "residualQuery": "Dorking Talking Magazine August",
+                },
+            }
+        )
+        == "Orkney Talking Magazine"
+    )
 
 
 def test_play_york_tn_still_requires_confirmation():
@@ -442,6 +491,52 @@ def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
     response = gate.handle(handler_input)
     assert "couldn't safely confirm that search" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
+
+
+def test_search_confirmation_gate_allows_unresolved_reference_handler():
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "SearchCreatorIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "Unknown Speaker Collective",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+        "_nlp": {
+            "status": "resolved",
+            "intent": "creator",
+            "slots": {
+                "creatorQuery": "Unknown Speaker Collective",
+                "unresolvedReferences": [
+                    {
+                        "phrase": "Unknown Speaker Collective",
+                        "expectedTypes": ["creator"],
+                    }
+                ],
+            },
+        },
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+    ConfirmationMiddleware().process(handler_input)
+
+    assert SearchConfirmationGateHandler().can_handle(handler_input) is False
+    assert IntentDispatchGateHandler(deps=ApplicationContainer()).can_handle(handler_input) is True
 
 
 def test_resolved_pendle_ambiguity_bypasses_generic_clarification():

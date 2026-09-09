@@ -10,6 +10,8 @@ from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.resolver import ResolverInterceptor
+from src.models.dialog import DialogStateManager
+from src.models.play import PlayContent
 from src.models.resolver_workflow import ResolverWorkflow
 from src.models.search import Search
 from src.models.social import FollowingManager
@@ -44,10 +46,17 @@ async def test_incomplete_publication_source_skips_resolver_and_elicits_name(
     ConfirmationMiddleware().process(mock_handler_input)
     resolve.assert_not_awaited()
     attrs = mock_handler_input.attributes_manager.request_attributes
-    assert attrs["_nlp"]["publicationSourceRequired"] is True
+    assert attrs["_nlp"]["slots"]["genericPublicationRequest"] is True
     assert attrs["_nlp"]["slots"]["dateQuery"] == "2026-08-02"
     assert attrs["_nlp"]["slots"]["publicationSort"] == "latest"
-    assert attrs["_resolverClarification"]["elicitSlot"] == "publicationSourceQuery"
+    response = await PlayContent(deps=ApplicationContainer()).execute(mock_handler_input)
+    assert response is not None
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingPublicationSource"] is True
+    assert store["activeDialog"]["type"] == "publication_source"
+    directive = DialogStateManager.source_capture_directive("publication_source")
+    assert directive["updatedIntent"]["name"] == "SelectPublicationSourceIntent"
+    assert directive["slotToElicit"] == "publicationSourceQuery"
 
 
 def test_followed_source_migration_types_legacy_creators_and_deduplicates():
@@ -90,7 +99,10 @@ def test_followed_creator_and_organization_with_same_id_are_distinct(
     [
         ("the first one", "first"),
         ("the second choice", "second"),
-        ("number two", "number two"),
+        ("number two", "two"),
+        ("play the first one", "first"),
+        ("pick option two", "two"),
+        ("select choice 3", "3"),
         ("3rd option", "third"),
     ],
 )

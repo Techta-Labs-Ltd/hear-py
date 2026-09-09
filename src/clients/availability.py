@@ -9,21 +9,18 @@ class AvailabilityResponse:
 
     @staticmethod
     def log_filter(value: dict) -> dict:
+        output = {
+            key: value[key] for key in AvailabilityResponse.SOURCE_FILTER_KEYS if value.get(key)
+        }
         location = value.get("location")
         if isinstance(location, dict):
-            return {
-                "location": {
-                    "city": location.get("city"),
-                    "countryCode": location.get("countryCode"),
-                    "latitude": location.get("latitude"),
-                    "longitude": location.get("longitude"),
-                }
+            output["location"] = {
+                "city": location.get("city"),
+                "countryCode": location.get("countryCode"),
+                "latitude": location.get("latitude"),
+                "longitude": location.get("longitude"),
             }
-        return {
-            key: value[key]
-            for key in AvailabilityResponse.SOURCE_FILTER_KEYS
-            if value.get(key)
-        }
+        return output
 
     @staticmethod
     def log_response(value: dict) -> dict:
@@ -48,25 +45,36 @@ class AvailabilityResponse:
 
     @staticmethod
     def normalize_filter(value: object) -> dict | None:
-        """Accept one availability scope: one source, or one location."""
-        if not isinstance(value, dict) or len(value) != 1:
+        if not isinstance(value, dict) or not value:
             return None
-        key, raw_value = next(iter(value.items()))
-        if key in AvailabilityResponse.SOURCE_FILTER_KEYS:
-            source_id = str(raw_value or "").strip()
-            return {key: source_id} if source_id else None
-        if key != "location" or not isinstance(raw_value, dict):
+        allowed_keys = set(AvailabilityResponse.SOURCE_FILTER_KEYS) | {"location"}
+        if any(key not in allowed_keys for key in value):
             return None
-        if not raw_value or any(
-            item not in AvailabilityResponse.LOCATION_FILTER_KEYS for item in raw_value
-        ):
-            return None
-        location = {
-            item: raw_value[item]
-            for item in AvailabilityResponse.LOCATION_FILTER_KEYS
-            if raw_value.get(item) is not None and str(raw_value.get(item)).strip()
-        }
-        return {"location": location} if location else None
+
+        output = {}
+        for key in AvailabilityResponse.SOURCE_FILTER_KEYS:
+            if key not in value:
+                continue
+            source_id = str(value.get(key) or "").strip()
+            if not source_id:
+                return None
+            output[key] = source_id
+
+        if "location" in value:
+            raw_location = value.get("location")
+            if not isinstance(raw_location, dict) or not raw_location:
+                return None
+            if any(item not in AvailabilityResponse.LOCATION_FILTER_KEYS for item in raw_location):
+                return None
+            location = {
+                item: raw_location[item]
+                for item in AvailabilityResponse.LOCATION_FILTER_KEYS
+                if raw_location.get(item) is not None and str(raw_location.get(item)).strip()
+            }
+            if not location:
+                return None
+            output["location"] = location
+        return output or None
 
     @staticmethod
     def integer(value, default: int = 0, minimum: int = 0) -> int:
@@ -117,6 +125,19 @@ class AvailabilityResponse:
         page = AvailabilityResponse.integer(data.get("page"))
         total_pages = AvailabilityResponse.integer(data.get("totalPages"))
         remaining = AvailabilityResponse.integer(data.get("remaining"))
+        raw_next_page = data.get("nextPage")
+        try:
+            next_page = int(raw_next_page) if raw_next_page is not None else None
+        except (TypeError, ValueError):
+            next_page = None
+        if next_page is not None and next_page <= page:
+            next_page = None
+        has_known_next_page = total_pages > 0 and page + 1 < total_pages
+        has_more = (
+            has_known_next_page
+            if total_pages > 0
+            else bool(data.get("hasMore") or next_page is not None or remaining > 0)
+        )
         return {
             "page": page,
             "limit": AvailabilityResponse.integer(
@@ -127,14 +148,8 @@ class AvailabilityResponse:
             "total": AvailabilityResponse.integer(data.get("total")),
             "total_pages": total_pages,
             "remaining": remaining,
-            "has_more": bool(
-                data.get("hasMore")
-                or data.get("nextPage") is not None
-                or remaining > 0
-                or total_pages > 0
-                and page + 1 < total_pages
-            ),
-            "next_page": data.get("nextPage"),
+            "has_more": has_more,
+            "next_page": next_page,
             "organizations": AvailabilityResponse.items(data, "organizations", "organization"),
             "creators": AvailabilityResponse.items(data, "creators", "creator"),
             "publications": publications,

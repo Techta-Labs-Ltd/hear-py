@@ -11,6 +11,7 @@ from src.constants.resolver import ResolverConstants
 from src.constants.search import SearchConstants
 from src.models.dialog import DialogSelection
 from src.models.user import User
+from src.utils.alexa_date import AlexaDateRange
 from src.utils.filters import SearchFilters, SearchFilterUtils
 from src.utils.search_payload import SearchPayload
 
@@ -18,11 +19,19 @@ from src.utils.search_payload import SearchPayload
 class ResolverWorkflow:
     logger = logging.getLogger(__name__)
     SEARCH_INTENTS = {
+        "ChooseSourceKindIntent",
         "PlayContentIntent",
+        "SearchContentIntent",
         "PlayLatestContentIntent",
         "PlayByCreatorIntent",
+        "SearchCreatorIntent",
+        "SelectCreatorIntent",
         "PlayByOrganizationIntent",
+        "SearchOrganizationIntent",
+        "SelectOrganizationIntent",
         "PlayPublicationIntent",
+        "SelectPublicationSourceIntent",
+        "SearchPublicationIntent",
         "BrowseContentIntent",
         "BrowseByCategoryIntent",
         "WhatsTrendingIntent",
@@ -46,13 +55,36 @@ class ResolverWorkflow:
         "PlayContentIntent": "play",
         "PlayLatestContentIntent": "play latest",
         "PlayByCreatorIntent": "play",
+        "SelectCreatorIntent": "play",
         "PlayByOrganizationIntent": "play",
+        "SelectOrganizationIntent": "play",
         "PlayPublicationIntent": "play publication",
+        "SelectPublicationSourceIntent": "play publication",
         "BrowseByCategoryIntent": "play",
         "BrowseContentIntent": "what's new",
         "WhatsTrendingIntent": "what's trending",
         "PlayLocalIntent": "play local content",
         "PlayRecommendationIntent": "recommend something",
+    }
+    SEARCH_QUERY_SOURCE_INTENTS = {
+        "SearchContentIntent": ("general", ("creator", "organization", "publication")),
+        "SearchCreatorIntent": ("creator", ("creator",)),
+        "SearchOrganizationIntent": ("organization", ("organization",)),
+        "SearchPublicationIntent": (
+            "publication",
+            ("publication", "creator", "organization"),
+        ),
+    }
+    SOURCE_NAME_SLOTS = {
+        "creator": ("creatorName", "creatorIds"),
+        "organization": ("organizationName", "organizationIds"),
+        "publication": ("publicationName", "publicationIds"),
+    }
+    SOURCE_QUERY_SLOTS = {
+        "creator": "creatorQuery",
+        "organization": "organizationQuery",
+        "publication": "publicationSourceQuery",
+        "general": "residualQuery",
     }
 
     @staticmethod
@@ -130,23 +162,24 @@ class ResolverWorkflow:
                 ),
                 None,
             )
-        date_text = AlexaRequest.get_resolved_slot_value(slots.get("dateQuery")) or ""
         if alexa_intent == "PlayLatestContentIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             content_format = AlexaRequest.get_resolved_slot_value(slots.get("format"))
             return " ".join(
-                value for value in ("play", date_text, "latest", topic or content_format) if value
+                value for value in ("play", "latest", topic or content_format) if value
             )
-        if alexa_intent == "PlayPublicationIntent":
+        if alexa_intent in DiscoveryConstants.PUBLICATION_INTENTS:
             source = AlexaRequest.get_resolved_slot_value(slots.get("publicationSourceQuery"))
             requested_sort = AlexaRequest.get_resolved_slot_value(slots.get("publicationSort"))
+            if str(requested_sort or "").casefold() not in ResolverConstants.PUBLICATION_SORTS:
+                requested_sort = None
             suffix = f"from {source}" if source else ""
             return " ".join(
                 value
-                for value in ("play", date_text, requested_sort, "publication", suffix)
+                for value in ("play", requested_sort, "publication", suffix)
                 if value
             )
-        if alexa_intent == "PlayByOrganizationIntent":
+        if alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS:
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             source = AlexaRequest.get_resolved_slot_value(slots.get("organizationQuery"))
             if source:
@@ -158,7 +191,7 @@ class ResolverWorkflow:
                 ):
                     return source
                 return " ".join(value for value in ("play", topic, "from", source) if value)
-        if alexa_intent == "PlayByCreatorIntent":
+        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS:
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             creator = AlexaRequest.get_resolved_slot_value(slots.get("creatorQuery"))
             if creator:
@@ -168,7 +201,7 @@ class ResolverWorkflow:
                     or not SearchFilterUtils.is_meaningful_creator_source(creator)
                 ):
                     return creator
-                return " ".join(value for value in ("play", topic, "by", creator) if value)
+                return " ".join(("play", topic or "something", "by", creator))
         if alexa_intent == "PlayLocalIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             location = AlexaRequest.get_resolved_slot_value(
@@ -191,7 +224,7 @@ class ResolverWorkflow:
             None,
         )
         if raw:
-            return f"{date_text} {raw}".strip()
+            return raw
         fallback = next(
             (
                 str(getattr(slot, "value", "") or "").strip()
@@ -201,8 +234,155 @@ class ResolverWorkflow:
             None,
         )
         if fallback:
-            return f"{date_text} {fallback}".strip()
-        return date_text or None
+            return fallback
+        return None
+
+    @staticmethod
+    def _apply_date_constraint(result: dict, intent_slots: dict) -> dict:
+        date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
+        date_range = AlexaDateRange.parse(date_query, settings.HEAR_RESOLVER_TIMEZONE)
+        if not date_range:
+            return result
+        filters = {
+            key: date_range[key] for key in ("publishedFrom", "publishedTo")
+        }
+        constrained = dict(result)
+        payload = dict(constrained.get("searchPayload") or {})
+        payload["filter"] = {**dict(payload.get("filter") or {}), **filters}
+        constrained["searchPayload"] = payload
+        slots = dict(constrained.get("slots") or {})
+        search_plan = dict(slots.get("searchPlan") or {})
+        search_plan["filter"] = {
+            **dict(search_plan.get("filter") or {}),
+            **filters,
+        }
+        slots.update(
+            {
+                "dateQuery": date_query,
+                "temporalOriginal": date_range["temporalOriginal"],
+                "searchPlan": search_plan,
+            }
+        )
+        constrained["slots"] = slots
+        return constrained
+
+    @staticmethod
+    def _resolved_source_names(result: dict) -> list[str]:
+        slots = result.get("slots") or {}
+        names = [
+            str(slots[name_slot]).strip()
+            for name_slot, _ in ResolverWorkflow.SOURCE_NAME_SLOTS.values()
+            if str(slots.get(name_slot) or "").strip()
+        ]
+        for entity in result.get("entities") or []:
+            entity_type = entity.get("entityType") or entity.get("type")
+            if entity_type in ResolverWorkflow.SOURCE_NAME_SLOTS:
+                name = str(entity.get("canonicalValue") or entity.get("name") or "").strip()
+                if name:
+                    names.append(name)
+        result_intent = str(result.get("intent") or "")
+        result_query_slot = ResolverWorkflow.SOURCE_QUERY_SLOTS.get(result_intent)
+        if result_query_slot and result_query_slot != "residualQuery":
+            query_name = str(slots.get(result_query_slot) or "").strip()
+            if query_name:
+                names.append(query_name)
+        return list(dict.fromkeys(names))
+
+    @staticmethod
+    def _has_confident_primary_source(
+        result: dict, expected_types: tuple[str, ...]
+    ) -> bool:
+        if str(result.get("status") or "") != "resolved":
+            return False
+        resolved_type = str(result.get("intent") or "")
+        if resolved_type not in expected_types:
+            return False
+        for entity in result.get("entities") or []:
+            entity_type = entity.get("entityType") or entity.get("type")
+            entity_id = entity.get("entityId") or entity.get("id")
+            confidence = entity.get("confidence")
+            if (
+                entity_type == resolved_type
+                and entity_id
+                and isinstance(confidence, int)
+                and not isinstance(confidence, bool)
+                and confidence >= ResolverConstants.SECONDARY_FACET_MIN_CONFIDENCE
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _reject_implausible_search_query_source(
+        result: dict, alexa_intent: str, intent_slots: dict
+    ) -> dict:
+        fallback = ResolverWorkflow.SEARCH_QUERY_SOURCE_INTENTS.get(alexa_intent)
+        if not fallback:
+            return result
+        result_slots = result.get("slots") or {}
+        if result.get("ambiguities") or result_slots.get("ambiguousReferences"):
+            return result
+        expected_intent, expected_types = fallback
+        requested = AlexaRequest.get_resolved_slot_value(intent_slots.get("searchQuery"))
+        canonical_names = ResolverWorkflow._resolved_source_names(result)
+        if not requested:
+            return result
+        if ResolverWorkflow._has_confident_primary_source(result, expected_types):
+            return result
+        verified = bool(canonical_names) and all(
+            SearchFilterUtils.is_plausible_source_match(requested, canonical)
+            for canonical in canonical_names
+        )
+        source_resolution = str(result.get("intent") or "") in ResolverWorkflow.SOURCE_NAME_SLOTS
+        requires_source = expected_intent != "general"
+        if verified or not canonical_names and not source_resolution and not requires_source:
+            return result
+        query_slot = ResolverWorkflow.SOURCE_QUERY_SLOTS[expected_intent]
+        reference = {
+            "phrase": requested,
+            "expectedTypes": list(expected_types),
+        }
+        ResolverWorkflow.logger.warning(
+            "Hear: rejected implausible source match intent=%s requested=%s canonical=%s",
+            alexa_intent,
+            requested,
+            canonical_names,
+        )
+        return {
+            "status": "resolved",
+            "intent": expected_intent,
+            "confidence": "low",
+            "slots": {
+                query_slot: requested,
+                "residualQuery": "" if query_slot != "residualQuery" else requested,
+                "unresolvedReferences": [reference],
+            },
+            "entities": [],
+            "ambiguities": [],
+        }
+
+    @staticmethod
+    def apply_alexa_constraints(result: dict, alexa_intent: str, intent_slots: dict) -> dict:
+        constrained = ResolverWorkflow._apply_date_constraint(result, intent_slots)
+        constrained = ResolverWorkflow._reject_implausible_search_query_source(
+            constrained, alexa_intent, intent_slots
+        )
+        if alexa_intent not in {"WhatsTrendingIntent", "PlayRecommendationIntent"}:
+            return constrained
+        constrained = {**constrained, "intent": "trending"}
+        slots = dict(constrained.get("slots") or {})
+        search_plan = dict(slots.get("searchPlan") or {})
+        search_plan["sort"] = "trending"
+        slots.update(
+            {
+                "isRecommended": True,
+                "sort": "trending",
+                "searchPlan": search_plan,
+            }
+        )
+        payload = dict(constrained.get("searchPayload") or {})
+        payload["sort"] = "trending"
+        constrained.update({"slots": slots, "searchPayload": payload})
+        return constrained
 
     @staticmethod
     def _set_nlp(handler_input, payload: dict) -> None:
@@ -214,10 +394,11 @@ class ResolverWorkflow:
     def _local_discovery_resolution(
         alexa_intent: str, intent_slots: dict, raw: str | None
     ) -> dict | None:
-        """Return discovery requests whose meaning Alexa has already supplied."""
         AlexaRequest.get_resolved_slot_value(intent_slots.get("topic"))
         date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
         normalized_raw = SearchFilterUtils.normalize_discovery_phrase(raw)
+        if alexa_intent == "ChooseSourceKindIntent":
+            return ResolverWorkflow._source_kind_resolution(intent_slots)
         if normalized_raw in DiscoveryConstants.LOCAL_HINTS:
             return ResolverWorkflow._direct_discovery_result(
                 alexa_intent,
@@ -231,9 +412,9 @@ class ResolverWorkflow:
             "PlayLocalIntent": ("local", "latest"),
         }
         direct_slot_names = {
-            "WhatsTrendingIntent": ("topic", "dateQuery"),
+            "WhatsTrendingIntent": ("topic",),
             "PlayRecommendationIntent": ("recommendationQuery",),
-            "BrowseContentIntent": ("dateQuery",),
+            "BrowseContentIntent": (),
             "PlayLocalIntent": ("cityQuery", "localQuery", "topic"),
         }
         if alexa_intent in direct and (
@@ -246,7 +427,7 @@ class ResolverWorkflow:
         ):
             intent_name, sort = direct[alexa_intent]
             return ResolverWorkflow._direct_discovery_result(alexa_intent, intent_name, sort)
-        if alexa_intent == "PlayByCreatorIntent" and (
+        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS and (
             not SearchFilterUtils.is_meaningful_creator_source(raw)
         ):
             return {
@@ -261,10 +442,10 @@ class ResolverWorkflow:
             }
         organization_request_kind = SearchFilterUtils.organization_request_kind(
             raw,
-            organization_intent=alexa_intent == "PlayByOrganizationIntent",
+            organization_intent=alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
         )
         generic_organization = (
-            alexa_intent == "PlayByOrganizationIntent"
+            alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS
             and organization_request_kind != "specific"
             or alexa_intent == "PlayContentIntent"
             and organization_request_kind in {"generic", "repair"}
@@ -281,12 +462,12 @@ class ResolverWorkflow:
                 "intent": "organization",
                 "alexaIntent": "organization",
                 "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": alexa_intent == "PlayByOrganizationIntent",
-                "needsRedirect": alexa_intent != "PlayByOrganizationIntent",
+                "nlpMatchesAlexa": alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
+                "needsRedirect": alexa_intent not in DiscoveryConstants.ORGANIZATION_INTENTS,
                 "localResolved": True,
                 "slots": organization_slots,
             }
-        if alexa_intent == "PlayPublicationIntent":
+        if alexa_intent in DiscoveryConstants.PUBLICATION_INTENTS:
             source = AlexaRequest.get_resolved_slot_value(
                 intent_slots.get("publicationSourceQuery")
             )
@@ -299,9 +480,9 @@ class ResolverWorkflow:
                     "nlpMatchesAlexa": True,
                     "needsRedirect": False,
                     "localResolved": True,
-                    "publicationSourceRequired": True,
                     "slots": {
                         "publicationSourceQuery": source or "",
+                        "genericPublicationRequest": True,
                         "publicationSort": AlexaRequest.get_resolved_slot_value(
                             intent_slots.get("publicationSort")
                         ),
@@ -322,6 +503,54 @@ class ResolverWorkflow:
                 "localResolved": True,
                 "searchPayload": {"query": "", "filter": {}},
                 "slots": {"residualQuery": ""},
+            }
+        return None
+
+    @staticmethod
+    def _source_kind_resolution(intent_slots: dict) -> dict | None:
+        source_kind = SearchFilterUtils.normalize_discovery_phrase(
+            AlexaRequest.get_resolved_slot_value(intent_slots.get("sourceKind"))
+        )
+        publication_sort = AlexaRequest.get_resolved_slot_value(
+            intent_slots.get("publicationSort")
+        )
+        publication_source = AlexaRequest.get_resolved_slot_value(
+            intent_slots.get("publicationSourceQuery")
+        )
+        base = {
+            "status": "resolved",
+            "alexaRawIntent": "ChooseSourceKindIntent",
+            "nlpMatchesAlexa": True,
+            "needsRedirect": True,
+            "localResolved": True,
+            "directDiscoveryRequest": True,
+        }
+        if source_kind == "creator":
+            return {
+                **base,
+                "intent": "creator",
+                "alexaIntent": "creator",
+                "slots": {"creatorQuery": "", "genericCreatorRequest": True},
+            }
+        if source_kind == "publication":
+            if SearchFilterUtils.is_meaningful_publication_source(publication_source):
+                return None
+            return {
+                **base,
+                "intent": "publication",
+                "alexaIntent": "publication",
+                "slots": {
+                    "publicationSourceQuery": "",
+                    "publicationSort": publication_sort,
+                    "genericPublicationRequest": True,
+                },
+            }
+        if source_kind == "talking newspaper":
+            return {
+                **base,
+                "intent": "organization",
+                "alexaIntent": "organization",
+                "slots": {"organizationQuery": "", "genericOrganizationRequest": True},
             }
         return None
 

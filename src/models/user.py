@@ -20,6 +20,7 @@ class UserStateNormalizer:
             "creatorId",
             "creatorName",
             "discoverySource",
+            "discoveryContext",
             "durationMs",
             "eventTimestamp",
             "isPublication",
@@ -481,6 +482,9 @@ class User:
                 state.get("pendingResolution"),
             ),
             (state.get("pendingAmbiguity"), "ambiguity", state.get("pendingAmbiguity")),
+            (state.get("awaitingCreatorName"), "creator_name", {}),
+            (state.get("awaitingOrganizationName"), "organization_name", {}),
+            (state.get("awaitingPublicationSource"), "publication_source", {}),
             (
                 state.get("onboardingStage"),
                 "onboarding",
@@ -495,6 +499,11 @@ class User:
                 state.get("awaitingFeedback"),
                 "feedback",
                 state.get("pendingFeedback") or {},
+            ),
+            (
+                state.get("awaitingFeedbackContinuation"),
+                "feedback_continuation",
+                state.get("feedbackContinuation") or {},
             ),
             (state.get("awaitingResume"), "resume", state.get("activePlayback") or {}),
             (

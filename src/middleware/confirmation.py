@@ -33,6 +33,7 @@ class SearchConfirmationGateHandler(AbstractRequestHandler):
             nlp.get("intent") in {"unclear", "resolver_unavailable"}
             or (nlp.get("status") and nlp.get("status") != "resolved")
             or ConfirmationPolicy.has_pending_ambiguity(nlp)
+            or slots.get("unresolvedReferences")
             or nlp.get("directDiscoveryRequest")
             or slots.get("genericCreatorRequest")
             or slots.get("genericOrganizationRequest")

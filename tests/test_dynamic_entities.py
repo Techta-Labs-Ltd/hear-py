@@ -1,4 +1,5 @@
 from src.alexa.entities import AlexaEntities
+from src.constants.discovery import DiscoveryConstants
 
 
 def test_ambiguity_dynamic_entities_include_unique_names_and_suffixes():
@@ -30,8 +31,9 @@ def test_ambiguity_dynamic_entities_include_unique_names_and_suffixes():
     ]
     assert values[0]["name"]["synonyms"] == [
         "Leader and Times",
-        "first",
-        "one",
-        "number one",
+        *DiscoveryConstants.CHOICE_ORDINAL_SYNONYMS[0],
     ]
-    assert values[1]["name"]["synonyms"] == ["Dalesman", "second", "two", "number two"]
+    assert values[1]["name"]["synonyms"] == [
+        "Dalesman",
+        *DiscoveryConstants.CHOICE_ORDINAL_SYNONYMS[1],
+    ]
