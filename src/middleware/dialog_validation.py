@@ -73,11 +73,11 @@ class DialogValidationPolicy:
     _SOURCE_NAME_PROMPTS = {
         "creator_name": (
             "Which creator would you like to hear?",
-            "Please say the creator's full name. For example, play something by David Beard.",
+            "Please say the creator's full name. For example, David Beard.",
         ),
         "organization_name": (
             Speech.ASK_TALKING_NEWSPAPER,
-            "Say play from, followed by the talking newspaper's full name.",
+            "Say the talking newspaper's full name. For example, Tynedale Talking Newspaper.",
         ),
         "publication_source": (
             Speech.ASK_PUBLICATION,
@@ -87,11 +87,11 @@ class DialogValidationPolicy:
     _SOURCE_NAME_RECOVERY = {
         "creator_name": (
             "I couldn't recognize that creator. "
-            "Please say the creator's full name. For example, play something by David Beard."
+            "Please say the creator's full name. For example, David Beard."
         ),
         "organization_name": (
             "I couldn't recognize that talking newspaper. "
-            "Say play from, followed by its full name."
+            "Say its full name. For example, Tynedale Talking Newspaper."
         ),
         "publication_source": (
             "I couldn't recognize the publication name. Please say its full name again."

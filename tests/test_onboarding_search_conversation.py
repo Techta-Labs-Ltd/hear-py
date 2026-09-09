@@ -3248,11 +3248,11 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
             "SelectOrganizationIntent",
             "awaitingOrganizationName",
             "organization_name",
-            "Say play from, followed by its full name",
+            "Say its full name",
         ),
     ],
 )
-async def test_empty_delegated_source_reply_gives_carrier_phrase_recovery(
+async def test_empty_delegated_source_reply_gives_name_recovery(
     mock_handler_input, intent_name, flag, dialog_type, expected_speech
 ):
     from src.controllers.play import PlayByCreatorHandler, PlayByOrganizationHandler
@@ -3355,11 +3355,11 @@ def test_source_name_collision_rechains_the_active_capture_dialog(
         (
             "organization_name",
             "awaitingOrganizationName",
-            "Say play from, followed by its full name",
+            "Say its full name",
         ),
     ],
 )
-def test_unknown_bare_source_reply_exits_capture_with_carrier_phrase(
+def test_unknown_bare_source_reply_exits_capture_with_name_guidance(
     mock_handler_input, dialog_type, flag, expected_speech
 ):
     from src.middleware.dialog_validation import (

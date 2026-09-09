@@ -153,7 +153,7 @@ class PlayCreator:
         DialogStateManager.clear(handler_input, "creator_name")
         prompt = (
             "I couldn't recognize that creator. Please say the creator's full name. "
-            "For example, play something by David Beard."
+            "For example, David Beard."
         )
         return (
             handler_input.response_builder.speak(Ssml.ssml(prompt))
@@ -290,7 +290,10 @@ class PlayOrganization:
     @staticmethod
     def _name_retry_response(handler_input):
         DialogStateManager.clear(handler_input, "organization_name")
-        prompt = "I couldn't recognize that talking newspaper. Say play from, followed by its full name."
+        prompt = (
+            "I couldn't recognize that talking newspaper. "
+            "Say its full name. For example, Tynedale Talking Newspaper."
+        )
         return (
             handler_input.response_builder.speak(Ssml.ssml(prompt))
             .reprompt(Ssml.ssml(prompt))

@@ -258,6 +258,18 @@
           ]
         },
         {
+          "name": "CarrierlessDiscoveryIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "HEAR_DISCOVERY_QUERY"
+            }
+          ],
+          "samples": [
+            "{query}"
+          ]
+        },
+        {
           "name": "ChooseSourceKindIntent",
           "slots": [
             {
@@ -673,9 +685,9 @@
             }
           ],
           "samples": [
-            "{organizationQuery}",
-            "the {organizationQuery}",
-            "{organizationQuery} please"
+            "talking newspaper {organizationQuery}",
+            "organisation {organizationQuery}",
+            "organization {organizationQuery}"
           ]
         },
         {
@@ -692,9 +704,9 @@
             }
           ],
           "samples": [
-            "{publicationSourceQuery}",
-            "the {publicationSourceQuery}",
-            "{publicationSourceQuery} please"
+            "publication {publicationSourceQuery}",
+            "publication from {publicationSourceQuery}",
+            "edition from {publicationSourceQuery}"
           ]
         },
         {
@@ -790,9 +802,9 @@
             }
           ],
           "samples": [
-            "{creatorQuery}",
-            "the {creatorQuery}",
-            "{creatorQuery} please"
+            "creator {creatorQuery}",
+            "by {creatorQuery}",
+            "from creator {creatorQuery}"
           ]
         },
         {
@@ -1270,7 +1282,6 @@
             }
           ],
           "samples": [
-            "{townName}",
             "my city is {townName}",
             "my town is {townName}",
             "I am in {townName}",
@@ -1412,6 +1423,76 @@
                   "premiership",
                   "E. P. L."
                 ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "HEAR_DISCOVERY_QUERY",
+          "values": [
+            {
+              "name": {
+                "value": "Herne Bay"
+              }
+            },
+            {
+              "name": {
+                "value": "London"
+              }
+            },
+            {
+              "name": {
+                "value": "Swindon"
+              }
+            },
+            {
+              "name": {
+                "value": "York"
+              }
+            },
+            {
+              "name": {
+                "value": "Tynedale Talking Newspaper"
+              }
+            },
+            {
+              "name": {
+                "value": "York Talking News"
+              }
+            },
+            {
+              "name": {
+                "value": "Talking News Federation"
+              }
+            },
+            {
+              "name": {
+                "value": "Crawley Audio News"
+              }
+            },
+            {
+              "name": {
+                "value": "sport"
+              }
+            },
+            {
+              "name": {
+                "value": "local news"
+              }
+            },
+            {
+              "name": {
+                "value": "Premier League"
+              }
+            },
+            {
+              "name": {
+                "value": "latest news in York"
+              }
+            },
+            {
+              "name": {
+                "value": "sport from Talking News Federation"
               }
             }
           ]

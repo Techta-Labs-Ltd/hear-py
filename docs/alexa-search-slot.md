@@ -7,6 +7,16 @@ The Hear backend generates four separate custom Alexa slot types:
 - `HEAR_CREATOR`
 - `HEAR_TOPIC`
 
+The lexicon post-processor derives a fifth type, `HEAR_DISCOVERY_QUERY`, from
+a bounded, representative sample of canonical values in those four domain
+slots. Preferred high-value examples are configured in
+`config/alexa_slot_lexicon.json`. It is used only by
+`CarrierlessDiscoveryIntent`, whose sole sample is `{query}`. This lets a
+listener say a topic, place, creator, publication, talking newspaper, or mixed
+discovery phrase without first saying `play` or `find`. The complete captured
+value is sent unchanged to the resolver, which remains responsible for domain
+classification.
+
 The interaction model also contains the small, static `HEAR_SOURCE_KIND` slot.
 It is not generated from catalogue data. Its canonical values are `talking
 newspaper`, `publication`, and `creator`, with common spoken variants. It
@@ -122,13 +132,14 @@ Replace the four matching objects in `interactionModel.languageModel.types` in
 `en-GB.json` with the generated objects before uploading and building the
 Alexa interaction model.
 
-For manual Alexa Console imports, the repository also produces one file per
-slot under `alexa-slot-imports/`:
+For manual Alexa Console imports, the repository produces the four backend
+domain files plus the derived carrierless file under `alexa-slot-imports/`:
 
 - `HEAR_LOCATION.csv`
 - `HEAR_ORGANIZATION.csv`
 - `HEAR_CREATOR.csv`
 - `HEAR_TOPIC.csv`
+- `HEAR_DISCOVERY_QUERY.csv`
 
 Import each file through that slot type's **Bulk Edit** screen. The files do
 not contain a header row. Each row uses `value,,synonym,...`; the deliberately
@@ -179,6 +190,13 @@ backend generates fresh CSV files and before importing them into Alexa.
 | `SelectCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
 | `ChooseSourceKindIntent.sourceKind` | static `HEAR_SOURCE_KIND` |
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
+| `CarrierlessDiscoveryIntent.query` | `HEAR_DISCOVERY_QUERY` |
+
+`CarrierlessDiscoveryIntent` is the only globally available slot-only
+discovery intent. Bare values captured while a town or source-name dialog is
+active are still interpreted by that active dialog before general discovery.
+The intent-specific `AMAZON.SearchQuery` fallbacks and their carrier phrases
+remain unchanged.
 
 Creator-owned publication requests use `PlayByCreatorIntent`, for example
 `play a publication by Jane Smith`. Organization-owned publication requests
@@ -317,28 +335,27 @@ play sport near Herne Bay
 The interaction model explicitly supports both complete commands and name-only
 turns. `Tynedale`, `Tynedale Talking Newspaper`, `play Tynedale Talking
 Newspaper`, `play from Tynedale Talking Newspaper`, and `play sport from
-Tynedale Talking Newspaper` all populate one complete organization slot. A bare
-creator name similarly populates `SelectCreatorIntent`. These selection intents
-still go through the same Hear resolver as the longer play intents.
+Tynedale Talking Newspaper` all reach the same resolver. The first two enter
+through `CarrierlessDiscoveryIntent`; the carrier-based forms retain their
+domain-specific intents.
 
 When the skill asks which creator, talking newspaper, or publication source
 the listener wants, its `Dialog.ElicitSlot` response explicitly chains to
 `SelectCreatorIntent`, `SelectOrganizationIntent`, or
 `SelectPublicationSourceIntent`. A custom slot no-match is valid when Alexa
 selects the intent: its raw spoken value is still forwarded to the Hear
-resolver. The skill also persists the active source-name dialog so an
-unexpected intent collision stays in source capture instead of returning to
-the general welcome prompt. If Alexa classifies an unlisted bare name as
-`AMAZON.FallbackIntent` and supplies no slot text, the skill ends that capture
-attempt and asks the listener to repeat it with an explicit carrier phrase:
-`play something by <creator>` or `play from <organization>`. That follow-up uses the
-intent-specific `AMAZON.SearchQuery` route and reaches the Hear resolver.
+resolver. The skill also persists the active source-name dialog, so a bare
+value arriving through `CarrierlessDiscoveryIntent` is reinterpreted as the
+expected source type instead of starting an unrelated general search. If Alexa
+emits `AMAZON.FallbackIntent` without any slot text, there is no transcript for
+the Lambda to recover, so the skill asks for the full name again without
+requiring a carrier phrase.
 
-If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
-waiting for an organization, creator, or publication source, active dialog
-state takes precedence. The backend sends the captured words to the expected
-resolver route and does not save them as the listener's city. An actual
-onboarding location question still owns a bare city response.
+If Alexa labels a name-only reply as `CarrierlessDiscoveryIntent` while the
+session is waiting for a town, organization, creator, or publication source,
+active dialog state takes precedence. The backend sends the captured words to
+the expected route and only saves a city during the actual onboarding location
+flow.
 
 Keep the public catalogue name as the single canonical value for an
 organisation. Add commonly spoken initialisms such as `TNF`, `T. N. F.`, and
