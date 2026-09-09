@@ -644,7 +644,8 @@ Required behavior:
 Example:
 
 ```text
-I couldn't check availability right now. Please try again in a moment.
+I had trouble finding content in Everton just now. Please say the name of a
+talking newspaper, creator, publication, or city you would like to listen to.
 ```
 
 ## Post-availability content retrieval

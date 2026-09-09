@@ -442,10 +442,32 @@ async def test_empty_local_availability_stops_without_search_or_playback_mutatio
         "limit": 3,
     }
     deps.heara.search.assert_not_awaited()
-    assert "currently available in Shalfleet" in AvailabilityTestSupport.speech(response)
+    assert "couldn't find any content in Shalfleet right now" in AvailabilityTestSupport.speech(
+        response
+    )
     assert response.get("directives") in (None, [])
     after = User.snapshot(handler_input)
     assert {key: after.get(key) for key in playback_state} == before
+
+
+@pytest.mark.asyncio
+async def test_failed_local_request_uses_listener_language_and_city(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    deps = AvailabilityTestSupport.dependencies({"failed": True})
+
+    response = await Availability(deps=deps).begin_local(
+        handler_input,
+        {
+            "intent": "local",
+            "requestedLocation": True,
+            "slots": {"city": "Everton", "isLocal": True},
+        },
+    )
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "had trouble finding content in Everton just now" in speech
+    assert "availability" not in speech.casefold()
+    deps.heara.search.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -467,7 +489,9 @@ async def test_empty_source_availability_stops_without_search(mock_handler_input
     )
 
     deps.heara.search.assert_not_awaited()
-    assert "currently available from Local Voice" in AvailabilityTestSupport.speech(response)
+    assert "couldn't find any content from Local Voice right now" in AvailabilityTestSupport.speech(
+        response
+    )
     assert response.get("directives") in (None, [])
 
 
@@ -483,7 +507,9 @@ async def test_failed_availability_stops_without_search(mock_handler_input):
     )
 
     deps.heara.search.assert_not_awaited()
-    assert "couldn't check availability just now" in AvailabilityTestSupport.speech(response)
+    speech = AvailabilityTestSupport.speech(response)
+    assert "had trouble finding content from A Reader just now" in speech
+    assert "availability" not in speech.casefold()
 
 
 def test_source_candidates_keep_same_name_in_distinct_domains():

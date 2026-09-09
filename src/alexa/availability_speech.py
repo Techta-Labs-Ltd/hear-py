@@ -10,20 +10,32 @@ class AvailabilitySpeech:
         if source_name:
             safe_source = Speech.escape_ssml_lite(source_name)
             return (
-                f"I couldn't find anything currently available from {safe_source}. "
+                f"I couldn't find any content from {safe_source} right now. "
                 f"{Speech.WELCOME_REPROMPT}"
             )
         if city:
             safe_city = Speech.escape_ssml_lite(city)
             return (
-                "I couldn't find a talking newspaper or creator currently available "
-                f"in {safe_city}. {Speech.WELCOME_REPROMPT}"
+                f"I couldn't find any content in {safe_city} right now. "
+                f"{Speech.WELCOME_REPROMPT}"
             )
-        return f"I couldn't find anything currently available. {Speech.WELCOME_REPROMPT}"
+        return f"I couldn't find any content right now. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
-    def unavailable() -> str:
-        return f"I couldn't check availability just now. {Speech.WELCOME_REPROMPT}"
+    def unavailable(city: str | None = None, source_name: str | None = None) -> str:
+        if source_name:
+            safe_source = Speech.escape_ssml_lite(source_name)
+            return (
+                f"I had trouble finding content from {safe_source} just now. "
+                f"{Speech.WELCOME_REPROMPT}"
+            )
+        if city:
+            safe_city = Speech.escape_ssml_lite(city)
+            return (
+                f"I had trouble finding content in {safe_city} just now. "
+                f"{Speech.WELCOME_REPROMPT}"
+            )
+        return f"I had trouble finding content just now. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def _count_label(value: int) -> str:

@@ -65,7 +65,7 @@ class Availability:
     ):
         DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
         speech = (
-            AvailabilitySpeech.unavailable()
+            AvailabilitySpeech.unavailable(city=city, source_name=source_name)
             if failed
             else AvailabilitySpeech.no_results(city=city, source_name=source_name)
         )
@@ -140,7 +140,11 @@ class Availability:
         result = await self._availability(handler_input, availability_filter, 0)
         candidates = AvailabilityData.source_candidates(result)
         if result.get("failed"):
-            return self._terminal_response(handler_input, failed=True)
+            return self._terminal_response(
+                handler_input,
+                failed=True,
+                city=requested_city,
+            )
         if not candidates:
             return self._terminal_response(handler_input, city=requested_city)
         context = {
@@ -223,6 +227,7 @@ class Availability:
             return self._terminal_response(
                 handler_input,
                 failed=True,
+                source_name=source.get("name"),
             )
         publication_count = int(result.get("publication_count") or 0)
         track_count = int(result.get("standalone_track_count") or 0)
