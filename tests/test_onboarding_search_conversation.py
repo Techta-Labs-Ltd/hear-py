@@ -102,7 +102,7 @@ async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
     _intent_request(
         mock_handler_input,
         "SearchContentIntent",
-        {"searchQuery": {"name": "searchQuery", "value": "Sevenoaks"}},
+        {"searchQuery": {"name": "searchQuery", "value": "seven ox"}},
     )
     old_resolution = {
         "confirmationLabel": "content in Swindon",
@@ -141,7 +141,7 @@ async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
     ConfirmationMiddleware().process(mock_handler_input)
     response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
 
-    assert resolve.await_args.args[0] == "play Sevenoaks"
+    assert resolve.await_args.args[0] == "play seven ox"
     assert "Did you want me to play content in Sevenoaks?" in response["outputSpeech"]["ssml"]
     store = User.snapshot(mock_handler_input)
     assert store["awaitingSearchConfirmation"] is True
