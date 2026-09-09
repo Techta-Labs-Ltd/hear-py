@@ -123,12 +123,14 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert "SetLocationIntent" not in dialog_intents
 
 
-def test_carrierless_intent_owns_global_bare_discovery_requests():
+def test_existing_domain_slots_accept_bare_discovery_requests():
     model = _model()["interactionModel"]["languageModel"]
     intents = {item["name"]: item for item in model["intents"]}
     city_type = next((item for item in model["types"] if item["name"] == "HEAR_LOCATION"))
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
+    swindon = next((item for item in city_type["values"] if item["name"]["value"] == "Swindon"))
     assert set(intents["TownCaptureIntent"]["samples"]) == {
+        "{townName}",
         "my city is {townName}",
         "my town is {townName}",
         "I am in {townName}",
@@ -141,6 +143,7 @@ def test_carrierless_intent_owns_global_bare_discovery_requests():
     assert all("{" not in sample for sample in intents["SetLocationIntent"]["samples"])
     assert "id" not in herne_bay
     assert "arn bay" in herne_bay["name"]["synonyms"]
+    assert "swidon" in swindon["name"]["synonyms"]
 
 
 def test_content_discovery_intents_accept_date_constraints():
@@ -336,8 +339,7 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
     assert "Tynedale Talking Newspaper" in organization_values
     assert "play from {organizationQuery}" in organization_slot["samples"]
     assert intents["SelectOrganizationIntent"]["slots"][0]["type"] == "HEAR_ORGANIZATION"
-    assert "{organizationQuery}" not in intents["SelectOrganizationIntent"]["samples"]
-    assert "talking newspaper {organizationQuery}" in intents["SelectOrganizationIntent"]["samples"]
+    assert "{organizationQuery}" in intents["SelectOrganizationIntent"]["samples"]
     tynedale = next(
         item
         for item in types["HEAR_ORGANIZATION"]["values"]
@@ -455,7 +457,7 @@ def test_carrierless_discovery_reuses_existing_domain_slots():
         "SelectOrganizationIntent": "{organizationQuery}",
         "SelectPublicationSourceIntent": "{publicationSourceQuery}",
     }.items():
-        assert bare_sample not in intents[intent_name]["samples"]
+        assert bare_sample in intents[intent_name]["samples"]
 
 
 def test_clarification_slot_has_format_and_ordinal_fallback_values():

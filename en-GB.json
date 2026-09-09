@@ -685,9 +685,9 @@
             }
           ],
           "samples": [
-            "talking newspaper {organizationQuery}",
-            "organisation {organizationQuery}",
-            "organization {organizationQuery}"
+            "{organizationQuery}",
+            "the {organizationQuery}",
+            "{organizationQuery} please"
           ]
         },
         {
@@ -704,9 +704,9 @@
             }
           ],
           "samples": [
-            "publication {publicationSourceQuery}",
-            "publication from {publicationSourceQuery}",
-            "edition from {publicationSourceQuery}"
+            "{publicationSourceQuery}",
+            "the {publicationSourceQuery}",
+            "{publicationSourceQuery} please"
           ]
         },
         {
@@ -802,9 +802,9 @@
             }
           ],
           "samples": [
-            "creator {creatorQuery}",
-            "by {creatorQuery}",
-            "from creator {creatorQuery}"
+            "{creatorQuery}",
+            "the {creatorQuery}",
+            "{creatorQuery} please"
           ]
         },
         {
@@ -1282,6 +1282,7 @@
             }
           ],
           "samples": [
+            "{townName}",
             "my city is {townName}",
             "my town is {townName}",
             "I am in {townName}",
@@ -1342,6 +1343,16 @@
             {
               "name": {
                 "value": "London"
+              }
+            },
+            {
+              "name": {
+                "value": "Swindon",
+                "synonyms": [
+                  "swidon",
+                  "swindon england",
+                  "swindon gloucestershire"
+                ]
               }
             }
           ]

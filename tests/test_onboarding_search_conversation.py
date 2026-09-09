@@ -510,6 +510,54 @@ async def test_idle_bare_city_misclassification_routes_to_discovery_without_savi
 
 
 @pytest.mark.asyncio
+async def test_idle_unresolved_location_slot_still_reaches_resolver(mock_handler_input):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "location_set",
+                "searchPayload": {"query": "", "filter": {"city": "Swindon"}},
+                "slots": {"city": "Swindon", "isLocal": True},
+            }
+        )
+    )
+    container = ApplicationContainer(
+        resolver=resolver,
+        progressive=SimpleNamespace(send=AsyncMock(return_value=True)),
+    )
+    handler_input = _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {
+            "townName": {
+                "name": "townName",
+                "value": "swidon",
+                "resolutions": {
+                    "resolutionsPerAuthority": [
+                        {"status": {"code": "ER_SUCCESS_NO_MATCH"}}
+                    ]
+                },
+            }
+        },
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+
+    await ResolverInterceptor(deps=container).process(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "play swidon",
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "general"
+    assert nlp["searchPayload"]["filter"] == {"city": "Swindon"}
+
+
+@pytest.mark.asyncio
 async def test_active_location_change_owns_city_misclassified_as_local_search(
     mock_handler_input,
 ):
