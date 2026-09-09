@@ -145,7 +145,6 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
                 }
             },
             "alexaUserId": "amzn1.ask.account.TEST",
-            "isLocal": True,
             "page": 0,
             "limit": 3,
         },
@@ -251,13 +250,15 @@ async def test_availability_accepts_supported_contract_filters(
     )
 
     assert result["failed"] is False
-    assert captured == {
+    expected = {
         "filter": availability_filter,
         "alexaUserId": "amzn1.ask.account.TEST",
-        "isLocal": is_local,
         "page": 0,
         "limit": 20,
     }
+    if "location" not in availability_filter:
+        expected["isLocal"] = is_local
+    assert captured == expected
 
 
 @pytest.mark.asyncio

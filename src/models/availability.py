@@ -44,14 +44,16 @@ class Availability:
         return builder.response
 
     async def _availability(self, handler_input, availability_filter: dict, page: int) -> dict:
+        payload = {
+            "filter": availability_filter,
+            "alexaUserId": AlexaRequest.get_user_id(handler_input),
+            "page": max(0, int(page or 0)),
+            "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
+        }
+        if "location" not in availability_filter:
+            payload["isLocal"] = False
         return await self._deps.heara.availability(
-            {
-                "filter": availability_filter,
-                "alexaUserId": AlexaRequest.get_user_id(handler_input),
-                "isLocal": "location" in availability_filter,
-                "page": max(0, int(page or 0)),
-                "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
-            },
+            payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
 

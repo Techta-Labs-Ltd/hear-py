@@ -304,7 +304,6 @@ async def test_location_and_one_organization_preserves_both_availability_filters
             "location": {"city": "Swindon"},
         },
         "alexaUserId": "amzn1.ask.account.TEST",
-        "isLocal": True,
         "page": 0,
         "limit": 3,
     }
@@ -371,7 +370,7 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
         "longitude": -1.78,
     }
     assert body["alexaUserId"] == "amzn1.ask.account.TEST"
-    assert body["isLocal"] is True
+    assert "isLocal" not in body
     speech = AvailabilityTestSupport.speech(response)
     assert "Here are the talking newspapers and creators closest to Swindon" in speech
     assert "Here are the local sources I found" not in speech
@@ -437,7 +436,6 @@ async def test_empty_local_availability_stops_without_search_or_playback_mutatio
             }
         },
         "alexaUserId": "amzn1.ask.account.TEST",
-        "isLocal": True,
         "page": 0,
         "limit": 3,
     }

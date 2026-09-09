@@ -232,12 +232,13 @@ class HearApiClient:
         body = {
             "filter": availability_filter or {},
             "alexaUserId": alexa_user_id,
-            "isLocal": bool(availability_filter and "location" in availability_filter),
             "page": AvailabilityResponse.integer(requested.get("page")),
             "limit": AvailabilityResponse.integer(
                 requested.get("limit"), DiscoveryConstants.CHOICE_PAGE_SIZE, 1
             ),
         }
+        if availability_filter and "location" not in availability_filter:
+            body["isLocal"] = bool(requested.get("isLocal"))
         if availability_filter is None or not alexa_user_id:
             supplied_filter = requested.get("filter")
             HearApiSupport.logger.warning(
@@ -254,7 +255,7 @@ class HearApiClient:
             body["limit"],
             sorted(body["filter"].keys()),
             AvailabilityResponse.log_filter(body["filter"]),
-            body["isLocal"],
+            body.get("isLocal", "omitted"),
         )
         for attempt in range(self._retry_count + 1):
             status, data = await self._raw_request("POST", path, body, timeout_ms)

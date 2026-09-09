@@ -94,15 +94,15 @@ with search-only criteria. They must not be discarded.
 
 ## Routing decision matrix
 
-| Resolved criteria | Endpoint | `isLocal` |
+| Resolved criteria | Endpoint | Availability `isLocal` field |
 | --- | --- | ---: |
-| Location only | `/availability` | `true` |
+| Location only | `/availability` | omitted |
 | Organisation only | `/availability` | `false` |
 | Creator only | `/availability` | `false` |
-| Location + organisation | `/availability` | `true` |
-| Location + creator | `/availability` | `true` |
+| Location + organisation | `/availability` | omitted |
+| Location + creator | `/availability` | omitted |
 | Organisation + creator | `/availability` | `false` |
-| Location + organisation + creator | `/availability` | `true` |
+| Location + organisation + creator | `/availability` | omitted |
 | No availability criterion and no content criterion | normal browse/search policy | derived |
 | Location + query/topic | `/search` | `true` |
 | Location + tag | `/search` | `true` |
@@ -122,7 +122,6 @@ Every `/availability` request must contain:
 {
   "filter": {},
   "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
   "page": 0,
   "limit": 3
 }
@@ -131,8 +130,9 @@ Every `/availability` request must contain:
 Rules:
 
 - `alexaUserId` is required and comes from the current Alexa request.
-- `isLocal` is `true` whenever `filter.location` is present.
-- `isLocal` is `false` when the filter contains only creator and/or organisation.
+- `isLocal` must be omitted whenever `filter.location` is present.
+- `isLocal` may be sent only when there is no location filter.
+- Source-only requests currently send `isLocal: false`.
 - `page` is zero-based.
 - `limit` uses the Alexa choice page size, currently three.
 - `/availability` does not receive `query`.
@@ -155,7 +155,6 @@ Rules:
     }
   },
   "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
   "page": 0,
   "limit": 3
 }
@@ -203,7 +202,6 @@ Rules:
     }
   },
   "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
   "page": 0,
   "limit": 3
 }
@@ -223,7 +221,6 @@ Rules:
     }
   },
   "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
   "page": 0,
   "limit": 3
 }
@@ -259,7 +256,6 @@ Rules:
     }
   },
   "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
   "page": 0,
   "limit": 3
 }
@@ -267,8 +263,8 @@ Rules:
 
 ## Availability pagination contract
 
-Every subsequent page must preserve the complete original filter,
-`alexaUserId`, and `isLocal`:
+Every subsequent page must preserve the complete original filter and
+`alexaUserId`. It must continue to omit `isLocal` when location is present:
 
 ```json
 {
@@ -283,7 +279,6 @@ Every subsequent page must preserve the complete original filter,
     }
   },
   "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
   "page": 1,
   "limit": 3
 }
@@ -701,7 +696,7 @@ This prevents the availability defect from producing:
 ### `src/models/availability.py`
 
 - Build the complete availability filter from the resolved payload.
-- Pass `alexaUserId` and `isLocal` on the initial request and every page request.
+- Pass `alexaUserId` on every request and omit `isLocal` whenever location is filtered.
 - Preserve combined filters in dialog context and pagination.
 - Separate successful-empty handling from failed-request handling.
 - Remove unrestricted fallback search from both paths.
@@ -722,7 +717,7 @@ This prevents the availability defect from producing:
 ### `src/clients/hear.py`
 
 - Serialize `alexaUserId` at the top level of `/availability` requests.
-- Serialize `isLocal` at the top level.
+- Serialize `isLocal` only when the request has no location filter.
 - Preserve the complete normalized combined filter.
 - Keep `page` and `limit` intact.
 - Keep logs privacy-safe while logging the presence of Alexa identity and the
@@ -767,7 +762,7 @@ This prevents the availability defect from producing:
 
 - all seven supported request payloads serialize exactly;
 - `alexaUserId` is included;
-- `isLocal` is true exactly when location is present;
+- `isLocal` is absent exactly when location is present;
 - combined filters survive normalization;
 - invalid filter fields are rejected before an HTTP call;
 - page and limit are preserved;
@@ -812,7 +807,7 @@ Expected CloudWatch sequence:
 
 ```text
 resolver -> confirmed location request
-/availability -> filter.location=Shalfleet, alexaUserIdPresent=true, isLocal=true
+/availability -> filter.location=Shalfleet, alexaUserIdPresent=true, isLocal=omitted
 /availability response -> total=0, organizations=[], creators=[]
 Alexa no-result response
 ```
@@ -838,7 +833,7 @@ The work is complete only when:
 - all seven availability combinations reach `/availability` with the exact
   contract defined above;
 - mixed content requests reach `/search` without losing constraints;
-- every availability request includes `alexaUserId` and correct `isLocal`;
+- every availability request includes `alexaUserId` and omits `isLocal` for location filters;
 - empty and failed availability never trigger search or playback;
 - positive inventory still supports constrained content retrieval;
 - pagination never offers a nonexistent next page;
