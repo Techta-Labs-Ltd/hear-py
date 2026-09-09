@@ -35,11 +35,10 @@ class Decline:
 
     @staticmethod
     def _generic_response(handler_input):
-        return (
-            handler_input.response_builder.speak(Speech.WELCOME_REPROMPT)
-            .reprompt(Speech.WELCOME_REPROMPT)
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.WELCOME_REPROMPT,
+            Speech.WELCOME_REPROMPT,
         )
 
     async def _setup_dialog_response(
@@ -51,32 +50,25 @@ class Decline:
     ):
         if dialog_type == "ambiguity":
             DialogStateManager.dismiss_ambiguity(handler_input)
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.CHOICES_DISMISSED)
-                )
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.CHOICES_DISMISSED,
+                Speech.WELCOME_REPROMPT,
             )
         if dialog_type == "asr_repair":
             DialogStateManager.clear(handler_input, "asr_repair")
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml("Ok. What would you like to listen to?")
-                )
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                "Ok. What would you like to listen to?",
+                Speech.WELCOME_REPROMPT,
             )
         if dialog_type == "latest_source":
             self._deps.user.update(handler_input, {"pendingLatestSource": None})
             DialogStateManager.clear(handler_input, "latest_source")
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.LATEST_SOURCE_DECLINED))
-                .reprompt(Ssml.ssml(Speech.LATEST_SOURCE_DECLINED))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.LATEST_SOURCE_DECLINED,
+                Speech.LATEST_SOURCE_DECLINED,
             )
         if dialog_type == "notification":
             return await self._deps.notifications.decline(handler_input)
@@ -99,13 +91,10 @@ class Decline:
             )
         if store.get("awaitingCommunityPlayback"):
             self._deps.user.update(handler_input, {"awaitingCommunityPlayback": False})
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml("Ok. What would you like to listen to?")
-                )
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                "Ok. What would you like to listen to?",
+                Speech.WELCOME_REPROMPT,
             )
         return None
 
@@ -186,13 +175,10 @@ class Decline:
             await self._deps.listener_sync.sync_for_launch(handler_input)
         except Exception:
             pass
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml(Speech.PROFILE_PERMISSION_SKIPPED)
-            )
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.PROFILE_PERMISSION_SKIPPED,
+            Speech.WELCOME_REPROMPT,
         )
 
     def _handle_search_no(self, handler_input, store, session_attrs):
@@ -210,13 +196,10 @@ class Decline:
                 },
             )
             DialogStateManager.clear(handler_input, "search_confirmation")
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(f"Ok. {Speech.WELCOME_REPROMPT}")
-                )
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                f"Ok. {Speech.WELCOME_REPROMPT}",
+                Speech.WELCOME_REPROMPT,
             )
         if store.get("pendingOrganizationConfirmation"):
             self._deps.user.update(
@@ -281,26 +264,20 @@ class Decline:
                 "excludedSuggestions": [],
             },
         )
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml("Ok. What would you like to listen to instead?")
-            )
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            "Ok. What would you like to listen to instead?",
+            Speech.WELCOME_REPROMPT,
         )
 
     def _handle_list_mode_no(self, handler_input, store):
         """Decline the offered queue item without creating another queue."""
         del store
         self._deps.user.update(handler_input, {"listModeActive": False})
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml("Ok. What would you like to listen to?")
-            )
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            "Ok. What would you like to listen to?",
+            Speech.WELCOME_REPROMPT,
         )
 
     def _handle_resume_no(self, handler_input, store):
@@ -312,11 +289,10 @@ class Decline:
                 FeedbackService.activate_best(handler_input)
         self._deps.user.update(handler_input, {"awaitingResume": False})
         DialogStateManager.clear(handler_input, "resume")
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.RESUME_DECLINED_NEXT_OPTIONS))
-            .reprompt(Ssml.ssml(Speech.RESUME_DECLINED_NEXT_OPTIONS_REPROMPT))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.RESUME_DECLINED_NEXT_OPTIONS,
+            Speech.RESUME_DECLINED_NEXT_OPTIONS_REPROMPT,
         )
 
     def _handle_still_listening_no(self, handler_input):

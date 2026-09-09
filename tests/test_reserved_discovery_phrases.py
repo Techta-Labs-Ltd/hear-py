@@ -244,6 +244,62 @@ async def test_carrierless_discovery_forwards_a_no_match_value_unchanged(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Bristol",
+        "Liverpool",
+        "TNF",
+        "Unknown Creator",
+        "Unlisted Publication",
+        "Obscure Community Tag",
+    ],
+)
+async def test_prompted_bare_discovery_reply_reaches_resolver_without_spoken_carrier(
+    monkeypatch, mock_handler_input, raw
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "dialogState": "COMPLETED",
+            "intent": {
+                "name": "SearchContentIntent",
+                "slots": {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": raw,
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "general",
+            "slots": {"residualQuery": raw},
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        f"play {raw}",
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["slots"]["residualQuery"] == raw
+
+
+@pytest.mark.asyncio
 async def test_carrierless_name_reply_respects_active_organization_dialog(
     monkeypatch, mock_handler_input
 ):

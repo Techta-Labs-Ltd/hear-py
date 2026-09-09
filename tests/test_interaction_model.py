@@ -119,6 +119,13 @@ def test_location_dialogs_elicit_bare_town_replies():
     dialog_intents = {
         item["name"]: item for item in _model()["interactionModel"]["dialog"]["intents"]
     }
+    assert dialog_intents["SearchContentIntent"]["slots"][0] == {
+        "name": "searchQuery",
+        "type": "AMAZON.SearchQuery",
+        "confirmationRequired": False,
+        "elicitationRequired": True,
+        "prompts": {"elicitation": "Elicit.SearchContentIntent.searchQuery"},
+    }
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "townName",
         "type": "HEAR_LOCATION",
@@ -294,7 +301,9 @@ def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
     }
     for intent_name, sample in expected_samples.items():
         slots = intents[intent_name]["slots"]
-        assert slots == [{"name": "searchQuery", "type": "AMAZON.SearchQuery"}]
+        assert [(slot["name"], slot["type"]) for slot in slots] == [
+            ("searchQuery", "AMAZON.SearchQuery")
+        ]
         assert sample in intents[intent_name]["samples"]
         assert all(value.endswith("{searchQuery}") for value in intents[intent_name]["samples"])
 

@@ -7,6 +7,7 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.resume_speech import ResumeSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -120,18 +121,14 @@ class LaunchWorkflow:
         city = store.get("userCity") or locality
         is_first_time = store.get("playCount", 0) == 0 and not store.get("lastToken")
         if is_first_time and city:
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.WELCOME_FIRST_HAS_CITY(user_name, city))
-                )
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.WELCOME_FIRST_HAS_CITY(user_name, city),
             )
         if is_first_time:
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_FIRST(user_name)))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.WELCOME_FIRST(user_name),
             )
         return Onboarding.handle_returning_user(handler_input, store, user_name, locality)
 
