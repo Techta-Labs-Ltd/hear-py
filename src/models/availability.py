@@ -6,6 +6,7 @@ from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.entities import AlexaEntities
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.availability import AvailabilityConstants
@@ -71,7 +72,7 @@ class Availability:
             if failed
             else AvailabilitySpeech.no_results(city=city, source_name=source_name)
         )
-        return self._response(handler_input, speech, Speech.WELCOME_REPROMPT)
+        return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
 
     def _activate(self, handler_input, context: dict) -> None:
         context["displayedCandidates"] = AvailabilityData.displayed(context)
@@ -583,7 +584,7 @@ class Availability:
         intent_name = AlexaRequest.get_intent_name(handler_input) or ""
         if intent_name in DialogConstants.CHOICE_DISMISS_INTENTS:
             DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
-            return self._response(
+            return AlexaResponse.present_idle_next(
                 handler_input,
                 Speech.CHOICES_DISMISSED,
                 Speech.WELCOME_REPROMPT,
@@ -594,7 +595,7 @@ class Availability:
             return self._previous(handler_input, context)
         if intent_name == "AMAZON.NoIntent" and context.get("singleChoice"):
             DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
-            return self._response(
+            return AlexaResponse.present_idle_next(
                 handler_input,
                 "Ok. What would you like to listen to instead?",
                 Speech.WELCOME_REPROMPT,
@@ -622,7 +623,7 @@ class Availability:
                 return await self._begin_tracks(handler_input, context)
         if intent_name == "AMAZON.NoIntent":
             DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
-            return self._response(
+            return AlexaResponse.present_idle_next(
                 handler_input,
                 Speech.CHOICES_DISMISSED,
                 Speech.WELCOME_REPROMPT,

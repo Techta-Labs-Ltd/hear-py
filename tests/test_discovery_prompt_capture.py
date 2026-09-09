@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.models.search import Search
 
 
 class TestDiscoveryPromptCapture:
@@ -40,3 +41,18 @@ class TestDiscoveryPromptCapture:
                 },
             },
         }
+
+    def test_no_content_response_recaptures_the_next_bare_discovery_reply(self):
+        response = Search._build_no_content_response(self._handler_input())
+
+        assert response["shouldEndSession"] is False
+        assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
+
+    def test_empty_search_response_recaptures_the_next_bare_discovery_reply(self):
+        response = Search._build_search_outcome_response(
+            self._handler_input(),
+            {"failed": False, "_search_payload": {"query": "Sevenoaks"}},
+        )
+
+        assert response["shouldEndSession"] is False
+        assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
