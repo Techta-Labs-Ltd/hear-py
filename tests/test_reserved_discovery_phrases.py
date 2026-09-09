@@ -186,7 +186,7 @@ async def test_truncated_talking_organization_request_never_reaches_resolver(
 
 
 @pytest.mark.asyncio
-async def test_carrierless_discovery_forwards_the_complete_query_unchanged(
+async def test_carrierless_discovery_forwards_a_no_match_value_unchanged(
     monkeypatch, mock_handler_input
 ):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
@@ -200,6 +200,11 @@ async def test_carrierless_discovery_forwards_the_complete_query_unchanged(
                     "topic": {
                         "name": "topic",
                         "value": "latest sport in Swindon from TNF",
+                        "resolutions": {
+                            "resolutionsPerAuthority": [
+                                {"status": {"code": "ER_SUCCESS_NO_MATCH"}}
+                            ]
+                        },
                     }
                 },
             },

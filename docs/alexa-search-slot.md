@@ -8,11 +8,12 @@ The Hear backend generates four separate custom Alexa slot types:
 - `HEAR_TOPIC`
 
 `CarrierlessDiscoveryIntent` reuses `HEAR_TOPIC` for its sole `{topic}` sample.
-Custom slot values are recognition training data rather than an allow-list, so
-Alexa can still return a raw no-match phrase for the resolver to classify.
-Together with the existing bare location and source selection intents, this
-lets listeners omit `play` and `find` without creating or uploading another
-slot type.
+It is the only globally available slot-only intent, avoiding multiple bare-slot
+intents competing for the same utterance. Custom slot values are recognition
+training data rather than an allow-list, so Alexa can return the raw phrase
+with `ER_SUCCESS_NO_MATCH`; the Lambda forwards that raw value unchanged for
+the resolver to classify. This lets listeners omit `play` and `find` without
+creating or uploading another slot type.
 
 The interaction model also contains the small, static `HEAR_SOURCE_KIND` slot.
 It is not generated from catalogue data. Its canonical values are `talking
@@ -188,12 +189,12 @@ backend generates fresh CSV files and before importing them into Alexa.
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
 | `CarrierlessDiscoveryIntent.topic` | `HEAR_TOPIC` |
 
-Existing bare source and location intents retain their domain-specific slots.
-`CarrierlessDiscoveryIntent` covers a bare topic or other phrase that Alexa
-does not assign to one of those typed intents. Bare values captured while a
-town or source-name dialog is active are interpreted by that active dialog
-before general discovery. The intent-specific `AMAZON.SearchQuery` fallbacks
-and their carrier phrases remain unchanged.
+Source and location intents retain their domain-specific slots for prompted and
+carrier-based flows, but do not publish competing global `{slot}`-only samples.
+`CarrierlessDiscoveryIntent` captures every bare discovery phrase. Bare values
+captured while a town or source-name dialog is active are interpreted by that
+active dialog before general discovery. The intent-specific
+`AMAZON.SearchQuery` fallbacks and their carrier phrases remain unchanged.
 
 Creator-owned publication requests use `PlayByCreatorIntent`, for example
 `play a publication by Jane Smith`. Organization-owned publication requests
@@ -333,9 +334,9 @@ The interaction model explicitly supports both complete commands and name-only
 turns. `Tynedale`, `Tynedale Talking Newspaper`, `play Tynedale Talking
 Newspaper`, `play from Tynedale Talking Newspaper`, and `play sport from
 Tynedale Talking Newspaper` all reach the same resolver. Bare organisation,
-creator, publication, and location names use their existing domain slots. Bare
-topics and general phrases use `CarrierlessDiscoveryIntent`; carrier-based
-forms retain their existing intents.
+creator, publication, location, topic, and general phrases use
+`CarrierlessDiscoveryIntent`; prompted and carrier-based forms retain their
+domain-specific intents and slots.
 
 When the skill asks which creator, talking newspaper, or publication source
 the listener wants, its `Dialog.ElicitSlot` response explicitly chains to
