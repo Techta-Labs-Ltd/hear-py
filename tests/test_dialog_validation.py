@@ -348,7 +348,17 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     assert response["shouldEndSession"] is False
 
 
-@pytest.mark.parametrize("intent_name", ["SearchContentIntent", "PlayContentIntent"])
+@pytest.mark.parametrize(
+    "intent_name",
+    [
+        "TownCaptureIntent",
+        "CarrierlessDiscoveryIntent",
+        "SelectCreatorIntent",
+        "SelectOrganizationIntent",
+        "SelectPublicationSourceIntent",
+        "PlayContentIntent",
+    ],
+)
 def test_search_confirmation_allows_a_new_discovery_reply(mock_handler_input, intent_name):
     User.update(
         mock_handler_input,

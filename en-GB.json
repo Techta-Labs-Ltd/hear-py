@@ -182,10 +182,7 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery",
-              "samples": [
-                "{searchQuery}"
-              ]
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
@@ -1739,23 +1736,6 @@
       "delegationStrategy": "SKILL_RESPONSE",
       "intents": [
         {
-          "name": "SearchContentIntent",
-          "delegationStrategy": "SKILL_RESPONSE",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "searchQuery",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.SearchContentIntent.searchQuery"
-              }
-            }
-          ]
-        },
-        {
           "name": "PlayContentIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1888,15 +1868,6 @@
       ]
     },
     "prompts": [
-      {
-        "id": "Elicit.SearchContentIntent.searchQuery",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "Please say the name of a talking newspaper, creator, publication, city, or topic you would like to listen to."
-          }
-        ]
-      },
       {
         "id": "Elicit.PlayContentIntent.topic",
         "variations": [

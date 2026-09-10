@@ -1,6 +1,5 @@
 class DialogConstants:
     VALIDATION_FAILURE = "_dialogValidationFailure"
-    CAPTURED_SEARCH_CONFIRMATION = "_capturedSearchConfirmation"
     DIALOG_TTL_SECONDS = 10 * 60
     CHOICE_DISMISS_INTENTS = frozenset({"DismissChoicesIntent"})
     DIALOG_LEGACY_FLAGS = {

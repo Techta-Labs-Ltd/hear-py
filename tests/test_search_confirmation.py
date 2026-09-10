@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
@@ -86,7 +85,6 @@ def test_full_resolved_search_is_spoken_before_backend_search():
         "Did you want me to play the latest community services from York Talking News?"
         in response["outputSpeech"]["ssml"]
     )
-    assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
     store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     pending = store["pendingResolution"]

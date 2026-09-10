@@ -119,13 +119,7 @@ def test_location_dialogs_elicit_bare_town_replies():
     dialog_intents = {
         item["name"]: item for item in _model()["interactionModel"]["dialog"]["intents"]
     }
-    assert dialog_intents["SearchContentIntent"]["slots"][0] == {
-        "name": "searchQuery",
-        "type": "AMAZON.SearchQuery",
-        "confirmationRequired": False,
-        "elicitationRequired": True,
-        "prompts": {"elicitation": "Elicit.SearchContentIntent.searchQuery"},
-    }
+    assert "SearchContentIntent" not in dialog_intents
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "townName",
         "type": "HEAR_LOCATION",

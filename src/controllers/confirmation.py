@@ -5,7 +5,6 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.request import AlexaRequest
 from src.models.affirmative import Affirmative
-from src.models.confirmation import ConfirmationPolicy
 from src.models.decline import Decline
 
 
@@ -16,10 +15,7 @@ class YesIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             AlexaRequest.get_request_type(handler_input) == "IntentRequest"
-            and (
-                AlexaRequest.get_intent_name(handler_input) == "AMAZON.YesIntent"
-                or ConfirmationPolicy.captured_search_confirmation(handler_input) is True
-            )
+            and AlexaRequest.get_intent_name(handler_input) == "AMAZON.YesIntent"
         )
 
     async def handle(self, handler_input: HandlerInput):
@@ -33,10 +29,7 @@ class NoIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
             AlexaRequest.get_request_type(handler_input) == "IntentRequest"
-            and (
-                AlexaRequest.get_intent_name(handler_input) == "AMAZON.NoIntent"
-                or ConfirmationPolicy.captured_search_confirmation(handler_input) is False
-            )
+            and AlexaRequest.get_intent_name(handler_input) == "AMAZON.NoIntent"
         )
 
     async def handle(self, handler_input: HandlerInput):

@@ -7,7 +7,6 @@ from ask_sdk_model import Response
 
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
-from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogStateManager
@@ -183,7 +182,6 @@ class IntentDispatcher:
         return (
             handler_input.response_builder.speak(Ssml.ssml(prompt))
             .reprompt(Ssml.ssml("Say yes to go ahead, or no for other options."))
-            .add_directive(AlexaResponse.discovery_capture_directive())
             .set_should_end_session(False)
             .get_response()
         )
