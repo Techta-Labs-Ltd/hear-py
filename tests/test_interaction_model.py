@@ -146,6 +146,23 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert "SetLocationIntent" not in dialog_intents
 
 
+def test_carrierless_dialog_elicits_the_existing_topic_slot():
+    model = _model()["interactionModel"]
+    dialog_intents = {item["name"]: item for item in model["dialog"]["intents"]}
+    carrierless = dialog_intents["CarrierlessDiscoveryIntent"]
+
+    assert carrierless["delegationStrategy"] == "SKILL_RESPONSE"
+    assert carrierless["slots"] == [
+        {
+            "name": "topic",
+            "type": "HEAR_TOPIC",
+            "confirmationRequired": False,
+            "elicitationRequired": True,
+            "prompts": {"elicitation": "Elicit.CarrierlessDiscoveryIntent.topic"},
+        }
+    ]
+
+
 def test_existing_domain_slots_accept_bare_discovery_requests():
     model = _model()["interactionModel"]["languageModel"]
     intents = {item["name"]: item for item in model["intents"]}
