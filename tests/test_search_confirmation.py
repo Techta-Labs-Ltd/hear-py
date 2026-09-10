@@ -461,6 +461,7 @@ def test_location_only_search_is_confirmed_with_city_filter():
     ConfirmationMiddleware().process(handler_input)
     response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
     assert "Did you want me to play content in Liverpool?" in response["outputSpeech"]["ssml"]
+    assert response.get("directives") in (None, [])
     attrs = handler_input.attributes_manager.request_attributes
     assert "_resolverClarification" not in attrs
     store = User.snapshot(handler_input)

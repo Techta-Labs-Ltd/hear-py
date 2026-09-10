@@ -70,6 +70,7 @@ from src.controllers.system import (
     UnknownRequestHandler,
     UnsupportedIntentHandler,
 )
+from src.middleware.captured_intent import CapturedIntentInterceptor
 from src.middleware.confirmation import (
     ConfirmationMiddleware,
     SearchConfirmationGateHandler,
@@ -105,6 +106,7 @@ class RouteRegistry:
         LambdaDeadlineInterceptor,
         IdentityInterceptor,
         LoadPersistenceInterceptor,
+        CapturedIntentInterceptor,
         DialogValidationInterceptor,
         ResolverInterceptor,
         ConfirmationMiddleware,
