@@ -262,15 +262,7 @@
           "slots": [
             {
               "name": "topic",
-              "type": "HEAR_TOPIC",
-              "samples": [
-                "{topic}",
-                "play {topic}",
-                "find {topic}",
-                "listen to {topic}",
-                "play content about {topic}",
-                "play content from {topic}"
-              ]
+              "type": "HEAR_TOPIC"
             }
           ],
           "samples": [
@@ -1744,23 +1736,6 @@
       "delegationStrategy": "SKILL_RESPONSE",
       "intents": [
         {
-          "name": "CarrierlessDiscoveryIntent",
-          "delegationStrategy": "SKILL_RESPONSE",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "topic",
-              "type": "HEAR_TOPIC",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.CarrierlessDiscoveryIntent.topic"
-              }
-            }
-          ]
-        },
-        {
           "name": "PlayContentIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1893,15 +1868,6 @@
       ]
     },
     "prompts": [
-      {
-        "id": "Elicit.CarrierlessDiscoveryIntent.topic",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "Please say the name of a talking newspaper, creator, publication, or city you would like to listen to."
-          }
-        ]
-      },
       {
         "id": "Elicit.PlayContentIntent.topic",
         "variations": [
