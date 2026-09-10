@@ -182,7 +182,7 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_TOPIC"
             }
           ],
           "samples": [
@@ -196,7 +196,7 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_CREATOR"
             }
           ],
           "samples": [
@@ -212,7 +212,7 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_ORGANIZATION"
             }
           ],
           "samples": [
@@ -227,7 +227,7 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_ORGANIZATION"
             }
           ],
           "samples": [
@@ -241,7 +241,7 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_LOCATION"
             }
           ],
           "samples": [

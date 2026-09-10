@@ -178,7 +178,7 @@ backend generates fresh CSV files and before importing them into Alexa.
 | `PlayLocalIntent.cityQuery` | `HEAR_LOCATION` |
 | `TownCaptureIntent.townName` | `HEAR_LOCATION` |
 | `SetLocationIntent` | no slot; explicit location-change command only |
-| `SearchLocationIntent.searchQuery` | explicit location-change fallback |
+| `SearchLocationIntent.searchQuery` | `HEAR_LOCATION` |
 | `PlayByOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `SelectOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `PlayPublicationIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
@@ -189,12 +189,12 @@ backend generates fresh CSV files and before importing them into Alexa.
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
 | `CarrierlessDiscoveryIntent.topic` | `HEAR_TOPIC` |
 
-Existing bare source and location intents retain their domain-specific slots.
-`CarrierlessDiscoveryIntent` covers a bare topic or other phrase that Alexa
-does not assign to one of those typed intents. Bare values captured while a
-town or source-name dialog is active are interpreted by that active dialog
-before general discovery. The intent-specific `AMAZON.SearchQuery` fallbacks
-and their carrier phrases remain unchanged.
+Existing bare and carrier-based discovery intents use their domain-specific
+slots. `CarrierlessDiscoveryIntent` covers a bare topic or other phrase that
+Alexa does not assign to a location, organization, publication, or creator
+intent. Bare values captured while a town or source-name dialog is active are
+interpreted by that active dialog before general discovery. A custom-slot
+no-match remains valid and its raw spoken value is sent to the resolver.
 
 Creator-owned publication requests use `PlayByCreatorIntent`, for example
 `play a publication by Jane Smith`. Organization-owned publication requests
@@ -362,14 +362,13 @@ organisation. Add commonly spoken initialisms such as `TNF`, `T. N. F.`, and
 returns the public canonical name after a successful match, while an unmatched
 raw form still goes to the resolver.
 
-If a new value is absent from the generated slot, Alexa may still return it as
-raw text through the custom slot. Alexa can also select the right source intent
-without populating that custom slot. The interaction model therefore has
-intent-specific `AMAZON.SearchQuery` fallbacks for arbitrary content, creator,
-organization, publication, and location phrases. These fallbacks preserve the
-carrier meaning (`play`, `play something by`, `play from`, `play publication from`, or
-`my city is`) and send the complete captured phrase to the same Hear resolver.
-They are not a second catalogue and do not bypass resolution.
+If a new value is absent from the custom slot, Alexa may still return it as raw
+text with `ER_SUCCESS_NO_MATCH`. Alexa can also select the right source intent
+without populating that custom slot. The backend preserves the carrier meaning
+(`play`, `play something by`, `play from`, `play publication from`, or `my city
+is`) and sends the complete captured phrase to the Hear resolver. The slot
+catalogue improves recognition; it is not an allow-list and does not replace
+resolution.
 
 When a free-text fallback produces a resolved primary source entity with an ID
 and confidence at or above the resolver's established source threshold, that
