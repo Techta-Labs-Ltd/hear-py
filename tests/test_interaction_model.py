@@ -119,6 +119,7 @@ def test_location_dialogs_elicit_bare_town_replies():
     dialog_intents = {
         item["name"]: item for item in _model()["interactionModel"]["dialog"]["intents"]
     }
+    assert "SearchContentIntent" not in dialog_intents
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "townName",
         "type": "HEAR_LOCATION",
@@ -127,33 +128,6 @@ def test_location_dialogs_elicit_bare_town_replies():
         "prompts": {"elicitation": "Elicit.TownCaptureIntent.townName"},
     }
     assert "SetLocationIntent" not in dialog_intents
-
-
-def test_generic_discovery_dialog_elicits_the_existing_search_query_slot():
-    model = _model()["interactionModel"]
-    intents = {item["name"]: item for item in model["languageModel"]["intents"]}
-    dialog_intents = {item["name"]: item for item in model["dialog"]["intents"]}
-
-    search_slot = intents["SearchContentIntent"]["slots"][0]
-    assert search_slot["name"] == "searchQuery"
-    assert search_slot["type"] == "AMAZON.SearchQuery"
-    assert set(search_slot["samples"]) == {
-        "{searchQuery}",
-        "play {searchQuery}",
-        "find {searchQuery}",
-        "listen to {searchQuery}",
-        "play content about {searchQuery}",
-        "play content from {searchQuery}",
-    }
-    assert dialog_intents["SearchContentIntent"]["slots"] == [
-        {
-            "name": "searchQuery",
-            "type": "AMAZON.SearchQuery",
-            "confirmationRequired": False,
-            "elicitationRequired": True,
-            "prompts": {"elicitation": "Elicit.SearchContentIntent.searchQuery"},
-        }
-    ]
 
 
 def test_existing_domain_slots_accept_bare_discovery_requests():

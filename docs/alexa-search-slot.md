@@ -126,9 +126,17 @@ Generate this object. Slot values contain only `name.value` and optional
 }
 ```
 
-Replace the four matching objects in `interactionModel.languageModel.types` in
-`en-GB.json` with the generated objects before uploading and building the
-Alexa interaction model.
+Build the uploadable interaction model from the checked-in base model and all
+four generated catalogues before uploading it to Alexa:
+
+```bash
+python scripts/build_alexa_interaction_model.py --output build/en-GB.json
+```
+
+Upload `build/en-GB.json`, not the seed-only `en-GB.json`. The builder replaces
+the four matching objects in `interactionModel.languageModel.types`, writes a
+compact model that stays within Alexa's size limit, and fails rather than
+silently omitting one of the four domain slots.
 
 For manual Alexa Console imports, the repository produces the four backend
 domain files under `alexa-slot-imports/`:
