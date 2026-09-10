@@ -17,6 +17,11 @@ from src.alexa.runtime import AttrDict
             {"sourceKind": "creator"},
         ),
         (
+            "play a publication",
+            "ChooseSourceKindIntent",
+            {"sourceKind": "publication"},
+        ),
+        (
             "play the latest publication",
             "PlayPublicationIntent",
             {"publicationSort": "latest"},

@@ -122,6 +122,9 @@ class CapturedIntentRouter:
             for name in route["slotNames"]:
                 value = str(match.group(name) or "").strip()
                 slot_type = route["slotTypes"].get(name, "")
+                if slot_type.startswith("AMAZON.") and slot_type != "AMAZON.SearchQuery":
+                    valid = False
+                    break
                 type_values = route["typeValues"].get(slot_type)
                 if (
                     type_values is not None
