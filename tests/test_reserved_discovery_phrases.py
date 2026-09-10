@@ -738,7 +738,7 @@ async def test_date_only_discovery_builds_date_filter_without_resolver_text(
             "SelectPublicationSourceIntent",
             "publicationSourceQuery",
             "Dorking Talking Magazine",
-            "play publication from Dorking Talking Magazine",
+            "play Dorking Talking Magazine",
             "publication",
         ),
     ],

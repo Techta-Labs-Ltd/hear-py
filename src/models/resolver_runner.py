@@ -359,6 +359,20 @@ class ResolverWorkflowRunner:
             return
         if await self._resolve_follow_up(handler_input, context, raw, store):
             return
+        carrierless_slot = ResolverWorkflow.CARRIERLESS_SELECTOR_SLOTS.get(alexa_intent)
+        if carrierless_slot and not dialog_type:
+            spoken = AlexaRequest.get_spoken_slot_value(
+                context["slots"].get(carrierless_slot)
+            )
+            if spoken:
+                await self._resolve_default(
+                    handler_input,
+                    "SearchContentIntent",
+                    spoken,
+                    {"searchQuery": {"value": spoken}},
+                    reported_alexa_intent=alexa_intent,
+                )
+                return
         if (
             alexa_intent in {"SetLocationIntent", "TownCaptureIntent"}
             and raw

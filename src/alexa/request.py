@@ -76,6 +76,11 @@ class AlexaRequest:
         return AlexaRequest._non_empty_string(AlexaRequest.read(slot, "value"))
 
     @staticmethod
+    def get_spoken_slot_value(slot) -> str | None:
+        """Return the words Alexa heard without replacing them with a catalogue match."""
+        return AlexaRequest._non_empty_string(AlexaRequest.read(slot, "value"))
+
+    @staticmethod
     def get_resolved_slot_id(slot) -> str | None:
         """Return Alexa's matched entity ID without falling back to spoken text."""
         resolutions = AlexaRequest.read(slot, "resolutions")

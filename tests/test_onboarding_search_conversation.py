@@ -317,7 +317,7 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
                     },
                 }
             },
-            "play from Tynedale Talking Newspaper",
+            "play tyndale",
         ),
         (
             "PlayLocalIntent",
@@ -375,7 +375,7 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
                     },
                 }
             },
-            "play something by Jane Smith",
+            "play jane smyth",
         ),
     ],
 )
@@ -681,6 +681,67 @@ async def test_idle_unresolved_location_slot_still_reaches_resolver(mock_handler
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "general"
     assert nlp["searchPayload"]["filter"] == {"city": "Swindon"}
+
+
+@pytest.mark.asyncio
+async def test_idle_typed_source_match_sends_spoken_words_to_general_resolver(
+    mock_handler_input,
+):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "general",
+                "searchPayload": {"query": "", "filter": {"city": "Liverpool"}},
+                "slots": {"city": "Liverpool", "isLocal": True},
+            }
+        )
+    )
+    container = ApplicationContainer(
+        resolver=resolver,
+        progressive=SimpleNamespace(send=AsyncMock(return_value=True)),
+    )
+    handler_input = _intent_request(
+        mock_handler_input,
+        "SelectOrganizationIntent",
+        {
+            "organizationQuery": {
+                "name": "organizationQuery",
+                "value": "Liverpool",
+                "resolutions": {
+                    "resolutionsPerAuthority": [
+                        {
+                            "status": {"code": "ER_SUCCESS_MATCH"},
+                            "values": [
+                                {
+                                    "value": {
+                                        "name": "Liverpool Talking Newspaper"
+                                    }
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        },
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+
+    await ResolverInterceptor(deps=container).process(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "play Liverpool",
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "general"
+    assert nlp["alexaRawIntent"] == "SelectOrganizationIntent"
+    assert nlp["needsRedirect"] is True
+    assert nlp["searchPayload"]["filter"] == {"city": "Liverpool"}
 
 
 @pytest.mark.asyncio

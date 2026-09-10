@@ -87,6 +87,11 @@ class ResolverWorkflow:
         "publication": "publicationSourceQuery",
         "general": "residualQuery",
     }
+    CARRIERLESS_SELECTOR_SLOTS = {
+        "SelectCreatorIntent": "creatorQuery",
+        "SelectOrganizationIntent": "organizationQuery",
+        "SelectPublicationSourceIntent": "publicationSourceQuery",
+    }
 
     @staticmethod
     def _normalize_ordinal(value: object) -> str:
