@@ -65,10 +65,14 @@ class ResolverWorkflowRunner:
     @staticmethod
     def _capture_location(handler_input, context: dict) -> bool:
         alexa_intent = context["alexa_intent"]
-        if alexa_intent in {
-            "SetLocationIntent",
-            "SearchLocationIntent",
-        } and not context["ambiguity_active"]:
+        if (
+            alexa_intent
+            in {
+                "SetLocationIntent",
+                "SearchLocationIntent",
+            }
+            and not context["ambiguity_active"]
+        ):
             slot_name = "searchQuery" if alexa_intent == "SearchLocationIntent" else "location"
             town = AlexaRequest.get_resolved_slot_value(context["slots"].get(slot_name))
             ResolverWorkflow._set_nlp(
@@ -242,8 +246,7 @@ class ResolverWorkflowRunner:
             else ("organization", "organizationQuery", "PlayByOrganizationIntent")
             if store.get("awaitingOrganizationName") or dialog_type == "organization_name"
             else ("publication", "publicationSourceQuery", "PlayPublicationIntent")
-            if store.get("awaitingPublicationSource")
-            or dialog_type == "publication_source"
+            if store.get("awaitingPublicationSource") or dialog_type == "publication_source"
             else None
         )
         if not follow_up:
@@ -311,9 +314,7 @@ class ResolverWorkflowRunner:
         expected = DiscoveryConstants.ALEXA_TO_NLP.get(alexa_intent, "general")
         if alexa_intent in ResolverWorkflow.SEARCH_INTENTS:
             result = await self._resolver_result(handler_input, raw, alexa_intent)
-            result = ResolverWorkflow.apply_alexa_constraints(
-                result, alexa_intent, intent_slots
-            )
+            result = ResolverWorkflow.apply_alexa_constraints(result, alexa_intent, intent_slots)
         else:
             if alexa_intent not in DiscoveryConstants.ALEXA_TO_NLP:
                 return
@@ -349,6 +350,9 @@ class ResolverWorkflowRunner:
             return
         alexa_intent = context["alexa_intent"]
         raw = ResolverWorkflow._extract_raw_utterance(handler_input, alexa_intent)
+        effective = ResolverWorkflow._extract_effective_discovery_input(
+            handler_input, alexa_intent, raw
+        )
         store = User.snapshot(handler_input)
         dialog_type = (context.get("dialog") or {}).get("type")
         if ConfirmationPolicy.allows_search_replacement(dialog_type, alexa_intent):
@@ -357,13 +361,11 @@ class ResolverWorkflowRunner:
             handler_input, context, raw, store.get("pendingAmbiguity")
         ):
             return
-        if await self._resolve_follow_up(handler_input, context, raw, store):
+        if await self._resolve_follow_up(handler_input, context, effective, store):
             return
         carrierless_slot = ResolverWorkflow.CARRIERLESS_SELECTOR_SLOTS.get(alexa_intent)
         if carrierless_slot and not dialog_type:
-            spoken = AlexaRequest.get_spoken_slot_value(
-                context["slots"].get(carrierless_slot)
-            )
+            spoken = AlexaRequest.get_spoken_slot_value(context["slots"].get(carrierless_slot))
             if spoken:
                 await self._resolve_default(
                     handler_input,
@@ -388,11 +390,11 @@ class ResolverWorkflowRunner:
             return
         if ResolverWorkflowRunner._capture_location(handler_input, context):
             return
-        local = ResolverWorkflow._local_discovery_resolution(alexa_intent, context["slots"], raw)
+        local = ResolverWorkflow._local_discovery_resolution(
+            alexa_intent, context["slots"], effective
+        )
         if local:
-            local = ResolverWorkflow.apply_alexa_constraints(
-                local, alexa_intent, context["slots"]
-            )
+            local = ResolverWorkflow.apply_alexa_constraints(local, alexa_intent, context["slots"])
             ResolverWorkflow._set_nlp(handler_input, local)
             ResolverWorkflow.logger.info(
                 "Hear: discovery request handled locally intent=%s result=%s",
@@ -400,9 +402,9 @@ class ResolverWorkflowRunner:
                 local.get("intent"),
             )
             return
-        if not raw and alexa_intent in ResolverWorkflow.SEARCH_INTENTS:
-            raw = ResolverWorkflow.CANONICAL_ZERO_SLOT_DISCOVERY.get(alexa_intent)
-        await self._resolve_default(handler_input, alexa_intent, raw, context["slots"])
+        if not effective and alexa_intent in ResolverWorkflow.SEARCH_INTENTS:
+            effective = ResolverWorkflow.CANONICAL_ZERO_SLOT_DISCOVERY.get(alexa_intent)
+        await self._resolve_default(handler_input, alexa_intent, effective, context["slots"])
 
     async def apply(self, handler_input) -> None:
         try:

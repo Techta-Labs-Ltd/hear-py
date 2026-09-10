@@ -175,9 +175,7 @@ class ResolverWorkflow:
         if alexa_intent == "PlayLatestContentIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             content_format = AlexaRequest.get_resolved_slot_value(slots.get("format"))
-            return " ".join(
-                value for value in ("play", "latest", topic or content_format) if value
-            )
+            return " ".join(value for value in ("play", "latest", topic or content_format) if value)
         if alexa_intent in DiscoveryConstants.PUBLICATION_INTENTS:
             source = AlexaRequest.get_resolved_slot_value(slots.get("publicationSourceQuery"))
             requested_sort = AlexaRequest.get_resolved_slot_value(slots.get("publicationSort"))
@@ -185,9 +183,7 @@ class ResolverWorkflow:
                 requested_sort = None
             suffix = f"from {source}" if source else ""
             return " ".join(
-                value
-                for value in ("play", requested_sort, "publication", suffix)
-                if value
+                value for value in ("play", requested_sort, "publication", suffix) if value
             )
         if alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS:
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
@@ -248,14 +244,25 @@ class ResolverWorkflow:
         return None
 
     @staticmethod
+    def _extract_effective_discovery_input(
+        handler_input, alexa_intent: str | None, raw: str | None
+    ) -> str | None:
+        if alexa_intent != "CarrierlessDiscoveryIntent":
+            return raw
+        slots = DialogSelection.request_slots(handler_input)
+        for slot_name in ("discoveryQuery", "topic"):
+            selection = AlexaRequest.get_discovery_slot_selection(slots.get(slot_name))
+            if selection["effective"]:
+                return selection["effective"]
+        return raw
+
+    @staticmethod
     def _apply_date_constraint(result: dict, intent_slots: dict) -> dict:
         date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
         date_range = AlexaDateRange.parse(date_query, settings.HEAR_RESOLVER_TIMEZONE)
         if not date_range:
             return result
-        filters = {
-            key: date_range[key] for key in ("publishedFrom", "publishedTo")
-        }
+        filters = {key: date_range[key] for key in ("publishedFrom", "publishedTo")}
         constrained = dict(result)
         payload = dict(constrained.get("searchPayload") or {})
         payload["filter"] = {**dict(payload.get("filter") or {}), **filters}
@@ -299,9 +306,7 @@ class ResolverWorkflow:
         return list(dict.fromkeys(names))
 
     @staticmethod
-    def _has_confident_primary_source(
-        result: dict, expected_types: tuple[str, ...]
-    ) -> bool:
+    def _has_confident_primary_source(result: dict, expected_types: tuple[str, ...]) -> bool:
         if str(result.get("status") or "") != "resolved":
             return False
         resolved_type = str(result.get("intent") or "")
@@ -521,9 +526,7 @@ class ResolverWorkflow:
         source_kind = SearchFilterUtils.normalize_discovery_phrase(
             AlexaRequest.get_resolved_slot_value(intent_slots.get("sourceKind"))
         )
-        publication_sort = AlexaRequest.get_resolved_slot_value(
-            intent_slots.get("publicationSort")
-        )
+        publication_sort = AlexaRequest.get_resolved_slot_value(intent_slots.get("publicationSort"))
         publication_source = AlexaRequest.get_resolved_slot_value(
             intent_slots.get("publicationSourceQuery")
         )

@@ -81,6 +81,43 @@ class AlexaRequest:
         return AlexaRequest._non_empty_string(AlexaRequest.read(slot, "value"))
 
     @staticmethod
+    def get_discovery_slot_selection(slot) -> dict:
+        """Select one unambiguous canonical discovery match or the captured text."""
+        spoken = AlexaRequest.get_spoken_slot_value(slot)
+        resolutions = AlexaRequest.read(slot, "resolutions")
+        authorities = (
+            AlexaRequest.read(resolutions, "resolutionsPerAuthority", "resolutions_per_authority")
+            or []
+        )
+        matches: list[str] = []
+        seen: set[str] = set()
+        statuses: list[str] = []
+        for authority in authorities:
+            status = AlexaRequest._non_empty_string(
+                AlexaRequest.read(AlexaRequest.read(authority, "status"), "code")
+            )
+            if status:
+                statuses.append(status)
+            if status != "ER_SUCCESS_MATCH":
+                continue
+            for item in AlexaRequest.read(authority, "values") or []:
+                canonical = AlexaRequest._non_empty_string(
+                    AlexaRequest.read(AlexaRequest.read(item, "value"), "name")
+                )
+                if canonical and canonical.casefold() not in seen:
+                    seen.add(canonical.casefold())
+                    matches.append(canonical)
+        canonical = matches[0] if len(matches) == 1 else None
+        return {
+            "spoken": spoken,
+            "canonical": canonical,
+            "effective": canonical or spoken,
+            "matches": matches,
+            "statuses": statuses,
+            "ambiguous": len(matches) > 1,
+        }
+
+    @staticmethod
     def get_resolved_slot_id(slot) -> str | None:
         """Return Alexa's matched entity ID without falling back to spoken text."""
         resolutions = AlexaRequest.read(slot, "resolutions")

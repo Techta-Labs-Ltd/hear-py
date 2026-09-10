@@ -29,31 +29,41 @@ class TestAlexaInteractionModelBuild:
         assert len(types["HEAR_DISCOVERY"]) >= 10_000
         locations = {item["name"]["value"] for item in types["HEAR_LOCATION"]}
         assert {"Liverpool", "Sevenoaks", "Dorking"}.issubset(locations)
-        discovery = {
-            item["name"]["value"] for item in types["HEAR_DISCOVERY"]
-        }
+        discovery = {item["name"]["value"] for item in types["HEAR_DISCOVERY"]}
         assert {
             "Liverpool",
             "Sevenoaks",
             "Talking News Federation",
             "Premier League",
         }.issubset(discovery)
-        assert all("synonyms" not in item["name"] for item in types["HEAR_DISCOVERY"])
+        discovery_by_name = {
+            item["name"]["value"]: item["name"] for item in types["HEAR_DISCOVERY"]
+        }
+        assert "premiership" in discovery_by_name["Premier League"]["synonyms"]
+        assert {
+            "talk en news federation",
+            "TNF",
+            "T. N. F.",
+            "tee en eff",
+        }.issubset(discovery_by_name["Talking News Federation"]["synonyms"])
+        assert "swidon" not in discovery_by_name["Swindon"].get("synonyms", [])
+        assert "Andover" not in discovery_by_name["Andover Talking Newspaper"].get("synonyms", [])
+        topics_by_name = {
+            item["name"]["value"]: item["name"] for item in types["HEAR_TOPIC"]
+        }
+        assert "sports" not in {
+            synonym.casefold()
+            for synonym in topics_by_name["Sport"].get("synonyms", [])
+        }
+        assert "Sports" in topics_by_name
 
     def test_deployment_model_keeps_search_query_carrier_based(self):
         interaction_model = self._model()["interactionModel"]
-        intents = {
-            item["name"]: item
-            for item in interaction_model["languageModel"]["intents"]
-        }
-        dialog_intents = {
-            item["name"]: item for item in interaction_model["dialog"]["intents"]
-        }
+        intents = {item["name"]: item for item in interaction_model["languageModel"]["intents"]}
+        dialog_intents = {item["name"]: item for item in interaction_model["dialog"]["intents"]}
 
         search = intents["SearchContentIntent"]
-        assert search["slots"] == [
-            {"name": "searchQuery", "type": "AMAZON.SearchQuery"}
-        ]
+        assert search["slots"] == [{"name": "searchQuery", "type": "AMAZON.SearchQuery"}]
         assert search["samples"] == [
             "play {searchQuery}",
             "find {searchQuery}",

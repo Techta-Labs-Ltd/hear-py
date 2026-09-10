@@ -10,11 +10,21 @@ The Hear backend generates four separate custom Alexa slot types:
 `CarrierlessDiscoveryIntent` keeps its `HEAR_TOPIC` sample and uses a generated
 `HEAR_DISCOVERY` capture slot during the general listening prompt. The build
 step fills that bridge slot with the canonical values already present in the
-four domain catalogues; it does not invent or maintain a fifth vocabulary.
-This gives Alexa Hear-specific recognition context while still allowing a raw
-no-match phrase to reach the resolver. The resolver remains responsible for
-deciding whether a bare reply is a location, organisation, creator, topic,
-tag, publication, or title.
+four domain catalogues. Approved aliases already attached to the same canonical
+value in the base model are retained when the full catalogues replace its seed
+values. The bridge also copies unambiguous organisation, creator and topic
+aliases. Location aliases remain in `HEAR_LOCATION`, whose bare-value
+intent stays active alongside the bridge; copying every location pronunciation
+into both slots would exceed Alexa's interaction-model size limit. An alias
+shared by different canonical entities is deliberately omitted from the bridge
+and left for the resolver to disambiguate. The bridge does not invent or
+maintain a fifth vocabulary. This gives Alexa Hear-specific recognition context
+while still allowing a raw no-match phrase to reach the resolver. A unique,
+usable Alexa match supplies the canonical resolver input while the original
+captured text remains separately available. A no-match, failed resolution,
+ambiguous match, or unusable canonical value sends the captured text instead.
+The resolver remains responsible for deciding whether a bare reply is a
+location, organisation, creator, topic, tag, publication, or title.
 
 The interaction model also contains the small, static `HEAR_SOURCE_KIND` slot.
 It is not generated from catalogue data. Its canonical values are `talking
