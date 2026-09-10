@@ -323,7 +323,8 @@ class ResolverWorkflow:
         if result.get("ambiguities") or result_slots.get("ambiguousReferences"):
             return result
         expected_intent, expected_types = fallback
-        requested = AlexaRequest.get_resolved_slot_value(intent_slots.get("searchQuery"))
+        slot_name = ResolverConstants.RAW_SLOT_PRIORITY[alexa_intent][0]
+        requested = AlexaRequest.get_resolved_slot_value(intent_slots.get(slot_name))
         canonical_names = ResolverWorkflow._resolved_source_names(result)
         if not requested:
             return result

@@ -734,7 +734,7 @@ async def test_explicit_one_turn_location_change_keeps_mutation_route(mock_handl
     handler_input = _intent_request(
         mock_handler_input,
         "SearchLocationIntent",
-        {"searchQuery": {"name": "searchQuery", "value": "Swindon"}},
+        {"locationQuery": {"name": "locationQuery", "value": "Swindon"}},
     )
     handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
@@ -840,7 +840,7 @@ async def test_unknown_city_search_query_reaches_the_location_resolver(mock_hand
     handler_input = _intent_request(
         mock_handler_input,
         "SearchLocationIntent",
-        {"searchQuery": {"name": "searchQuery", "value": "dorking"}},
+        {"locationQuery": {"name": "locationQuery", "value": "dorking"}},
     )
     handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
@@ -1823,8 +1823,8 @@ async def test_unresolved_creator_does_not_play_unrelated_fallback(
             "intent": {
                 "name": "SearchCreatorIntent",
                 "slots": {
-                    "searchQuery": {
-                        "name": "searchQuery",
+                    "creatorQuery": {
+                        "name": "creatorQuery",
                         "value": "Unknown Speaker Collective",
                     }
                 },

@@ -58,6 +58,16 @@ def test_discovery_intents_use_domain_specific_generated_slots():
     assert intents["ChooseSourceKindIntent"]["slots"][0]["type"] == "HEAR_SOURCE_KIND"
 
 
+def test_each_slot_name_references_only_one_slot_type():
+    intents = _model()["interactionModel"]["languageModel"]["intents"]
+    slot_types = {}
+    for intent in intents:
+        for slot in intent.get("slots", []):
+            slot_types.setdefault(slot["name"], set()).add(slot["type"])
+
+    assert {name: types for name, types in slot_types.items() if len(types) > 1} == {}
+
+
 def test_key_conversation_intents_have_the_expected_slot_contracts():
     intents = {
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
@@ -66,11 +76,13 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         "CarrierlessDiscoveryIntent": {"topic": "HEAR_TOPIC"},
         "TownCaptureIntent": {"townName": "HEAR_LOCATION"},
         "SetLocationIntent": {},
-        "SearchContentIntent": {"searchQuery": "HEAR_TOPIC"},
-        "SearchCreatorIntent": {"searchQuery": "HEAR_CREATOR"},
-        "SearchOrganizationIntent": {"searchQuery": "HEAR_ORGANIZATION"},
-        "SearchPublicationIntent": {"searchQuery": "HEAR_ORGANIZATION"},
-        "SearchLocationIntent": {"searchQuery": "HEAR_LOCATION"},
+        "SearchContentIntent": {"topic": "HEAR_TOPIC"},
+        "SearchCreatorIntent": {"creatorQuery": "HEAR_CREATOR"},
+        "SearchOrganizationIntent": {"organizationQuery": "HEAR_ORGANIZATION"},
+        "SearchPublicationIntent": {
+            "publicationSourceQuery": "HEAR_ORGANIZATION"
+        },
+        "SearchLocationIntent": {"locationQuery": "HEAR_LOCATION"},
         "PlayContentIntent": {
             "topic": "HEAR_TOPIC",
             "format": "ContentFormat",
@@ -207,13 +219,13 @@ def test_local_search_keeps_city_search_separate_from_location_mutation():
     assert "play something from {cityQuery}" in local_samples
     assert all("{cityQuery}" not in sample for sample in location_samples)
     assert {
-        "my city is {searchQuery}",
-        "my town is {searchQuery}",
-        "I am in {searchQuery}",
-        "I live in {searchQuery}",
-        "my area is {searchQuery}",
+        "my city is {locationQuery}",
+        "my town is {locationQuery}",
+        "I am in {locationQuery}",
+        "I live in {locationQuery}",
+        "my area is {locationQuery}",
     }.isdisjoint(location_query_samples)
-    assert "change my location to {searchQuery}" in location_query_samples
+    assert "change my location to {locationQuery}" in location_query_samples
 
 
 def test_generic_source_search_is_neutral_and_specialized_routes_are_explicit():
@@ -291,22 +303,33 @@ def test_carrier_search_intents_use_their_domain_slots():
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
-        "SearchContentIntent": ("HEAR_TOPIC", "play {searchQuery}"),
-        "SearchCreatorIntent": ("HEAR_CREATOR", "play content by {searchQuery}"),
-        "SearchOrganizationIntent": ("HEAR_ORGANIZATION", "play from {searchQuery}"),
-        "SearchPublicationIntent": (
-            "HEAR_ORGANIZATION",
-            "play publication from {searchQuery}",
+        "SearchContentIntent": ("topic", "HEAR_TOPIC", "play {topic}"),
+        "SearchCreatorIntent": (
+            "creatorQuery",
+            "HEAR_CREATOR",
+            "play content by {creatorQuery}",
         ),
-        "SearchLocationIntent": ("HEAR_LOCATION", "change my location to {searchQuery}"),
+        "SearchOrganizationIntent": (
+            "organizationQuery",
+            "HEAR_ORGANIZATION",
+            "play from {organizationQuery}",
+        ),
+        "SearchPublicationIntent": (
+            "publicationSourceQuery",
+            "HEAR_ORGANIZATION",
+            "play publication from {publicationSourceQuery}",
+        ),
+        "SearchLocationIntent": (
+            "locationQuery",
+            "HEAR_LOCATION",
+            "change my location to {locationQuery}",
+        ),
     }
-    for intent_name, (slot_type, sample) in expected.items():
+    for intent_name, (slot_name, slot_type, sample) in expected.items():
         slots = intents[intent_name]["slots"]
-        assert [(slot["name"], slot["type"]) for slot in slots] == [
-            ("searchQuery", slot_type)
-        ]
+        assert [(slot["name"], slot["type"]) for slot in slots] == [(slot_name, slot_type)]
         assert sample in intents[intent_name]["samples"]
-        assert all(value.endswith("{searchQuery}") for value in intents[intent_name]["samples"])
+        assert all(value.endswith(f"{{{slot_name}}}") for value in intents[intent_name]["samples"])
 
     assert all(
         slot["type"] != "AMAZON.SearchQuery"

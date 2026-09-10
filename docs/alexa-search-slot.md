@@ -178,7 +178,7 @@ backend generates fresh CSV files and before importing them into Alexa.
 | `PlayLocalIntent.cityQuery` | `HEAR_LOCATION` |
 | `TownCaptureIntent.townName` | `HEAR_LOCATION` |
 | `SetLocationIntent` | no slot; explicit location-change command only |
-| `SearchLocationIntent.searchQuery` | `HEAR_LOCATION` |
+| `SearchLocationIntent.locationQuery` | `HEAR_LOCATION` |
 | `PlayByOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `SelectOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `PlayPublicationIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |

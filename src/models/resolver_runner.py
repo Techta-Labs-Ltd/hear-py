@@ -69,7 +69,7 @@ class ResolverWorkflowRunner:
             "SetLocationIntent",
             "SearchLocationIntent",
         } and not context["ambiguity_active"]:
-            slot_name = "searchQuery" if alexa_intent == "SearchLocationIntent" else "location"
+            slot_name = "locationQuery" if alexa_intent == "SearchLocationIntent" else "location"
             town = AlexaRequest.get_resolved_slot_value(context["slots"].get(slot_name))
             ResolverWorkflow._set_nlp(
                 handler_input,
@@ -368,7 +368,7 @@ class ResolverWorkflowRunner:
                 handler_input,
                 "SearchContentIntent",
                 raw,
-                {"searchQuery": {"value": raw}},
+                {"topic": {"value": raw}},
                 reported_alexa_intent=alexa_intent,
             )
             return
