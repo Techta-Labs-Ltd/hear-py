@@ -92,12 +92,13 @@ def _intent_request(mock_handler_input, intent_name: str, slots: dict | None = N
 
 
 @pytest.mark.asyncio
-async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
+async def test_bare_reply_during_search_confirmation_keeps_pending_resolution(
     monkeypatch, mock_handler_input
 ):
-    from src.controllers.intent_dispatch import IntentDispatchGateHandler
-    from src.middleware.confirmation import ConfirmationMiddleware
-    from src.middleware.dialog_validation import DialogValidationInterceptor
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
 
     _intent_request(
         mock_handler_input,
@@ -105,8 +106,8 @@ async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
         {"townName": {"name": "townName", "value": "seven ox"}},
     )
     old_resolution = {
-        "confirmationLabel": "content in Swindon",
-        "searchPayload": {"query": "", "filter": {"city": "Swindon"}},
+        "confirmationLabel": "content in Dorking",
+        "searchPayload": {"query": "", "filter": {"city": "Dorking"}},
     }
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
@@ -119,67 +120,56 @@ async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
             "expiresAt": 4102444800,
         },
     }
-    resolved = {
-        "version": 1,
-        "status": "resolved",
-        "intent": "search",
-        "confidence": "high",
-        "confirmationLabel": "content in Sevenoaks",
-        "searchPayload": {"query": "", "filter": {"city": "Sevenoaks"}},
-        "slots": {
-            "city": "Sevenoaks",
-            "placeName": "Sevenoaks",
-            "residualQuery": "",
-        },
-    }
-    resolve = AsyncMock(return_value=resolved)
+    resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
 
     DialogValidationInterceptor().process(mock_handler_input)
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    response = DialogValidationGateHandler().handle(mock_handler_input)
 
-    assert resolve.await_args.args[0] == "play seven ox"
-    assert "Did you want me to play content in Sevenoaks?" in response["outputSpeech"]["ssml"]
+    resolve.assert_not_awaited()
+    question = "Did you want me to play content in Dorking? Please say yes or no."
+    assert question in response["outputSpeech"]["ssml"]
+    assert question in response["reprompt"]["outputSpeech"]["ssml"]
     store = User.snapshot(mock_handler_input)
     assert store["awaitingSearchConfirmation"] is True
-    assert store["pendingResolution"]["confirmationLabel"] == "content in Sevenoaks"
+    assert store["pendingResolution"] == old_resolution
+    assert store["activeDialog"]["context"] == old_resolution
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("intent_name", "slot_name", "raw", "resolver_utterance"),
+    ("intent_name", "slot_name", "raw"),
     [
-        ("TownCaptureIntent", "townName", "seven ox", "play seven ox"),
-        ("SelectOrganizationIntent", "organizationQuery", "tnf", "play from tnf"),
-        ("SelectCreatorIntent", "creatorQuery", "David Beard", "play something by David Beard"),
+        ("TownCaptureIntent", "townName", "seven ox"),
+        ("SelectOrganizationIntent", "organizationQuery", "tnf"),
+        ("SelectCreatorIntent", "creatorQuery", "David Beard"),
         (
             "SelectPublicationSourceIntent",
             "publicationSourceQuery",
             "Local Voice",
-            "play publication from Local Voice",
         ),
-        ("CarrierlessDiscoveryIntent", "topic", "Premier League", "Premier League"),
+        ("CarrierlessDiscoveryIntent", "topic", "Premier League"),
         (
             "CarrierlessDiscoveryIntent",
             "discoveryQuery",
             "Orion Meta Glasses",
-            "Orion Meta Glasses",
         ),
-        ("OpenDiscoveryIntent", "searchQuery", "dkken", "dkken"),
+        ("OpenDiscoveryIntent", "searchQuery", "dkken"),
     ],
 )
-async def test_typed_slot_reply_reaches_resolver_during_search_confirmation(
+async def test_typed_slot_reply_cannot_replace_pending_search_confirmation(
     monkeypatch,
     mock_handler_input,
     intent_name,
     slot_name,
     raw,
-    resolver_utterance,
 ):
-    from src.middleware.dialog_validation import DialogValidationInterceptor
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
 
     _intent_request(
         mock_handler_input,
@@ -187,8 +177,8 @@ async def test_typed_slot_reply_reaches_resolver_during_search_confirmation(
         {slot_name: {"name": slot_name, "value": raw}},
     )
     pending = {
-        "confirmationLabel": "content in Swindon",
-        "searchPayload": {"query": "", "filter": {"city": "Swindon"}},
+        "confirmationLabel": "content in Liverpool",
+        "searchPayload": {"query": "", "filter": {"city": "Liverpool"}},
     }
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
@@ -201,27 +191,22 @@ async def test_typed_slot_reply_reaches_resolver_during_search_confirmation(
             "expiresAt": 4102444800,
         },
     }
-    resolve = AsyncMock(
-        return_value={
-            "status": "resolved",
-            "intent": "general",
-            "confidence": "high",
-            "slots": {"residualQuery": raw},
-        }
-    )
+    resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
 
     DialogValidationInterceptor().process(mock_handler_input)
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    response = DialogValidationGateHandler().handle(mock_handler_input)
 
-    resolve.assert_awaited_once_with(
-        resolver_utterance,
-        alexa_user_id="amzn1.ask.account.TEST",
-        timeout_ms=5000,
-    )
+    resolve.assert_not_awaited()
+    question = "Did you want me to play content in Liverpool? Please say yes or no."
+    assert question in response["outputSpeech"]["ssml"]
+    assert question in response["reprompt"]["outputSpeech"]["ssml"]
     store = User.snapshot(mock_handler_input)
-    assert store["awaitingSearchConfirmation"] is False
-    assert store["activeDialog"] is None
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingResolution"] == pending
+    assert store["activeDialog"]["context"] == pending
 
 
 @pytest.mark.asyncio

@@ -88,10 +88,12 @@ def test_full_resolved_search_is_spoken_before_backend_search():
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
     ConfirmationMiddleware().process(handler_input)
     response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
-    assert (
-        "Did you want me to play the latest community services from York Talking News?"
-        in response["outputSpeech"]["ssml"]
+    question = (
+        "Did you want me to play the latest community services from York Talking News? "
+        "Please say yes or no."
     )
+    assert question in response["outputSpeech"]["ssml"]
+    assert question in response["reprompt"]["outputSpeech"]["ssml"]
     store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     pending = store["pendingResolution"]

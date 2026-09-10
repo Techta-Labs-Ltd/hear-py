@@ -129,13 +129,6 @@ class ConfirmationPolicy:
         return bool(nlp.get("ambiguities") or slots.get("ambiguousReferences"))
 
     @staticmethod
-    def allows_search_replacement(dialog_type: str | None, alexa_intent: str | None) -> bool:
-        return bool(
-            dialog_type == "search_confirmation"
-            and alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
-        )
-
-    @staticmethod
     def _has_meaningful_general_request(nlp: dict, raw: str | None) -> bool:
         slots = nlp.get("slots") or {}
         payload = nlp.get("searchPayload") or slots.get("searchPlan") or {}

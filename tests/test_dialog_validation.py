@@ -352,6 +352,7 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     "intent_name",
     [
         "TownCaptureIntent",
+        "OpenDiscoveryIntent",
         "CarrierlessDiscoveryIntent",
         "SelectCreatorIntent",
         "SelectOrganizationIntent",
@@ -359,21 +360,33 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
         "PlayContentIntent",
     ],
 )
-def test_search_confirmation_allows_a_new_discovery_reply(mock_handler_input, intent_name):
+def test_search_confirmation_rejects_discovery_reply_and_repeats_locked_question(
+    mock_handler_input, intent_name
+):
+    pending = {"confirmationLabel": "content in Dorking"}
     User.update(
         mock_handler_input,
         {
             "awaitingSearchConfirmation": True,
-            "pendingResolution": {"confirmationLabel": "Daily Sermons"},
+            "pendingResolution": pending,
             "activeDialog": {
                 "type": "search_confirmation",
-                "context": {"confirmationLabel": "Daily Sermons"},
+                "context": pending,
             },
         },
     )
     _intent(mock_handler_input, intent_name)
     failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
-    assert failure is None
+    question = "Did you want me to play content in Dorking? Please say yes or no."
+    assert failure == {
+        "dialogType": "search_confirmation",
+        "speech": question,
+        "reprompt": question,
+    }
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingResolution"] == pending
+    assert store["activeDialog"]["context"] == pending
 
 
 def test_resume_validation_repeats_publication_title(mock_handler_input):

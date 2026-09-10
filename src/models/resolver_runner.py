@@ -9,7 +9,6 @@ from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.onboarding import OnboardingConstants
 from src.constants.resolver import ResolverConstants
-from src.models.confirmation import ConfirmationPolicy
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.resolver import ResolverUnavailable
 from src.models.resolver_workflow import ResolverWorkflow
@@ -355,8 +354,6 @@ class ResolverWorkflowRunner:
         )
         store = User.snapshot(handler_input)
         dialog_type = (context.get("dialog") or {}).get("type")
-        if ConfirmationPolicy.allows_search_replacement(dialog_type, alexa_intent):
-            DialogStateManager.clear_transient_discovery(handler_input)
         if await self._resolve_ambiguity(
             handler_input, context, raw, store.get("pendingAmbiguity")
         ):
