@@ -389,6 +389,30 @@ def test_search_confirmation_rejects_discovery_reply_and_repeats_locked_question
     assert store["activeDialog"]["context"] == pending
 
 
+def test_search_confirmation_uses_session_state_when_persistence_is_stale(
+    mock_handler_input,
+):
+    pending = {
+        "confirmationLabel": "content in Dorking",
+        "searchPayload": {"query": "", "filter": {"city": "Dorking"}},
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {}
+    mock_handler_input.attributes_manager.get_session_attributes = lambda: {
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": pending,
+    }
+    _intent(mock_handler_input, "PlayContentIntent")
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    question = "Did you want me to play content in Dorking? Please say yes or no."
+    assert failure == {
+        "dialogType": "search_confirmation",
+        "speech": question,
+        "reprompt": question,
+    }
+
+
 def test_resume_validation_repeats_publication_title(mock_handler_input):
     context = {
         "contentId": "track-2",

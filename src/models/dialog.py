@@ -253,7 +253,14 @@ class DialogStateManager:
 
     @staticmethod
     def get_active(handler_input) -> dict | None:
-        return DialogStateManager.active_from_store(User.snapshot(handler_input))
+        active = DialogStateManager.active_from_store(User.snapshot(handler_input))
+        if active:
+            return active
+        session = RequestContext.session(handler_input)
+        pending = session.get("pendingResolution")
+        if session.get("awaitingSearchConfirmation") and isinstance(pending, dict) and pending:
+            return {"type": "search_confirmation", "context": deepcopy(pending)}
+        return None
 
     @staticmethod
     def source_capture_directive(dialog_type: str) -> dict:
