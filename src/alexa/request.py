@@ -105,32 +105,6 @@ class AlexaRequest:
         return AlexaRequest.get_resolved_slot_value(slot)
 
     @staticmethod
-    def get_unmatched_slot_value(handler_input) -> str | None:
-        envelope = getattr(handler_input, "request_envelope", None)
-        request = AlexaRequest.read(envelope, "request")
-        intent = AlexaRequest.read(request, "intent")
-        slots = AlexaRequest.read(intent, "slots") or {}
-        for slot in slots.values():
-            resolutions = AlexaRequest.read(slot, "resolutions")
-            authorities = (
-                AlexaRequest.read(
-                    resolutions,
-                    "resolutionsPerAuthority",
-                    "resolutions_per_authority",
-                )
-                or []
-            )
-            if any(
-                AlexaRequest.read(AlexaRequest.read(authority, "status"), "code")
-                == "ER_SUCCESS_NO_MATCH"
-                for authority in authorities
-            ):
-                value = AlexaRequest._non_empty_string(AlexaRequest.read(slot, "value"))
-                if value:
-                    return value
-        return None
-
-    @staticmethod
     def get_topic_slot(handler_input) -> str:
         return (
             AlexaRequest.get_slot_value(handler_input, "topic")

@@ -69,7 +69,7 @@ class ResolverWorkflowRunner:
             "SetLocationIntent",
             "SearchLocationIntent",
         } and not context["ambiguity_active"]:
-            slot_name = "locationQuery" if alexa_intent == "SearchLocationIntent" else "location"
+            slot_name = "searchQuery" if alexa_intent == "SearchLocationIntent" else "location"
             town = AlexaRequest.get_resolved_slot_value(context["slots"].get(slot_name))
             ResolverWorkflow._set_nlp(
                 handler_input,
@@ -351,24 +351,13 @@ class ResolverWorkflowRunner:
         raw = ResolverWorkflow._extract_raw_utterance(handler_input, alexa_intent)
         store = User.snapshot(handler_input)
         dialog_type = (context.get("dialog") or {}).get("type")
-        unmatched_raw = AlexaRequest.get_unmatched_slot_value(handler_input)
-        discovery_reply = ConfirmationPolicy.allows_discovery_reply(
-            dialog_type, alexa_intent, unmatched_raw
-        )
+        if ConfirmationPolicy.allows_search_replacement(dialog_type, alexa_intent):
+            DialogStateManager.clear_transient_discovery(handler_input)
         if await self._resolve_ambiguity(
             handler_input, context, raw, store.get("pendingAmbiguity")
         ):
             return
         if await self._resolve_follow_up(handler_input, context, raw, store):
-            return
-        if discovery_reply and unmatched_raw and alexa_intent not in ResolverWorkflow.SEARCH_INTENTS:
-            await self._resolve_default(
-                handler_input,
-                "SearchContentIntent",
-                unmatched_raw,
-                {"topic": {"value": unmatched_raw}},
-                reported_alexa_intent=alexa_intent,
-            )
             return
         if (
             alexa_intent in {"SetLocationIntent", "TownCaptureIntent"}
@@ -379,7 +368,7 @@ class ResolverWorkflowRunner:
                 handler_input,
                 "SearchContentIntent",
                 raw,
-                {"topic": {"value": raw}},
+                {"searchQuery": {"value": raw}},
                 reported_alexa_intent=alexa_intent,
             )
             return

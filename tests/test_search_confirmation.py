@@ -504,8 +504,8 @@ def test_search_confirmation_gate_allows_unresolved_reference_handler():
                 "intent": {
                     "name": "SearchCreatorIntent",
                     "slots": {
-                        "creatorQuery": {
-                            "name": "creatorQuery",
+                        "searchQuery": {
+                            "name": "searchQuery",
                             "value": "Unknown Speaker Collective",
                         }
                     },

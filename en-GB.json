@@ -181,80 +181,80 @@
           "name": "SearchContentIntent",
           "slots": [
             {
-              "name": "topic",
-              "type": "HEAR_TOPIC"
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "play {topic}",
-            "find {topic}",
-            "listen to {topic}"
+            "play {searchQuery}",
+            "find {searchQuery}",
+            "listen to {searchQuery}"
           ]
         },
         {
           "name": "SearchCreatorIntent",
           "slots": [
             {
-              "name": "creatorQuery",
-              "type": "HEAR_CREATOR"
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "play content by {creatorQuery}",
-            "play something by {creatorQuery}",
-            "play from creator {creatorQuery}",
-            "find creator {creatorQuery}",
-            "find the creator {creatorQuery}"
+            "play content by {searchQuery}",
+            "play something by {searchQuery}",
+            "play from creator {searchQuery}",
+            "find creator {searchQuery}",
+            "find the creator {searchQuery}"
           ]
         },
         {
           "name": "SearchOrganizationIntent",
           "slots": [
             {
-              "name": "organizationQuery",
-              "type": "HEAR_ORGANIZATION"
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "play from {organizationQuery}",
-            "find organization {organizationQuery}",
-            "find organisation {organizationQuery}",
-            "find talking newspaper {organizationQuery}"
+            "play from {searchQuery}",
+            "find organization {searchQuery}",
+            "find organisation {searchQuery}",
+            "find talking newspaper {searchQuery}"
           ]
         },
         {
           "name": "SearchPublicationIntent",
           "slots": [
             {
-              "name": "publicationSourceQuery",
-              "type": "HEAR_ORGANIZATION"
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "play publication from {publicationSourceQuery}",
-            "play a publication from {publicationSourceQuery}",
-            "find publication from {publicationSourceQuery}"
+            "play publication from {searchQuery}",
+            "play a publication from {searchQuery}",
+            "find publication from {searchQuery}"
           ]
         },
         {
           "name": "SearchLocationIntent",
           "slots": [
             {
-              "name": "locationQuery",
-              "type": "HEAR_LOCATION"
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "set my location to {locationQuery}",
-            "set my town to {locationQuery}",
-            "change my location to {locationQuery}",
-            "update my location to {locationQuery}",
-            "I've moved to {locationQuery}",
-            "I moved to {locationQuery}",
-            "I now live in {locationQuery}",
-            "change my town to {locationQuery}",
-            "change my city to {locationQuery}",
-            "update my town to {locationQuery}"
+            "set my location to {searchQuery}",
+            "set my town to {searchQuery}",
+            "change my location to {searchQuery}",
+            "update my location to {searchQuery}",
+            "I've moved to {searchQuery}",
+            "I moved to {searchQuery}",
+            "I now live in {searchQuery}",
+            "change my town to {searchQuery}",
+            "change my city to {searchQuery}",
+            "update my town to {searchQuery}"
           ]
         },
         {

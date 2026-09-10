@@ -1009,7 +1009,7 @@ async def test_selecting_tracks_starts_playback_without_offering_track_choices(m
         ),
         (
             "SearchContentIntent",
-            {"topic": {"name": "topic", "value": "tracks"}},
+            {"searchQuery": {"name": "searchQuery", "value": "tracks"}},
         ),
         (
             "PlayContentIntent",
@@ -1081,7 +1081,7 @@ async def test_availability_track_choice_survives_alexa_intent_variants(
         ),
         (
             "SearchContentIntent",
-            {"topic": {"name": "topic", "value": "publication"}},
+            {"searchQuery": {"name": "searchQuery", "value": "publication"}},
         ),
     ],
 )

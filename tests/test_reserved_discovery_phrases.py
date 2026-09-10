@@ -800,43 +800,38 @@ async def test_out_of_catalog_source_name_still_reaches_backend_resolver(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("intent_name", "slot_name", "raw_name", "expected_utterance", "resolved_intent"),
+    ("intent_name", "raw_name", "expected_utterance", "resolved_intent"),
     [
         (
             "SearchContentIntent",
-            "topic",
             "Dorking Talking Magazine",
             "play Dorking Talking Magazine",
             "organization",
         ),
         (
             "SearchCreatorIntent",
-            "creatorQuery",
             "Unknown Speaker Collective",
             "play something by Unknown Speaker Collective",
             "creator",
         ),
         (
             "SearchOrganizationIntent",
-            "organizationQuery",
             "Unknown Voice Network",
             "play from Unknown Voice Network",
             "organization",
         ),
         (
             "SearchPublicationIntent",
-            "publicationSourceQuery",
             "Unknown Voice Magazine",
             "play publication from Unknown Voice Magazine",
             "publication",
         ),
     ],
 )
-async def test_domain_slot_preserves_full_name_and_relation(
+async def test_search_query_fallback_preserves_full_name_and_relation(
     monkeypatch,
     mock_handler_input,
     intent_name,
-    slot_name,
     raw_name,
     expected_utterance,
     resolved_intent,
@@ -849,8 +844,8 @@ async def test_domain_slot_preserves_full_name_and_relation(
             "intent": {
                 "name": intent_name,
                 "slots": {
-                    slot_name: {
-                        "name": slot_name,
+                    "searchQuery": {
+                        "name": "searchQuery",
                         "value": raw_name,
                     }
                 },
@@ -887,7 +882,7 @@ async def test_domain_slot_preserves_full_name_and_relation(
 
 
 @pytest.mark.asyncio
-async def test_topic_slot_rejects_different_catalog_source(
+async def test_search_query_fallback_rejects_different_catalog_source(
     monkeypatch, mock_handler_input
 ):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
@@ -898,8 +893,8 @@ async def test_topic_slot_rejects_different_catalog_source(
             "intent": {
                 "name": "SearchContentIntent",
                 "slots": {
-                    "topic": {
-                        "name": "topic",
+                    "searchQuery": {
+                        "name": "searchQuery",
                         "value": "Dorking Talking Magazine",
                     }
                 },
@@ -950,7 +945,7 @@ async def test_topic_slot_rejects_different_catalog_source(
 
 
 @pytest.mark.asyncio
-async def test_topic_slot_rejects_unverified_publication_source(
+async def test_search_query_fallback_rejects_unverified_publication_source(
     monkeypatch, mock_handler_input
 ):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
@@ -961,8 +956,8 @@ async def test_topic_slot_rejects_unverified_publication_source(
             "intent": {
                 "name": "SearchContentIntent",
                 "slots": {
-                    "topic": {
-                        "name": "topic",
+                    "searchQuery": {
+                        "name": "searchQuery",
                         "value": "Dorking Talking Magazine",
                     }
                 },
@@ -1001,19 +996,10 @@ async def test_topic_slot_rejects_unverified_publication_source(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    (
-        "intent_name",
-        "slot_name",
-        "raw_name",
-        "resolved_intent",
-        "name_slot",
-        "id_slot",
-        "canonical",
-    ),
+    ("intent_name", "raw_name", "resolved_intent", "name_slot", "id_slot", "canonical"),
     [
         (
             "SearchOrganizationIntent",
-            "organizationQuery",
             "Tyndale Talking News",
             "organization",
             "organizationName",
@@ -1022,7 +1008,6 @@ async def test_topic_slot_rejects_unverified_publication_source(
         ),
         (
             "SearchCreatorIntent",
-            "creatorQuery",
             "John Smyth",
             "creator",
             "creatorName",
@@ -1031,11 +1016,10 @@ async def test_topic_slot_rejects_unverified_publication_source(
         ),
     ],
 )
-async def test_domain_slot_accepts_close_source_name(
+async def test_search_query_fallback_accepts_close_source_name(
     monkeypatch,
     mock_handler_input,
     intent_name,
-    slot_name,
     raw_name,
     resolved_intent,
     name_slot,
@@ -1049,7 +1033,7 @@ async def test_domain_slot_accepts_close_source_name(
             "locale": "en-GB",
             "intent": {
                 "name": intent_name,
-                "slots": {slot_name: {"name": slot_name, "value": raw_name}},
+                "slots": {"searchQuery": {"name": "searchQuery", "value": raw_name}},
             },
         }
     )
@@ -1077,7 +1061,7 @@ async def test_domain_slot_accepts_close_source_name(
     assert "unresolvedReferences" not in nlp["slots"]
 
 
-def test_domain_slot_accepts_confident_resolver_alias():
+def test_search_query_fallback_accepts_confident_resolver_alias():
     result = {
         "status": "resolved",
         "intent": "organization",
@@ -1102,7 +1086,7 @@ def test_domain_slot_accepts_confident_resolver_alias():
     constrained = ResolverWorkflow.apply_alexa_constraints(
         result,
         "SearchContentIntent",
-        {"topic": {"name": "topic", "value": "tnf"}},
+        {"searchQuery": {"name": "searchQuery", "value": "tnf"}},
     )
 
     assert constrained["intent"] == "organization"
@@ -1111,7 +1095,7 @@ def test_domain_slot_accepts_confident_resolver_alias():
 
 
 @pytest.mark.asyncio
-async def test_creator_slot_preserves_actionable_creator_ambiguity(
+async def test_search_query_fallback_preserves_actionable_creator_ambiguity(
     monkeypatch, mock_handler_input
 ):
     candidates = [
@@ -1141,8 +1125,8 @@ async def test_creator_slot_preserves_actionable_creator_ambiguity(
             "intent": {
                 "name": "SearchCreatorIntent",
                 "slots": {
-                    "creatorQuery": {
-                        "name": "creatorQuery",
+                    "searchQuery": {
+                        "name": "searchQuery",
                         "value": "pendu voice",
                     }
                 },

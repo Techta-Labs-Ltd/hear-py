@@ -49,10 +49,10 @@ class ConfirmationPolicy:
     SLOT_PRIORITY = {
         "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
         "CarrierlessDiscoveryIntent": ("topic",),
-        "SearchContentIntent": ("topic",),
-        "SearchCreatorIntent": ("creatorQuery",),
-        "SearchOrganizationIntent": ("organizationQuery",),
-        "SearchPublicationIntent": ("publicationSourceQuery",),
+        "SearchContentIntent": ("searchQuery",),
+        "SearchCreatorIntent": ("searchQuery",),
+        "SearchOrganizationIntent": ("searchQuery",),
+        "SearchPublicationIntent": ("searchQuery",),
         "PlayByCreatorIntent": (
             "creatorQuery",
             "topic",
@@ -127,26 +127,10 @@ class ConfirmationPolicy:
         return bool(nlp.get("ambiguities") or slots.get("ambiguousReferences"))
 
     @staticmethod
-    def allows_discovery_reply(
-        dialog_type: str | None,
-        alexa_intent: str | None,
-        unmatched_raw: str | None = None,
-    ) -> bool:
+    def allows_search_replacement(dialog_type: str | None, alexa_intent: str | None) -> bool:
         return bool(
             dialog_type == "search_confirmation"
-            and (
-                alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
-                or (
-                    unmatched_raw
-                    and alexa_intent
-                    not in {
-                        "AMAZON.YesIntent",
-                        "AMAZON.NoIntent",
-                        "AMAZON.CancelIntent",
-                        "AMAZON.StopIntent",
-                    }
-                )
-            )
+            and alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
         )
 
     @staticmethod
