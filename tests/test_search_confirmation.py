@@ -291,6 +291,56 @@ async def test_yes_uses_session_confirmation_when_persistent_dialog_state_is_mis
     assert attributes.get_session_attributes() == {}
 
 
+@pytest.mark.parametrize("failed", [False, True])
+def test_confirmed_search_terminal_response_reopens_bare_discovery(failed):
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolution = {
+        "intent": "organization",
+        "searchPayload": {"query": "", "filter": {"organizationIds": ["org-wtn"]}},
+    }
+
+    response = Affirmative(deps=SimpleNamespace())._failed_search_response(
+        handler_input,
+        resolution,
+        {"failed": failed, "results": []},
+        "content from Wakefield Talking Newspaper",
+    )
+
+    assert response["shouldEndSession"] is False
+    assert response["directives"] == [
+        {
+            "type": "Dialog.ElicitSlot",
+            "slotToElicit": "discoveryQuery",
+            "updatedIntent": {
+                "name": "CarrierlessDiscoveryIntent",
+                "confirmationStatus": "NONE",
+                "slots": {
+                    "discoveryQuery": {
+                        "name": "discoveryQuery",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+            },
+        }
+    ]
+
+
 def test_empty_play_request_reports_failed_recognition_and_stays_open():
     envelope = AttrDict(
         {

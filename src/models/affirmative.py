@@ -12,6 +12,7 @@ from src.alexa.entities import AlexaEntities
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -430,11 +431,8 @@ class Affirmative:
                 f"I couldn't reach the Hear catalogue to search for "
                 f"{Speech.escape_ssml_lite(label)}. Please try again shortly."
             )
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(speech))
-                .reprompt(Speech.WELCOME_REPROMPT)
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input, speech, Speech.WELCOME_REPROMPT
             )
         relaxed = self._relaxed_search_response(handler_input, resolution, label)
         if relaxed:
@@ -443,12 +441,7 @@ class Affirmative:
             f"I couldn't find anything for {Speech.escape_ssml_lite(label)} right now. "
             "What would you like to try instead?"
         )
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(speech))
-            .reprompt(Speech.WELCOME_REPROMPT)
-            .set_should_end_session(False)
-            .response
-        )
+        return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
 
     def _missing_resolution_response(self, handler_input):
         self._deps.user.update(
