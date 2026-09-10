@@ -222,7 +222,11 @@ class DialogValidationPolicy:
         elif (
             dialog_type in DialogValidationPolicy._BINARY_DIALOGS
             and intent_name not in DialogValidationPolicy._BINARY_INTENTS
-            and not ConfirmationPolicy.allows_search_replacement(dialog_type, intent_name)
+            and not ConfirmationPolicy.allows_discovery_reply(
+                dialog_type,
+                intent_name,
+                AlexaRequest.get_unmatched_slot_value(handler_input),
+            )
         ):
             speech, reprompt = DialogValidationPolicy._binary_prompt(active)
         elif (

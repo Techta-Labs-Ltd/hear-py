@@ -127,10 +127,26 @@ class ConfirmationPolicy:
         return bool(nlp.get("ambiguities") or slots.get("ambiguousReferences"))
 
     @staticmethod
-    def allows_search_replacement(dialog_type: str | None, alexa_intent: str | None) -> bool:
+    def allows_discovery_reply(
+        dialog_type: str | None,
+        alexa_intent: str | None,
+        unmatched_raw: str | None = None,
+    ) -> bool:
         return bool(
             dialog_type == "search_confirmation"
-            and alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
+            and (
+                alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
+                or (
+                    unmatched_raw
+                    and alexa_intent
+                    not in {
+                        "AMAZON.YesIntent",
+                        "AMAZON.NoIntent",
+                        "AMAZON.CancelIntent",
+                        "AMAZON.StopIntent",
+                    }
+                )
+            )
         )
 
     @staticmethod

@@ -149,6 +149,81 @@ async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
 
 
 @pytest.mark.asyncio
+async def test_unmatched_bare_slot_reaches_resolver_without_clearing_confirmation(
+    monkeypatch, mock_handler_input
+):
+    from src.controllers.intent_dispatch import IntentDispatchGateHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    _intent_request(
+        mock_handler_input,
+        "FeedbackResponseIntent",
+        {
+            "feedback": {
+                "name": "feedback",
+                "value": "7 ox",
+                "resolutions": {
+                    "resolutionsPerAuthority": [
+                        {"status": {"code": "ER_SUCCESS_NO_MATCH"}}
+                    ]
+                },
+            }
+        },
+    )
+    old_resolution = {
+        "confirmationLabel": "content in Swindon",
+        "searchPayload": {"query": "", "filter": {"city": "Swindon"}},
+    }
+    old_dialog = {
+        "type": "search_confirmation",
+        "context": old_resolution,
+        "expiresAt": 4102444800,
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": old_resolution,
+        "activeDialog": old_dialog,
+    }
+
+    async def resolve_utterance(*args, **kwargs):
+        current = User.snapshot(mock_handler_input)
+        assert current["awaitingSearchConfirmation"] is True
+        assert current["pendingResolution"] == old_resolution
+        assert current["activeDialog"] == old_dialog
+        return {
+            "version": 1,
+            "status": "resolved",
+            "intent": "search",
+            "confidence": "high",
+            "confirmationLabel": "content in Sevenoaks",
+            "searchPayload": {"query": "", "filter": {"city": "Sevenoaks"}},
+            "slots": {
+                "city": "Sevenoaks",
+                "placeName": "Sevenoaks",
+                "residualQuery": "",
+            },
+        }
+
+    resolve = AsyncMock(side_effect=resolve_utterance)
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    DialogValidationInterceptor().process(mock_handler_input)
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+
+    assert resolve.await_args.args[0] == "play 7 ox"
+    assert "Did you want me to play content in Sevenoaks?" in response["outputSpeech"]["ssml"]
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingResolution"]["confirmationLabel"] == "content in Sevenoaks"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("intent_name", "slot_name", "raw", "resolver_utterance"),
     [
@@ -213,8 +288,9 @@ async def test_typed_slot_reply_reaches_resolver_during_search_confirmation(
         timeout_ms=5000,
     )
     store = User.snapshot(mock_handler_input)
-    assert store["awaitingSearchConfirmation"] is False
-    assert store["activeDialog"] is None
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingResolution"] == pending
+    assert store["activeDialog"]["type"] == "search_confirmation"
 
 
 @pytest.mark.asyncio
