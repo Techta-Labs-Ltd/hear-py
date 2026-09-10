@@ -127,10 +127,26 @@ class ConfirmationPolicy:
         return bool(nlp.get("ambiguities") or slots.get("ambiguousReferences"))
 
     @staticmethod
-    def allows_search_replacement(dialog_type: str | None, alexa_intent: str | None) -> bool:
+    def allows_search_replacement(
+        dialog_type: str | None,
+        alexa_intent: str | None,
+        raw: str | None = None,
+    ) -> bool:
         return bool(
             dialog_type == "search_confirmation"
-            and alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
+            and (
+                alexa_intent in ConfirmationPolicy.ALEXA_INTENTS
+                or (
+                    raw
+                    and alexa_intent
+                    not in {
+                        "AMAZON.YesIntent",
+                        "AMAZON.NoIntent",
+                        "AMAZON.CancelIntent",
+                        "AMAZON.StopIntent",
+                    }
+                )
+            )
         )
 
     @staticmethod
@@ -300,11 +316,24 @@ class ConfirmationPolicy:
         priority = ConfirmationPolicy.SLOT_PRIORITY.get(
             intent, ConfirmationPolicy.DEFAULT_SLOT_PRIORITY
         )
-        return next(
+        prioritized = next(
             (
                 value.strip()
                 for name in priority
                 if (value := AlexaRequest.get_slot_value(handler_input, name)) and value.strip()
+            ),
+            None,
+        )
+        if prioritized:
+            return prioritized
+        request = AlexaRequest.read(handler_input.request_envelope, "request")
+        request_intent = AlexaRequest.read(request, "intent")
+        slots = AlexaRequest.read(request_intent, "slots") or {}
+        return next(
+            (
+                value.strip()
+                for slot in slots.values()
+                if (value := AlexaRequest.get_resolved_slot_value(slot)) and value.strip()
             ),
             None,
         )

@@ -351,13 +351,25 @@ class ResolverWorkflowRunner:
         raw = ResolverWorkflow._extract_raw_utterance(handler_input, alexa_intent)
         store = User.snapshot(handler_input)
         dialog_type = (context.get("dialog") or {}).get("type")
-        if ConfirmationPolicy.allows_search_replacement(dialog_type, alexa_intent):
+        search_replacement = ConfirmationPolicy.allows_search_replacement(
+            dialog_type, alexa_intent, raw
+        )
+        if search_replacement:
             DialogStateManager.clear_transient_discovery(handler_input)
         if await self._resolve_ambiguity(
             handler_input, context, raw, store.get("pendingAmbiguity")
         ):
             return
         if await self._resolve_follow_up(handler_input, context, raw, store):
+            return
+        if search_replacement and raw and alexa_intent not in ResolverWorkflow.SEARCH_INTENTS:
+            await self._resolve_default(
+                handler_input,
+                "SearchContentIntent",
+                raw,
+                {"topic": {"value": raw}},
+                reported_alexa_intent=alexa_intent,
+            )
             return
         if (
             alexa_intent in {"SetLocationIntent", "TownCaptureIntent"}
