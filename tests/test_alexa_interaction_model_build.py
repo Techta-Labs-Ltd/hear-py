@@ -73,6 +73,16 @@ class TestAlexaInteractionModelBuild:
         assert dialog_intents["CarrierlessDiscoveryIntent"]["slots"][0]["type"] == (
             "HEAR_DISCOVERY"
         )
+        assert intents["OpenDiscoveryIntent"]["slots"] == [
+            {
+                "name": "searchQuery",
+                "type": "AMAZON.SearchQuery",
+                "samples": ["{searchQuery}"],
+            }
+        ]
+        assert dialog_intents["OpenDiscoveryIntent"]["slots"][0]["type"] == (
+            "AMAZON.SearchQuery"
+        )
 
     def test_compact_deployment_model_fits_alexa_limit(self, tmp_path):
         output = tmp_path / "en-GB.json"

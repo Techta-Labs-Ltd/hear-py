@@ -40,6 +40,7 @@ class DialogConstants:
     )
     DEFERRED_DISCOVERY_INTENTS = frozenset(
         {
+            "OpenDiscoveryIntent",
             "PlayContentIntent",
             "PlayLocalIntent",
             "PlayRecommendationIntent",

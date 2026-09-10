@@ -258,6 +258,21 @@
           ]
         },
         {
+          "name": "OpenDiscoveryIntent",
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery",
+              "samples": [
+                "{searchQuery}"
+              ]
+            }
+          ],
+          "samples": [
+            "search the Hear catalogue for {searchQuery}"
+          ]
+        },
+        {
           "name": "CarrierlessDiscoveryIntent",
           "slots": [
             {
@@ -1768,6 +1783,23 @@
       "delegationStrategy": "SKILL_RESPONSE",
       "intents": [
         {
+          "name": "OpenDiscoveryIntent",
+          "delegationStrategy": "SKILL_RESPONSE",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.OpenDiscoveryIntent.searchQuery"
+              }
+            }
+          ]
+        },
+        {
           "name": "CarrierlessDiscoveryIntent",
           "delegationStrategy": "SKILL_RESPONSE",
           "confirmationRequired": false,
@@ -1917,6 +1949,15 @@
       ]
     },
     "prompts": [
+      {
+        "id": "Elicit.OpenDiscoveryIntent.searchQuery",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Please say the name of a talking newspaper, creator, publication, or city you would like to listen to."
+          }
+        ]
+      },
       {
         "id": "Elicit.CarrierlessDiscoveryIntent.discoveryQuery",
         "variations": [

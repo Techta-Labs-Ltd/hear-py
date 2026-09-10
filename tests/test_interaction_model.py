@@ -63,6 +63,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
+        "OpenDiscoveryIntent": {"searchQuery": "AMAZON.SearchQuery"},
         "CarrierlessDiscoveryIntent": {
             "topic": "HEAR_TOPIC",
             "discoveryQuery": "HEAR_DISCOVERY",
@@ -157,6 +158,26 @@ def test_generic_discovery_dialog_uses_the_combined_hear_slot():
             "prompts": {
                 "elicitation": "Elicit.CarrierlessDiscoveryIntent.discoveryQuery"
             },
+        }
+    ]
+    assert intents["OpenDiscoveryIntent"] == {
+        "name": "OpenDiscoveryIntent",
+        "slots": [
+            {
+                "name": "searchQuery",
+                "type": "AMAZON.SearchQuery",
+                "samples": ["{searchQuery}"],
+            }
+        ],
+        "samples": ["search the Hear catalogue for {searchQuery}"],
+    }
+    assert dialog_intents["OpenDiscoveryIntent"]["slots"] == [
+        {
+            "name": "searchQuery",
+            "type": "AMAZON.SearchQuery",
+            "confirmationRequired": False,
+            "elicitationRequired": True,
+            "prompts": {"elicitation": "Elicit.OpenDiscoveryIntent.searchQuery"},
         }
     ]
 

@@ -41,16 +41,16 @@ class TestDiscoveryPromptCapture:
         assert response["shouldEndSession"] is False
         assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
 
-    def test_capture_directive_uses_the_combined_hear_slot(self):
+    def test_capture_directive_uses_the_open_query_slot(self):
         assert AlexaResponse.discovery_capture_directive() == {
             "type": "Dialog.ElicitSlot",
-            "slotToElicit": "discoveryQuery",
+            "slotToElicit": "searchQuery",
             "updatedIntent": {
-                "name": "CarrierlessDiscoveryIntent",
+                "name": "OpenDiscoveryIntent",
                 "confirmationStatus": "NONE",
                 "slots": {
-                    "discoveryQuery": {
-                        "name": "discoveryQuery",
+                    "searchQuery": {
+                        "name": "searchQuery",
                         "confirmationStatus": "NONE",
                     }
                 },

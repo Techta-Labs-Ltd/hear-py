@@ -168,6 +168,7 @@ async def test_bare_reply_during_search_confirmation_returns_to_the_resolver(
             "Orion Meta Glasses",
             "Orion Meta Glasses",
         ),
+        ("OpenDiscoveryIntent", "searchQuery", "dkken", "dkken"),
     ],
 )
 async def test_typed_slot_reply_reaches_resolver_during_search_confirmation(

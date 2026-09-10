@@ -7,12 +7,12 @@ from src.alexa.ssml import Ssml
 class AlexaResponse:
     @staticmethod
     def discovery_capture_directive() -> dict:
-        slot_name = "discoveryQuery"
+        slot_name = "searchQuery"
         return {
             "type": "Dialog.ElicitSlot",
             "slotToElicit": slot_name,
             "updatedIntent": {
-                "name": "CarrierlessDiscoveryIntent",
+                "name": "OpenDiscoveryIntent",
                 "confirmationStatus": "NONE",
                 "slots": {
                     slot_name: {

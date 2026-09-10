@@ -25,6 +25,7 @@ class ResolverConstants:
     }
     RAW_SLOT_PRIORITY = {
         "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
+        "OpenDiscoveryIntent": ("searchQuery",),
         "CarrierlessDiscoveryIntent": ("discoveryQuery", "topic"),
         "TownCaptureIntent": ("townName", "selection"),
         "SetLocationIntent": ("location", "townName", "selection"),

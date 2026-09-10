@@ -326,13 +326,13 @@ def test_confirmed_search_terminal_response_reopens_bare_discovery(failed):
     assert response["directives"] == [
         {
             "type": "Dialog.ElicitSlot",
-            "slotToElicit": "discoveryQuery",
+            "slotToElicit": "searchQuery",
             "updatedIntent": {
-                "name": "CarrierlessDiscoveryIntent",
+                "name": "OpenDiscoveryIntent",
                 "confirmationStatus": "NONE",
                 "slots": {
-                    "discoveryQuery": {
-                        "name": "discoveryQuery",
+                    "searchQuery": {
+                        "name": "searchQuery",
                         "confirmationStatus": "NONE",
                     }
                 },
