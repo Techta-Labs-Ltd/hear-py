@@ -238,6 +238,11 @@ class DialogSelection:
 class DialogStateManager:
     __slots__ = ()
 
+    SEARCH_CONFIRMATION_SESSION_FIELDS = (
+        "awaitingSearchConfirmation",
+        "pendingResolution",
+    )
+
     @staticmethod
     def _now() -> int:
         return int(time.time())
@@ -291,7 +296,24 @@ class DialogStateManager:
         if legacy_flag:
             updates[legacy_flag] = True
         updates.update({"activeDialog": active, "_requiresReliableSave": True})
-        return User.update(handler_input, updates)
+        store = User.update(handler_input, updates)
+        if dialog_type == "search_confirmation":
+            session = dict(RequestContext.session(handler_input) or {})
+            session.update(
+                {
+                    "awaitingSearchConfirmation": True,
+                    "pendingResolution": deepcopy(context or {}),
+                }
+            )
+            RequestContext.replace_session(handler_input, session)
+        return store
+
+    @staticmethod
+    def _clear_search_confirmation_session(handler_input) -> None:
+        session = dict(RequestContext.session(handler_input) or {})
+        for field in DialogStateManager.SEARCH_CONFIRMATION_SESSION_FIELDS:
+            session.pop(field, None)
+        RequestContext.replace_session(handler_input, session)
 
     @staticmethod
     def clear(handler_input, *dialog_types: str) -> dict:
@@ -303,11 +325,16 @@ class DialogStateManager:
             else DialogStateManager.active_from_store(store)
         )
         if dialog_types and (not active or active.get("type") not in dialog_types):
+            if "search_confirmation" in dialog_types:
+                DialogStateManager._clear_search_confirmation_session(handler_input)
             return store
         updates = {"activeDialog": None}
         if active and active.get("type") in DialogConstants.DIALOG_LEGACY_FLAGS:
             updates[DialogConstants.DIALOG_LEGACY_FLAGS[active["type"]]] = False
-        return User.update(handler_input, updates)
+        updated = User.update(handler_input, updates)
+        if active and active.get("type") == "search_confirmation":
+            DialogStateManager._clear_search_confirmation_session(handler_input)
+        return updated
 
     @staticmethod
     def clear_transient_discovery(handler_input) -> dict:
@@ -336,7 +363,9 @@ class DialogStateManager:
             )
         ):
             updates["activeDialog"] = None
-        return User.update(handler_input, updates)
+        updated = User.update(handler_input, updates)
+        DialogStateManager._clear_search_confirmation_session(handler_input)
+        return updated
 
     @staticmethod
     def dismiss_ambiguity(handler_input) -> dict:

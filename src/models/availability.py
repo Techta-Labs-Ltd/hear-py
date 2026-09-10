@@ -186,10 +186,8 @@ class Availability:
                 return None
             await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
             return await self._begin_source(
-                handler_input,
-                source,
-                payload,
-                availability_filter,
+                handler_input, source, payload, availability_filter,
+                continue_with_search_on_failure=True,
             )
         if scope == AvailabilityConstants.LOCATION_KIND and (
             resolution.get("intent") == "local" or AvailabilityData.has_location_payload(payload)
@@ -214,11 +212,9 @@ class Availability:
         return {key: source.get("id")}
 
     async def _begin_source(
-        self,
-        handler_input,
-        source: dict,
-        base_payload: dict,
-        availability_filter: dict | None = None,
+        self, handler_input, source: dict, base_payload: dict,
+        availability_filter: dict | None = None, *,
+        continue_with_search_on_failure: bool = False,
     ):
         requested_filter = availability_filter or self._source_availability_filter(source)
         result = await self._availability(
@@ -227,6 +223,9 @@ class Availability:
             0,
         )
         if result.get("failed"):
+            if continue_with_search_on_failure:
+                self.logger.warning("Hear: source availability failed; using catalogue search")
+                return None
             return self._terminal_response(
                 handler_input,
                 failed=True,

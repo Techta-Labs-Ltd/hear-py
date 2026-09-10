@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
@@ -8,6 +14,7 @@ from src.middleware.confirmation import (
     ConfirmationMiddleware,
     SearchConfirmationGateHandler,
 )
+from src.models.affirmative import Affirmative
 from src.models.availability_data import AvailabilityData
 from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolutionBuilder
@@ -236,6 +243,52 @@ def test_play_york_tn_still_requires_confirmation():
     store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     assert store["activeDialog"]["type"] == "search_confirmation"
+    session = handler_input.attributes_manager.get_session_attributes()
+    assert session["awaitingSearchConfirmation"] is True
+    assert session["pendingResolution"] == store["pendingResolution"]
+
+
+@pytest.mark.asyncio
+async def test_yes_uses_session_confirmation_when_persistent_dialog_state_is_missing():
+    resolution = {
+        "requestId": "resolution-session-1",
+        "intent": "organization",
+        "confirmationLabel": "content from Wakefield Talking Newspaper",
+        "searchPayload": {"query": "", "filter": {"organizationIds": ["org-wtn"]}},
+        "expiresAt": int(time.time()) + 300,
+    }
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "session": {
+                "attributes": {
+                    "awaitingSearchConfirmation": True,
+                    "pendingResolution": resolution,
+                }
+            },
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    expected = {"outputSpeech": {"ssml": "played"}}
+    availability = SimpleNamespace(handle_resolution=AsyncMock(return_value=expected))
+    deps = SimpleNamespace(user=User(), availability=availability)
+
+    response = await Affirmative(deps=deps).execute(handler_input)
+
+    assert response == expected
+    availability.handle_resolution.assert_awaited_once()
+    assert attributes.get_session_attributes() == {}
 
 
 def test_empty_play_request_reports_failed_recognition_and_stays_open():

@@ -515,6 +515,38 @@ async def test_failed_availability_stops_without_search(mock_handler_input):
     assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
 
 
+@pytest.mark.asyncio
+async def test_confirmed_source_continues_to_catalogue_search_when_availability_fails(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    deps = AvailabilityTestSupport.dependencies({"failed": True})
+    payload = {"query": "", "filter": {"organizationIds": ["org-1"]}}
+    resolution = {
+        "intent": "organization",
+        "confirmationLabel": "content from Wakefield Talking Newspaper",
+        "searchPayload": payload,
+        "resolvedEntities": [
+            {
+                "type": "organization",
+                "id": "org-1",
+                "canonicalValue": "Wakefield Talking Newspaper",
+            }
+        ],
+    }
+
+    response = await Availability(deps=deps).handle_resolution(
+        handler_input,
+        resolution,
+        payload,
+        "content from Wakefield Talking Newspaper",
+    )
+
+    assert response is None
+    deps.heara.availability.assert_awaited_once()
+    deps.heara.search.assert_not_awaited()
+
+
 def test_source_candidates_keep_same_name_in_distinct_domains():
     candidates = AvailabilityData.source_candidates(
         {
