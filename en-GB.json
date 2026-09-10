@@ -182,7 +182,15 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "AMAZON.SearchQuery",
+              "samples": [
+                "{searchQuery}",
+                "play {searchQuery}",
+                "find {searchQuery}",
+                "listen to {searchQuery}",
+                "play content about {searchQuery}",
+                "play content from {searchQuery}"
+              ]
             }
           ],
           "samples": [
@@ -1736,6 +1744,23 @@
       "delegationStrategy": "SKILL_RESPONSE",
       "intents": [
         {
+          "name": "SearchContentIntent",
+          "delegationStrategy": "SKILL_RESPONSE",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "searchQuery",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.SearchContentIntent.searchQuery"
+              }
+            }
+          ]
+        },
+        {
           "name": "PlayContentIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1868,6 +1893,15 @@
       ]
     },
     "prompts": [
+      {
+        "id": "Elicit.SearchContentIntent.searchQuery",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Please say the name of a talking newspaper, creator, publication, or city you would like to listen to."
+          }
+        ]
+      },
       {
         "id": "Elicit.PlayContentIntent.topic",
         "variations": [
