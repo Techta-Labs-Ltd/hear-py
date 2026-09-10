@@ -130,6 +130,29 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert "SetLocationIntent" not in dialog_intents
 
 
+def test_carrierless_discovery_dialog_elicits_the_topic_slot():
+    dialog_intents = {
+        item["name"]: item for item in _model()["interactionModel"]["dialog"]["intents"]
+    }
+    assert dialog_intents["CarrierlessDiscoveryIntent"] == {
+        "name": "CarrierlessDiscoveryIntent",
+        "delegationStrategy": "SKILL_RESPONSE",
+        "confirmationRequired": False,
+        "prompts": {},
+        "slots": [
+            {
+                "name": "topic",
+                "type": "HEAR_TOPIC",
+                "confirmationRequired": False,
+                "elicitationRequired": True,
+                "prompts": {
+                    "elicitation": "Elicit.CarrierlessDiscoveryIntent.topic"
+                },
+            }
+        ],
+    }
+
+
 def test_existing_domain_slots_accept_bare_discovery_requests():
     model = _model()["interactionModel"]["languageModel"]
     intents = {item["name"]: item for item in model["intents"]}
@@ -456,9 +479,17 @@ def test_carrierless_discovery_reuses_existing_domain_slots():
     intents = {
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
-    assert intents["CarrierlessDiscoveryIntent"]["slots"] == [
-        {"name": "topic", "type": "HEAR_TOPIC"}
-    ]
+    carrierless_slot = intents["CarrierlessDiscoveryIntent"]["slots"][0]
+    assert carrierless_slot["name"] == "topic"
+    assert carrierless_slot["type"] == "HEAR_TOPIC"
+    assert set(carrierless_slot["samples"]) == {
+        "{topic}",
+        "play {topic}",
+        "find {topic}",
+        "listen to {topic}",
+        "play content about {topic}",
+        "play content from {topic}",
+    }
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     for intent_name, bare_sample in {
         "TownCaptureIntent": "{townName}",
