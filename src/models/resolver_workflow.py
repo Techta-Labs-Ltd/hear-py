@@ -159,6 +159,10 @@ class ResolverWorkflow:
         slots = DialogSelection.request_slots(handler_input)
         if not slots:
             return None
+        if alexa_intent == "CarrierlessDiscoveryIntent":
+            spoken = AlexaRequest.get_spoken_slot_value(slots.get("discoveryQuery"))
+            if spoken:
+                return spoken
         if User.snapshot(handler_input).get("onboardingStage") == "ask_town":
             return next(
                 (

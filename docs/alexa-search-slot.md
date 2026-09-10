@@ -7,13 +7,14 @@ The Hear backend generates four separate custom Alexa slot types:
 - `HEAR_CREATOR`
 - `HEAR_TOPIC`
 
-`CarrierlessDiscoveryIntent` reuses `HEAR_TOPIC` for its sole `{topic}` sample.
-Custom slot values are recognition training data rather than an allow-list, so
-Alexa can return a raw no-match phrase for the resolver to classify. Together
-with the existing bare location and source selection intents, this lets
-listeners omit `play` and `find` without creating or uploading another slot
-type. Known domain values keep their Alexa domain classification; the topic
-intent is only the general fallback.
+`CarrierlessDiscoveryIntent` keeps its `HEAR_TOPIC` sample and uses a generated
+`HEAR_DISCOVERY` capture slot during the general listening prompt. The build
+step fills that bridge slot with the canonical values already present in the
+four domain catalogues; it does not invent or maintain a fifth vocabulary.
+This gives Alexa Hear-specific recognition context while still allowing a raw
+no-match phrase to reach the resolver. The resolver remains responsible for
+deciding whether a bare reply is a location, organisation, creator, topic,
+tag, publication, or title.
 
 The interaction model also contains the small, static `HEAR_SOURCE_KIND` slot.
 It is not generated from catalogue data. Its canonical values are `talking
@@ -196,6 +197,7 @@ backend generates fresh CSV files and before importing them into Alexa.
 | `ChooseSourceKindIntent.sourceKind` | static `HEAR_SOURCE_KIND` |
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
 | `CarrierlessDiscoveryIntent.topic` | `HEAR_TOPIC` |
+| `CarrierlessDiscoveryIntent.discoveryQuery` | generated `HEAR_DISCOVERY` bridge |
 
 Existing bare source and location intents retain their domain-specific slots.
 `CarrierlessDiscoveryIntent` covers a bare topic or other phrase that Alexa

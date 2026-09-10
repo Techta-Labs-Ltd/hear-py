@@ -63,7 +63,10 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
-        "CarrierlessDiscoveryIntent": {"topic": "HEAR_TOPIC"},
+        "CarrierlessDiscoveryIntent": {
+            "topic": "HEAR_TOPIC",
+            "discoveryQuery": "HEAR_DISCOVERY",
+        },
         "TownCaptureIntent": {"townName": "HEAR_LOCATION"},
         "SetLocationIntent": {},
         "SearchLocationIntent": {"searchQuery": "AMAZON.SearchQuery"},
@@ -128,6 +131,34 @@ def test_location_dialogs_elicit_bare_town_replies():
         "prompts": {"elicitation": "Elicit.TownCaptureIntent.townName"},
     }
     assert "SetLocationIntent" not in dialog_intents
+
+
+def test_generic_discovery_dialog_uses_the_combined_hear_slot():
+    model = _model()["interactionModel"]
+    intents = {item["name"]: item for item in model["languageModel"]["intents"]}
+    dialog_intents = {item["name"]: item for item in model["dialog"]["intents"]}
+
+    discovery_slot = next(
+        slot
+        for slot in intents["CarrierlessDiscoveryIntent"]["slots"]
+        if slot["name"] == "discoveryQuery"
+    )
+    assert discovery_slot == {
+        "name": "discoveryQuery",
+        "type": "HEAR_DISCOVERY",
+        "samples": ["{discoveryQuery}"],
+    }
+    assert dialog_intents["CarrierlessDiscoveryIntent"]["slots"] == [
+        {
+            "name": "discoveryQuery",
+            "type": "HEAR_DISCOVERY",
+            "confirmationRequired": False,
+            "elicitationRequired": True,
+            "prompts": {
+                "elicitation": "Elicit.CarrierlessDiscoveryIntent.discoveryQuery"
+            },
+        }
+    ]
 
 
 def test_existing_domain_slots_accept_bare_discovery_requests():
@@ -452,12 +483,17 @@ def test_generated_domain_slots_have_id_free_backend_replaceable_values():
         assert all(item["name"]["value"].strip() for item in types[slot_name]["values"])
 
 
-def test_carrierless_discovery_reuses_existing_domain_slots():
+def test_carrierless_discovery_uses_topic_and_combined_hear_slots():
     intents = {
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     assert intents["CarrierlessDiscoveryIntent"]["slots"] == [
-        {"name": "topic", "type": "HEAR_TOPIC"}
+        {"name": "topic", "type": "HEAR_TOPIC"},
+        {
+            "name": "discoveryQuery",
+            "type": "HEAR_DISCOVERY",
+            "samples": ["{discoveryQuery}"],
+        },
     ]
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     for intent_name, bare_sample in {

@@ -26,8 +26,19 @@ class TestAlexaInteractionModelBuild:
         assert len(types["HEAR_ORGANIZATION"]) == 286
         assert len(types["HEAR_CREATOR"]) == 14
         assert len(types["HEAR_TOPIC"]) == 4_562
+        assert len(types["HEAR_DISCOVERY"]) >= 10_000
         locations = {item["name"]["value"] for item in types["HEAR_LOCATION"]}
         assert {"Liverpool", "Sevenoaks", "Dorking"}.issubset(locations)
+        discovery = {
+            item["name"]["value"] for item in types["HEAR_DISCOVERY"]
+        }
+        assert {
+            "Liverpool",
+            "Sevenoaks",
+            "Talking News Federation",
+            "Premier League",
+        }.issubset(discovery)
+        assert all("synonyms" not in item["name"] for item in types["HEAR_DISCOVERY"])
 
     def test_deployment_model_keeps_search_query_carrier_based(self):
         interaction_model = self._model()["interactionModel"]
@@ -36,7 +47,7 @@ class TestAlexaInteractionModelBuild:
             for item in interaction_model["languageModel"]["intents"]
         }
         dialog_intents = {
-            item["name"] for item in interaction_model["dialog"]["intents"]
+            item["name"]: item for item in interaction_model["dialog"]["intents"]
         }
 
         search = intents["SearchContentIntent"]
@@ -49,6 +60,9 @@ class TestAlexaInteractionModelBuild:
             "listen to {searchQuery}",
         ]
         assert "SearchContentIntent" not in dialog_intents
+        assert dialog_intents["CarrierlessDiscoveryIntent"]["slots"][0]["type"] == (
+            "HEAR_DISCOVERY"
+        )
 
     def test_compact_deployment_model_fits_alexa_limit(self, tmp_path):
         output = tmp_path / "en-GB.json"

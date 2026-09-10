@@ -24,13 +24,13 @@ class TestDiscoveryPromptCapture:
         )
 
         assert response["shouldEndSession"] is False
-        assert response.get("directives") in (None, [])
+        assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
 
     def test_no_content_response_recaptures_the_next_bare_discovery_reply(self):
         response = Search._build_no_content_response(self._handler_input())
 
         assert response["shouldEndSession"] is False
-        assert response.get("directives") in (None, [])
+        assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
 
     def test_empty_search_response_recaptures_the_next_bare_discovery_reply(self):
         response = Search._build_search_outcome_response(
@@ -39,4 +39,20 @@ class TestDiscoveryPromptCapture:
         )
 
         assert response["shouldEndSession"] is False
-        assert response.get("directives") in (None, [])
+        assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
+
+    def test_capture_directive_uses_the_combined_hear_slot(self):
+        assert AlexaResponse.discovery_capture_directive() == {
+            "type": "Dialog.ElicitSlot",
+            "slotToElicit": "discoveryQuery",
+            "updatedIntent": {
+                "name": "CarrierlessDiscoveryIntent",
+                "confirmationStatus": "NONE",
+                "slots": {
+                    "discoveryQuery": {
+                        "name": "discoveryQuery",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+            },
+        }

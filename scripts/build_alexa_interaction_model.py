@@ -13,6 +13,7 @@ class AlexaInteractionModelBuilder:
         "HEAR_CREATOR",
         "HEAR_TOPIC",
     )
+    DISCOVERY_SLOT_NAME = "HEAR_DISCOVERY"
     MAX_MODEL_BYTES = 1_500_000
 
     @staticmethod
@@ -37,12 +38,23 @@ class AlexaInteractionModelBuilder:
             for item in model["interactionModel"]["languageModel"]["types"]
         }
         missing = [slot_name for slot_name in cls.SLOT_NAMES if slot_name not in types]
+        if cls.DISCOVERY_SLOT_NAME not in types:
+            missing.append(cls.DISCOVERY_SLOT_NAME)
         if missing:
             raise ValueError(f"Interaction model is missing slot types: {', '.join(missing)}")
+        discovery_values: list[dict] = []
+        discovery_seen: set[str] = set()
         for slot_name in cls.SLOT_NAMES:
-            types[slot_name]["values"] = cls._slot_values(
-                slot_directory / f"{slot_name}.csv"
-            )
+            values = cls._slot_values(slot_directory / f"{slot_name}.csv")
+            types[slot_name]["values"] = values
+            for item in values:
+                canonical = str(item["name"]["value"])
+                key = canonical.casefold()
+                if key in discovery_seen:
+                    continue
+                discovery_seen.add(key)
+                discovery_values.append({"name": {"value": canonical}})
+        types[cls.DISCOVERY_SLOT_NAME]["values"] = discovery_values
         return model
 
     @classmethod

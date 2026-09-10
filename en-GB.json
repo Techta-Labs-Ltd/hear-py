@@ -263,6 +263,13 @@
             {
               "name": "topic",
               "type": "HEAR_TOPIC"
+            },
+            {
+              "name": "discoveryQuery",
+              "type": "HEAR_DISCOVERY",
+              "samples": [
+                "{discoveryQuery}"
+              ]
             }
           ],
           "samples": [
@@ -1439,6 +1446,31 @@
           ]
         },
         {
+          "name": "HEAR_DISCOVERY",
+          "values": [
+            {
+              "name": {
+                "value": "Herne Bay"
+              }
+            },
+            {
+              "name": {
+                "value": "Talking News Federation"
+              }
+            },
+            {
+              "name": {
+                "value": "Crawley Audio News"
+              }
+            },
+            {
+              "name": {
+                "value": "Premier League"
+              }
+            }
+          ]
+        },
+        {
           "name": "HEAR_PUBLICATION_SORT",
           "values": [
             {
@@ -1736,6 +1768,23 @@
       "delegationStrategy": "SKILL_RESPONSE",
       "intents": [
         {
+          "name": "CarrierlessDiscoveryIntent",
+          "delegationStrategy": "SKILL_RESPONSE",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "discoveryQuery",
+              "type": "HEAR_DISCOVERY",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.CarrierlessDiscoveryIntent.discoveryQuery"
+              }
+            }
+          ]
+        },
+        {
           "name": "PlayContentIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1868,6 +1917,15 @@
       ]
     },
     "prompts": [
+      {
+        "id": "Elicit.CarrierlessDiscoveryIntent.discoveryQuery",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Please say the name of a talking newspaper, creator, publication, or city you would like to listen to."
+          }
+        ]
+      },
       {
         "id": "Elicit.PlayContentIntent.topic",
         "variations": [
