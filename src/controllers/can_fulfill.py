@@ -11,6 +11,8 @@ from src.utils.deadline import DeadlineBudget
 
 class CanFulfillPolicy:
     CONTENT_INTENTS = {
+        "OpenDiscoveryIntent",
+        "CarrierlessDiscoveryIntent",
         "PlayContentIntent",
         "PlayByCreatorIntent",
         "SelectCreatorIntent",

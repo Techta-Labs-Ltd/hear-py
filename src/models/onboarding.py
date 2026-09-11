@@ -8,6 +8,7 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
@@ -277,23 +278,18 @@ class Onboarding(OnboardingService):
                 )
         city = store.get("userCity") or resolved_locality
         if resolved_user_name and city:
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.WELCOME_RETURN_NAMED(resolved_user_name, city))
-                )
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.WELCOME_RETURN_NAMED(resolved_user_name, city),
             )
         if city:
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_RETURN_CITY(city)))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.WELCOME_RETURN_CITY(city),
             )
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_RETURN_GENERIC))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.WELCOME_RETURN_GENERIC,
         )
 
     @staticmethod

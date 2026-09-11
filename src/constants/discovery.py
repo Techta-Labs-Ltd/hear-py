@@ -145,6 +145,8 @@ class DiscoveryConstants:
     )
     ALEXA_TO_NLP = {
         "ChooseSourceKindIntent": "general",
+        "OpenDiscoveryIntent": "general",
+        "CarrierlessDiscoveryIntent": "general",
         "PlayContentIntent": "general",
         "SearchContentIntent": "general",
         "PlayLatestContentIntent": "general",

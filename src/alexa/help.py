@@ -5,9 +5,9 @@ from src.alexa.playback_speech import PlaybackSpeech
 
 class HelpSpeech:
     GUIDE_OPENING = (
-        "Here is your guide to Hear Service. To find something, say what's new, what's trending, "
-        "play the latest news, play sport, or play something about a topic. You can ask for "
-        "local content, a publication, a named creator, or a talking newspaper. When I read "
+        "Here is your guide to Hear Service. To find something, you can simply say sport, "
+        "local news, a place such as Swindon, or a talking newspaper such as Talking News Federation. "
+        "You can also say what's new, what's trending, or play the latest news. When I read "
         "out choices, say the name or number, show more, previous choices, or none of these. "
     )
     GUIDE_CLOSING = (
@@ -15,16 +15,17 @@ class HelpSpeech:
         "follow or unfollow the creator, play content from creators you follow, rate the "
         "recording, or report inappropriate content. You can ask to hear your updates, or turn "
         "notifications on or off. To personalise Hear, say change my location or set up my "
-        "account. For example, try saying, play the latest local news. What would you like to do?"
+        "account. For example, try saying, local news. What would you like to do?"
     )
     REPROMPT = (
-        "Try saying what's trending, play local content, play from a talking newspaper, "
-        "or play the latest news."
+        "Try saying sport, local news, Swindon, Talking News Federation, or what's trending."
     )
     CARD_TITLE = "Hear - complete voice guide"
     CARD_OPENING = (
         "FIND AND BROWSE\n"
-        "- What's new?\n- What's trending?\n- Play the latest news.\n- Play sport.\n"
+        "- Say a topic, place, creator, publication, or talking newspaper directly.\n"
+        "- Sport.\n- Swindon.\n- Talking News Federation.\n"
+        "- What's new?\n- What's trending?\n- Play the latest news.\n"
         "- Play something about [topic].\n- Play local content / Play near [place].\n"
         "- Play a publication.\n- Play from [creator or organisation].\n"
         "- Play from a talking newspaper.\n\n"

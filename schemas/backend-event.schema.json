@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hear-py/backend-event.schema.json",
-  "title": "Hear Alexa backend event envelope v2",
+  "title": "Hear Alexa backend event envelope v3",
   "type": "object",
   "required": ["event", "schemaVersion", "eventId", "timestamp", "data"],
   "properties": {
@@ -15,7 +15,6 @@
         "playback.stopped",
         "playback.finished",
         "playback.failed",
-        "playback.cancelled",
         "feedback.given",
         "user.followed_creator",
         "user.unfollowed_creator",
@@ -27,7 +26,7 @@
         "user.reported_creator"
       ]
     },
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": 3 },
     "eventId": { "type": "string", "minLength": 1 },
     "timestamp": {
       "type": "string",
@@ -35,15 +34,59 @@
     },
     "data": {
       "type": "object",
-      "required": ["alexaUserId", "clientEventId"],
+      "required": ["action", "alexaUserId", "clientEventId"],
       "properties": {
+        "action": { "const": "alexa" },
         "alexaUserId": { "type": "string", "minLength": 1 },
         "listenerId": { "type": "string", "minLength": 1 },
         "clientEventId": { "type": "string", "minLength": 1 },
         "enabled": { "type": "boolean" },
         "permissionGranted": { "type": "boolean" },
-        "subjectType": { "enum": ["content", "publication"] },
+        "subjectType": { "enum": ["content", "publication", "creator"] },
         "subjectId": { "type": "string", "minLength": 1 },
+        "contentId": { "type": "string", "minLength": 1 },
+        "publicationId": { "type": "string", "minLength": 1 },
+        "sourceType": { "enum": ["creator", "organization"] },
+        "sourceId": { "type": "string", "minLength": 1 },
+        "sessionId": { "type": "string", "minLength": 1 },
+        "subjectSessionId": { "type": "string", "minLength": 1 },
+        "eventType": {
+          "enum": [
+            "started",
+            "progress",
+            "nearly_finished",
+            "paused",
+            "resumed",
+            "stopped",
+            "finished",
+            "failed"
+          ]
+        },
+        "positionMs": { "type": "integer", "minimum": 0 },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "listenedMs": { "type": "integer", "minimum": 0 },
+        "timeSpentMs": { "type": "integer", "minimum": 0 },
+        "trackIndex": { "type": "integer", "minimum": 0 },
+        "trackCount": { "type": "integer", "minimum": 0 },
+        "feedback": {
+          "enum": ["enjoyed", "somewhat", "not_enjoyed", "skipped"]
+        },
+        "trackListening": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["contentId"],
+            "properties": {
+              "contentId": { "type": "string", "minLength": 1 },
+              "trackIndex": { "type": "integer", "minimum": 0 },
+              "durationMs": { "type": "integer", "minimum": 0 },
+              "listenedMs": { "type": "integer", "minimum": 0 },
+              "timeSpentMs": { "type": "integer", "minimum": 0 },
+              "completed": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
         "timestamp": { "type": "integer", "minimum": 0 },
         "timestampMs": { "type": "integer", "minimum": 0 }
       },

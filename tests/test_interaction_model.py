@@ -8,6 +8,12 @@ def _model():
     return json.loads((Path(__file__).parents[1] / "en-GB.json").read_text(encoding="utf-8"))
 
 
+def test_fallback_sensitivity_allows_unresolved_domain_slots_to_win():
+    configuration = _model()["interactionModel"]["languageModel"]["modelConfiguration"]
+
+    assert configuration["fallbackIntentSensitivity"]["level"] == "LOW"
+
+
 def test_constrained_latest_utterances_preserve_the_full_topic_slot():
     model = _model()
     intents = {item["name"]: item for item in model["interactionModel"]["languageModel"]["intents"]}
@@ -24,6 +30,7 @@ def test_discovery_intents_use_domain_specific_generated_slots():
         for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     protected = {
+        "CarrierlessDiscoveryIntent",
         "PlayContentIntent",
         "PlayLatestContentIntent",
         "PlayLocalIntent",
@@ -56,6 +63,11 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     expected = {
+        "OpenDiscoveryIntent": {"searchQuery": "AMAZON.SearchQuery"},
+        "CarrierlessDiscoveryIntent": {
+            "topic": "HEAR_TOPIC",
+            "discoveryQuery": "HEAR_DISCOVERY",
+        },
         "TownCaptureIntent": {"townName": "HEAR_LOCATION"},
         "SetLocationIntent": {},
         "SearchLocationIntent": {"searchQuery": "AMAZON.SearchQuery"},
@@ -111,6 +123,7 @@ def test_location_dialogs_elicit_bare_town_replies():
     dialog_intents = {
         item["name"]: item for item in _model()["interactionModel"]["dialog"]["intents"]
     }
+    assert "SearchContentIntent" not in dialog_intents
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "townName",
         "type": "HEAR_LOCATION",
@@ -121,11 +134,60 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert "SetLocationIntent" not in dialog_intents
 
 
-def test_town_intent_owns_bare_city_and_uses_generated_location_slot():
+def test_generic_discovery_dialog_uses_the_combined_hear_slot():
+    model = _model()["interactionModel"]
+    intents = {item["name"]: item for item in model["languageModel"]["intents"]}
+    dialog_intents = {item["name"]: item for item in model["dialog"]["intents"]}
+
+    discovery_slot = next(
+        slot
+        for slot in intents["CarrierlessDiscoveryIntent"]["slots"]
+        if slot["name"] == "discoveryQuery"
+    )
+    assert discovery_slot == {
+        "name": "discoveryQuery",
+        "type": "HEAR_DISCOVERY",
+        "samples": ["{discoveryQuery}"],
+    }
+    assert dialog_intents["CarrierlessDiscoveryIntent"]["slots"] == [
+        {
+            "name": "discoveryQuery",
+            "type": "HEAR_DISCOVERY",
+            "confirmationRequired": False,
+            "elicitationRequired": True,
+            "prompts": {
+                "elicitation": "Elicit.CarrierlessDiscoveryIntent.discoveryQuery"
+            },
+        }
+    ]
+    assert intents["OpenDiscoveryIntent"] == {
+        "name": "OpenDiscoveryIntent",
+        "slots": [
+            {
+                "name": "searchQuery",
+                "type": "AMAZON.SearchQuery",
+                "samples": ["{searchQuery}"],
+            }
+        ],
+        "samples": ["search the Hear catalogue for {searchQuery}"],
+    }
+    assert dialog_intents["OpenDiscoveryIntent"]["slots"] == [
+        {
+            "name": "searchQuery",
+            "type": "AMAZON.SearchQuery",
+            "confirmationRequired": False,
+            "elicitationRequired": True,
+            "prompts": {"elicitation": "Elicit.OpenDiscoveryIntent.searchQuery"},
+        }
+    ]
+
+
+def test_existing_domain_slots_accept_bare_discovery_requests():
     model = _model()["interactionModel"]["languageModel"]
     intents = {item["name"]: item for item in model["intents"]}
     city_type = next((item for item in model["types"] if item["name"] == "HEAR_LOCATION"))
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
+    swindon = next((item for item in city_type["values"] if item["name"]["value"] == "Swindon"))
     assert set(intents["TownCaptureIntent"]["samples"]) == {
         "{townName}",
         "my city is {townName}",
@@ -134,10 +196,13 @@ def test_town_intent_owns_bare_city_and_uses_generated_location_slot():
         "I live in {townName}",
         "my area is {townName}",
     }
+    assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
+    assert intents["TownCaptureIntent"]["slots"][0]["samples"] == ["{townName}"]
     assert intents["SetLocationIntent"]["slots"] == []
     assert all("{" not in sample for sample in intents["SetLocationIntent"]["samples"])
     assert "id" not in herne_bay
     assert "arn bay" in herne_bay["name"]["synonyms"]
+    assert "swidon" in swindon["name"]["synonyms"]
 
 
 def test_content_discovery_intents_accept_date_constraints():
@@ -282,7 +347,9 @@ def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
     }
     for intent_name, sample in expected_samples.items():
         slots = intents[intent_name]["slots"]
-        assert slots == [{"name": "searchQuery", "type": "AMAZON.SearchQuery"}]
+        assert [(slot["name"], slot["type"]) for slot in slots] == [
+            ("searchQuery", "AMAZON.SearchQuery")
+        ]
         assert sample in intents[intent_name]["samples"]
         assert all(value.endswith("{searchQuery}") for value in intents[intent_name]["samples"])
 
@@ -430,10 +497,33 @@ def test_generated_domain_slots_have_id_free_backend_replaceable_values():
     }
     assert generated.issubset(types)
     assert "HEAR_SEARCH_QUERY" not in types
+    assert "HEAR_DISCOVERY_QUERY" not in types
     for slot_name in generated:
         assert types[slot_name]["values"]
         assert all("id" not in item for item in types[slot_name]["values"])
         assert all(item["name"]["value"].strip() for item in types[slot_name]["values"])
+
+
+def test_carrierless_discovery_uses_topic_and_combined_hear_slots():
+    intents = {
+        item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    assert intents["CarrierlessDiscoveryIntent"]["slots"] == [
+        {"name": "topic", "type": "HEAR_TOPIC"},
+        {
+            "name": "discoveryQuery",
+            "type": "HEAR_DISCOVERY",
+            "samples": ["{discoveryQuery}"],
+        },
+    ]
+    assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
+    for intent_name, bare_sample in {
+        "TownCaptureIntent": "{townName}",
+        "SelectCreatorIntent": "{creatorQuery}",
+        "SelectOrganizationIntent": "{organizationQuery}",
+        "SelectPublicationSourceIntent": "{publicationSourceQuery}",
+    }.items():
+        assert bare_sample in intents[intent_name]["samples"]
 
 
 def test_clarification_slot_has_format_and_ordinal_fallback_values():

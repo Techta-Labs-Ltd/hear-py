@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.alexa.availability_speech import AvailabilitySpeech
+from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, ResponseBuilder
 from src.constants.state import StateSchema
 from src.models.availability import Availability
@@ -64,6 +65,7 @@ async def test_something_else_leaves_availability_choices_and_returns_to_search(
 
     assert "What would you like to listen to instead?" in AvailabilityTestSupport.speech(response)
     assert response["shouldEndSession"] is False
+    assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
     assert User.snapshot(handler_input)["activeDialog"] is None
 
 
@@ -91,6 +93,7 @@ async def test_no_leaves_multiple_availability_choices_and_returns_to_search(
 
     assert "What would you like to listen to instead?" in AvailabilityTestSupport.speech(response)
     assert response["shouldEndSession"] is False
+    assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
     assert User.snapshot(handler_input)["activeDialog"] is None
 
 
@@ -443,7 +446,7 @@ async def test_empty_local_availability_stops_without_search_or_playback_mutatio
     assert "couldn't find any content in Shalfleet right now" in AvailabilityTestSupport.speech(
         response
     )
-    assert response.get("directives") in (None, [])
+    assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
     after = User.snapshot(handler_input)
     assert {key: after.get(key) for key in playback_state} == before
 
@@ -465,6 +468,7 @@ async def test_failed_local_request_uses_listener_language_and_city(mock_handler
     speech = AvailabilityTestSupport.speech(response)
     assert "had trouble finding content in Everton just now" in speech
     assert "availability" not in speech.casefold()
+    assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
     deps.heara.search.assert_not_awaited()
 
 
@@ -490,7 +494,7 @@ async def test_empty_source_availability_stops_without_search(mock_handler_input
     assert "couldn't find any content from Local Voice right now" in AvailabilityTestSupport.speech(
         response
     )
-    assert response.get("directives") in (None, [])
+    assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
 
 
 @pytest.mark.asyncio
@@ -508,6 +512,39 @@ async def test_failed_availability_stops_without_search(mock_handler_input):
     speech = AvailabilityTestSupport.speech(response)
     assert "had trouble finding content from A Reader just now" in speech
     assert "availability" not in speech.casefold()
+    assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
+
+
+@pytest.mark.asyncio
+async def test_confirmed_source_continues_to_catalogue_search_when_availability_fails(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    deps = AvailabilityTestSupport.dependencies({"failed": True})
+    payload = {"query": "", "filter": {"organizationIds": ["org-1"]}}
+    resolution = {
+        "intent": "organization",
+        "confirmationLabel": "content from Wakefield Talking Newspaper",
+        "searchPayload": payload,
+        "resolvedEntities": [
+            {
+                "type": "organization",
+                "id": "org-1",
+                "canonicalValue": "Wakefield Talking Newspaper",
+            }
+        ],
+    }
+
+    response = await Availability(deps=deps).handle_resolution(
+        handler_input,
+        resolution,
+        payload,
+        "content from Wakefield Talking Newspaper",
+    )
+
+    assert response is None
+    deps.heara.availability.assert_awaited_once()
+    deps.heara.search.assert_not_awaited()
 
 
 def test_source_candidates_keep_same_name_in_distinct_domains():

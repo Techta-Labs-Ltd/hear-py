@@ -6,6 +6,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -61,11 +62,10 @@ class FallbackHandler(AbstractRequestHandler):
         redirect = Onboarding.onboarding_pending_redirect(handler_input, store, deps=self._deps)
         if redirect is not None:
             return redirect
-        return (
-            handler_input.response_builder.speak(Speech.FALLBACK_SPEECH)
-            .reprompt(Speech.WELCOME_REPROMPT)
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.FALLBACK_SPEECH,
+            Speech.WELCOME_REPROMPT,
         )
 
 
@@ -95,9 +95,8 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
         )
         if redirect is not None:
             return redirect
-        return (
-            handler_input.response_builder.speak(Speech.FALLBACK_SPEECH)
-            .reprompt(Speech.WELCOME_REPROMPT)
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.FALLBACK_SPEECH,
+            Speech.WELCOME_REPROMPT,
         )

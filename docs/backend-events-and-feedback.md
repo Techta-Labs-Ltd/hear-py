@@ -17,7 +17,7 @@ The backend is the source of truth for:
 - catalogue, creator, organisation, and publication data;
 - recommendation and personalisation projections.
 
-`HearListenerStateTable` is only short-lived Alexa execution state. It stores playback resume state, active dialogue state, onboarding/location state, and small bounded caches needed to make the voice flow work. It does not duplicate backend event history or profile PII. `HearNotificationInboxTable` is a separate backend-written delivery inbox; it is not listener profile/history state.
+`HearListenerStateTable` is only short-lived Alexa execution state. It stores playback resume state, active dialogue state, onboarding/location state, and small bounded caches needed to make the voice flow work. It does not duplicate backend event history, notification documents, or profile PII.
 
 | Data | Authority | Alexa/DynamoDB use |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ The backend is the source of truth for:
 | Follows | Hear backend follow projection | DynamoDB keeps a bounded 50-entry UX/search cache |
 | Profile name/email/address | Alexa APIs and Hear backend | Request-local only; not written to DynamoDB |
 | Catalogue metadata | Hear backend | Only the current/prepared playback item is retained locally |
-| Content/publication notifications | Hear backend | Backend inserts a bounded inbox row; Alexa advances delivery/consumption status |
+| Content/publication notifications | Hear notification API | Alexa fetches and updates them with `POST /alexa/notification` |
 
 ## 2. Request lifecycle
 
@@ -57,9 +57,9 @@ Every normal stateful Alexa request follows this sequence:
 | Hear API | `POST /alexa/availability` | `X-Api-Key` | Local source discovery and source publication/track choice |
 | Resolver | `POST /resolve` | `x-api-key` | Search/source/location interpretation |
 | DynamoDB listener state | `GetItem`, `UpdateItem`, `DeleteItem` | Lambda IAM | Stateful request |
-| DynamoDB notification inbox | `Query`, `GetItem`, `UpdateItem` | Lambda IAM | Launch, notification intent, and notification playback events |
-| Login with Amazon | `POST /auth/o2/token` | Proactive client credentials | Cached worker token on notification inserts |
-| Alexa proactive events | `POST /v1/proactiveEvents[/stages/development]` | LWA bearer token | Notification inbox stream `INSERT` |
+| Hear API | `POST /alexa/notification` | `X-Api-Key` | Notification fetch, user status, and delivery status |
+| Login with Amazon | `POST /auth/o2/token` | Proactive client credentials | Cached worker token on SQS notification messages |
+| Alexa proactive events | `POST /v1/proactiveEvents[/stages/development]` | LWA bearer token | Notification SQS message |
 | Amazon SQS | `SendMessage` | Lambda IAM | Playback, feedback, follow, unfollow, report |
 | Hear webhook | `POST WEBHOOK_OUTBOUND_URL` | API key plus HMAC | SQS consumer delivery |
 | Alexa directives | `POST /v1/directives` | Alexa bearer token | One best-effort progressive response |
@@ -155,42 +155,31 @@ X-Api-Key: <HEAR_API_KEY>
 Content-Type: application/json
 ~~~
 
-Common request fields are always present, although nullable values may be JSON `null`:
+The request contains only listener identity and permitted profile values:
 
 ~~~json
 {
+  "action": "alexa",
   "alexaUserId": "amzn1.ask.account.current-alias",
   "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
-  "skillId": "amzn1.ask.skill.hear",
-  "environment": "production",
-  "principalType": "skill_user",
-  "deviceId": "amzn1.ask.device.current",
-  "apiEndpoint": "https://api.eu.amazonalexa.com",
-  "locale": "en-GB",
-  "listenerType": "registered",
-  "clientVersion": "alexa-skill",
-  "playbackSpeed": 1.25,
-  "userName": "Alex Hear",
-  "userEmail": "listener@example.com",
-  "address": "Optional permitted address",
+  "listenerName": "Alex Hear",
+  "email": "listener@example.com",
   "city": "Manchester",
-  "state": "Greater Manchester",
-  "country": "United Kingdom",
-  "countryCode": "GB",
-  "postalCode": "M1 1AA",
-  "latitude": 53.4808,
   "longitude": -2.2426,
-  "locality": "Manchester"
+  "latitude": 53.4808
 }
 ~~~
 
-The protected fields from `userName` through `locality` are included only when the profile is classified as registered, currently requiring a permitted email and a permitted name. The response is:
+`action` and `alexaUserId` are always present. `listenerId` may be null on the
+first sync. `listenerName`, `email`, and available location fields are included
+only when permitted name and email have been resolved. The response is:
 
 ~~~json
 {"listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa"}
 ~~~
 
-Removed from this contract: `listeningPattern`, `followedCreatorIds`, `followedOrganizationIds`, `playCount`, `lastPlayedAt`, `recentPlayedIds`, and `recentPlays`. The backend already derives these from canonical events; sending them on every launch caused duplicate ownership and growing payloads.
+Not sent: device, skill, environment, principal, locale, playback setting,
+address, country, client-version, history, follows, feedback, or report data.
 
 Machine-readable contract: [`schemas/listener-sync.schema.json`](../schemas/listener-sync.schema.json).
 
@@ -453,65 +442,60 @@ changes the Alexa user ID without retaining or reading a second table.
 An explicit listener-state deletion removes all four scoped items for the
 selected key.
 
-### 8.5 Backend-written notification inbox
+### 8.5 Notification API
 
-`HearNotificationInboxTable` is deliberately separate from listener state. The
-Hear backend owns notification eligibility and writes one row directly to this
-table when an opted-in listener has a new single recording or publication. The
-Alexa Lambda does not copy catalogue notifications into `CORE`, `CACHE`, or a
-history array.
+The Alexa skill does not persist notification documents. Both spoken inbox
+reads and proactive delivery use one authenticated endpoint:
 
-~~~text
-PK listenerId     = canonical Hear listener ID
-SK notificationId = stable, idempotent notification ID
-GSI ActiveByListener:
-  PK activeListenerId
-  SK activePublishedAt = zero-padded publishedAt#notificationId
+~~~http
+POST <HEAR_API_URL>/<HEAR_API_PATH_PREFIX>/notification
+X-Api-Key: <HEAR_API_KEY>
+Content-Type: application/json
 ~~~
 
-The backend should use a conditional put such as
-`attribute_not_exists(notificationId)` and a deterministic ID (for example
-`content:<contentId>` or `publication:<publicationId>`). This makes retries
-idempotent and ensures that the DynamoDB stream produces only one `INSERT` for
-proactive delivery. Do not delete and recreate a row to retry delivery.
-
-Single-recording example:
+Inbox reads use only the canonical listener ID:
 
 ~~~json
 {
-  "schemaVersion": 1,
+  "operation": "fetch",
   "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
-  "notificationId": "content:content-1",
-  "notificationType": "content",
-  "contentId": "content-1",
-  "title": "Morning bulletin",
-  "creatorId": "creator-1",
-  "creatorName": "Pendle Voice",
-  "organizationId": "organisation-1",
-  "organizationName": "Pendle Voice",
-  "alexaUserId": "amzn1.ask.account.current-alias",
-  "locale": "en-GB",
-  "publishedAt": 1788451200,
-  "status": "pending",
-  "deliveryStatus": "pending",
-  "sendProactive": true,
-  "activeListenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
-  "activePublishedAt": "00000000001788451200#content:content-1",
-  "expiresAt": 1789056000
+  "purpose": "inbox",
+  "limit": 5
 }
 ~~~
 
-For a publication, set `notificationType` to `publication`, replace
-`contentId` with `publicationId`, and make the stable ID
-`publication:<publicationId>`. Exactly one of `contentId` and `publicationId`
-is allowed. The machine-readable write contract is
-[`schemas/notification-inbox-item.schema.json`](../schemas/notification-inbox-item.schema.json).
+An SQS delivery fetch additionally includes the exact `notificationId` and sets
+`purpose` to `delivery`. The response joins the source update to a transient
+Alexa target:
 
-The backend must write the current Alexa alias associated with the canonical
-listener because Amazon proactive unicast delivery requires it. A changed
-Alexa alias is first attached through `/alexa/listeners/resolve`; future rows
-must use that latest active alias. This alias is delivery routing data, not the
-canonical identity.
+~~~json
+{
+  "notification": {
+    "schemaVersion": 1,
+    "notificationId": "creator-update-18-20260910T150500Z",
+    "notificationType": "creator_update",
+    "sourceType": "creator",
+    "sourceId": "creator-18",
+    "sourceName": "Jordan Lee",
+    "lastDate": "2026-09-10T15:05:00Z",
+    "expiresAt": "2026-09-11T15:05:00Z"
+  },
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
+  "deliveryTarget": {
+    "type": "alexa",
+    "userId": "amzn1.ask.account.current-alias"
+  }
+}
+~~~
+
+The only notification types are `creator_update` and `organization_update`.
+There is no track or publication payload. The machine-readable source-update
+contract is
+[`schemas/notification-item.schema.json`](../schemas/notification-item.schema.json).
+
+Status changes use the same endpoint with `operation=update`. User status uses
+`status`; proactive delivery uses `deliveryStatus`, optional
+`deliveryHttpStatus`, and optional `deliveryErrorCode`.
 
 User-consumption and transport delivery are separate state machines:
 
@@ -522,32 +506,30 @@ User:     pending -> offered -> resolving -> queued -> consumed
                                     +-> pending on temporary lookup/playback failure
 
 Delivery: pending -> sent | suppressed | failed
-                  -> retrying -> sent | failed | dead-letter queue
+                  -> retrying -> sent | failed | SQS dead-letter queue
 ~~~
 
-The active GSI keys remain only for `pending`, `offered`, `resolving`, and
-`queued`; the skill removes them when a row becomes `consumed`, `dismissed`, or
-`unavailable`. TTL is cleanup only, so reads also reject expired rows. The
-backend should bound creation and retention per listener; the skill asks for
-the newest item and mentions when additional active items exist.
+The proactive worker receives only `schemaVersion`, `notificationId`, and
+`listenerId` from SQS. It fetches the Alexa target using those IDs, sends the
+event, and posts the outcome using `notificationId + listenerId`. Alexa user ID
+is never a lookup filter or SQS field. Notification data is never written to
+`HearListenerStateTable`.
 
-Backend IAM should be least privilege: `dynamodb:PutItem` (and optionally
-`DescribeTable`) on the environment-specific inbox table. The skill and stream
-worker own `Query`/`GetItem`/`UpdateItem`. The CloudFormation outputs
-`NotificationInboxTableName` and `NotificationInboxTableArn` are the deployment
-handoff to the backend stack.
+The SQS body contract is
+[`schemas/notification-delivery-message.schema.json`](../schemas/notification-delivery-message.schema.json).
 
 ## 9. Domain event transport
 
-### 9.1 Envelope V2
+### 9.1 Envelope V3
 
 ~~~json
 {
   "event": "playback.finished",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "eventId": "publication:publication-1:queue-1:finished:1788451200000",
   "timestamp": "2026-09-03T16:00:00Z",
   "data": {
+    "action": "alexa",
     "alexaUserId": "amzn1.ask.account.current-alias",
     "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
     "clientEventId": "publication:publication-1:queue-1:finished:1788451200000"
@@ -557,7 +539,9 @@ handoff to the backend stack.
 
 `eventId` equals `data.clientEventId` for all normal domain events. Backend consumers must deduplicate on `eventId` and ignore unknown fields. Machine-readable envelope: [`schemas/backend-event.schema.json`](../schemas/backend-event.schema.json).
 
-SQS message attributes, when non-empty, are `eventType`, `eventId`, `schemaVersion`, `listenerId`, `subjectType`, `subjectId`, `publicationId`, and `notificationSubjectType`.
+SQS message attributes, when non-empty, are `eventType`, `eventId`,
+`schemaVersion`, `action`, `listenerId`, `subjectType`, `contentId`,
+`publicationId`, `sourceType`, `sourceId`, and `notificationSubjectType`.
 
 The webhook receives the exact compact SQS body with:
 
@@ -574,7 +558,7 @@ The signature input is `<timestamp>.<exact-request-body>`. Delivery is at least 
 
 | Family | Event names |
 | --- | --- |
-| Playback | `playback.started`, `progress`, `nearly_finished`, `paused`, `resumed`, `stopped`, `finished`, `failed`, `cancelled` (all prefixed `playback.`) |
+| Playback | `playback.started`, `progress`, `nearly_finished`, `paused`, `resumed`, `stopped`, `finished`, `failed` (all prefixed `playback.`) |
 | Feedback | `feedback.given` |
 | Follow | `user.followed_creator`, `user.unfollowed_creator`, `user.followed_organization`, `user.unfollowed_organization` |
 | Report | `user.reported_content`, `user.reported_creator` |
@@ -588,21 +572,25 @@ All playback event data can contain:
 
 | Field | Meaning |
 | --- | --- |
+| `action` | Always `alexa` |
 | `alexaUserId`, `listenerId` | Current alias and canonical listener |
-| `subjectType`, `subjectId` | Canonical owner: content or publication |
-| `creatorId`, `queueId` | Optional source/queue context |
+| `subjectType` | `content` or `publication` |
+| `contentId` | The current playable track; always present |
+| `publicationId` | The containing publication; publication playback only |
 | `sessionId` | Current track/listen session |
 | `subjectSessionId` | Stable publication or standalone subject session |
 | `eventType` | Suffix such as `started`, `progress`, or `finished` |
 | `positionMs`, `durationMs`, `listenedMs` | Playback cursor/duration/high-water values |
-| `timeSpentMs`, `timeSpentHours` | Measured listening time for this session |
-| `completionPercentage` | Derived high-water percentage when duration is known |
+| `timeSpentMs` | Measured listening time for this session |
+| `trackIndex`, `trackCount` | Optional publication position and size |
 | `timestampMs` | Event time in Unix milliseconds |
 | `clientEventId` | `<subjectSessionId>:<eventType>:<timestampMs>` |
 
-Standalone content adds `contentId`.
-
-Publication playback adds `publicationId`, `trackContentId`, `trackIndex`, `trackCount`, `publicationTimeSpentMs`, `publicationTimeSpentHours`, and `trackListening`. `contentId` is deliberately omitted at the top level for a publication event; the current track is `trackContentId`.
+For publication playback, `contentId` is still the current track and
+`publicationId` is its container. Version 3 does not send `subjectId`,
+`trackContentId`, hours, completion percentages, publication totals, or the full
+`trackListening` array on every callback. The complete examples and exact ID
+rules are in [Alexa outbound event contracts](alexa-event-contracts.md).
 
 The backend must upsert a playback session by `clientEventId`/`sessionId`. For cumulative time, apply only positive deltas:
 
@@ -620,21 +608,20 @@ Do not sum repeated snapshots, retries, seek distances, or `timeSpentHours`.
 
 | Field | Rule |
 | --- | --- |
+| `action` | Always `alexa` |
 | `alexaUserId`, `listenerId` | Identity |
-| `feedbackKey` | Stable prompt-suppression key |
-| `subjectType`, `subjectId` | Content/publication owner |
-| `title`, `publicationTitle` | Optional display/spoken context |
-| `creatorId`, `creatorName` | Optional creator context |
-| `organizationId`, `organizationName` | Optional organisation context |
-| `category` | Optional category context |
-| `listenedMs`, `timeSpentMs`, `timeSpentHours` | Optional listening snapshot |
+| `subjectType` | `content` or `publication` |
+| `contentId` | Required for content feedback only |
+| `publicationId` | Required for publication feedback only |
 | `feedback` | `enjoyed`, `somewhat`, `not_enjoyed`, or `skipped` |
-| `coverage`, `expectedTrackCount`, `meaningfulTrackCount` | Optional publication qualification data |
-| `trackListening` | Publication-only compact track snapshots |
-| `timestamp` | Unix milliseconds |
-| `clientEventId` | `feedback:<listener-or-alexa>:<feedbackKey-or-subjectId>:<feedback>` |
+| `trackListening` | Publication-only per-track measurements keyed by `contentId` |
+| `timestampMs` | Unix milliseconds |
+| `clientEventId` | Stable feedback event identifier |
 
-Standalone feedback adds `contentId` and optional `parentPublicationId`. Publication feedback adds `publicationId` and unique ordered `contentIds`. The backend is the only full feedback-history store.
+Titles, names, category, coverage counters, duplicate ID arrays, hours, and
+top-level listening totals are not transmitted. The backend derives those from
+canonical content/publication records. The backend is the only full
+feedback-history store.
 
 ### 10.3 Follow and unfollow
 
@@ -642,6 +629,7 @@ All four follow events contain:
 
 ~~~json
 {
+  "action": "alexa",
   "alexaUserId": "amzn1.ask.account.current-alias",
   "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
   "sourceType": "organization",
@@ -666,6 +654,7 @@ section 8.5. It must never write them into `HearListenerStateTable`.
 
 ~~~json
 {
+  "action": "alexa",
   "alexaUserId": "amzn1.ask.account.current-alias",
   "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
   "enabled": true,
@@ -690,6 +679,7 @@ listener-state DynamoDB.
 
 ~~~json
 {
+  "action": "alexa",
   "alexaUserId": "amzn1.ask.account.current-alias",
   "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
   "subjectType": "content",
@@ -749,8 +739,8 @@ Deletion is best-effort. Reminder tokens are no longer durable DynamoDB fields.
 
 ### 11.4 Alexa proactive event delivery
 
-An inbox `INSERT` invokes `main.notification_handler` through the DynamoDB
-stream. The worker obtains a client-credentials token using scope
+An SQS message invokes `main.notification_handler`. The worker fetches the
+notification with `POST /alexa/notification`, obtains a client-credentials token using scope
 `alexa::proactive_events`, caches it for its safe lifetime, then posts an
 `AMAZON.MediaContent.Available` event to the European Alexa endpoint. Development
 uses `/v1/proactiveEvents/stages/development`; production uses
@@ -790,10 +780,10 @@ The exact outbound shape is:
 ~~~
 
 HTTP `429`, `432`, `500`, and `503`, plus network failures, are retryable.
-Lambda reports only the failed DynamoDB sequence number; after five retries the
-record is sent to `ProactiveNotificationDeadLetterQueue`. Other rejection
-statuses are recorded as terminal delivery failures. Status-only `MODIFY`
-events do not trigger another send.
+Lambda reports only the failed SQS `messageId`; after five receives the message
+is sent to `ProactiveNotificationDeadLetterQueue`. Other rejection statuses are
+posted as terminal delivery failures. Missing or already-completed
+notifications are acknowledged without another send.
 
 The Alexa skill manifest must request the Notifications permission and publish
 the proactive schema:
@@ -817,18 +807,18 @@ account-linking or Hear OAuth step.
 ### P0: required before enabling canonical identity everywhere
 
 - Implement the atomic `/alexa/listeners/resolve` transaction and unique alias constraints.
-- Accept event envelope V2 and deduplicate on `eventId`.
+- Accept event envelope V3 and deduplicate on `eventId`.
 - Persist raw event receipts before updating projections.
 - Project playback, feedback, follow, and report events into backend-owned tables.
-- Project notification preference events and enforce them before writing an inbox row.
-- Keep accepting the legacy V1 event envelope only for the agreed deployment window.
+- Project notification preference events before publishing a notification message.
+- Keep accepting the legacy V2 event envelope only for the agreed deployment window.
 - Return `2xx` for duplicate event IDs and retryable `5xx` only for genuine ingestion failures.
 
 ### P1: deployment
 
 - Deploy `HearListenerStateTable` as the sole listener-state table and grant the skill access only to it.
 - Deploy the skill with `HEAR_DDB_TABLE` set to `HearListenerStateTable`.
-- Deploy `HearNotificationInboxTable` separately, grant the backend conditional `PutItem`, and pass its stack output to the backend deployment.
+- Deploy `ProactiveNotificationQueue` and configure its producer with the queue URL.
 - Configure environment-specific proactive LWA credentials and the Alexa manifest permission/publication.
 - Enable canonical identity in development, run changed-alias/same-email and person-ID tests, then promote to production.
 - Monitor identity latency/alias-copy/conflict rate, conditional conflicts by scope, item sizes, event age, webhook retries, and DLQ depth.
@@ -853,10 +843,11 @@ account-linking or Hear OAuth step.
 - No listener sync contains history, follow lists, feedback, or report data.
 - No DynamoDB item contains profile email/name/address, full feedback/report history, raw catalogue results, or Alexa tokens.
 - V2 writes touch only changed scopes and default values are removed rather than stored as `NULL`.
-- A repeated backend notification write does not produce a second row or proactive event.
-- A single-content row searches by `contentId`; a publication row searches by `publicationId`.
-- Inbox rows become `consumed` only after `AudioPlayer.PlaybackStarted`, and temporary playback failure returns them to `pending`.
-- Disabling notifications stops future backend writes without requiring account linking.
+- A repeated SQS `eventId` does not produce a second proactive event.
+- A creator update searches by `creatorId`; an organization update searches by
+  `organizationId`, both bounded by `lastDate`.
+- Notification items become `consumed` only after `AudioPlayer.PlaybackStarted`, and temporary playback failure returns them to `pending`.
+- Disabling notifications stops future delivery without requiring account linking.
 
 ## 13. Logging and privacy rules
 
@@ -876,7 +867,6 @@ account-linking or Hear OAuth step.
 - `src/services/events.py`
 - `src/constants/state.py`
 - `src/database/dynamo_user.py`
-- `src/database/notification_inbox.py`
 - `src/models/notifications.py`
 - `src/services/notification_delivery.py`
 - `src/clients/proactive.py`
@@ -885,4 +875,5 @@ account-linking or Hear OAuth step.
 - `schemas/resolver-request.schema.json`
 - `schemas/search-request.schema.json`
 - `schemas/backend-event.schema.json`
-- `schemas/notification-inbox-item.schema.json`
+- `schemas/notification-item.schema.json`
+- `schemas/notification-delivery-message.schema.json`

@@ -7,6 +7,29 @@ The Hear backend generates four separate custom Alexa slot types:
 - `HEAR_CREATOR`
 - `HEAR_TOPIC`
 
+`CarrierlessDiscoveryIntent` keeps its `HEAR_TOPIC` sample and generated
+`HEAR_DISCOVERY` bridge. The build step fills that bridge with the canonical
+values already present in the four domain catalogues. Approved aliases already
+attached to the same canonical value in the base model are retained when the
+full catalogues replace its seed values. The bridge also copies unambiguous
+organisation, creator and topic aliases. Location aliases remain in
+`HEAR_LOCATION`, whose bare-value intent stays active alongside the bridge;
+copying every location pronunciation into both slots would exceed Alexa's
+interaction-model size limit. An alias shared by different canonical entities
+is deliberately omitted from the bridge and left for the resolver to
+disambiguate. The bridge does not invent or maintain a fifth vocabulary.
+
+The general listening prompt elicits `OpenDiscoveryIntent.searchQuery`, an
+`AMAZON.SearchQuery` slot. Existing custom-slot intents remain active and give
+Alexa Hear-specific recognition context for known names. When Alexa does not
+select one of those intents but can still recognize the reply as a query, the
+open slot sends its raw text to the resolver. A unique, usable custom-slot match
+supplies the canonical resolver input while the original captured text remains
+separately available. A failed custom-slot resolution, ambiguous match, or
+unusable canonical value sends the captured text instead. The resolver remains
+responsible for deciding whether a bare reply is a location, organisation,
+creator, topic, tag, publication, or title.
+
 The interaction model also contains the small, static `HEAR_SOURCE_KIND` slot.
 It is not generated from catalogue data. Its canonical values are `talking
 newspaper`, `publication`, and `creator`, with common spoken variants. It
@@ -118,12 +141,20 @@ Generate this object. Slot values contain only `name.value` and optional
 }
 ```
 
-Replace the four matching objects in `interactionModel.languageModel.types` in
-`en-GB.json` with the generated objects before uploading and building the
-Alexa interaction model.
+Build the uploadable interaction model from the checked-in base model and all
+four generated catalogues before uploading it to Alexa:
 
-For manual Alexa Console imports, the repository also produces one file per
-slot under `alexa-slot-imports/`:
+```bash
+python scripts/build_alexa_interaction_model.py --output build/en-GB.json
+```
+
+Upload `build/en-GB.json`, not the seed-only `en-GB.json`. The builder replaces
+the four matching objects in `interactionModel.languageModel.types`, writes a
+compact model that stays within Alexa's size limit, and fails rather than
+silently omitting one of the four domain slots.
+
+For manual Alexa Console imports, the repository produces the four backend
+domain files under `alexa-slot-imports/`:
 
 - `HEAR_LOCATION.csv`
 - `HEAR_ORGANIZATION.csv`
@@ -179,6 +210,18 @@ backend generates fresh CSV files and before importing them into Alexa.
 | `SelectCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
 | `ChooseSourceKindIntent.sourceKind` | static `HEAR_SOURCE_KIND` |
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
+| `CarrierlessDiscoveryIntent.topic` | `HEAR_TOPIC` |
+| `CarrierlessDiscoveryIntent.discoveryQuery` | generated `HEAR_DISCOVERY` bridge |
+| `OpenDiscoveryIntent.searchQuery` | `AMAZON.SearchQuery` open-query fallback |
+
+Existing bare source and location intents retain their domain-specific slots.
+`CarrierlessDiscoveryIntent` covers a bare topic or other phrase that Alexa
+assigns to the generated bridge. `OpenDiscoveryIntent` captures a recognizable
+bare phrase that Alexa does not assign to a typed intent while the general
+prompt is active. Bare values captured while a town or source-name dialog is
+active are interpreted by that active dialog before general discovery. The
+intent-specific `AMAZON.SearchQuery` fallbacks and their carrier phrases remain
+unchanged.
 
 Creator-owned publication requests use `PlayByCreatorIntent`, for example
 `play a publication by Jane Smith`. Organization-owned publication requests
@@ -317,28 +360,29 @@ play sport near Herne Bay
 The interaction model explicitly supports both complete commands and name-only
 turns. `Tynedale`, `Tynedale Talking Newspaper`, `play Tynedale Talking
 Newspaper`, `play from Tynedale Talking Newspaper`, and `play sport from
-Tynedale Talking Newspaper` all populate one complete organization slot. A bare
-creator name similarly populates `SelectCreatorIntent`. These selection intents
-still go through the same Hear resolver as the longer play intents.
+Tynedale Talking Newspaper` all reach the same resolver. Bare organisation,
+creator, publication, and location names use their existing domain slots. Bare
+topics use `CarrierlessDiscoveryIntent`, and recognizable uncatalogued phrases
+use `OpenDiscoveryIntent` while the general prompt is active. Carrier-based
+forms retain their existing intents.
 
 When the skill asks which creator, talking newspaper, or publication source
 the listener wants, its `Dialog.ElicitSlot` response explicitly chains to
 `SelectCreatorIntent`, `SelectOrganizationIntent`, or
 `SelectPublicationSourceIntent`. A custom slot no-match is valid when Alexa
 selects the intent: its raw spoken value is still forwarded to the Hear
-resolver. The skill also persists the active source-name dialog so an
-unexpected intent collision stays in source capture instead of returning to
-the general welcome prompt. If Alexa classifies an unlisted bare name as
-`AMAZON.FallbackIntent` and supplies no slot text, the skill ends that capture
-attempt and asks the listener to repeat it with an explicit carrier phrase:
-`play something by <creator>` or `play from <organization>`. That follow-up uses the
-intent-specific `AMAZON.SearchQuery` route and reaches the Hear resolver.
+resolver. The skill also persists the active source-name dialog, so a bare
+value arriving through any compatible slot intent is reinterpreted as the
+expected source type instead of starting an unrelated general search. If Alexa
+emits `AMAZON.FallbackIntent` without any slot text, there is no transcript for
+the Lambda to recover, so the skill asks for the full name again without
+requiring a carrier phrase.
 
-If Alexa labels a name-only reply as `TownCaptureIntent` while the session is
-waiting for an organization, creator, or publication source, active dialog
-state takes precedence. The backend sends the captured words to the expected
-resolver route and does not save them as the listener's city. An actual
-onboarding location question still owns a bare city response.
+If Alexa labels a name-only reply with the wrong bare-value intent while the
+session is waiting for a town, organization, creator, or publication source,
+active dialog state takes precedence. The backend sends the captured words to
+the expected route and only saves a city during the actual onboarding location
+flow.
 
 Keep the public catalogue name as the single canonical value for an
 organisation. Add commonly spoken initialisms such as `TNF`, `T. N. F.`, and
@@ -367,4 +411,7 @@ Absence from a generated custom slot can still reduce ASR accuracy, so publish
 refreshed slot values when practical. Updating the Hear database or resolver
 takes effect immediately for backend matching; changing Alexa's ASR vocabulary
 takes effect only after the updated interaction model is uploaded and built for
-the relevant skill stage.
+the relevant skill stage. The open-query fallback does not turn arbitrary noise
+or every possible character sequence into a valid Alexa utterance. If Alexa
+emits `AMAZON.FallbackIntent` or rejects an utterance without a slot value,
+Lambda has no transcript to send to the resolver.

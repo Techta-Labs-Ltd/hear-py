@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from config import settings
-from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.clients.hear import HearApiClient
 from src.models.listener import Listener
@@ -12,53 +10,38 @@ from src.models.user import User
 
 class ListenerSyncSupport:
     logger = logging.getLogger(__name__)
-    _CLIENT_VERSION = settings.HEAR_CLIENT_VERSION
 
     @staticmethod
     def build_listener_sync_profile(handler_input, store: dict) -> dict | None:
         alexa_user_id = AlexaRequest.get_user_id(handler_input)
         if not alexa_user_id:
             return None
-        system = RequestContext.get_system_context(handler_input)
-        request = getattr(handler_input.request_envelope, "request", None)
-        device = getattr(system, "device", None)
-        registered = bool(
-            store.get("userEmail")
-            and (store.get("userName") or store.get("fullName"))
-        )
         identity = Listener.identity(handler_input)
+        raw_listener_name = store.get("userName") or store.get("fullName")
+        raw_email = store.get("userEmail")
+        listener_name = str(raw_listener_name or "").strip()
+        email = str(raw_email or "").strip().lower()
         profile = {
+            "action": "alexa",
             "alexaUserId": alexa_user_id,
             "listenerId": store.get("listenerId")
             or (identity.listener_id if identity else None),
-            "skillId": identity.skill_id if identity else None,
-            "environment": settings.STAGE,
-            "principalType": identity.principal_type.value if identity else None,
-            "deviceId": getattr(device, "deviceId", None),
-            "apiEndpoint": getattr(system, "apiEndpoint", None),
-            "locale": getattr(request, "locale", None),
-            "listenerType": "registered" if registered else "guest",
-            "clientVersion": ListenerSyncSupport._CLIENT_VERSION,
-            "playbackSpeed": store.get("playbackSpeed"),
         }
-        if registered:
+        if listener_name and email:
             profile.update(
                 {
-                    "userName": store.get("userName") or store.get("fullName"),
-                    "userEmail": store.get("userEmail"),
-                    "address": store.get("userAddress") or store.get("address"),
+                    "listenerName": listener_name,
+                    "email": email,
                     "city": store.get("userCity") or store.get("city"),
-                    "state": store.get("userState") or store.get("state"),
-                    "country": store.get("userCountry") or store.get("country"),
-                    "countryCode": store.get("deviceCountryCode")
-                    or store.get("countryCode"),
-                    "postalCode": store.get("devicePostalCode") or store.get("postalCode"),
                     "latitude": store.get("latitude"),
                     "longitude": store.get("longitude"),
-                    "locality": store.get("locality"),
                 }
             )
-        return profile
+        return {
+            key: value
+            for key, value in profile.items()
+            if value is not None or key == "listenerId"
+        }
 
 class ListenerSyncService:
     __slots__ = ("_hear_api", "_enabled")
@@ -77,8 +60,8 @@ class ListenerSyncService:
         ListenerSyncSupport.logger.info(
             "Hear: listener sync request fields=%s hasLocation=%s hasProfile=%s",
             sorted((key for key, value in profile.items() if value not in (None, [], {}))),
-            bool(profile.get("locality") or profile.get("city")),
-            bool(profile.get("userEmail") or profile.get("userName")),
+            bool(profile.get("city")),
+            bool(profile.get("email") or profile.get("listenerName")),
         )
         result = await self._hear_api.sync_listener(profile, timeout_ms=2500)
         if not result:

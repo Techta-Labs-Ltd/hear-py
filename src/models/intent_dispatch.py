@@ -179,9 +179,10 @@ class IntentDispatcher:
             if pending.get("ambiguityResolution")
             else f"Did you want me to play {escaped}?"
         )
+        prompt = f"{prompt} Please say yes or no."
         return (
             handler_input.response_builder.speak(Ssml.ssml(prompt))
-            .reprompt(Ssml.ssml("Say yes to go ahead, or no for other options."))
+            .reprompt(Ssml.ssml(prompt))
             .set_should_end_session(False)
             .get_response()
         )

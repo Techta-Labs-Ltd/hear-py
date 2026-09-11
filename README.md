@@ -15,16 +15,17 @@ Python Alexa skill backend deployed to AWS Lambda as a container image.
 - `src/database/` - DynamoDB and persistence middleware
 - `src/constants/` and `src/utils/` - focused values, filters, and deadline helpers
 - `src/alexa/runtime.py` - async Alexa dispatch runtime
-- `template.yaml` - Alexa Lambdas, listener state, notification inbox, and outbound SQS deployment
+- `template.yaml` - Alexa Lambdas, listener state, notification SQS, and outbound SQS deployment
 
 Search utterances are resolved by `POST https://resolver.hear.media/resolve`.
 Canonical resolver entities are converted into Hear search filters before the
 Alexa skill calls the catalog API. Playback, feedback, follow, unfollow, and
 report events are published to SQS and forwarded by the outbound worker to the
-Hear backend. The Hear backend writes content/publication notifications directly
-to the stack-owned notification inbox; a DynamoDB stream worker sends Alexa
-proactive events and the skill offers the same updates by voice. This repository
-does not host a resolver, taxonomy runtime, or inbound webhook.
+Hear backend. A dedicated SQS queue invokes the proactive notification worker,
+which fetches the listener notification with `POST /alexa/notification`, sends
+the Alexa proactive event, and posts the delivery result to the same endpoint.
+The skill uses that endpoint for its spoken inbox. This repository does not host
+a resolver, taxonomy runtime, notification store, or inbound webhook.
 
 ## Backend contracts
 
@@ -44,7 +45,7 @@ The `.env` flags are grouped by responsibility:
 - `HEAR_RESOLVER_*` configures the resolver endpoint, timeout, country, and timezone.
 - `HEAR_HTTP_*`, `HEAR_ALEXA_API_TIMEOUT_MS`, and `HEAR_PROGRESSIVE_*` configure outbound HTTP behavior.
 - `HEAR_DDB_*` and `HEAR_PERSISTENCE_*` configure durable User persistence.
-- `HEAR_NOTIFICATION_*` and `ALEXA_PROACTIVE_*` configure the backend-owned notification inbox and proactive delivery worker.
+- `HEAR_NOTIFICATION_LIMIT` and `ALEXA_PROACTIVE_*` configure notification reads and proactive delivery.
 - `HEAR_CANONICAL_IDENTITY_*` configures pre-persistence listener resolution and caching.
 - `SQS_OUT_QUEUE_URL`, `WEBHOOK_OUTBOUND_*`, and `HEAR_EVENT_WEBHOOK_TIMEOUT_MS` configure backend event delivery.
 - `HEAR_FEEDBACK_*`, `HEAR_PLAYBACK_*`, `HEAR_SEEK_STEP_MS`, queue, browse, search, and history flags configure application behavior.
@@ -60,16 +61,17 @@ selects this sole listener-state table outside the stack. Memory persistence is
 intended for local development only.
 
 The deployment stack also creates an encrypted outbound SQS queue, a dead-letter
-queue, and a batch consumer. Event envelope V2 includes `schemaVersion` and a
+queue, and a batch consumer. Event envelope V3 includes `schemaVersion` and a
 stable `eventId`. Complete listening history, feedback, follows, and reports are
 backend-owned event projections and are not duplicated in listener sync or
 DynamoDB history arrays.
 
-Notifications use a separate encrypted `HearNotificationInboxTable`, keyed by
-canonical `listenerId` and `notificationId`. The Hear backend writes the inbox
-item once; the Alexa skill only reads and advances its user-consumption status.
-The table stream invokes the proactive notification Lambda. Notification rows
-must never be written into `HearListenerStateTable`.
+Notifications are not persisted in this stack. The main skill fetches and
+updates them through `POST /alexa/notification`. The proactive notification
+Lambda consumes `ProactiveNotificationQueue`, fetches the exact notification by
+`listenerId + notificationId`, receives the transient Alexa delivery target,
+sends it to Alexa, and posts the delivery outcome back to the notification
+endpoint. Alexa user ID is not placed in SQS or used as a lookup filter.
 
 ## Local checks
 

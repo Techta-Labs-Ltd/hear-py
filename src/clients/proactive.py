@@ -14,7 +14,15 @@ class ProactiveEventPayload:
     __slots__ = ()
 
     @staticmethod
-    def iso_time(value: int | float | None = None) -> str:
+    def iso_time(value: int | float | str | None = None) -> str:
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+                return parsed.astimezone(UTC).replace(microsecond=0).isoformat().replace(
+                    "+00:00", "Z"
+                )
+            except ValueError:
+                pass
         timestamp = float(value) if value else time.time()
         if timestamp > 10_000_000_000:
             timestamp /= 1000
@@ -28,20 +36,12 @@ class ProactiveEventPayload:
 
     @staticmethod
     def provider(item: dict) -> str:
-        return str(
-            item.get("organizationName")
-            or item.get("creatorName")
-            or NotificationConstants.DEFAULT_PROVIDER
-        ).strip()[:100]
+        return str(item.get("sourceName") or NotificationConstants.DEFAULT_PROVIDER).strip()[:100]
 
     @staticmethod
     def title(item: dict) -> str:
-        fallback = (
-            "A new publication"
-            if item.get("notificationType") == NotificationConstants.PUBLICATION
-            else "A new recording"
-        )
-        return str(item.get("title") or fallback).strip()[:200]
+        source = ProactiveEventPayload.provider(item)
+        return f"A new release from {source}"[:200]
 
     @staticmethod
     def build(item: dict) -> dict:
@@ -51,7 +51,9 @@ class ProactiveEventPayload:
         locale = str(item.get("locale") or NotificationConstants.DEFAULT_LOCALE)
         return {
             "timestamp": now.isoformat().replace("+00:00", "Z"),
-            "referenceId": ProactiveEventPayload.reference_id(item["notificationId"]),
+            "referenceId": ProactiveEventPayload.reference_id(
+                f"{item['notificationId']}:{item['listenerId']}"
+            ),
             "expiryTime": (now + timedelta(hours=NotificationConstants.DELIVERY_EXPIRY_HOURS))
             .isoformat()
             .replace("+00:00", "Z"),
@@ -59,7 +61,7 @@ class ProactiveEventPayload:
                 "name": NotificationConstants.EVENT_NAME,
                 "payload": {
                     "availability": {
-                        "startTime": ProactiveEventPayload.iso_time(item.get("publishedAt")),
+                        "startTime": ProactiveEventPayload.iso_time(item.get("lastDate")),
                         "provider": {"name": "localizedattribute:providerName"},
                         "method": "STREAM",
                     },

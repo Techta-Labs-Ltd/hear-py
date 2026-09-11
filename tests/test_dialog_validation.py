@@ -348,23 +348,69 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     assert response["shouldEndSession"] is False
 
 
-def test_search_confirmation_rejects_new_search(mock_handler_input):
+@pytest.mark.parametrize(
+    "intent_name",
+    [
+        "TownCaptureIntent",
+        "OpenDiscoveryIntent",
+        "CarrierlessDiscoveryIntent",
+        "SelectCreatorIntent",
+        "SelectOrganizationIntent",
+        "SelectPublicationSourceIntent",
+        "PlayContentIntent",
+    ],
+)
+def test_search_confirmation_rejects_discovery_reply_and_repeats_locked_question(
+    mock_handler_input, intent_name
+):
+    pending = {"confirmationLabel": "content in Dorking"}
     User.update(
         mock_handler_input,
         {
             "awaitingSearchConfirmation": True,
-            "pendingResolution": {"confirmationLabel": "Daily Sermons"},
+            "pendingResolution": pending,
             "activeDialog": {
                 "type": "search_confirmation",
-                "context": {"confirmationLabel": "Daily Sermons"},
+                "context": pending,
             },
         },
     )
-    _intent(mock_handler_input, "PlayContentIntent")
+    _intent(mock_handler_input, intent_name)
     failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
-    assert failure["dialogType"] == "search_confirmation"
-    assert "Daily Sermons" in failure["speech"]
-    assert "yes or no" in failure["speech"]
+    question = "Did you want me to play content in Dorking? Please say yes or no."
+    assert failure == {
+        "dialogType": "search_confirmation",
+        "speech": question,
+        "reprompt": question,
+    }
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingSearchConfirmation"] is True
+    assert store["pendingResolution"] == pending
+    assert store["activeDialog"]["context"] == pending
+
+
+def test_search_confirmation_uses_session_state_when_persistence_is_stale(
+    mock_handler_input,
+):
+    pending = {
+        "confirmationLabel": "content in Dorking",
+        "searchPayload": {"query": "", "filter": {"city": "Dorking"}},
+    }
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {}
+    mock_handler_input.attributes_manager.get_session_attributes = lambda: {
+        "awaitingSearchConfirmation": True,
+        "pendingResolution": pending,
+    }
+    _intent(mock_handler_input, "PlayContentIntent")
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    question = "Did you want me to play content in Dorking? Please say yes or no."
+    assert failure == {
+        "dialogType": "search_confirmation",
+        "speech": question,
+        "reprompt": question,
+    }
 
 
 def test_resume_validation_repeats_publication_title(mock_handler_input):

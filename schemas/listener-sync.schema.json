@@ -1,51 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hear-py/listener-sync.schema.json",
-  "title": "Listener sync payload",
-  "description": "Profile payload sent to POST /alexa/listeners/sync by src/services/listener_sync.py.",
+  "title": "Alexa listener registration and sync payload",
+  "description": "Payload sent to POST /alexa/listeners/sync by src/services/listener_sync.py.",
   "type": "object",
-  "required": [
-    "alexaUserId",
-    "listenerId",
-    "skillId",
-    "environment",
-    "principalType",
-    "deviceId",
-    "apiEndpoint",
-    "locale",
-    "clientVersion",
-    "listenerType",
-    "playbackSpeed"
-  ],
+  "required": ["action", "alexaUserId", "listenerId"],
   "properties": {
-    "alexaUserId": { "type": "string" },
+    "action": { "const": "alexa" },
+    "alexaUserId": { "type": "string", "minLength": 1 },
     "listenerId": { "type": ["string", "null"] },
-    "skillId": { "type": ["string", "null"] },
-    "environment": { "type": "string" },
-    "principalType": {
-      "enum": [
-        "recognized_person",
-        "skill_user",
-        null
-      ]
-    },
-    "listenerType": { "enum": ["guest", "registered"] },
-    "deviceId": { "type": ["string", "null"] },
-    "apiEndpoint": { "type": ["string", "null"] },
-    "locale": { "type": ["string", "null"] },
-    "userName": { "type": ["string", "null"] },
-    "userEmail": { "type": ["string", "null"] },
-    "address": { "type": ["string", "null"] },
-    "city": { "type": ["string", "null"] },
-    "state": { "type": ["string", "null"] },
-    "country": { "type": ["string", "null"] },
-    "countryCode": { "type": ["string", "null"] },
-    "postalCode": { "type": ["string", "null"] },
-    "latitude": { "type": ["number", "null"] },
-    "longitude": { "type": ["number", "null"] },
-    "clientVersion": { "type": "string" },
-    "locality": { "type": ["string", "null"] },
-    "playbackSpeed": { "type": ["number", "null"] }
+    "listenerName": { "type": "string", "minLength": 1 },
+    "email": { "type": "string", "format": "email", "minLength": 3 },
+    "city": { "type": "string", "minLength": 1 },
+    "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+    "latitude": { "type": "number", "minimum": -90, "maximum": 90 }
   },
   "additionalProperties": false
 }

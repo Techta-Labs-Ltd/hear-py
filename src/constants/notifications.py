@@ -9,11 +9,8 @@ class NotificationConstants:
             "DisableNotificationsIntent",
         }
     )
-    ACTIVE_INDEX = "ActiveByListener"
-    ACTIVE_PARTITION_KEY = "activeListenerId"
-    ACTIVE_SORT_KEY = "activePublishedAt"
-    CONTENT = "content"
-    PUBLICATION = "publication"
+    CREATOR_UPDATE = "creator_update"
+    ORGANIZATION_UPDATE = "organization_update"
     ACTIVE_STATUSES = frozenset({"pending", "offered", "resolving", "queued"})
     TERMINAL_STATUSES = frozenset({"consumed", "dismissed", "unavailable"})
     DELIVERY_RETRYABLE_STATUSES = frozenset({429, 432, 500, 503})

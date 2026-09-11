@@ -395,42 +395,16 @@ class Speech:
 
     @staticmethod
     def NOTIFICATION_OFFER(item, additional=0):
-        title = Speech.humanize_spoken_title(item.get("title"))
-        source = Speech.escape_ssml_lite(
-            item.get("organizationName") or item.get("creatorName") or "a source you follow"
-        )
-        if item.get("notificationType") == "publication":
-            subject = (
-                f"a new edition of {title}, from {source}"
-                if title
-                else f"a new publication from {source}"
-            )
-        else:
-            subject = (
-                f"a new recording called {title}, from {source}"
-                if title
-                else f"a new recording from {source}"
-            )
+        source = Speech.escape_ssml_lite(item.get("sourceName") or "a source you follow")
         more = f" You also have {additional} more updates." if additional else ""
-        return f"You have {subject}.{more} Would you like to listen now?"
+        return f"Good news, you've got a new release from {source}.{more} Would you like to listen?"
 
     @staticmethod
     def NOTIFICATION_OFFER_REPROMPT(item):
-        title = Speech.humanize_spoken_title(item.get("title"))
-        subject = title or "the new update"
-        return f"Would you like to listen to {Speech.escape_ssml_lite(subject)}? Say yes or no."
+        source = Speech.escape_ssml_lite(item.get("sourceName") or "that source")
+        return f"Would you like to hear the new release from {source}? Say yes or no."
 
     @staticmethod
     def NOTIFICATION_PLAYING(item):
-        title = Speech.humanize_spoken_title(item.get("title"))
-        if item.get("notificationType") == "publication":
-            return (
-                f"Here is {Speech.escape_ssml_lite(title)}."
-                if title
-                else "Here is the new publication."
-            )
-        return (
-            f"Here is {Speech.escape_ssml_lite(title)}."
-            if title
-            else "Here is the new recording."
-        )
+        source = Speech.escape_ssml_lite(item.get("sourceName") or "that source")
+        return f"Here is the latest release from {source}."

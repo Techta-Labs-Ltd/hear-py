@@ -11,6 +11,7 @@ from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.entities import AlexaEntities
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -105,11 +106,10 @@ class Search:
     @staticmethod
     def _build_no_content_response(handler_input: HandlerInput):
         """Return a standard no-content-available response."""
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.NO_CONTENT_AVAILABLE))
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.NO_CONTENT_AVAILABLE,
+            Speech.WELCOME_REPROMPT,
         )
 
     @staticmethod
@@ -118,11 +118,10 @@ class Search:
     ):
         """Build an error response from a failed or empty search result."""
         if search_result and search_result.get("failed"):
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.SEARCH_UNAVAILABLE))
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.SEARCH_UNAVAILABLE,
+                Speech.WELCOME_REPROMPT,
             )
         if search_result and search_result.get("client_message"):
             return (
@@ -141,13 +140,10 @@ class Search:
                 or search_payload.get("q")
                 or "that request"
             )
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(SearchSpeech.search_no_match(requested))
-                )
-                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                .set_should_end_session(False)
-                .response
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                SearchSpeech.search_no_match(requested),
+                Speech.WELCOME_REPROMPT,
             )
         return Search._build_no_content_response(handler_input)
 

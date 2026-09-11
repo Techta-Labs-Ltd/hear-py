@@ -71,7 +71,8 @@ def test_sqs_client_sends_one_canonical_envelope():
         "data": {"contentId": "track-1"},
     }
     assert sqs.messages[0]["MessageAttributes"] == {
-        "eventType": {"DataType": "String", "StringValue": "playback.finished"}
+        "eventType": {"DataType": "String", "StringValue": "playback.finished"},
+        "contentId": {"DataType": "String", "StringValue": "track-1"},
     }
 
 
@@ -150,27 +151,49 @@ async def test_publication_playback_event_reaches_sqs_as_publication(mock_handle
     envelope = json.loads(message["MessageBody"])
     data = envelope["data"]
     assert envelope["event"] == "playback.stopped"
-    assert envelope["schemaVersion"] == 2
+    assert envelope["schemaVersion"] == 3
     assert envelope["eventId"] == data["clientEventId"]
+    assert data["action"] == "alexa"
     assert data["subjectType"] == "publication"
-    assert data["subjectId"] == "publication-1"
+    assert data["contentId"] == "track-2"
     assert data["publicationId"] == "publication-1"
-    assert data["trackContentId"] == "track-2"
     assert data["timeSpentMs"] == 900000
-    assert data["timeSpentHours"] == 0.25
-    assert data["publicationTimeSpentMs"] == 1800000
-    assert data["publicationTimeSpentHours"] == 0.5
-    assert [track["contentId"] for track in data["trackListening"]] == [
-        "track-1",
-        "track-2",
-    ]
-    assert "contentId" not in data
+    assert set(data) == {
+        "action",
+        "alexaUserId",
+        "subjectType",
+        "contentId",
+        "publicationId",
+        "sessionId",
+        "subjectSessionId",
+        "eventType",
+        "positionMs",
+        "durationMs",
+        "listenedMs",
+        "timeSpentMs",
+        "trackIndex",
+        "trackCount",
+        "timestampMs",
+        "clientEventId",
+    }
+    assert {
+        "subjectId",
+        "trackContentId",
+        "creatorId",
+        "queueId",
+        "timeSpentHours",
+        "completionPercentage",
+        "publicationTimeSpentMs",
+        "publicationTimeSpentHours",
+        "trackListening",
+    }.isdisjoint(data)
     assert message["MessageAttributes"] == {
         "eventType": {"DataType": "String", "StringValue": "playback.stopped"},
         "eventId": {"DataType": "String", "StringValue": envelope["eventId"]},
-        "schemaVersion": {"DataType": "String", "StringValue": "2"},
+        "schemaVersion": {"DataType": "String", "StringValue": "3"},
+        "action": {"DataType": "String", "StringValue": "alexa"},
         "subjectType": {"DataType": "String", "StringValue": "publication"},
-        "subjectId": {"DataType": "String", "StringValue": "publication-1"},
+        "contentId": {"DataType": "String", "StringValue": "track-2"},
         "publicationId": {"DataType": "String", "StringValue": "publication-1"},
     }
 
@@ -209,15 +232,21 @@ async def test_publication_feedback_event_reaches_sqs_as_publication(mock_handle
 
     message = sqs.messages[0]
     data = json.loads(message["MessageBody"])["data"]
+    assert data["action"] == "alexa"
     assert data["subjectType"] == "publication"
-    assert data["subjectId"] == "publication-1"
-    assert data["contentIds"] == ["track-1", "track-2"]
-    assert data["timeSpentMs"] == 1800000
-    assert data["timeSpentHours"] == 0.5
+    assert data["publicationId"] == "publication-1"
     assert len(data["trackListening"]) == 2
     assert "contentId" not in data
+    assert {
+        "subjectId",
+        "contentIds",
+        "feedbackKey",
+        "publicationTitle",
+        "timeSpentMs",
+        "timeSpentHours",
+    }.isdisjoint(data)
     assert message["MessageAttributes"]["subjectType"]["StringValue"] == "publication"
-    assert message["MessageAttributes"]["subjectId"]["StringValue"] == "publication-1"
+    assert message["MessageAttributes"]["publicationId"]["StringValue"] == "publication-1"
 
 
 def test_follow_notification_event_reaches_sqs_with_publication_unit():
@@ -300,10 +329,28 @@ async def test_content_feedback_event_owns_one_complete_track(mock_handler_input
 
     envelope = producer.envelopes[0]
     assert envelope["event"] == "feedback.given"
+    assert envelope["schemaVersion"] == 3
+    assert envelope["data"]["action"] == "alexa"
     assert envelope["data"]["subjectType"] == "content"
-    assert envelope["data"]["subjectId"] == "track-1"
     assert envelope["data"]["contentId"] == "track-1"
-    assert "contentIds" not in envelope["data"]
+    assert set(envelope["data"]) == {
+        "action",
+        "alexaUserId",
+        "listenerId",
+        "subjectType",
+        "contentId",
+        "feedback",
+        "timestampMs",
+        "clientEventId",
+    }
+    assert {
+        "subjectId",
+        "contentIds",
+        "feedbackKey",
+        "title",
+        "listenedMs",
+        "completed",
+    }.isdisjoint(envelope["data"])
 
 
 @pytest.mark.asyncio
@@ -336,10 +383,31 @@ async def test_publication_feedback_event_owns_the_whole_publication(
 
     data = producer.envelopes[0]["data"]
     assert data["subjectType"] == "publication"
-    assert data["subjectId"] == "publication-1"
     assert data["publicationId"] == "publication-1"
-    assert data["contentIds"] == ["track-1", "track-2"]
+    assert data["trackListening"] == []
     assert "contentId" not in data
+    assert set(data) == {
+        "action",
+        "alexaUserId",
+        "listenerId",
+        "subjectType",
+        "publicationId",
+        "trackListening",
+        "feedback",
+        "timestampMs",
+        "clientEventId",
+    }
+    assert {
+        "subjectId",
+        "contentIds",
+        "feedbackKey",
+        "publicationTitle",
+        "expectedTrackCount",
+        "meaningfulTrackCount",
+        "coverage",
+        "listenedMs",
+        "completed",
+    }.isdisjoint(data)
 
 
 @pytest.mark.asyncio
@@ -386,10 +454,10 @@ async def test_playback_event_uses_publication_as_subject_and_track_as_cursor(
     assert envelope["event"] == "playback.stopped"
     data = envelope["data"]
     assert data["subjectType"] == "publication"
-    assert data["subjectId"] == "publication-1"
     assert data["publicationId"] == "publication-1"
-    assert data["trackContentId"] == "track-1"
-    assert "contentId" not in data
+    assert data["contentId"] == "track-1"
+    assert "subjectId" not in data
+    assert "trackContentId" not in data
 
 
 @pytest.mark.asyncio
@@ -411,9 +479,9 @@ async def test_playback_event_keeps_standalone_content_as_subject(mock_handler_i
 
     data = producer.envelopes[0]["data"]
     assert data["subjectType"] == "content"
-    assert data["subjectId"] == "track-1"
     assert data["contentId"] == "track-1"
     assert "publicationId" not in data
+    assert "subjectId" not in data
     assert "trackContentId" not in data
 
 

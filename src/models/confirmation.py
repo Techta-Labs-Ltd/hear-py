@@ -26,6 +26,8 @@ class ConfirmationPolicy:
     ALEXA_INTENTS = frozenset(
         {
             "ChooseSourceKindIntent",
+            "OpenDiscoveryIntent",
+            "CarrierlessDiscoveryIntent",
             "PlayContentIntent",
             "SearchContentIntent",
             "PlayByCreatorIntent",
@@ -37,6 +39,7 @@ class ConfirmationPolicy:
             "PlayPublicationIntent",
             "SelectPublicationSourceIntent",
             "SearchPublicationIntent",
+            "TownCaptureIntent",
             "BrowseContentIntent",
             "BrowseByCategoryIntent",
             "WhatsTrendingIntent",
@@ -46,6 +49,8 @@ class ConfirmationPolicy:
     )
     SLOT_PRIORITY = {
         "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
+        "OpenDiscoveryIntent": ("searchQuery",),
+        "CarrierlessDiscoveryIntent": ("discoveryQuery", "topic"),
         "SearchContentIntent": ("searchQuery",),
         "SearchCreatorIntent": ("searchQuery",),
         "SearchOrganizationIntent": ("searchQuery",),

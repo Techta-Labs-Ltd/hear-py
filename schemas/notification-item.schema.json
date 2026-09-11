@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/notification-item.schema.json",
+  "title": "Hear source-update notification v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "notificationId",
+    "notificationType",
+    "sourceType",
+    "sourceId",
+    "sourceName",
+    "lastDate",
+    "expiresAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "notificationId": { "type": "string", "minLength": 1 },
+    "notificationType": {
+      "enum": ["creator_update", "organization_update"]
+    },
+    "sourceType": { "enum": ["creator", "organization"] },
+    "sourceId": { "type": "string", "minLength": 1 },
+    "sourceName": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "lastDate": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "notificationType": { "const": "creator_update" } },
+        "required": ["notificationType"]
+      },
+      "then": { "properties": { "sourceType": { "const": "creator" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "notificationType": { "const": "organization_update" }
+        },
+        "required": ["notificationType"]
+      },
+      "then": { "properties": { "sourceType": { "const": "organization" } } }
+    }
+  ],
+  "additionalProperties": false
+}

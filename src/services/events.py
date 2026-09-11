@@ -44,15 +44,10 @@ class OutboundEventService:
                 "durationMs": state.get("durationMs") or 0,
                 "listenedMs": state.get("listenedMs") or 0,
                 "timeSpentMs": state.get("timeSpentMs") or 0,
-                "creatorId": state.get("creatorId"),
                 "publicationId": state.get("publicationId"),
                 "subjectSessionId": state.get("subjectSessionId"),
                 "trackIndex": state.get("trackIndex"),
                 "trackCount": state.get("trackCount"),
-                "queueId": state.get("queueId"),
-                "publicationTimeSpentMs": state.get("publicationTimeSpentMs"),
-                "publicationTimeSpentHours": state.get("publicationTimeSpentHours"),
-                "trackListening": state.get("trackListening"),
             }
         )
         event.update(

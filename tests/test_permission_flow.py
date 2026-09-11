@@ -208,7 +208,7 @@ async def test_profile_consent_uses_pending_state_when_alexa_omits_token():
     deps.onboarding.decline_permission.assert_not_called()
 
 
-def test_guest_sync_excludes_protected_profile_and_location_fields():
+def test_guest_sync_contains_only_alexa_identity_fields():
     handler_input = _handler_input()
     store = User.snapshot(handler_input)
     store.update(
@@ -222,16 +222,11 @@ def test_guest_sync_excludes_protected_profile_and_location_fields():
         }
     )
     payload = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
-    assert payload["listenerType"] == "guest"
-    assert not {
-        "userName",
-        "userEmail",
-        "city",
-        "postalCode",
-        "latitude",
-        "longitude",
-        "locality",
-    }.intersection(payload)
+    assert payload == {
+        "action": "alexa",
+        "alexaUserId": "user",
+        "listenerId": None,
+    }
 
 
 def test_listener_sync_uses_publication_history_subject_instead_of_track():

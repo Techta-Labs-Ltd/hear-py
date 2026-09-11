@@ -8,6 +8,7 @@ import pytest
 
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.clients.hear import HearApiClient, HearApiOptions, HearApiSupport
+from src.clients.notifications import NotificationApiClient
 from src.clients.pool import CircuitHttpClient, HttpCircuitBreaker, HttpCircuitOpen
 from src.container import ApplicationContainer
 from src.models.playback import Playback
@@ -53,6 +54,122 @@ def test_location_path_applies_configured_prefix_once():
 def test_availability_path_applies_configured_prefix_once():
     client = HearApiClient(HearApiOptions(path_prefix="alexa"))
     assert client._build_api_path(client._build_alexa_availability_path()) == "/alexa/availability"
+
+
+def test_notification_api_uses_the_alexa_notification_post_path():
+    client = NotificationApiClient(
+        api_key="test-key",
+        base_url="https://api.example.com",
+        path_prefix="alexa",
+    )
+    assert client.enabled is True
+    assert client._path == "/alexa/notification"
+
+
+@pytest.mark.asyncio
+async def test_notification_fetch_posts_listener_identity_and_normalizes_item(monkeypatch):
+    captured = {}
+
+    async def fake_post(self, body, timeout_ms):
+        captured.update({"body": body})
+        return 200, {
+            "data": {
+                "notification": {
+                    "schemaVersion": 1,
+                    "notificationId": "notification-1",
+                    "notificationType": "creator_update",
+                    "sourceType": "creator",
+                    "sourceId": "creator-1",
+                    "sourceName": "News Reader",
+                    "lastDate": "2026-09-11T10:00:00Z",
+                    "expiresAt": "2026-09-12T10:00:00Z",
+                },
+                "listenerId": "listener-1",
+                "deliveryTarget": {
+                    "type": "alexa",
+                    "userId": "alexa-1",
+                },
+            }
+        }
+
+    monkeypatch.setattr(NotificationApiClient, "_post", fake_post)
+    result = await NotificationApiClient().pending(
+        {
+            "listenerId": "listener-1",
+            "notificationId": "notification-1",
+            "purpose": "delivery",
+            "limit": 1,
+        }
+    )
+
+    assert captured == {
+        "body": {
+            "operation": "fetch",
+            "listenerId": "listener-1",
+            "notificationId": "notification-1",
+            "purpose": "delivery",
+            "limit": 1,
+        },
+    }
+    assert result["failed"] is False
+    assert result["items"][0]["notificationId"] == "notification-1"
+
+
+@pytest.mark.asyncio
+async def test_notification_update_posts_delivery_result_to_same_endpoint(monkeypatch):
+    captured = {}
+
+    async def fake_post(self, body, timeout_ms):
+        captured.update({"body": body})
+        return 200, {"updated": True}
+
+    monkeypatch.setattr(NotificationApiClient, "_post", fake_post)
+    result = await NotificationApiClient().update(
+        {
+            "listenerId": "listener-1",
+            "notificationId": "notification-1",
+            "deliveryStatus": "sent",
+            "deliveryHttpStatus": 202,
+        }
+    )
+
+    assert captured == {
+        "body": {
+            "operation": "update",
+            "listenerId": "listener-1",
+            "notificationId": "notification-1",
+            "deliveryStatus": "sent",
+            "deliveryHttpStatus": 202,
+        },
+    }
+    assert result == {"updated": True, "retryable": False, "httpStatus": 200}
+
+
+@pytest.mark.asyncio
+async def test_notification_fetch_rejects_a_mismatched_listener(monkeypatch):
+    async def fake_post(self, body, timeout_ms):
+        return 200, {
+            "notification": {
+                "notificationId": "notification-1",
+                "notificationType": "creator_update",
+                "sourceType": "creator",
+                "sourceId": "creator-1",
+                "sourceName": "News Reader",
+                "lastDate": "2026-09-11T10:00:00Z",
+                "expiresAt": "2026-09-12T10:00:00Z",
+            },
+            "listenerId": "another-listener",
+        }
+
+    monkeypatch.setattr(NotificationApiClient, "_post", fake_post)
+    result = await NotificationApiClient().pending(
+        {
+            "listenerId": "listener-1",
+            "notificationId": "notification-1",
+        }
+    )
+
+    assert result == {"items": [], "failed": True, "retryable": True, "httpStatus": 200}
 
 
 @pytest.mark.parametrize(

@@ -9,7 +9,6 @@ from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.constants.notifications import NotificationConstants
 from src.models.dialog import DialogStateManager
 from src.models.search import Search
 from src.utils.deadline import DeadlineBudget
@@ -31,19 +30,17 @@ class Notification:
         allowed = {
             "notificationId",
             "notificationType",
-            "contentId",
-            "publicationId",
-            "title",
-            "creatorId",
-            "creatorName",
-            "organizationId",
-            "organizationName",
-            "publishedAt",
+            "sourceType",
+            "sourceId",
+            "sourceName",
+            "lastDate",
+            "expiresAt",
         }
         return {key: item[key] for key in allowed if item.get(key) is not None}
 
     async def _safe_status(
         self,
+        handler_input,
         item: dict,
         status: str,
         *,
@@ -53,10 +50,14 @@ class Notification:
         if not resolved_listener_id or not item.get("notificationId"):
             return False
         try:
-            await self._deps.notification_inbox.set_status(
-                resolved_listener_id, item["notificationId"], status
+            result = await self._deps.notification_api.update(
+                {
+                    "listenerId": resolved_listener_id,
+                    "notificationId": item["notificationId"],
+                    "status": status,
+                }
             )
-            return True
+            return bool(result.get("updated"))
         except Exception as exc:
             self.logger.warning(
                 "Hear: notification status update failed status=%s error=%s",
@@ -73,7 +74,10 @@ class Notification:
             return None
         store = self._deps.user.snapshot(handler_input)
         listener_id = str(store.get("listenerId") or "").strip()
-        if not listener_id or not self._deps.notification_inbox.enabled:
+        if (
+            not listener_id
+            or not getattr(self._deps.notification_api, "enabled", True)
+        ):
             return (
                 AlexaResponse.present_idle_next(
                     handler_input,
@@ -84,10 +88,16 @@ class Notification:
                 else None
             )
         try:
-            items = await self._deps.notification_inbox.pending(
-                listener_id,
-                limit=max(1, settings.HEAR_NOTIFICATION_LIMIT),
+            result = await self._deps.notification_api.pending(
+                {
+                    "listenerId": listener_id,
+                    "purpose": "inbox",
+                    "limit": max(1, settings.HEAR_NOTIFICATION_LIMIT),
+                }
             )
+            if result.get("failed"):
+                raise RuntimeError("notification API unavailable")
+            items = result.get("items") or []
         except Exception as exc:
             self.logger.warning(
                 "Hear: notification inbox read failed error=%s", type(exc).__name__
@@ -113,7 +123,7 @@ class Notification:
             )
         source_item = items[0]
         item = Notification._dialog_item(source_item)
-        await self._safe_status(source_item, "offered")
+        await self._safe_status(handler_input, source_item, "offered")
         self._deps.user.update(
             handler_input,
             {
@@ -146,18 +156,15 @@ class Notification:
                 Speech.WELCOME_REPROMPT,
             )
         listener_id = str(store.get("listenerId") or "").strip()
-        await self._safe_status(item, "resolving", listener_id=listener_id)
-        filters = (
-            SearchFilters.content(item.get("contentId"))
-            if item.get("notificationType") == NotificationConstants.CONTENT
-            else SearchFilters.source("publication", item.get("publicationId"))
-        )
-        limit = 1 if item.get("notificationType") == NotificationConstants.CONTENT else 10
+        await self._safe_status(handler_input, item, "resolving", listener_id=listener_id)
+        filters = SearchFilters.source(item.get("sourceType"), item.get("sourceId"))
+        if item.get("lastDate"):
+            filters["publishedFrom"] = item["lastDate"]
         payload = SearchPayload.build(
             AlexaRequest.get_user_id(handler_input),
             store,
             q="",
-            limit=limit,
+            limit=10,
             page=0,
             sort="latest",
             nlp_filter=filters,
@@ -174,7 +181,7 @@ class Notification:
             )
             result = {"results": [], "failed": True}
         if result.get("failed"):
-            await self._safe_status(item, "pending", listener_id=listener_id)
+            await self._safe_status(handler_input, item, "pending", listener_id=listener_id)
             self._clear_dialog(handler_input)
             return AlexaResponse.present_idle_next(
                 handler_input,
@@ -183,7 +190,7 @@ class Notification:
             )
         results = list(result.get("results") or [])
         if not results:
-            await self._safe_status(item, "unavailable", listener_id=listener_id)
+            await self._safe_status(handler_input, item, "unavailable", listener_id=listener_id)
             self._clear_dialog(handler_input)
             return AlexaResponse.present_idle_next(
                 handler_input,
@@ -201,7 +208,7 @@ class Notification:
                 }
             },
         )
-        await self._safe_status(item, "queued", listener_id=listener_id)
+        await self._safe_status(handler_input, item, "queued", listener_id=listener_id)
         result["_search_payload"] = payload
         try:
             return await Search.auto_play_first_from_search(
@@ -215,7 +222,7 @@ class Notification:
                 deps=self._deps,
             )
         except Exception:
-            await self._safe_status(item, "pending", listener_id=listener_id)
+            await self._safe_status(handler_input, item, "pending", listener_id=listener_id)
             self._deps.user.update(handler_input, {"notificationPlayback": None})
             raise
 
@@ -224,6 +231,7 @@ class Notification:
         item = store.get("pendingNotification") or {}
         if item.get("notificationId"):
             await self._safe_status(
+                handler_input,
                 item,
                 "dismissed",
                 listener_id=str(store.get("listenerId") or "").strip(),
@@ -252,6 +260,7 @@ class Notification:
         if not pending.get("notificationId") or pending.get("contentId") != content_id:
             return
         await self._safe_status(
+            handler_input,
             pending,
             "consumed",
             listener_id=str(store.get("listenerId") or "").strip(),
@@ -264,6 +273,7 @@ class Notification:
         if not pending.get("notificationId") or pending.get("contentId") != content_id:
             return
         await self._safe_status(
+            handler_input,
             pending,
             "pending",
             listener_id=str(store.get("listenerId") or "").strip(),

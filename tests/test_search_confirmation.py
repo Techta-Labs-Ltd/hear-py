@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
@@ -8,6 +14,7 @@ from src.middleware.confirmation import (
     ConfirmationMiddleware,
     SearchConfirmationGateHandler,
 )
+from src.models.affirmative import Affirmative
 from src.models.availability_data import AvailabilityData
 from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolutionBuilder
@@ -81,10 +88,12 @@ def test_full_resolved_search_is_spoken_before_backend_search():
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
     ConfirmationMiddleware().process(handler_input)
     response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
-    assert (
-        "Did you want me to play the latest community services from York Talking News?"
-        in response["outputSpeech"]["ssml"]
+    question = (
+        "Did you want me to play the latest community services from York Talking News? "
+        "Please say yes or no."
     )
+    assert question in response["outputSpeech"]["ssml"]
+    assert question in response["reprompt"]["outputSpeech"]["ssml"]
     store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     pending = store["pendingResolution"]
@@ -236,6 +245,102 @@ def test_play_york_tn_still_requires_confirmation():
     store = User.snapshot(handler_input)
     assert store["awaitingSearchConfirmation"] is True
     assert store["activeDialog"]["type"] == "search_confirmation"
+    session = handler_input.attributes_manager.get_session_attributes()
+    assert session["awaitingSearchConfirmation"] is True
+    assert session["pendingResolution"] == store["pendingResolution"]
+
+
+@pytest.mark.asyncio
+async def test_yes_uses_session_confirmation_when_persistent_dialog_state_is_missing():
+    resolution = {
+        "requestId": "resolution-session-1",
+        "intent": "organization",
+        "confirmationLabel": "content from Wakefield Talking Newspaper",
+        "searchPayload": {"query": "", "filter": {"organizationIds": ["org-wtn"]}},
+        "expiresAt": int(time.time()) + 300,
+    }
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "session": {
+                "attributes": {
+                    "awaitingSearchConfirmation": True,
+                    "pendingResolution": resolution,
+                }
+            },
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    expected = {"outputSpeech": {"ssml": "played"}}
+    availability = SimpleNamespace(handle_resolution=AsyncMock(return_value=expected))
+    deps = SimpleNamespace(user=User(), availability=availability)
+
+    response = await Affirmative(deps=deps).execute(handler_input)
+
+    assert response == expected
+    availability.handle_resolution.assert_awaited_once()
+    assert attributes.get_session_attributes() == {}
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_confirmed_search_terminal_response_reopens_bare_discovery(failed):
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.YesIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+    }
+    handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolution = {
+        "intent": "organization",
+        "searchPayload": {"query": "", "filter": {"organizationIds": ["org-wtn"]}},
+    }
+
+    response = Affirmative(deps=SimpleNamespace())._failed_search_response(
+        handler_input,
+        resolution,
+        {"failed": failed, "results": []},
+        "content from Wakefield Talking Newspaper",
+    )
+
+    assert response["shouldEndSession"] is False
+    assert response["directives"] == [
+        {
+            "type": "Dialog.ElicitSlot",
+            "slotToElicit": "searchQuery",
+            "updatedIntent": {
+                "name": "OpenDiscoveryIntent",
+                "confirmationStatus": "NONE",
+                "slots": {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+            },
+        }
+    ]
 
 
 def test_empty_play_request_reports_failed_recognition_and_stays_open():

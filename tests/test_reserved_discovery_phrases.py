@@ -186,6 +186,155 @@ async def test_truncated_talking_organization_request_never_reaches_resolver(
 
 
 @pytest.mark.asyncio
+async def test_carrierless_discovery_forwards_a_no_match_value_unchanged(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "CarrierlessDiscoveryIntent",
+                "slots": {
+                    "topic": {
+                        "name": "topic",
+                        "value": "latest sport in Swindon from TNF",
+                        "resolutions": {
+                            "resolutionsPerAuthority": [
+                                {"status": {"code": "ER_SUCCESS_NO_MATCH"}}
+                            ]
+                        },
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "general",
+            "slots": {
+                "category": "sport",
+                "city": "Swindon",
+                "organizationName": "Talking News Federation",
+                "organizationIds": ["organization-tnf"],
+                "residualQuery": "",
+            },
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        "latest sport in Swindon from TNF",
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "general"
+    assert nlp["alexaRawIntent"] == "CarrierlessDiscoveryIntent"
+    assert nlp["nlpMatchesAlexa"] is True
+    assert nlp["needsRedirect"] is False
+
+
+@pytest.mark.asyncio
+async def test_carrierless_name_reply_respects_active_organization_dialog(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "CarrierlessDiscoveryIntent",
+                "slots": {
+                    "topic": {
+                        "name": "topic",
+                        "value": "Talking News Federation",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingOrganizationName": True,
+        "activeDialog": {
+            "type": "organization_name",
+            "context": {"slotName": "organizationQuery"},
+            "expiresAt": 4102444800,
+        },
+    }
+    resolve = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "organization",
+            "slots": {
+                "organizationName": "Talking News Federation",
+                "organizationIds": ["organization-tnf"],
+                "residualQuery": "",
+            },
+        }
+    )
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_awaited_once_with(
+        "play from Talking News Federation",
+        alexa_user_id="amzn1.ask.account.TEST",
+        timeout_ms=5000,
+    )
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "organization"
+    assert nlp["slots"]["organizationQuery"] == "Talking News Federation"
+    assert nlp["slots"]["organizationFollowUp"] is True
+
+
+@pytest.mark.asyncio
+async def test_carrierless_town_reply_respects_active_onboarding(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "CarrierlessDiscoveryIntent",
+                "slots": {"topic": {"name": "topic", "value": "Swindon"}},
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+
+    resolve.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"] == {"townName": "Swindon", "placeName": "Swindon"}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("source_kind", "expected_intent", "flag", "action_type"),
     [
@@ -589,7 +738,7 @@ async def test_date_only_discovery_builds_date_filter_without_resolver_text(
             "SelectPublicationSourceIntent",
             "publicationSourceQuery",
             "Dorking Talking Magazine",
-            "play publication from Dorking Talking Magazine",
+            "play Dorking Talking Magazine",
             "publication",
         ),
     ],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,7 +8,6 @@ import pytest
 from src.clients.proactive import ProactiveEventPayload, ProactiveEventsClient
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
-from src.database.dynamodb import DynamoExpressions
 from src.models.launch_workflow import LaunchWorkflow
 from src.models.onboarding import LaunchTracker
 from src.models.search import Search
@@ -15,42 +15,52 @@ from src.models.user import User
 from src.services.notification_delivery import NotificationDeliveryService
 
 
-class FakeInbox:
-    def __init__(self, items=None):
+class FakeHearApi:
+    def __init__(self, result=None, items=None):
         self.enabled = True
+        self.result = result or {"results": [], "failed": False}
         self.items = list(items or [])
+        self.payload = None
+        self.notification_request = None
         self.statuses = []
         self.deliveries = []
-
-    async def pending(self, listener_id, limit=5):
-        return [item for item in self.items if item["listenerId"] == listener_id][:limit]
-
-    async def set_status(self, listener_id, notification_id, status):
-        self.statuses.append((listener_id, notification_id, status))
-
-    async def set_delivery(
-        self,
-        listener_id,
-        notification_id,
-        status,
-        *,
-        http_status=None,
-        error_code=None,
-    ):
-        self.deliveries.append(
-            (listener_id, notification_id, status, http_status, error_code)
-        )
-
-
-class FakeHearApi:
-    def __init__(self, result):
-        self.result = result
-        self.payload = None
 
     async def search(self, payload, timeout_ms=None):
         del timeout_ms
         self.payload = payload
         return self.result
+
+    async def pending(self, request, timeout_ms=None):
+        del timeout_ms
+        self.notification_request = dict(request)
+        items = [
+            item
+            for item in self.items
+            if item["listenerId"] == request["listenerId"]
+            and (
+                not request.get("notificationId")
+                or item["notificationId"] == request["notificationId"]
+            )
+        ]
+        return {"items": items[: request.get("limit", 5)], "failed": False}
+
+    async def update(self, request, timeout_ms=None):
+        del timeout_ms
+        if request.get("status"):
+            self.statuses.append(
+                (request["listenerId"], request["notificationId"], request["status"])
+            )
+        if request.get("deliveryStatus"):
+            self.deliveries.append(
+                (
+                    request["listenerId"],
+                    request["notificationId"],
+                    request["deliveryStatus"],
+                    request.get("deliveryHttpStatus"),
+                    request.get("deliveryErrorCode"),
+                )
+            )
+        return {"updated": True, "retryable": False, "httpStatus": 200}
 
 
 class FakeProgressive:
@@ -99,39 +109,33 @@ class FakeHttpPool:
 
 class NotificationExamples:
     @staticmethod
-    def content():
+    def creator():
         return {
             "schemaVersion": 1,
             "listenerId": "listener-1",
             "notificationId": "notification-1",
-            "notificationType": "content",
-            "contentId": "content-1",
-            "title": "The morning bulletin",
-            "creatorId": "creator-1",
-            "creatorName": "Pendle Voice",
-            "organizationId": "organization-1",
-            "organizationName": "Pendle Voice",
+            "notificationType": "creator_update",
+            "sourceType": "creator",
+            "sourceId": "creator-1",
+            "sourceName": "Pendle Voice",
             "alexaUserId": "amzn1.ask.account.TEST",
             "locale": "en-GB",
-            "publishedAt": 1_788_430_000,
-            "status": "pending",
-            "deliveryStatus": "pending",
+            "lastDate": "2026-09-11T10:00:00Z",
             "sendProactive": True,
-            "expiresAt": 1_788_516_400,
+            "expiresAt": "2026-09-12T10:00:00Z",
         }
 
     @staticmethod
-    def publication():
-        item = NotificationExamples.content()
+    def organization():
+        item = NotificationExamples.creator()
         item.update(
             {
-                "notificationId": "publication:publication-1",
-                "notificationType": "publication",
-                "publicationId": "publication-1",
-                "title": "The September edition",
+                "notificationId": "organization-update-1",
+                "notificationType": "organization_update",
+                "sourceType": "organization",
+                "sourceId": "organization-1",
             }
         )
-        item.pop("contentId")
         return item
 
 
@@ -156,20 +160,20 @@ async def test_notification_offer_uses_canonical_listener_and_persists_compact_d
     mock_handler_input,
 ):
     NotificationTestSupport.prepare(mock_handler_input)
-    inbox = FakeInbox([NotificationExamples.content()])
-    deps = ApplicationContainer(notification_inbox=inbox)
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    deps = ApplicationContainer(notification_api=hear)
 
     response = await deps.notifications.offer(mock_handler_input, explicit=True)
 
     assert response == {"response": True}
-    assert inbox.statuses == [("listener-1", "notification-1", "offered")]
+    assert hear.statuses == [("listener-1", "notification-1", "offered")]
     store = User.snapshot(mock_handler_input)
     assert store["awaitingNotificationChoice"] is True
-    assert store["pendingNotification"]["contentId"] == "content-1"
+    assert store["pendingNotification"]["sourceId"] == "creator-1"
     assert "alexaUserId" not in store["pendingNotification"]
     assert "listenerId" not in store["pendingNotification"]
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "The morning bulletin" in spoken
+    assert "new release from Pendle Voice" in spoken
     assert "Pendle Voice" in spoken
 
 
@@ -178,13 +182,13 @@ async def test_automatic_notification_offer_runs_when_listener_returns_on_launch
     mock_handler_input,
 ):
     NotificationTestSupport.prepare(mock_handler_input)
-    inbox = FakeInbox([NotificationExamples.content()])
-    deps = ApplicationContainer(notification_inbox=inbox)
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    deps = ApplicationContainer(notification_api=hear)
 
     response = await deps.notifications.offer(mock_handler_input)
 
     assert response == {"response": True}
-    assert inbox.statuses == [("listener-1", "notification-1", "offered")]
+    assert hear.statuses == [("listener-1", "notification-1", "offered")]
     assert User.snapshot(mock_handler_input)["awaitingNotificationChoice"] is True
 
 
@@ -197,13 +201,13 @@ async def test_automatic_notification_offer_never_interrupts_an_active_intent(
         "type": "IntentRequest",
         "intent": {"name": "IncreaseSpeedIntent", "slots": {}},
     }
-    inbox = FakeInbox([NotificationExamples.content()])
-    deps = ApplicationContainer(notification_inbox=inbox)
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    deps = ApplicationContainer(notification_api=hear)
 
     response = await deps.notifications.offer(mock_handler_input)
 
     assert response is None
-    assert inbox.statuses == []
+    assert hear.statuses == []
     assert User.snapshot(mock_handler_input)["awaitingNotificationChoice"] is False
 
 
@@ -226,8 +230,8 @@ async def test_return_launch_offers_new_update_before_an_unfinished_recording(
             },
         },
     )
-    inbox = FakeInbox([NotificationExamples.content()])
-    deps = ApplicationContainer(notification_inbox=inbox)
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    deps = ApplicationContainer(notification_api=hear)
     monkeypatch.setattr(LaunchTracker, "record", lambda *_args: {"save": {}})
     monkeypatch.setattr(
         LaunchWorkflow,
@@ -248,20 +252,20 @@ async def test_return_launch_offers_new_update_before_an_unfinished_recording(
     assert store["awaitingNotificationChoice"] is True
     assert store["awaitingResume"] is False
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "The morning bulletin" in spoken
+    assert "new release from Pendle Voice" in spoken
     assert "Yesterday's recording" not in spoken
 
 
 @pytest.mark.asyncio
-async def test_notification_accept_searches_exact_content_and_consumes_only_when_started(
+async def test_creator_update_searches_source_since_last_date_and_consumes_on_start(
     monkeypatch,
     mock_handler_input,
 ):
-    item = NotificationExamples.content()
+    item = NotificationExamples.creator()
     compact_item = {
         key: value
         for key, value in item.items()
-        if key not in {"alexaUserId", "listenerId", "status", "deliveryStatus"}
+        if key not in {"alexaUserId", "listenerId"}
     }
     NotificationTestSupport.prepare(
         mock_handler_input,
@@ -270,7 +274,6 @@ async def test_notification_accept_searches_exact_content_and_consumes_only_when
             "pendingNotification": compact_item,
         },
     )
-    inbox = FakeInbox([item])
     hear = FakeHearApi(
         {
             "results": [
@@ -285,8 +288,8 @@ async def test_notification_accept_searches_exact_content_and_consumes_only_when
         }
     )
     deps = ApplicationContainer(
-        notification_inbox=inbox,
         heara=hear,
+        notification_api=hear,
         progressive=FakeProgressive(),
     )
     auto_play = AsyncMock(return_value={"playing": True})
@@ -295,8 +298,11 @@ async def test_notification_accept_searches_exact_content_and_consumes_only_when
     response = await deps.notifications.accept(mock_handler_input)
 
     assert response == {"playing": True}
-    assert hear.payload["filter"] == {"contentIds": ["content-1"]}
-    assert [status[2] for status in inbox.statuses] == ["resolving", "queued"]
+    assert hear.payload["filter"] == {
+        "creatorIds": ["creator-1"],
+        "publishedFrom": "2026-09-11T10:00:00Z",
+    }
+    assert [status[2] for status in hear.statuses] == ["resolving", "queued"]
     assert User.snapshot(mock_handler_input)["notificationPlayback"] == {
         "notificationId": "notification-1",
         "contentId": "content-1",
@@ -304,16 +310,16 @@ async def test_notification_accept_searches_exact_content_and_consumes_only_when
 
     await deps.notifications.playback_started(mock_handler_input, "content-1")
 
-    assert inbox.statuses[-1] == ("listener-1", "notification-1", "consumed")
+    assert hear.statuses[-1] == ("listener-1", "notification-1", "consumed")
     assert User.snapshot(mock_handler_input)["notificationPlayback"] is None
 
 
 @pytest.mark.asyncio
-async def test_publication_notification_searches_the_exact_publication(
+async def test_organization_update_searches_source_since_last_date(
     monkeypatch,
     mock_handler_input,
 ):
-    item = NotificationExamples.publication()
+    item = NotificationExamples.organization()
     NotificationTestSupport.prepare(
         mock_handler_input,
         {
@@ -321,11 +327,10 @@ async def test_publication_notification_searches_the_exact_publication(
             "pendingNotification": {
                 key: value
                 for key, value in item.items()
-                if key not in {"alexaUserId", "listenerId", "status", "deliveryStatus"}
+                if key not in {"alexaUserId", "listenerId"}
             },
         },
     )
-    inbox = FakeInbox([item])
     hear = FakeHearApi(
         {
             "results": [
@@ -340,8 +345,8 @@ async def test_publication_notification_searches_the_exact_publication(
         }
     )
     deps = ApplicationContainer(
-        notification_inbox=inbox,
         heara=hear,
+        notification_api=hear,
         progressive=FakeProgressive(),
     )
     monkeypatch.setattr(
@@ -352,14 +357,17 @@ async def test_publication_notification_searches_the_exact_publication(
 
     await deps.notifications.accept(mock_handler_input)
 
-    assert hear.payload["filter"] == {"publicationIds": ["publication-1"]}
+    assert hear.payload["filter"] == {
+        "organizationIds": ["organization-1"],
+        "publishedFrom": "2026-09-11T10:00:00Z",
+    }
     assert hear.payload["limit"] == 10
     assert hear.payload["sort"] == "latest"
 
 
 @pytest.mark.asyncio
 async def test_notification_playback_failure_returns_item_to_pending(mock_handler_input):
-    item = NotificationExamples.content()
+    item = NotificationExamples.creator()
     NotificationTestSupport.prepare(
         mock_handler_input,
         {
@@ -369,17 +377,17 @@ async def test_notification_playback_failure_returns_item_to_pending(mock_handle
             }
         },
     )
-    inbox = FakeInbox([item])
-    deps = ApplicationContainer(notification_inbox=inbox)
+    hear = FakeHearApi(items=[item])
+    deps = ApplicationContainer(notification_api=hear)
 
     await deps.notifications.playback_failed(mock_handler_input, "content-1")
 
-    assert inbox.statuses == [("listener-1", "notification-1", "pending")]
+    assert hear.statuses == [("listener-1", "notification-1", "pending")]
     assert User.snapshot(mock_handler_input)["notificationPlayback"] is None
 
 
 def test_proactive_media_event_uses_localized_content_and_unicast_audience():
-    payload = ProactiveEventPayload.build(NotificationExamples.content())
+    payload = ProactiveEventPayload.build(NotificationExamples.creator())
 
     assert payload["event"]["name"] == "AMAZON.MediaContent.Available"
     assert payload["event"]["payload"]["availability"]["method"] == "STREAM"
@@ -387,7 +395,7 @@ def test_proactive_media_event_uses_localized_content_and_unicast_audience():
         {
             "locale": "en-GB",
             "providerName": "Pendle Voice",
-            "contentName": "The morning bulletin",
+            "contentName": "A new release from Pendle Voice",
         }
     ]
     assert payload["relevantAudience"]["payload"]["user"] == "amzn1.ask.account.TEST"
@@ -404,7 +412,7 @@ async def test_proactive_client_gets_lwa_token_then_posts_to_europe_development_
         pool=pool,
     )
 
-    result = await client.deliver(NotificationExamples.content())
+    result = await client.deliver(NotificationExamples.creator())
 
     assert result == {"sent": True, "retryable": False, "httpStatus": 202}
     assert len(pool.client.calls) == 2
@@ -413,10 +421,9 @@ async def test_proactive_client_gets_lwa_token_then_posts_to_europe_development_
 
 
 @pytest.mark.asyncio
-async def test_stream_consumer_reports_only_retryable_records():
-    item = NotificationExamples.content()
-    encoded = {key: DynamoExpressions.encode_value(value) for key, value in item.items()}
-    inbox = FakeInbox([item])
+async def test_sqs_consumer_reports_only_retryable_records():
+    item = NotificationExamples.creator()
+    hear = FakeHearApi(items=[item])
     proactive = FakeProactive(
         {
             "sent": False,
@@ -425,22 +432,91 @@ async def test_stream_consumer_reports_only_retryable_records():
             "errorCode": "unavailable",
         }
     )
-    service = NotificationDeliveryService(inbox, proactive)
+    service = NotificationDeliveryService(hear, proactive)
 
     result = await service.consume(
         [
             {
-                "eventName": "INSERT",
-                "dynamodb": {"SequenceNumber": "123", "NewImage": encoded},
+                "messageId": "123",
+                "body": json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "listenerId": "listener-1",
+                        "notificationId": "notification-1",
+                    }
+                ),
             },
             {
-                "eventName": "MODIFY",
-                "dynamodb": {"SequenceNumber": "456", "NewImage": encoded},
+                "messageId": "456",
+                "body": json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "listenerId": "listener-1",
+                        "notificationId": "notification-2",
+                    }
+                ),
             },
         ]
     )
 
     assert result == {"batchItemFailures": [{"itemIdentifier": "123"}]}
-    assert inbox.deliveries == [
+    assert hear.deliveries == [
         ("listener-1", "notification-1", "retrying", 503, "unavailable")
     ]
+
+
+@pytest.mark.asyncio
+async def test_sqs_consumer_marks_successful_delivery_and_acknowledges_message():
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    proactive = FakeProactive(
+        {"sent": True, "retryable": False, "httpStatus": 202}
+    )
+    service = NotificationDeliveryService(hear, proactive)
+
+    result = await service.consume(
+        [
+            {
+                "messageId": "message-1",
+                "body": json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "listenerId": "listener-1",
+                        "notificationId": "notification-1",
+                    }
+                ),
+            }
+        ]
+    )
+
+    assert result == {"batchItemFailures": []}
+    assert proactive.items[0]["notificationId"] == "notification-1"
+    assert hear.deliveries == [
+        ("listener-1", "notification-1", "sent", 202, None)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sqs_consumer_acknowledges_an_already_completed_notification():
+    hear = FakeHearApi(items=[])
+    proactive = FakeProactive(
+        {"sent": True, "retryable": False, "httpStatus": 202}
+    )
+    service = NotificationDeliveryService(hear, proactive)
+
+    result = await service.consume(
+        [
+            {
+                "messageId": "message-1",
+                "body": json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "listenerId": "listener-1",
+                        "notificationId": "notification-1",
+                    }
+                ),
+            }
+        ]
+    )
+
+    assert result == {"batchItemFailures": []}
+    assert proactive.items == []
