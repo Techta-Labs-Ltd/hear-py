@@ -16,13 +16,14 @@ class EventUtils:
     @staticmethod
     def envelope(event_type: str, data: dict) -> dict:
         created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        payload = {**data, "action": EventConstants.ACTION}
         return {
             "event": str(event_type),
             "schemaVersion": EventConstants.CONTRACT_VERSION,
-            "eventId": data.get("clientEventId")
+            "eventId": payload.get("clientEventId")
             or f"{event_type}:{EventUtils.timestamp_ms()}",
             "timestamp": created_at,
-            "data": data,
+            "data": payload,
         }
 
     @staticmethod
@@ -32,10 +33,13 @@ class EventUtils:
             "eventType": envelope.get("event"),
             "eventId": envelope.get("eventId"),
             "schemaVersion": envelope.get("schemaVersion"),
+            "action": data.get("action"),
             "listenerId": data.get("listenerId"),
             "subjectType": data.get("subjectType"),
-            "subjectId": data.get("subjectId"),
+            "contentId": data.get("contentId"),
             "publicationId": data.get("publicationId"),
+            "sourceType": data.get("sourceType"),
+            "sourceId": data.get("sourceId"),
             "notificationSubjectType": data.get("notificationSubjectType"),
         }
         return {
@@ -66,33 +70,19 @@ class EventUtils:
             {
                 "alexaUserId": alexa_user_id,
                 "listenerId": listener_id,
-                "feedbackKey": pending.get("feedbackKey"),
                 "subjectType": subject_type,
-                "subjectId": str(subject_id),
-                "title": pending.get("title"),
-                "publicationTitle": pending.get("publicationTitle"),
-                "creatorId": pending.get("creatorId"),
-                "creatorName": pending.get("creatorName"),
-                "organizationId": pending.get("organizationId"),
-                "organizationName": pending.get("organizationName"),
-                "category": pending.get("category"),
-                "listenedMs": pending.get("listenedMs"),
-                "timeSpentMs": pending.get("timeSpentMs"),
-                "timeSpentHours": pending.get("timeSpentHours"),
-                "trackListening": pending.get("trackListening")
+                "contentId": str(subject_id) if not is_publication else None,
+                "publicationId": str(subject_id) if is_publication else None,
+                "trackListening": EventUtils._feedback_track_listening(pending)
                 if is_publication
                 else None,
                 "feedback": str(value),
-                "coverage": pending.get("coverage"),
-                "expectedTrackCount": pending.get("expectedTrackCount"),
-                "meaningfulTrackCount": pending.get("meaningfulTrackCount"),
-                "timestamp": recorded_at,
+                "timestampMs": recorded_at,
                 "clientEventId": (
                     f"feedback:{identity_id}:{pending.get('feedbackKey') or subject_id}:{value}"
                 ),
             }
         )
-        payload.update(EventUtils._feedback_scope_fields(pending, is_publication))
         return payload
 
     @staticmethod
@@ -107,25 +97,27 @@ class EventUtils:
         return (subject_type, str(subject_id), is_publication) if subject_id else None
 
     @staticmethod
-    def _feedback_scope_fields(pending: dict, is_publication: bool) -> dict:
-        publication_id = pending.get("publicationId")
-        if is_publication:
-            return {
-                "publicationId": str(publication_id),
-                "contentIds": list(
-                    dict.fromkeys(
-                        str(item)
-                        for item in pending.get("contentIds") or []
-                        if item is not None and str(item).strip()
-                    )
-                ),
-            }
-        return EventUtils.compact(
-            {
-                "contentId": str(pending["contentId"]),
-                "parentPublicationId": str(publication_id) if publication_id else None,
-            }
-        )
+    def _feedback_track_listening(pending: dict) -> list[dict]:
+        tracks = pending.get("trackListening")
+        if not isinstance(tracks, list):
+            return []
+        normalized = []
+        for track in tracks:
+            if not isinstance(track, dict) or not track.get("contentId"):
+                continue
+            normalized.append(
+                EventUtils.compact(
+                    {
+                        "contentId": str(track["contentId"]),
+                        "trackIndex": track.get("trackIndex"),
+                        "durationMs": track.get("durationMs"),
+                        "listenedMs": track.get("listenedMs"),
+                        "timeSpentMs": track.get("timeSpentMs"),
+                        "completed": track.get("completed"),
+                    }
+                )
+            )
+        return normalized
 
     @staticmethod
     def webhook_headers(

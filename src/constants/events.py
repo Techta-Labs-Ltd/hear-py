@@ -1,5 +1,6 @@
 class EventConstants:
-    CONTRACT_VERSION = 2
+    CONTRACT_VERSION = 3
+    ACTION = "alexa"
     CONTENT = "content"
     PUBLICATION = "publication"
     FEEDBACK_GIVEN = "feedback.given"

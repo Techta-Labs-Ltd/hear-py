@@ -142,17 +142,23 @@ def test_template_owns_and_wires_durable_persistence_table():
     assert "HEAR_DDB_TABLE: hear-service" not in template
 
 
-def test_backend_contract_schemas_match_v2_ownership():
+def test_backend_contract_schemas_match_v3_ownership():
     root = Path(__file__).resolve().parents[1]
     listener_sync = json.loads((root / "schemas/listener-sync.schema.json").read_text())
     backend_event = json.loads((root / "schemas/backend-event.schema.json").read_text())
 
     sync_fields = listener_sync["properties"]
-    assert "listenerId" in sync_fields
-    assert "recentPlays" not in sync_fields
-    assert "followedCreatorIds" not in sync_fields
-    assert "feedbackHistory" not in sync_fields
-    assert backend_event["properties"]["schemaVersion"]["const"] == 2
+    assert set(sync_fields) == {
+        "action",
+        "alexaUserId",
+        "listenerId",
+        "listenerName",
+        "email",
+        "city",
+        "longitude",
+        "latitude",
+    }
+    assert backend_event["properties"]["schemaVersion"]["const"] == 3
     assert {"eventId", "schemaVersion", "data"}.issubset(backend_event["required"])
 
 
@@ -195,24 +201,40 @@ def test_template_owns_outbound_event_delivery_pipeline():
     assert "FunctionResponseTypes: [ReportBatchItemFailures]" in template
 
 
-def test_template_owns_backend_written_notification_inbox_and_delivery_worker():
+def test_template_owns_sqs_notification_delivery_worker_without_notification_dynamodb():
     root = Path(__file__).resolve().parents[1]
     template = (root / "template.yaml").read_text(encoding="utf-8")
     schema = json.loads(
-        (root / "schemas" / "notification-inbox-item.schema.json").read_text()
+        (root / "schemas" / "notification-item.schema.json").read_text()
     )
-    assert "HearNotificationInboxTable:" in template
-    assert "IndexName: ActiveByListener" in template
-    assert "StreamViewType: NEW_AND_OLD_IMAGES" in template
+    message_schema = json.loads(
+        (root / "schemas" / "notification-delivery-message.schema.json").read_text()
+    )
+    assert "HearNotificationInboxTable:" not in template
+    assert "ActiveByListener" not in template
+    assert "DynamoDBStreamReadPolicy" not in template
+    assert "ProactiveNotificationQueue:" in template
+    assert "ProactiveNotificationDeadLetterQueue:" in template
     assert "ProactiveNotificationFunction:" in template
     assert 'Command: ["main.notification_handler"]' in template
+    assert "SQSPollerPolicy: { QueueName: !GetAtt ProactiveNotificationQueue.QueueName }" in template
+    assert "Queue: !GetAtt ProactiveNotificationQueue.Arn" in template
+    assert "FunctionResponseTypes: [ReportBatchItemFailures]" in template
     assert "ALEXA_PROACTIVE_CLIENT_ID" in template
     assert "ALEXA_PROACTIVE_CLIENT_SECRET" in template
     assert "AMAZON.MediaContent.Available" not in template
     assert schema["properties"]["schemaVersion"]["const"] == 1
-    assert {"content", "publication"} == set(
+    assert {"creator_update", "organization_update"} == set(
         schema["properties"]["notificationType"]["enum"]
     )
+    assert "contentId" not in schema["properties"]
+    assert "publicationId" not in schema["properties"]
+    assert set(message_schema["required"]) == {
+        "schemaVersion",
+        "notificationId",
+        "listenerId",
+    }
+    assert set(message_schema["properties"]) == set(message_schema["required"])
 
 
 def test_deployment_role_can_manage_table_recovery_configuration():

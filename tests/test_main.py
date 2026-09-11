@@ -83,5 +83,24 @@ def test_outbound_lambda_returns_partial_batch_response():
     consume.assert_awaited_once_with(event["Records"])
 
 
+def test_notification_lambda_returns_sqs_partial_batch_response():
+    application = main.NotificationLambdaApplication()
+    consume = AsyncMock(return_value={"batchItemFailures": [{"itemIdentifier": "message-2"}]})
+    application._dependencies = SimpleNamespace(
+        notification_delivery=SimpleNamespace(consume=consume)
+    )
+    event = {
+        "Records": [
+            {"messageId": "message-1", "body": "{}"},
+            {"messageId": "message-2", "body": "{}"},
+        ]
+    }
+
+    result = application.handle(event, None)
+
+    assert result == {"batchItemFailures": [{"itemIdentifier": "message-2"}]}
+    consume.assert_awaited_once_with(event["Records"])
+
+
 async def _running_loop():
     return asyncio.get_running_loop()

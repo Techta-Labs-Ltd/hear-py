@@ -1,71 +1,82 @@
 from __future__ import annotations
 
+import json
+
 from src.constants.notifications import NotificationConstants
 
 
-class NotificationInboxItem:
+class NotificationItem:
     __slots__ = ()
 
     @staticmethod
     def normalize(item: dict | None) -> dict | None:
-        source = item if isinstance(item, dict) else {}
-        listener_id = str(source.get("listenerId") or "").strip()
-        notification_id = str(source.get("notificationId") or "").strip()
-        notification_type = str(source.get("notificationType") or "").strip().casefold()
-        content_id = str(source.get("contentId") or "").strip() or None
-        publication_id = str(source.get("publicationId") or "").strip() or None
+        source, notification, target = NotificationItem._parts(item)
+        listener_id = str(
+            source.get("listenerId") or notification.get("listenerId") or ""
+        ).strip()
+        notification_id = str(notification.get("notificationId") or "").strip()
+        notification_type = str(
+            notification.get("notificationType") or ""
+        ).strip().casefold()
+        source_type = str(notification.get("sourceType") or "").strip().casefold()
+        source_id = str(notification.get("sourceId") or "").strip()
+        source_name = NotificationItem.optional_text(notification.get("sourceName"))
+        last_date = NotificationItem.optional_text(notification.get("lastDate"))
         if (
             not listener_id
             or not notification_id
             or notification_type
-            not in {NotificationConstants.CONTENT, NotificationConstants.PUBLICATION}
+            not in {
+                NotificationConstants.CREATOR_UPDATE,
+                NotificationConstants.ORGANIZATION_UPDATE,
+            }
+            or not source_id
+            or not source_name
+            or not last_date
         ):
             return None
-        if notification_type == NotificationConstants.CONTENT and (
-            not content_id or publication_id
-        ):
+        if notification_type == NotificationConstants.CREATOR_UPDATE and source_type != "creator":
             return None
-        if notification_type == NotificationConstants.PUBLICATION and (
-            not publication_id or content_id
+        if (
+            notification_type == NotificationConstants.ORGANIZATION_UPDATE
+            and source_type != "organization"
         ):
             return None
         return {
             key: value
             for key, value in {
                 "schemaVersion": int(
-                    source.get("schemaVersion") or NotificationConstants.SCHEMA_VERSION
+                    notification.get("schemaVersion")
+                    or NotificationConstants.SCHEMA_VERSION
                 ),
                 "listenerId": listener_id,
                 "notificationId": notification_id,
                 "notificationType": notification_type,
-                "contentId": content_id,
-                "publicationId": publication_id,
-                "title": NotificationInboxItem.optional_text(source.get("title")),
-                "creatorId": NotificationInboxItem.optional_text(source.get("creatorId")),
-                "creatorName": NotificationInboxItem.optional_text(source.get("creatorName")),
-                "organizationId": NotificationInboxItem.optional_text(
-                    source.get("organizationId")
+                "sourceType": source_type,
+                "sourceId": source_id,
+                "sourceName": source_name,
+                "lastDate": last_date,
+                "alexaUserId": NotificationItem.optional_text(
+                    target.get("userId") or source.get("alexaUserId")
                 ),
-                "organizationName": NotificationInboxItem.optional_text(
-                    source.get("organizationName")
-                ),
-                "alexaUserId": NotificationInboxItem.optional_text(
-                    source.get("alexaUserId")
-                ),
-                "locale": NotificationInboxItem.optional_text(source.get("locale"))
+                "locale": NotificationItem.optional_text(target.get("locale"))
                 or NotificationConstants.DEFAULT_LOCALE,
-                "publishedAt": NotificationInboxItem.integer(source.get("publishedAt")),
-                "status": NotificationInboxItem.optional_text(source.get("status"))
-                or "pending",
-                "deliveryStatus": NotificationInboxItem.optional_text(
-                    source.get("deliveryStatus")
-                )
-                or "pending",
                 "sendProactive": source.get("sendProactive") is not False,
-                "expiresAt": NotificationInboxItem.integer(source.get("expiresAt")),
+                "expiresAt": NotificationItem.optional_text(
+                    notification.get("expiresAt")
+                ),
             }.items()
             if value is not None
         }
+
+    @staticmethod
+    def _parts(item: dict | None) -> tuple[dict, dict, dict]:
+        source = item if isinstance(item, dict) else {}
+        notification = source.get("notification")
+        notification = notification if isinstance(notification, dict) else source
+        target = source.get("deliveryTarget")
+        target = target if isinstance(target, dict) else {}
+        return source, notification, target
 
     @staticmethod
     def optional_text(value: object) -> str | None:
@@ -82,39 +93,59 @@ class NotificationInboxItem:
             return None
 
     @staticmethod
-    def active_sort_key(item: dict) -> str:
-        published_at = max(0, int(item.get("publishedAt") or 0))
-        return f"{published_at:020d}#{item['notificationId']}"
+    def response_items(response: dict | list | None) -> list[dict]:
+        source = response.get("data", response) if isinstance(response, dict) else response
+        if isinstance(source, list):
+            return [item for item in source if isinstance(item, dict)]
+        if not isinstance(source, dict):
+            return []
+        if isinstance(source.get("notification"), dict) and (
+            source.get("listenerId") or source.get("deliveryTarget")
+        ):
+            return [source]
+        for key in ("notifications", "items", "results", "notification"):
+            candidate = source.get(key)
+            if isinstance(candidate, list):
+                return [item for item in candidate if isinstance(item, dict)]
+            if isinstance(candidate, dict):
+                return [candidate]
+        return [source] if source.get("notificationId") else []
+
+    @staticmethod
+    def matches_request(item: dict, request: dict) -> bool:
+        notification_id = str(request.get("notificationId") or "").strip()
+        return (
+            item.get("listenerId") == request.get("listenerId")
+            and (not notification_id or item.get("notificationId") == notification_id)
+        )
 
 
-class NotificationStreamDecoder:
+class NotificationQueueMessage:
     __slots__ = ()
 
     @staticmethod
-    def value(attribute: dict | None):
-        if not isinstance(attribute, dict):
+    def decode(record: dict) -> dict | None:
+        try:
+            decoded = json.loads(record.get("body") or "{}")
+        except (json.JSONDecodeError, TypeError):
             return None
-        if "NULL" in attribute:
+        source = decoded.get("data") if isinstance(decoded, dict) else None
+        if not isinstance(source, dict):
+            source = decoded if isinstance(decoded, dict) else {}
+        listener_id = NotificationItem.optional_text(source.get("listenerId"))
+        notification_id = NotificationItem.optional_text(source.get("notificationId"))
+        try:
+            schema_version = int(source.get("schemaVersion"))
+        except (TypeError, ValueError):
             return None
-        if "S" in attribute:
-            return attribute["S"]
-        if "N" in attribute:
-            number = str(attribute["N"])
-            return float(number) if "." in number else int(number)
-        if "BOOL" in attribute:
-            return bool(attribute["BOOL"])
-        if "L" in attribute:
-            return [NotificationStreamDecoder.value(value) for value in attribute["L"]]
-        if "M" in attribute:
-            return {
-                key: NotificationStreamDecoder.value(value)
-                for key, value in attribute["M"].items()
-            }
-        return None
-
-    @staticmethod
-    def item(raw: dict) -> dict:
+        if (
+            schema_version != NotificationConstants.SCHEMA_VERSION
+            or not listener_id
+            or not notification_id
+        ):
+            return None
         return {
-            key: NotificationStreamDecoder.value(value)
-            for key, value in (raw or {}).items()
+            "schemaVersion": schema_version,
+            "notificationId": notification_id,
+            "listenerId": listener_id,
         }

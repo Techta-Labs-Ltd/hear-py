@@ -72,10 +72,11 @@ configure:
   `ALEXA_PROACTIVE_CLIENT_ID_PROD` and
   `ALEXA_PROACTIVE_CLIENT_SECRET_PROD`.
 
-The backend writes eligible rows directly to `HearNotificationInboxTable`.
-Its stream invokes the proactive worker, while the main skill reads the same
-inbox on launch or when the listener asks for updates. Full row and event
-contracts are in [backend-events-and-feedback.md](backend-events-and-feedback.md).
+`ProactiveNotificationQueue` invokes the proactive worker. The worker fetches
+the exact eligible item with `POST /alexa/notification`, sends the proactive
+event, and posts its delivery outcome to that endpoint. The main skill uses the
+same endpoint on launch or when the listener asks for updates. Full request and
+event contracts are in [backend-events-and-feedback.md](backend-events-and-feedback.md).
 
 ## Card assets
 

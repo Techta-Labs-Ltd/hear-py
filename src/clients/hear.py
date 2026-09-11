@@ -114,7 +114,12 @@ class HearApiClient:
                     response.status_code,
                 )
                 return (response.status_code, None)
-            return (response.status_code, response.json())
+            if not response.content:
+                return (response.status_code, None)
+            try:
+                return (response.status_code, response.json())
+            except ValueError:
+                return (response.status_code, None)
         except Exception as exc:
             HearApiSupport.logger.warning(
                 "Hear API request error method=%s path=%s error=%s",

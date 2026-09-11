@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/notification-delivery-message.schema.json",
+  "title": "Hear proactive notification SQS message v1",
+  "type": "object",
+  "required": ["schemaVersion", "notificationId", "listenerId"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "notificationId": { "type": "string", "minLength": 1 },
+    "listenerId": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

@@ -5,6 +5,7 @@ import time
 
 from config import settings
 from src.utils.content import ContentIdentity
+from src.utils.events import EventUtils
 
 
 class PlaybackUtils:
@@ -171,12 +172,10 @@ class PlaybackUtils:
         publication_id = ContentIdentity.publication_id(data)
         content_id = ContentIdentity.content_id(data)
         subject_type = "publication" if publication_id else "content"
-        subject_id = publication_id or content_id
         event = {
             "subjectType": subject_type,
-            "subjectId": str(subject_id),
-            "creatorId": data.get("creatorId"),
-            "queueId": data.get("queueId"),
+            "contentId": str(content_id),
+            "publicationId": str(publication_id) if publication_id else None,
             "sessionId": session_id,
             "subjectSessionId": data.get("subjectSessionId") or session_id,
             "eventType": event_type,
@@ -184,26 +183,15 @@ class PlaybackUtils:
             "durationMs": duration,
             "listenedMs": listened,
             "timeSpentMs": max(0, int(data.get("timeSpentMs") or 0)),
-            "timeSpentHours": PlaybackUtils.hours(data.get("timeSpentMs")),
-            "completionPercentage": min(100, round(listened / duration * 100))
-            if duration > 0
-            else None,
             "timestampMs": timestamp,
             "clientEventId": (
                 f"{data.get('subjectSessionId') or session_id}:{event_type}:{timestamp}"
             ),
         }
         if publication_id:
-            event["publicationId"] = publication_id
-            event["trackContentId"] = content_id
             event["trackIndex"] = data.get("trackIndex")
             event["trackCount"] = data.get("trackCount")
-            event["publicationTimeSpentMs"] = data.get("publicationTimeSpentMs")
-            event["publicationTimeSpentHours"] = data.get("publicationTimeSpentHours")
-            event["trackListening"] = data.get("trackListening")
-        else:
-            event["contentId"] = content_id
-        return event
+        return EventUtils.compact(event)
 
     @staticmethod
     def normalize_playback_event(event: dict) -> dict:

@@ -147,13 +147,9 @@ class NotificationLambdaApplication:
             self.logger.exception("Proactive notification batch failed")
             return {
                 "batchItemFailures": [
-                    {
-                        "itemIdentifier": str(
-                            (record.get("dynamodb") or {}).get("SequenceNumber") or ""
-                        )
-                    }
+                    {"itemIdentifier": str(record.get("messageId"))}
                     for record in records
-                    if (record.get("dynamodb") or {}).get("SequenceNumber")
+                    if record.get("messageId")
                 ]
             }
 

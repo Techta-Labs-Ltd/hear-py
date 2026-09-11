@@ -764,11 +764,12 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
     service = ListenerSyncService(SimpleNamespace(sync_listener=sync))
     assert await service.sync_for_launch(mock_handler_input)
     profile = sync.await_args.args[0]
-    assert profile["alexaUserId"]
-    assert profile["listenerId"] == "listener-existing"
-    assert "followedCreatorIds" not in profile
-    assert "followedOrganizationIds" not in profile
-    assert "playCount" not in profile
-    assert profile["city"] == "Manchester"
-    assert profile["locality"] == "Manchester"
+    assert profile == {
+        "action": "alexa",
+        "alexaUserId": profile["alexaUserId"],
+        "listenerId": "listener-existing",
+        "listenerName": "Alex Hear",
+        "email": "alex@example.com",
+        "city": "Manchester",
+    }
     assert sync.await_args.kwargs["timeout_ms"] == 2500

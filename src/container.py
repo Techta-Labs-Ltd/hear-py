@@ -7,10 +7,10 @@ from src.clients.alexa import AlexaClient
 from src.clients.alexa_settings import AlexaSettingsClient
 from src.clients.events import SqsEventClient, WebhookEventClient
 from src.clients.hear import HearApiClient
+from src.clients.notifications import NotificationApiClient
 from src.clients.proactive import ProactiveEventsClient
 from src.clients.progressive import ProgressiveResponseClient
 from src.clients.resolver import ResolverClient, ResolverOptions
-from src.database.notification_inbox import NotificationInboxFactory
 from src.models.availability import Availability
 from src.models.browse import Browse
 from src.models.feedback import FeedbackService
@@ -58,7 +58,7 @@ class ApplicationContainer:
             "resolver",
             "progressive",
             "permission",
-            "notification_inbox",
+            "notification_api",
             "proactive_events",
             "notification_delivery",
             "notifications",
@@ -87,7 +87,7 @@ class ApplicationContainer:
         "progressive",
         "error_reporter",
         "permission",
-        "notification_inbox",
+        "notification_api",
         "proactive_events",
         "notification_delivery",
         "notifications",
@@ -126,17 +126,12 @@ class ApplicationContainer:
             self.events,
         )
         self.heara = components.get("heara") or HearApiClient()
+        self.notification_api = components.get("notification_api") or NotificationApiClient()
         self.listener_identity = components.get("listener_identity") or ListenerIdentityService(
             self.heara,
             settings_client,
             enabled=settings.HEAR_CANONICAL_IDENTITY_ENABLED,
             timeout_ms=settings.identity_timeout_ms,
-        )
-        self.notification_inbox = components.get(
-            "notification_inbox"
-        ) or NotificationInboxFactory.build(
-            settings.HEAR_NOTIFICATION_TABLE,
-            region=settings.ddb_region,
         )
         self.proactive_events = components.get("proactive_events") or ProactiveEventsClient(
             client_id=settings.ALEXA_PROACTIVE_CLIENT_ID,
@@ -146,7 +141,7 @@ class ApplicationContainer:
         self.notification_delivery = components.get(
             "notification_delivery"
         ) or NotificationDeliveryService(
-            self.notification_inbox,
+            self.notification_api,
             self.proactive_events,
         )
         self.listener_sync = components.get("listener_sync") or ListenerSyncService(

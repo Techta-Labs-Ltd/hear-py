@@ -79,7 +79,6 @@ class Settings(BaseSettings):
     SQS_OUT_QUEUE_URL: str = ""
     WEBHOOK_OUTBOUND_URL: str = ""
     WEBHOOK_OUTBOUND_SECRET: str = ""
-    HEAR_NOTIFICATION_TABLE: str = ""
     HEAR_NOTIFICATION_LIMIT: int = 5
     HEAR_PROACTIVE_TIMEOUT_MS: int = 5000
     ALEXA_PROACTIVE_CLIENT_ID: str = ""
