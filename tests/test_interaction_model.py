@@ -384,6 +384,10 @@ def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms()
         "talking news",
         "talking paper",
         "audio newspaper",
+        "talking newspapers",
+        "audio newspapers",
+        "spoken newspaper",
+        "talking newspaper service",
     }.issubset(set(source_kind["name"]["synonyms"]))
     assert "top english paper" not in source_kind["name"]["synonyms"]
     assert "Tynedale Talking Newspaper" in organization_values

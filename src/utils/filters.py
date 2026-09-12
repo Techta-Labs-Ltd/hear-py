@@ -5,6 +5,7 @@ from difflib import SequenceMatcher
 
 from src.constants.creator import CreatorConstants
 from src.constants.discovery import DiscoveryConstants
+from src.constants.organization import OrganizationConstants
 from src.constants.search import SearchConstants
 
 
@@ -306,29 +307,29 @@ class SearchFilterUtils:
             "",
             normalized,
         ).strip()
-        if repair_phrase in DiscoveryConstants.ORGANIZATION_ASR_REPAIR_PHRASES:
+        if repair_phrase in OrganizationConstants.ASR_REPAIR_PHRASES:
             return "repair"
         if (
-            normalized in DiscoveryConstants.ORGANIZATION_SOURCE_PLACEHOLDERS
-            or repair_phrase in DiscoveryConstants.ORGANIZATION_SOURCE_PLACEHOLDERS
+            normalized in OrganizationConstants.SOURCE_PLACEHOLDERS
+            or repair_phrase in OrganizationConstants.SOURCE_PLACEHOLDERS
         ):
             return "generic"
         tokens = re.findall("[a-z]+", normalized)
-        has_talking_newspaper = "talking" in tokens and (
-            "newspaper" in tokens or ("news" in tokens and "paper" in tokens)
+        has_talking_newspaper = any(
+            prefix in tokens for prefix in ("talking", "audio", "spoken")
+        ) and any(
+            word in tokens for word in ("news", "newspaper", "newspapers", "paper", "papers")
         )
         generic_talking_newspaper = bool(
             has_talking_newspaper
             and tokens
-            and all((token in DiscoveryConstants.GENERIC_ORGANIZATION_WORDS for token in tokens))
+            and all((token in OrganizationConstants.GENERIC_WORDS for token in tokens))
         )
         under_specified = bool(
             organization_intent
             and (
                 not tokens
-                or all(
-                    (token in DiscoveryConstants.GENERIC_ORGANIZATION_WORDS for token in tokens)
-                )
+                or all((token in OrganizationConstants.GENERIC_WORDS for token in tokens))
             )
         )
         return "generic" if generic_talking_newspaper or under_specified else "specific"

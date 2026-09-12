@@ -102,6 +102,39 @@ def test_generic_talking_newspaper_phrases_need_a_name(phrase):
 
 @pytest.mark.parametrize(
     "phrase",
+    [
+        "talking newspapers",
+        "play a talking newspaper",
+        "play from a talking newspaper",
+        "play me something from talking news",
+        "find me an audio newspaper",
+        "hear a talking news paper",
+        "listen to spoken news",
+        "give me a talking paper",
+        "put on local talking newspapers",
+        "I would like a talking newspaper service",
+        "could you recommend an audio paper",
+    ],
+)
+def test_generic_talking_newspaper_combinations_stay_local(phrase):
+    assert SearchFilterUtils.is_generic_organization_request(phrase)
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "Mole Valley Talking Newspaper",
+        "York Talking News",
+        "The Talking Newspaper Podcast",
+        "news from Wakefield Talking Newspaper",
+    ],
+)
+def test_named_talking_newspaper_requests_are_not_generic(phrase):
+    assert not SearchFilterUtils.is_generic_organization_request(phrase)
+
+
+@pytest.mark.parametrize(
+    "phrase",
     ["Pendle Voice", "York Talking Newspaper", "play from Andover Talking Newspaper"],
 )
 def test_named_talking_newspapers_are_not_generic(phrase):
