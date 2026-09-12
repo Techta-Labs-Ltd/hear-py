@@ -357,11 +357,16 @@ class ResolverWorkflowRunner:
         }
 
     @staticmethod
-    def _spoken_follow_up(handler_input, fallback: str | None) -> str | None:
+    def _creator_location_follow_up(handler_input, fallback: str | None) -> str | None:
+        slots = DialogSelection.request_slots(handler_input)
+        for slot_name in ResolverConstants.CREATOR_LOCATION_SLOTS:
+            value = AlexaRequest.get_resolved_slot_value(slots.get(slot_name))
+            if value:
+                return value.strip()
         return next(
             (
                 spoken.strip()
-                for slot in DialogSelection.request_slots(handler_input).values()
+                for slot in slots.values()
                 if (spoken := AlexaRequest.get_spoken_slot_value(slot)) and spoken.strip()
             ),
             fallback,
@@ -446,7 +451,7 @@ class ResolverWorkflowRunner:
         ):
             return
         follow_up_input = (
-            ResolverWorkflowRunner._spoken_follow_up(handler_input, raw)
+            ResolverWorkflowRunner._creator_location_follow_up(handler_input, raw)
             if dialog_type == "creator_location"
             else effective
         )

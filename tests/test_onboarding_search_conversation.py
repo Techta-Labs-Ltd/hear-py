@@ -3683,26 +3683,29 @@ async def test_creator_city_reply_uses_location_resolver_without_saving_profile(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("intent_name", "slot_name", "spoken", "alexa_match", "city"),
+    ("intent_name", "slot_name", "spoken", "alexa_match", "resolver_input", "city"),
     [
-        ("SelectCreatorCityIntent", "cityQuery", "york", "York", "York"),
-        ("PlayContentIntent", "topic", "liverpool", None, "Liverpool"),
-        ("SearchContentIntent", "searchQuery", "york", None, "York"),
+        ("SelectCreatorCityIntent", "cityQuery", "yuck", "York", "York", "York"),
+        ("SelectCreatorCityIntent", "cityQuery", "seven ox", None, "seven ox", "Sevenoaks"),
+        ("PlayContentIntent", "topic", "liverpool", None, "liverpool", "Liverpool"),
+        ("SearchContentIntent", "searchQuery", "york", None, "york", "York"),
         (
             "CarrierlessDiscoveryIntent",
             "discoveryQuery",
             "york",
             "York Talking Newspaper",
+            "york",
             "York",
         ),
     ],
 )
-async def test_creator_city_dialog_forwards_spoken_city_from_misrouted_intents(
+async def test_creator_city_dialog_uses_location_canonical_or_raw_resolver_input(
     mock_handler_input,
     intent_name,
     slot_name,
     spoken,
     alexa_match,
+    resolver_input,
     city,
 ):
     from src.middleware.dialog_validation import DialogValidationInterceptor
@@ -3758,7 +3761,7 @@ async def test_creator_city_dialog_forwards_spoken_city_from_misrouted_intents(
     await ResolverInterceptor(deps=container).process(mock_handler_input)
 
     resolver.resolve_utterance.assert_awaited_once()
-    assert resolver.resolve_utterance.await_args.args == (spoken,)
+    assert resolver.resolve_utterance.await_args.args == (resolver_input,)
     assert resolver.resolve_utterance.await_args.kwargs["prefer_location"] is True
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["slots"]["city"] == city
@@ -3836,7 +3839,7 @@ async def test_creator_city_rejects_non_location_even_when_alexa_matches_a_city(
     await ResolverInterceptor(deps=container).process(mock_handler_input)
     response = await IntentDispatchGateHandler(deps=container).handle(mock_handler_input)
 
-    assert resolver.resolve_utterance.await_args.args == ("yuck",)
+    assert resolver.resolve_utterance.await_args.args == ("York",)
     assert Speech.CREATOR_CITY_NOT_RECOGNISED in response["outputSpeech"]["ssml"]
     heara.availability.assert_not_awaited()
     assert DialogStateManager.get_active(mock_handler_input)["type"] == "creator_location"

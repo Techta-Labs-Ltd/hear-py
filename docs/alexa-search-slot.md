@@ -353,10 +353,13 @@ retain their existing intents.
 When a generic creator request resolves through `ChooseSourceKindIntent`, the
 skill activates `creator_location` and elicits
 `SelectCreatorCityIntent.cityQuery`. That slot uses `HEAR_LOCATION`. The city is
-sent to the resolver with location preference, then used transiently for
-creator-only availability. It is never written to onboarding or the listener's
-saved location. The skill keeps no more than the current three creator choices
-and reloads API pages for next and previous navigation.
+sent to the resolver with location preference. A successful Alexa entity match
+sends the canonical `HEAR_LOCATION` value; an entity no-match or absent
+resolution sends the captured spoken value. Only a complete location returned
+by the resolver is used transiently for creator-only availability. It is never
+written to onboarding or the listener's saved location. The skill keeps no more
+than the current three creator choices and reloads API pages for next and
+previous navigation.
 
 When the skill asks which talking newspaper or publication source the listener
 wants, its `Dialog.ElicitSlot` response explicitly chains to

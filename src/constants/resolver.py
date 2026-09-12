@@ -55,3 +55,8 @@ class ResolverConstants:
         "feedbackPhrase",
         "query",
     )
+    CREATOR_LOCATION_SLOTS = (
+        "cityQuery",
+        "localQuery",
+        "townName",
+    )
