@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+
+class CreatorConstants:
+    SOURCE_PLACEHOLDERS = frozenset(
+        {
+            "creator",
+            "creators",
+            "a creator",
+            "the creator",
+            "from a creator",
+            "play creator",
+            "play a creator",
+            "play from a creator",
+            "play something from a creator",
+            "play me something from a creator",
+        }
+    )
+    ROLE_WORDS = frozenset(
+        {
+            "author",
+            "authors",
+            "contributor",
+            "contributors",
+            "creator",
+            "creators",
+            "creater",
+            "creaters",
+            "narrator",
+            "narrators",
+            "reader",
+            "readers",
+            "storyteller",
+            "storytellers",
+        }
+    )
+    GENERIC_WORDS = ROLE_WORDS | frozenset(
+        {
+            "a",
+            "an",
+            "any",
+            "available",
+            "by",
+            "can",
+            "choose",
+            "content",
+            "could",
+            "create",
+            "d",
+            "different",
+            "find",
+            "from",
+            "get",
+            "give",
+            "have",
+            "hear",
+            "i",
+            "id",
+            "independent",
+            "latest",
+            "let",
+            "like",
+            "listen",
+            "local",
+            "me",
+            "new",
+            "of",
+            "on",
+            "one",
+            "other",
+            "play",
+            "please",
+            "put",
+            "random",
+            "recommend",
+            "select",
+            "show",
+            "some",
+            "something",
+            "the",
+            "to",
+            "want",
+            "would",
+            "you",
+        }
+    )

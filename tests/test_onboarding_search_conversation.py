@@ -3472,11 +3472,17 @@ async def test_generic_creator_pipeline_asks_for_city(monkeypatch, mock_handler_
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("intent_name", "slot_name"),
+    ("intent_name", "slot_name", "slot_value"),
     [
-        ("PlayContentIntent", "topic"),
-        ("SearchContentIntent", "searchQuery"),
-        ("CarrierlessDiscoveryIntent", "discoveryQuery"),
+        ("PlayContentIntent", "topic", "creator"),
+        ("PlayContentIntent", "topic", "creators"),
+        ("SearchContentIntent", "searchQuery", "play from a creator"),
+        ("SearchContentIntent", "searchQuery", "find me an author"),
+        ("CarrierlessDiscoveryIntent", "discoveryQuery", "create a"),
+        ("PlayByOrganizationIntent", "organizationQuery", "narrator"),
+        ("PlayPublicationIntent", "publicationSourceQuery", "reader"),
+        ("BrowseByCategoryIntent", "category", "content creators"),
+        ("ClarifySelectionIntent", "selection", "independent creator"),
     ],
 )
 async def test_live_generic_creator_fallback_asks_for_city(
@@ -3484,6 +3490,7 @@ async def test_live_generic_creator_fallback_asks_for_city(
     mock_handler_input,
     intent_name,
     slot_name,
+    slot_value,
 ):
     from src.controllers.intent_dispatch import IntentDispatchGateHandler
     from src.middleware.confirmation import ConfirmationMiddleware
@@ -3498,7 +3505,7 @@ async def test_live_generic_creator_fallback_asks_for_city(
                 "slots": {
                     slot_name: {
                         "name": slot_name,
-                        "value": "creator",
+                        "value": slot_value,
                         "confirmationStatus": "NONE",
                     }
                 },

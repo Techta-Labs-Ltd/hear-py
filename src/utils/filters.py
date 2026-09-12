@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
+from src.constants.creator import CreatorConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 
@@ -266,7 +267,26 @@ class SearchFilterUtils:
         return bool(
             normalized
             and normalized not in DiscoveryConstants.RESERVED_DISCOVERY_PHRASES
-            and (normalized not in DiscoveryConstants.CREATOR_SOURCE_PLACEHOLDERS)
+            and not SearchFilterUtils.is_generic_creator_request(normalized)
+        )
+
+    @staticmethod
+    def is_generic_creator_request(value: object) -> bool:
+        normalized = SearchFilterUtils.normalize_discovery_phrase(value)
+        if normalized in CreatorConstants.SOURCE_PLACEHOLDERS:
+            return True
+        tokens = re.findall("[a-z]+", normalized)
+        has_creator_role = any(
+            token in CreatorConstants.ROLE_WORDS for token in tokens
+        )
+        has_creator_asr = any(
+            left == "create" and right == "a"
+            for left, right in zip(tokens, tokens[1:])
+        )
+        return bool(
+            tokens
+            and (has_creator_role or has_creator_asr)
+            and all(token in CreatorConstants.GENERIC_WORDS for token in tokens)
         )
 
     @staticmethod

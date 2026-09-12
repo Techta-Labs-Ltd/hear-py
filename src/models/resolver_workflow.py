@@ -401,10 +401,19 @@ class ResolverWorkflow:
         AlexaRequest.get_resolved_slot_value(intent_slots.get("topic"))
         date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
         normalized_raw = SearchFilterUtils.normalize_discovery_phrase(raw)
+        generic_creator_slot = any(
+            SearchFilterUtils.is_generic_creator_request(
+                AlexaRequest.get_resolved_slot_value(slot)
+            )
+            or SearchFilterUtils.is_generic_creator_request(
+                AlexaRequest.get_spoken_slot_value(slot)
+            )
+            for slot in intent_slots.values()
+        )
+        if SearchFilterUtils.is_generic_creator_request(raw) or generic_creator_slot:
+            return ResolverWorkflow._generic_creator_resolution(alexa_intent)
         if alexa_intent == "ChooseSourceKindIntent":
             return ResolverWorkflow._source_kind_resolution(intent_slots)
-        if normalized_raw in DiscoveryConstants.CREATOR_SOURCE_PLACEHOLDERS:
-            return ResolverWorkflow._generic_creator_resolution(alexa_intent)
         if normalized_raw in DiscoveryConstants.LOCAL_HINTS:
             return ResolverWorkflow._direct_discovery_result(
                 alexa_intent,
@@ -516,7 +525,7 @@ class ResolverWorkflow:
             "localResolved": True,
             "directDiscoveryRequest": True,
         }
-        if source_kind == "creator":
+        if SearchFilterUtils.is_generic_creator_request(source_kind):
             return ResolverWorkflow._generic_creator_resolution("ChooseSourceKindIntent")
         if source_kind == "publication":
             if SearchFilterUtils.is_meaningful_publication_source(publication_source):

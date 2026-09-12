@@ -229,19 +229,6 @@ class DiscoveryConstants:
             "something from a publication",
         }
     )
-    CREATOR_SOURCE_PLACEHOLDERS = frozenset(
-        {
-            "creator",
-            "a creator",
-            "the creator",
-            "from a creator",
-            "play creator",
-            "play a creator",
-            "play from a creator",
-            "play something from a creator",
-            "play me something from a creator",
-        }
-    )
     ORGANIZATION_SOURCE_PLACEHOLDERS = frozenset(
         {
             "talking newspaper",

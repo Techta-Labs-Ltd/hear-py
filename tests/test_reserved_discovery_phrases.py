@@ -51,6 +51,43 @@ def test_meaningful_discovery_phrases_are_not_reserved(phrase):
 @pytest.mark.parametrize(
     "phrase",
     [
+        "creator",
+        "creators",
+        "play a creator",
+        "play from a creator",
+        "play me something from creators",
+        "find me an author",
+        "hear a narrator",
+        "listen to a reader",
+        "give me a contributor",
+        "put on a storyteller",
+        "I would like an independent creator",
+        "could you recommend a content creator",
+        "please play create a",
+    ],
+)
+def test_generic_creator_combinations_stay_local(phrase):
+    assert SearchFilterUtils.is_generic_creator_request(phrase)
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "Alex Reader",
+        "The Creator Economy",
+        "news from creator Alex",
+        "play history by David Beard",
+        "followed creators",
+        "play from my followed creators",
+    ],
+)
+def test_named_or_scoped_creator_requests_are_not_generic(phrase):
+    assert not SearchFilterUtils.is_generic_creator_request(phrase)
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
         "talking newspaper",
         "play from a talking news paper",
         "play from a talking a talking newspaper",

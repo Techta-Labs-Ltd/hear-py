@@ -435,7 +435,20 @@ def test_source_kind_slot_has_no_ids_and_owns_generic_source_requests():
     assert "play from a {sourceKind}" in generic_samples
     assert "play something from a {sourceKind}" in generic_samples
     assert "play a {sourceKind}" in generic_samples
+    assert "find me a {sourceKind}" in generic_samples
+    assert "hear a {sourceKind}" in generic_samples
+    assert "listen to a {sourceKind}" in generic_samples
+    assert "I would like a {sourceKind}" in generic_samples
     assert "play {publicationSort} {sourceKind}" in generic_samples
+    creator = next(
+        item for item in source_kind["values"] if item["name"]["value"] == "creator"
+    )
+    assert {
+        "content creator",
+        "independent creator",
+        "storyteller",
+        "create a",
+    }.issubset(set(creator["name"]["synonyms"]))
     assert "play from a talking newspaper" not in set(
         intents["PlayByOrganizationIntent"]["samples"]
     )

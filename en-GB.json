@@ -310,14 +310,28 @@
             "play something from {sourceKind}",
             "play me something from a {sourceKind}",
             "play me something from {sourceKind}",
+            "play me a {sourceKind}",
+            "play me {sourceKind}",
             "play a {sourceKind}",
             "play {sourceKind}",
             "find a {sourceKind}",
             "find {sourceKind}",
+            "find me a {sourceKind}",
+            "find me {sourceKind}",
+            "hear a {sourceKind}",
+            "hear {sourceKind}",
+            "listen to a {sourceKind}",
+            "listen to {sourceKind}",
             "give me a {sourceKind}",
+            "give me {sourceKind}",
             "put on a {sourceKind}",
+            "put on {sourceKind}",
             "I want a {sourceKind}",
             "I want {sourceKind}",
+            "I would like a {sourceKind}",
+            "I would like {sourceKind}",
+            "something from a {sourceKind}",
+            "something from {sourceKind}",
             "play {publicationSort} {sourceKind}",
             "play the {publicationSort} {sourceKind}"
           ]
@@ -1644,7 +1658,14 @@
                   "reader",
                   "readers",
                   "contributor",
-                  "contributors"
+                  "contributors",
+                  "content creator",
+                  "content creators",
+                  "independent creator",
+                  "independent creators",
+                  "storyteller",
+                  "storytellers",
+                  "create a"
                 ]
               }
             }
