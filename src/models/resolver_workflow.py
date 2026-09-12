@@ -403,6 +403,8 @@ class ResolverWorkflow:
         normalized_raw = SearchFilterUtils.normalize_discovery_phrase(raw)
         if alexa_intent == "ChooseSourceKindIntent":
             return ResolverWorkflow._source_kind_resolution(intent_slots)
+        if normalized_raw in DiscoveryConstants.CREATOR_SOURCE_PLACEHOLDERS:
+            return ResolverWorkflow._generic_creator_resolution(alexa_intent)
         if normalized_raw in DiscoveryConstants.LOCAL_HINTS:
             return ResolverWorkflow._direct_discovery_result(
                 alexa_intent,
@@ -515,12 +517,7 @@ class ResolverWorkflow:
             "directDiscoveryRequest": True,
         }
         if source_kind == "creator":
-            return {
-                **base,
-                "intent": "creator",
-                "alexaIntent": "creator",
-                "slots": {"creatorQuery": "", "genericCreatorRequest": True},
-            }
+            return ResolverWorkflow._generic_creator_resolution("ChooseSourceKindIntent")
         if source_kind == "publication":
             if SearchFilterUtils.is_meaningful_publication_source(publication_source):
                 return None
@@ -542,6 +539,20 @@ class ResolverWorkflow:
                 "slots": {"organizationQuery": "", "genericOrganizationRequest": True},
             }
         return None
+
+    @staticmethod
+    def _generic_creator_resolution(alexa_intent: str) -> dict:
+        return {
+            "status": "resolved",
+            "intent": "creator",
+            "alexaIntent": "creator",
+            "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": alexa_intent == "ChooseSourceKindIntent",
+            "needsRedirect": alexa_intent != "ChooseSourceKindIntent",
+            "localResolved": True,
+            "directDiscoveryRequest": True,
+            "slots": {"creatorQuery": "", "genericCreatorRequest": True},
+        }
 
     @staticmethod
     def _direct_discovery_result(alexa_intent: str, intent_name: str, sort: str) -> dict:

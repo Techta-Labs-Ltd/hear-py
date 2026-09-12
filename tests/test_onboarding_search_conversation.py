@@ -3471,6 +3471,62 @@ async def test_generic_creator_pipeline_asks_for_city(monkeypatch, mock_handler_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slot_name"),
+    [
+        ("PlayContentIntent", "topic"),
+        ("SearchContentIntent", "searchQuery"),
+        ("CarrierlessDiscoveryIntent", "discoveryQuery"),
+    ],
+)
+async def test_live_generic_creator_fallback_asks_for_city(
+    monkeypatch,
+    mock_handler_input,
+    intent_name,
+    slot_name,
+):
+    from src.controllers.intent_dispatch import IntentDispatchGateHandler
+    from src.middleware.confirmation import ConfirmationMiddleware
+
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": intent_name,
+                "slots": {
+                    slot_name: {
+                        "name": slot_name,
+                        "value": "creator",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    resolve = AsyncMock()
+    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+        mock_handler_input
+    )
+
+    assert "Which city would you like me to find creators in" in response["outputSpeech"]["ssml"]
+    assert response["directives"] == [DialogStateManager.capture_directive("creator_location")]
+    assert response["shouldEndSession"] is False
+    assert DialogStateManager.get_active(mock_handler_input)["type"] == "creator_location"
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_creator_city_reply_uses_location_resolver_without_saving_profile(
     mock_handler_input,
 ):
