@@ -387,6 +387,231 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
 
 
 @pytest.mark.asyncio
+async def test_creator_location_availability_filters_creators_without_saving_city(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(
+        mock_handler_input,
+        "SelectCreatorCityIntent",
+        {"cityQuery": {"name": "cityQuery", "value": "Manchester"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "listenerId": "listener-1",
+        "userCity": "Swindon",
+        "latitude": 51.56,
+        "longitude": -1.78,
+    }
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "page": 0,
+            "total_pages": 1,
+            "has_more": False,
+            "organizations": [
+                {"type": "organization", "id": "org-1", "name": "Manchester Talking News"}
+            ],
+            "creators": [
+                {"type": "creator", "id": "creator-1", "name": "Alex Reader"},
+                {"type": "creator", "id": "creator-2", "name": "Sam Voice"},
+            ],
+        }
+    )
+    nlp = {
+        "intent": "creator_location",
+        "requestedLocation": True,
+        "slots": {
+            "city": "Manchester",
+            "placeName": "Manchester",
+            "countryCode": "gb",
+            "latitude": 53.4808,
+            "longitude": -2.2426,
+            "isLocal": True,
+        },
+        "searchPayload": {
+            "query": "",
+            "filter": {
+                "city": "Manchester",
+                "countryCode": "gb",
+                "latitude": 53.4808,
+                "longitude": -2.2426,
+            },
+        },
+    }
+
+    response = await Availability(deps=deps).begin_creator_location(handler_input, nlp)
+
+    assert deps.heara.availability.await_args.args[0] == {
+        "filter": {
+            "isCreator": True,
+            "location": {
+                "city": "Manchester",
+                "countryCode": "gb",
+                "latitude": 53.4808,
+                "longitude": -2.2426,
+            },
+        },
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "listenerId": "listener-1",
+        "page": 0,
+        "limit": 3,
+    }
+    speech = AvailabilityTestSupport.speech(response)
+    assert "Alex Reader" in speech
+    assert "Sam Voice" in speech
+    assert "Manchester Talking News" not in speech
+    store = User.snapshot(handler_input)
+    assert store["userCity"] == "Swindon"
+    assert store["latitude"] == 51.56
+    assert store["longitude"] == -1.78
+    active = DialogStateManager.get_active(handler_input)
+    assert active["type"] == "availability"
+    assert active["context"]["sourceType"] == "creator"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("availability_result", "expected_speech"),
+    [
+        ({"failed": False, "creators": []}, "couldn't find any creators"),
+        ({"failed": True}, "trouble finding creators"),
+    ],
+)
+async def test_creator_location_terminal_results_do_not_enter_onboarding(
+    mock_handler_input,
+    availability_result,
+    expected_speech,
+):
+    handler_input = AvailabilityTestSupport.intent(
+        mock_handler_input,
+        "SelectCreatorCityIntent",
+        {"cityQuery": {"name": "cityQuery", "value": "Manchester"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    deps = AvailabilityTestSupport.dependencies(availability_result)
+    nlp = {
+        "intent": "creator_location",
+        "requestedLocation": True,
+        "slots": {"city": "Manchester", "countryCode": "gb"},
+        "searchPayload": {
+            "query": "",
+            "filter": {"city": "Manchester", "countryCode": "gb"},
+        },
+    }
+
+    response = await Availability(deps=deps).begin_creator_location(handler_input, nlp)
+
+    assert expected_speech in AvailabilityTestSupport.speech(response)
+    store = User.snapshot(handler_input)
+    assert store["activeDialog"] is None
+    assert store["onboardingStage"] is None
+
+
+@pytest.mark.asyncio
+async def test_creator_location_pagination_preserves_filter_and_creator_domain(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.NextIntent")
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "page": 1,
+            "total_pages": 2,
+            "has_more": False,
+            "organizations": [
+                {"type": "organization", "id": "org-2", "name": "Wrong Domain"}
+            ],
+            "creators": [
+                {"type": "creator", "id": "creator-2", "name": "Second Creator"},
+                {"type": "creator", "id": "creator-3", "name": "Third Creator"},
+                {"type": "creator", "id": "creator-4", "name": "Fourth Creator"},
+                {"type": "creator", "id": "creator-5", "name": "Fifth Creator"},
+            ],
+        }
+    )
+    availability_filter = {
+        "isCreator": True,
+        "location": {
+            "city": "Manchester",
+            "countryCode": "gb",
+            "latitude": 53.4808,
+            "longitude": -2.2426,
+        },
+    }
+    context = {
+        "kind": "source",
+        "sourceType": "creator",
+        "candidates": [
+            {"type": "creator", "id": "creator-1", "name": "First Creator"}
+        ],
+        "apiPage": 0,
+        "hasMore": True,
+        "availabilityFilter": availability_filter,
+    }
+
+    updated = await Availability(deps=deps)._load_remote_page(handler_input, context)
+
+    request = deps.heara.availability.await_args.args[0]
+    assert request["filter"] == availability_filter
+    assert request["page"] == 1
+    assert [item["id"] for item in updated["candidates"]] == [
+        "creator-2",
+        "creator-3",
+        "creator-4",
+    ]
+    assert updated["offset"] == 0
+
+
+@pytest.mark.asyncio
+async def test_creator_location_previous_page_reloads_without_growing_state(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(
+        mock_handler_input,
+        "ShowPreviousBrowseIntent",
+    )
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "page": 0,
+            "total_pages": 2,
+            "has_more": True,
+            "creators": [
+                {"type": "creator", "id": "creator-1", "name": "First Creator"}
+            ],
+        }
+    )
+    context = {
+        "kind": "source",
+        "sourceType": "creator",
+        "candidates": [
+            {"type": "creator", "id": "creator-4", "name": "Fourth Creator"}
+        ],
+        "offset": 0,
+        "apiPage": 1,
+        "totalPages": 2,
+        "hasMore": False,
+        "availabilityFilter": {
+            "isCreator": True,
+            "location": {"city": "Manchester", "countryCode": "gb"},
+        },
+    }
+
+    response = await Availability(deps=deps)._previous(handler_input, context)
+
+    request = deps.heara.availability.await_args.args[0]
+    assert request["page"] == 0
+    assert request["filter"] == context["availabilityFilter"]
+    active = DialogStateManager.get_active(handler_input)["context"]
+    assert active["apiPage"] == 0
+    assert [item["id"] for item in active["candidates"]] == ["creator-1"]
+    assert "First Creator" in AvailabilityTestSupport.speech(response)
+
+
+@pytest.mark.asyncio
 async def test_empty_local_availability_stops_without_search_or_playback_mutation(
     mock_handler_input,
 ):
@@ -558,6 +783,49 @@ def test_source_candidates_keep_same_name_in_distinct_domains():
         ("organization", "org-1"),
         ("creator", "creator-1"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_recommendations_list_sources_before_loading_content(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(
+        mock_handler_input, "PlayRecommendationIntent"
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "listenerId": "listener-1",
+    }
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "page": 0,
+            "total_pages": 1,
+            "has_more": False,
+            "organizations": [
+                {
+                    "type": "organization",
+                    "id": "org-1",
+                    "name": "Community News",
+                }
+            ],
+            "creators": [
+                {
+                    "type": "creator",
+                    "id": "creator-1",
+                    "name": "Local Reader",
+                },
+            ],
+        }
+    )
+
+    response = await Availability(deps=deps).begin_recommendations(handler_input)
+
+    request = deps.heara.availability.await_args.args[0]
+    assert request["filter"] == {}
+    assert request["listenerId"] == "listener-1"
+    assert request["isRecommended"] is True
+    speech = AvailabilityTestSupport.speech(response)
+    assert "Community News" in speech
+    assert "Local Reader" in speech
 
 
 @pytest.mark.parametrize(

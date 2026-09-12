@@ -263,8 +263,8 @@ class DialogStateManager:
         return None
 
     @staticmethod
-    def source_capture_directive(dialog_type: str) -> dict:
-        capture = DialogConstants.SOURCE_CAPTURE[dialog_type]
+    def capture_directive(dialog_type: str) -> dict:
+        capture = DialogConstants.SLOT_CAPTURE[dialog_type]
         slot_name = capture["slotName"]
         return {
             "type": "Dialog.ElicitSlot",
@@ -357,7 +357,6 @@ class DialogStateManager:
             "suggestionIndex": 0,
             "excludedSuggestions": [],
             "awaitingOrganizationName": False,
-            "awaitingCreatorName": False,
             "awaitingPublicationSource": False,
             "_requiresReliableSave": True,
         }

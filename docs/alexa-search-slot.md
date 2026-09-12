@@ -1,18 +1,17 @@
 # Alexa generated domain-slot contract
 
-The Hear backend generates four separate custom Alexa slot types:
+The Hear backend generates three separate custom Alexa slot types:
 
 - `HEAR_LOCATION`
 - `HEAR_ORGANIZATION`
-- `HEAR_CREATOR`
 - `HEAR_TOPIC`
 
 `CarrierlessDiscoveryIntent` keeps its `HEAR_TOPIC` sample and generated
 `HEAR_DISCOVERY` bridge. The build step fills that bridge with the canonical
-values already present in the four domain catalogues. Approved aliases already
+values already present in the three domain catalogues. Approved aliases already
 attached to the same canonical value in the base model are retained when the
 full catalogues replace its seed values. The bridge also copies unambiguous
-organisation, creator and topic aliases. Location aliases remain in
+organisation and topic aliases. Location aliases remain in
 `HEAR_LOCATION`, whose bare-value intent stays active alongside the bridge;
 copying every location pronunciation into both slots would exceed Alexa's
 interaction-model size limit. An alias shared by different canonical entities
@@ -28,13 +27,13 @@ supplies the canonical resolver input while the original captured text remains
 separately available. A failed custom-slot resolution, ambiguous match, or
 unusable canonical value sends the captured text instead. The resolver remains
 responsible for deciding whether a bare reply is a location, organisation,
-creator, topic, tag, publication, or title.
+topic, tag, publication, title, or a directly spoken creator phrase.
 
 The interaction model also contains the small, static `HEAR_SOURCE_KIND` slot.
 It is not generated from catalogue data. Its canonical values are `talking
 newspaper`, `publication`, and `creator`, with common spoken variants. It
-routes a generic request into the correct name-capture flow without sending a
-generic phrase to the resolver.
+routes a generic request into the correct discovery flow without sending a
+generic phrase to the resolver. A generic creator request starts city capture.
 
 `HEAR_CLARIFICATION` is not generated from the catalogue. Keep its stable
 fallback values in the interaction model for `first`, `second`, `third`,
@@ -101,19 +100,6 @@ Generate this object. Slot values contain only `name.value` and optional
       ]
     },
     {
-      "name": "HEAR_CREATOR",
-      "values": [
-        {
-          "name": {
-            "value": "Jane Smith",
-            "synonyms": [
-              "Jane Smyth"
-            ]
-          }
-        }
-      ]
-    },
-    {
       "name": "HEAR_TOPIC",
       "values": [
         {
@@ -142,23 +128,22 @@ Generate this object. Slot values contain only `name.value` and optional
 ```
 
 Build the uploadable interaction model from the checked-in base model and all
-four generated catalogues before uploading it to Alexa:
+three generated catalogues before uploading it to Alexa:
 
 ```bash
 python scripts/build_alexa_interaction_model.py --output build/en-GB.json
 ```
 
 Upload `build/en-GB.json`, not the seed-only `en-GB.json`. The builder replaces
-the four matching objects in `interactionModel.languageModel.types`, writes a
+the three matching objects in `interactionModel.languageModel.types`, writes a
 compact model that stays within Alexa's size limit, and fails rather than
-silently omitting one of the four domain slots.
+silently omitting one of the three domain slots.
 
-For manual Alexa Console imports, the repository produces the four backend
+For manual Alexa Console imports, the repository produces the three backend
 domain files under `alexa-slot-imports/`:
 
 - `HEAR_LOCATION.csv`
 - `HEAR_ORGANIZATION.csv`
-- `HEAR_CREATOR.csv`
 - `HEAR_TOPIC.csv`
 
 Import each file through that slot type's **Bulk Edit** screen. The files do
@@ -173,7 +158,6 @@ for that slot type, after which the interaction model must be saved and built.
 | --- | --- |
 | `HEAR_LOCATION` | Active towns, cities, localities, areas, and their observed spoken variants |
 | `HEAR_ORGANIZATION` | Full backend organization names, plus distinctive spoken names and observed ASR variants |
-| `HEAR_CREATOR` | Active creator, author, narrator, and contributor names |
 | `HEAR_TOPIC` | Every active topic, category, subject, and searchable tag, including multi-word values |
 
 Do not copy all records into every slot. Domain separation is what helps Alexa
@@ -181,10 +165,8 @@ prefer `London` as a location instead of a creator name. If the same phrase
 exists in multiple domains, keep it only where users genuinely use it or rely
 on the resolver to clarify the unavoidable ambiguity.
 
-The lexicon post-processor removes organisation-owned accounts from
-`HEAR_CREATOR` when their canonical name is already present in
-`HEAR_ORGANIZATION`. Cross-slot canonical collisions fail validation unless the
-phrase is listed in `allowCrossSlotCollisions`. Synonym overlap is allowed
+Cross-slot canonical collisions fail validation unless the phrase is listed in
+`allowCrossSlotCollisions`. Synonym overlap is allowed
 because carrier phrases and active dialog establish the domain, but duplicate
 canonical values must be an explicit catalogue decision.
 
@@ -206,8 +188,8 @@ backend generates fresh CSV files and before importing them into Alexa.
 | `SelectOrganizationIntent.organizationQuery` | `HEAR_ORGANIZATION` |
 | `PlayPublicationIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
 | `SelectPublicationSourceIntent.publicationSourceQuery` | `HEAR_ORGANIZATION` |
-| `PlayByCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
-| `SelectCreatorIntent.creatorQuery` | `HEAR_CREATOR` |
+| `SearchCreatorIntent.searchQuery` | `AMAZON.SearchQuery` |
+| `SelectCreatorCityIntent.cityQuery` | `HEAR_LOCATION` |
 | `ChooseSourceKindIntent.sourceKind` | static `HEAR_SOURCE_KIND` |
 | Discovery `topic` and recommendation fields | `HEAR_TOPIC` |
 | `CarrierlessDiscoveryIntent.topic` | `HEAR_TOPIC` |
@@ -223,14 +205,16 @@ active are interpreted by that active dialog before general discovery. The
 intent-specific `AMAZON.SearchQuery` fallbacks and their carrier phrases remain
 unchanged.
 
-Creator-owned publication requests use `PlayByCreatorIntent`, for example
-`play a publication by Jane Smith`. Organization-owned publication requests
-use `PlayPublicationIntent`, for example `play a publication from Tynedale
-Talking Newspaper`.
+Direct creator phrases use `SearchCreatorIntent` and the general resolver. The
+existing creator playback path continues only when resolution returns a
+concrete creator ID. An unresolved creator phrase starts the city question and
+never reaches raw catalogue search. Organization-owned publication requests use
+`PlayPublicationIntent`, for example `play a publication from Tynedale Talking
+Newspaper`.
 
 ## Generation rules
 
-1. Emit exactly the four slot objects in the order shown above.
+1. Emit exactly the three slot objects in the order shown above.
 2. Emit only `name.value` and optional `name.synonyms`; never emit `id`.
 3. Use the exact public/backend catalog name as the canonical `value`. This is
    the text Alexa sends to the resolver after a successful slot match.
@@ -290,7 +274,7 @@ For every populated domain slot:
   Hear resolver.
 - The resolver remains responsible for entity lookup, ambiguity, permissions,
   availability, and the final search filters.
-- No Alexa entity ID is required or read for these four slots.
+- No Alexa entity ID is required or read for these three slots.
 
 The normalized resolver result uses structured matches before free text:
 
@@ -357,19 +341,26 @@ play near London
 play sport near Herne Bay
 ```
 
-The interaction model explicitly supports both complete commands and name-only
-turns. `Tynedale`, `Tynedale Talking Newspaper`, `play Tynedale Talking
+The interaction model explicitly supports both complete commands and supported
+follow-up turns. `Tynedale`, `Tynedale Talking Newspaper`, `play Tynedale Talking
 Newspaper`, `play from Tynedale Talking Newspaper`, and `play sport from
 Tynedale Talking Newspaper` all reach the same resolver. Bare organisation,
-creator, publication, and location names use their existing domain slots. Bare
-topics use `CarrierlessDiscoveryIntent`, and recognizable uncatalogued phrases
-use `OpenDiscoveryIntent` while the general prompt is active. Carrier-based
-forms retain their existing intents.
+publication, and location names use their domain slots. Bare topics use
+`CarrierlessDiscoveryIntent`, and recognizable uncatalogued phrases use
+`OpenDiscoveryIntent` while the general prompt is active. Carrier-based forms
+retain their existing intents.
 
-When the skill asks which creator, talking newspaper, or publication source
-the listener wants, its `Dialog.ElicitSlot` response explicitly chains to
-`SelectCreatorIntent`, `SelectOrganizationIntent`, or
-`SelectPublicationSourceIntent`. A custom slot no-match is valid when Alexa
+When a generic creator request resolves through `ChooseSourceKindIntent`, the
+skill activates `creator_location` and elicits
+`SelectCreatorCityIntent.cityQuery`. That slot uses `HEAR_LOCATION`. The city is
+sent to the resolver with location preference, then used transiently for
+creator-only availability. It is never written to onboarding or the listener's
+saved location. The skill keeps no more than the current three creator choices
+and reloads API pages for next and previous navigation.
+
+When the skill asks which talking newspaper or publication source the listener
+wants, its `Dialog.ElicitSlot` response explicitly chains to
+`SelectOrganizationIntent` or `SelectPublicationSourceIntent`. A custom slot no-match is valid when Alexa
 selects the intent: its raw spoken value is still forwarded to the Hear
 resolver. The skill also persists the active source-name dialog, so a bare
 value arriving through any compatible slot intent is reinterpreted as the
@@ -379,7 +370,7 @@ the Lambda to recover, so the skill asks for the full name again without
 requiring a carrier phrase.
 
 If Alexa labels a name-only reply with the wrong bare-value intent while the
-session is waiting for a town, organization, creator, or publication source,
+session is waiting for a town, organization, or publication source,
 active dialog state takes precedence. The backend sends the captured words to
 the expected route and only saves a city during the actual onboarding location
 flow.

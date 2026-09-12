@@ -156,18 +156,11 @@ class AlexaRequest:
 
     @staticmethod
     def get_search_query(handler_input) -> str:
-        intent_name = AlexaRequest.get_intent_name(handler_input) or ""
         creator = AlexaRequest.get_slot_value(handler_input, "creatorQuery") or ""
         if creator:
             return SearchFilterUtils.strip_conversational_topic_prefix(
                 SearchFilterUtils._normalize_search_query_for_creator(creator)
             )
-        if intent_name == "PlayByCreatorIntent":
-            topic_as_creator = AlexaRequest.get_slot_value(handler_input, "topic") or ""
-            if topic_as_creator:
-                return SearchFilterUtils.strip_conversational_topic_prefix(
-                    SearchFilterUtils._normalize_search_query_for_creator(topic_as_creator)
-                )
         organization = AlexaRequest.get_slot_value(handler_input, "organizationQuery") or ""
         if organization:
             return SearchFilterUtils.strip_conversational_topic_prefix(

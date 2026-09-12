@@ -2,7 +2,6 @@ from __future__ import annotations
 
 
 class DiscoveryConstants:
-    CREATOR_INTENTS = frozenset({"PlayByCreatorIntent", "SelectCreatorIntent"})
     ORGANIZATION_INTENTS = frozenset({"PlayByOrganizationIntent", "SelectOrganizationIntent"})
     PUBLICATION_INTENTS = frozenset({"PlayPublicationIntent", "SelectPublicationSourceIntent"})
     CHOICE_PAGE_SIZE = 3
@@ -150,9 +149,8 @@ class DiscoveryConstants:
         "PlayContentIntent": "general",
         "SearchContentIntent": "general",
         "PlayLatestContentIntent": "general",
-        "PlayByCreatorIntent": "creator",
         "SearchCreatorIntent": "creator",
-        "SelectCreatorIntent": "creator",
+        "SelectCreatorCityIntent": "creator_location",
         "PlayByOrganizationIntent": "organization",
         "SearchOrganizationIntent": "organization",
         "SelectOrganizationIntent": "organization",

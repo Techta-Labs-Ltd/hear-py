@@ -144,7 +144,7 @@ async def test_bare_reply_during_search_confirmation_keeps_pending_resolution(
     [
         ("TownCaptureIntent", "townName", "seven ox"),
         ("SelectOrganizationIntent", "organizationQuery", "tnf"),
-        ("SelectCreatorIntent", "creatorQuery", "David Beard"),
+        ("SelectCreatorCityIntent", "cityQuery", "Manchester"),
         (
             "SelectPublicationSourceIntent",
             "publicationSourceQuery",
@@ -320,43 +320,6 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
             },
             "play near London",
         ),
-        (
-            "PlayByCreatorIntent",
-            {
-                "topic": {"name": "topic", "value": "gardening"},
-                "creatorQuery": {
-                    "name": "creatorQuery",
-                    "value": "jane smyth",
-                    "resolutions": {
-                        "resolutionsPerAuthority": [
-                            {
-                                "status": {"code": "ER_SUCCESS_MATCH"},
-                                "values": [{"value": {"name": "Jane Smith"}}],
-                            }
-                        ]
-                    },
-                },
-            },
-            "play gardening by Jane Smith",
-        ),
-        (
-            "SelectCreatorIntent",
-            {
-                "creatorQuery": {
-                    "name": "creatorQuery",
-                    "value": "jane smyth",
-                    "resolutions": {
-                        "resolutionsPerAuthority": [
-                            {
-                                "status": {"code": "ER_SUCCESS_MATCH"},
-                                "values": [{"value": {"name": "Jane Smith"}}],
-                            }
-                        ]
-                    },
-                }
-            },
-            "play jane smyth",
-        ),
     ],
 )
 async def test_generated_slot_match_or_raw_value_always_reaches_backend_resolver(
@@ -435,8 +398,8 @@ async def test_organization_follow_up_beats_incorrect_town_intent(mock_handler_i
     assert "townName" not in nlp["slots"]
 
 
-def test_name_only_selection_intents_use_domain_handlers(mock_handler_input):
-    from src.controllers.play import PlayByCreatorHandler, PlayByOrganizationHandler
+def test_name_only_organization_selection_uses_domain_handler(mock_handler_input):
+    from src.controllers.play import PlayByOrganizationHandler
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
@@ -455,13 +418,6 @@ def test_name_only_selection_intents_use_domain_handlers(mock_handler_input):
         }
     )
     assert PlayByOrganizationHandler(deps=ApplicationContainer()).can_handle(mock_handler_input)
-
-    mock_handler_input.request_envelope.request.intent.name = "SelectCreatorIntent"
-    mock_handler_input.request_envelope.request.intent.slots = {
-        "creatorQuery": {"name": "creatorQuery", "value": "sample creator"}
-    }
-    assert PlayByCreatorHandler(deps=ApplicationContainer()).can_handle(mock_handler_input)
-
 
 @pytest.mark.asyncio
 async def test_local_resolver_result_does_not_send_interpretation_progressive(
@@ -1032,8 +988,8 @@ async def test_onboarding_treats_creator_misclassification_as_town(monkeypatch, 
             "type": "IntentRequest",
             "locale": "en-GB",
             "intent": {
-                "name": "PlayByCreatorIntent",
-                "slots": {"creatorQuery": {"name": "creatorQuery", "value": "Gloucester"}},
+                "name": "SearchCreatorIntent",
+                "slots": {"searchQuery": {"name": "searchQuery", "value": "Gloucester"}},
             },
         }
     )
@@ -1737,10 +1693,10 @@ async def test_resolved_organization_requires_confirmation_before_search(
             "type": "IntentRequest",
             "locale": "en-GB",
             "intent": {
-                "name": "PlayByCreatorIntent",
+                "name": "SearchCreatorIntent",
                 "slots": {
-                    "creatorQuery": {
-                        "name": "creatorQuery",
+                    "searchQuery": {
+                        "name": "searchQuery",
                         "value": "heatwave from ytn",
                     }
                 },
@@ -1887,7 +1843,7 @@ async def test_ambiguity_response_without_original_slot_reprompts_candidates(
 
 @pytest.mark.asyncio
 async def test_unresolved_creator_does_not_play_unrelated_fallback(monkeypatch, mock_handler_input):
-    from src.controllers.play import PlayByCreatorHandler
+    from src.models.play import PlayCreator
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
@@ -1923,29 +1879,70 @@ async def test_unresolved_creator_does_not_play_unrelated_fallback(monkeypatch, 
             },
         }
     )
-    discover = AsyncMock(
-        return_value={
-            "results": [],
-            "total_hits": 0,
-            "failed": False,
-            "client_message": "I couldn't find a creator named Unknown Speaker Collective.",
-        }
-    )
+    discover = AsyncMock()
     fallback = AsyncMock()
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
     monkeypatch.setattr("src.models.search.Search._discover_content_avoiding_recent", fallback)
 
-    await PlayByCreatorHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await PlayCreator(deps=ApplicationContainer()).execute(mock_handler_input)
 
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "couldn't find a creator" in spoken
-    discover.assert_awaited_once()
+    assert "Which city would you like me to find creators in" in spoken
+    assert User.snapshot(mock_handler_input)["activeDialog"]["type"] == "creator_location"
+    discover.assert_not_awaited()
     fallback.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_creator_ambiguity_without_a_slot_announces_candidates(mock_handler_input):
-    from src.controllers.play import PlayByCreatorHandler
+async def test_resolver_recognized_creator_keeps_existing_playback_flow(
+    monkeypatch,
+    mock_handler_input,
+):
+    from src.models.play import PlayCreator
+
+    mock_handler_input.attributes_manager.request_attributes.update(
+        {
+            "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+            "_nlp": {
+                "status": "resolved",
+                "intent": "creator",
+                "slots": {
+                    "creatorIds": ["creator-1"],
+                    "creatorName": "Alex Reader",
+                    "residualQuery": "latest news",
+                },
+            },
+        }
+    )
+    search_result = {
+        "failed": False,
+        "results": [{"contentId": "track-1", "title": "Latest News"}],
+        "total_hits": 1,
+    }
+    discover = AsyncMock(return_value=search_result)
+    play = AsyncMock(return_value={"shouldEndSession": True})
+    ask_creator_city = AsyncMock()
+    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.models.search.Search.auto_play_first_from_search", play)
+    deps = SimpleNamespace(
+        availability=SimpleNamespace(ask_creator_city=ask_creator_city),
+    )
+
+    response = await PlayCreator(deps=deps).execute(mock_handler_input)
+
+    discover.assert_awaited_once_with(
+        mock_handler_input,
+        {"q": "latest news", "intent": "creator"},
+        deps=deps,
+    )
+    play.assert_awaited_once()
+    ask_creator_city.assert_not_awaited()
+    assert response == {"shouldEndSession": True}
+
+
+@pytest.mark.asyncio
+async def test_creator_ambiguity_without_a_concrete_id_asks_for_city(mock_handler_input):
+    from src.models.play import PlayCreator
 
     candidates = [
         {
@@ -1969,7 +1966,7 @@ async def test_creator_ambiguity_without_a_slot_announces_candidates(mock_handle
         {
             "type": "IntentRequest",
             "locale": "en-GB",
-            "intent": {"name": "PlayByCreatorIntent", "slots": {}},
+            "intent": {"name": "SearchCreatorIntent", "slots": {}},
         }
     )
     mock_handler_input.attributes_manager.request_attributes.update(
@@ -1984,18 +1981,15 @@ async def test_creator_ambiguity_without_a_slot_announces_candidates(mock_handle
             },
         }
     )
+    mock_handler_input.response_builder = ResponseBuilder()
 
-    await PlayByCreatorHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    response = await PlayCreator(deps=ApplicationContainer()).execute(mock_handler_input)
 
     store = User.snapshot(mock_handler_input)
-    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert store["activeDialog"]["type"] == "ambiguity"
-    assert store["pendingAmbiguity"]["candidates"] == candidates
-    assert "Pendle Voice" in spoken
-    assert "Dalesman" in spoken
-    assert "Which creator would you like" not in spoken
-    directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
-    assert directive["type"] == "Dialog.UpdateDynamicEntities"
+    spoken = response["outputSpeech"]["ssml"]
+    assert store["activeDialog"]["type"] == "creator_location"
+    assert "Which city would you like me to find creators in" in spoken
+    assert response["directives"] == [DialogStateManager.capture_directive("creator_location")]
 
 
 def test_fallback_during_ambiguity_repeats_candidates_not_welcome(mock_handler_input):
@@ -3066,11 +3060,10 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
 
     search.assert_awaited_once_with(
         {
-            "alexaUserId": "amzn1.ask.account.TEST",
-            "query": "",
-            "isLocal": False,
-            "isRecommended": False,
-            "limit": 3,
+                "alexaUserId": "amzn1.ask.account.TEST",
+                "query": "",
+                "isLocal": False,
+                "limit": 3,
             "page": 0,
             "filter": {"publicationIds": ["publication-buxton"]},
         },
@@ -3293,7 +3286,7 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     chained_builder = mock_handler_input.response_builder.speak.return_value.reprompt.return_value
     chained_builder.add_directive.assert_called_once()
     directive = chained_builder.add_directive.call_args.args[0]
-    assert directive == DialogStateManager.source_capture_directive("organization_name")
+    assert directive == DialogStateManager.capture_directive("organization_name")
     json.dumps(directive)
     discover.assert_not_awaited()
 
@@ -3335,7 +3328,7 @@ async def test_generic_talking_newspaper_pipeline_prompts_when_slot_has_no_value
     )
     assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
-        DialogStateManager.source_capture_directive("organization_name")
+        DialogStateManager.capture_directive("organization_name")
     ]
     assert User.snapshot(mock_handler_input)["awaitingOrganizationName"] is True
     resolve.assert_not_awaited()
@@ -3379,7 +3372,7 @@ async def test_generic_talking_newspaper_slot_value_still_prompts_for_name(
     )
     assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
-        DialogStateManager.source_capture_directive("organization_name")
+        DialogStateManager.capture_directive("organization_name")
     ]
     assert User.snapshot(mock_handler_input)["awaitingOrganizationName"] is True
     resolve.assert_not_awaited()
@@ -3429,14 +3422,14 @@ async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
     )
     assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
-        DialogStateManager.source_capture_directive("organization_name")
+        DialogStateManager.capture_directive("organization_name")
     ]
     assert User.snapshot(mock_handler_input)["awaitingOrganizationName"] is True
     resolve.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_handler_input):
+async def test_generic_creator_pipeline_asks_for_city(monkeypatch, mock_handler_input):
     from src.controllers.intent_dispatch import IntentDispatchGateHandler
     from src.middleware.confirmation import ConfirmationMiddleware
 
@@ -3446,11 +3439,11 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
             "type": "IntentRequest",
             "locale": "en-GB",
             "intent": {
-                "name": "PlayByCreatorIntent",
+                "name": "ChooseSourceKindIntent",
                 "slots": {
-                    "creatorQuery": {
-                        "name": "creatorQuery",
-                        "value": "a creator",
+                    "sourceKind": {
+                        "name": "sourceKind",
+                        "value": "creator",
                         "confirmationStatus": "NONE",
                     }
                 },
@@ -3469,24 +3462,145 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
     response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
         mock_handler_input
     )
-    assert "Which creator would you like to hear" in response["outputSpeech"]["ssml"]
-    assert response["directives"] == [DialogStateManager.source_capture_directive("creator_name")]
+    assert "Which city would you like me to find creators in" in response["outputSpeech"]["ssml"]
+    assert response["directives"] == [DialogStateManager.capture_directive("creator_location")]
     assert response["shouldEndSession"] is False
-    assert User.snapshot(mock_handler_input)["awaitingCreatorName"] is True
-    assert DialogStateManager.get_active(mock_handler_input)["type"] == "creator_name"
+    assert "awaitingCreatorName" not in User.snapshot(mock_handler_input)
+    assert DialogStateManager.get_active(mock_handler_input)["type"] == "creator_location"
     resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_creator_city_reply_uses_location_resolver_without_saving_profile(
+    mock_handler_input,
+):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "search",
+                "slots": {
+                    "city": "Manchester",
+                    "placeName": "Manchester",
+                    "countryCode": "gb",
+                    "latitude": 53.4808,
+                    "longitude": -2.2426,
+                    "isLocal": True,
+                },
+                "searchPayload": {
+                    "query": "",
+                    "filter": {
+                        "city": "Manchester",
+                        "countryCode": "gb",
+                        "latitude": 53.4808,
+                        "longitude": -2.2426,
+                    },
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SelectCreatorCityIntent",
+                "slots": {
+                    "cityQuery": {
+                        "name": "cityQuery",
+                        "value": "Manchester",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "listenerId": "listener-1",
+        "userCity": "Swindon",
+        "latitude": 51.56,
+        "longitude": -1.78,
+        "activeDialog": {
+            "type": "creator_location",
+            "context": {"slotName": "cityQuery"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await ResolverInterceptor(
+        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
+    ).process(mock_handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once()
+    resolver_call = resolver.resolve_utterance.await_args
+    assert resolver_call.args == ("Manchester",)
+    assert resolver_call.kwargs["alexa_user_id"] == "amzn1.ask.account.TEST"
+    assert resolver_call.kwargs["listener_id"] == "listener-1"
+    assert resolver_call.kwargs["prefer_location"] is True
+    assert resolver_call.kwargs["timeout_ms"] > 0
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "creator_location"
+    assert nlp["slots"]["city"] == "Manchester"
+    store = User.snapshot(mock_handler_input)
+    assert store["userCity"] == "Swindon"
+    assert store["latitude"] == 51.56
+    assert store["longitude"] == -1.78
+    assert DialogStateManager.get_active(mock_handler_input) is None
+
+
+@pytest.mark.asyncio
+async def test_creator_city_resolver_failure_reasks_without_entering_onboarding(
+    mock_handler_input,
+):
+    from src.controllers.intent_dispatch import IntentDispatchGateHandler
+
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(side_effect=ResolverUnavailable("unavailable"))
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SelectCreatorCityIntent",
+                "slots": {
+                    "cityQuery": {"name": "cityQuery", "value": "not a real city"}
+                },
+            },
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "activeDialog": {
+            "type": "creator_location",
+            "context": {"slotName": "cityQuery"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await ResolverInterceptor(deps=container).process(mock_handler_input)
+    response = await IntentDispatchGateHandler(deps=container).handle(mock_handler_input)
+
+    assert "Which city would you like me to find creators in" in response["outputSpeech"]["ssml"]
+    assert response["directives"] == [
+        DialogStateManager.capture_directive("creator_location")
+    ]
+    store = User.snapshot(mock_handler_input)
+    assert store["activeDialog"]["type"] == "creator_location"
+    assert store["onboardingStage"] is None
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("intent_name", "flag", "dialog_type", "expected_speech"),
     [
-        (
-            "SelectCreatorIntent",
-            "awaitingCreatorName",
-            "creator_name",
-            "Please say the creator's full name",
-        ),
         (
             "SelectOrganizationIntent",
             "awaitingOrganizationName",
@@ -3498,7 +3612,7 @@ async def test_generic_creator_pipeline_asks_for_creator_name(monkeypatch, mock_
 async def test_empty_delegated_source_reply_gives_name_recovery(
     mock_handler_input, intent_name, flag, dialog_type, expected_speech
 ):
-    from src.controllers.play import PlayByCreatorHandler, PlayByOrganizationHandler
+    from src.controllers.play import PlayByOrganizationHandler
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
@@ -3519,11 +3633,9 @@ async def test_empty_delegated_source_reply_gives_name_recovery(
             "expiresAt": 4102444800,
         },
     }
-    handler_type = (
-        PlayByCreatorHandler if intent_name == "SelectCreatorIntent" else PlayByOrganizationHandler
+    response = await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(
+        mock_handler_input
     )
-
-    response = await handler_type(deps=ApplicationContainer()).handle(mock_handler_input)
 
     assert expected_speech in response["outputSpeech"]["ssml"]
     assert User.snapshot(mock_handler_input)[flag] is False
@@ -3533,11 +3645,6 @@ async def test_empty_delegated_source_reply_gives_name_recovery(
 @pytest.mark.parametrize(
     ("dialog_type", "flag", "slot_name"),
     [
-        (
-            "creator_name",
-            "awaitingCreatorName",
-            "creatorQuery",
-        ),
         (
             "organization_name",
             "awaitingOrganizationName",
@@ -3580,17 +3687,12 @@ def test_source_name_collision_rechains_the_active_capture_dialog(
 
     assert "outputSpeech" in response
     assert response["shouldEndSession"] is False
-    assert response["directives"] == [DialogStateManager.source_capture_directive(dialog_type)]
+    assert response["directives"] == [DialogStateManager.capture_directive(dialog_type)]
 
 
 @pytest.mark.parametrize(
     ("dialog_type", "flag", "expected_speech"),
     [
-        (
-            "creator_name",
-            "awaitingCreatorName",
-            "Please say the creator's full name",
-        ),
         (
             "organization_name",
             "awaitingOrganizationName",

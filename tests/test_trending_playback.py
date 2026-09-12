@@ -21,7 +21,7 @@ def test_resume_offer_requires_a_playable_https_url():
 
 
 @pytest.mark.asyncio
-async def test_recommendation_intent_uses_trending_handler_and_announces_count(
+async def test_recommendation_intent_uses_availability_source_selection(
     monkeypatch, mock_handler_input
 ):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
@@ -30,6 +30,36 @@ async def test_recommendation_intent_uses_trending_handler_and_announces_count(
             "type": "IntentRequest",
             "locale": "en-GB",
             "intent": {"name": "PlayRecommendationIntent", "slots": {}},
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    selection = {"outputSpeech": {"ssml": "<speak>Choose a source</speak>"}}
+    begin_recommendations = AsyncMock(return_value=selection)
+    monkeypatch.setattr(
+        "src.models.availability.Availability.begin_recommendations",
+        begin_recommendations,
+    )
+    handler = WhatsTrendingHandler(deps=ApplicationContainer())
+    assert handler.can_handle(mock_handler_input)
+    response = await handler.handle(mock_handler_input)
+
+    assert response == selection
+    begin_recommendations.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_trending_intent_searches_and_plays_trending_content(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": "WhatsTrendingIntent", "slots": {}},
         }
     )
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
@@ -53,12 +83,11 @@ async def test_recommendation_intent_uses_trending_handler_and_announces_count(
     autoplay = AsyncMock(return_value={"directives": [{"type": "AudioPlayer.Play"}]})
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
     monkeypatch.setattr("src.models.search.Search.auto_play_first_from_search", autoplay)
-    handler = WhatsTrendingHandler(deps=ApplicationContainer())
-    assert handler.can_handle(mock_handler_input)
-    response = await handler.handle(mock_handler_input)
-    options = autoplay.await_args.args[2]
-    assert (
-        options["introOverride"]
-        == "Here are 8 trending stories. Here's the first one."
+
+    response = await WhatsTrendingHandler(deps=ApplicationContainer()).handle(
+        mock_handler_input
     )
+
+    options = autoplay.await_args.args[2]
+    assert options["introOverride"] == "Here are 8 trending stories. Here's the first one."
     assert response["directives"][0]["type"] == "AudioPlayer.Play"

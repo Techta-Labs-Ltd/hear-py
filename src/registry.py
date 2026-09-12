@@ -28,7 +28,6 @@ from src.controllers.notifications import (
 )
 from src.controllers.permission import PermissionResumeHandler, SetUpAccountHandler
 from src.controllers.play import (
-    PlayByCreatorHandler,
     PlayByOrganizationHandler,
     PlayContentHandler,
 )
@@ -119,7 +118,6 @@ class RouteRegistry:
         DisableNotificationsHandler,
         WhatsTrendingHandler,
         BrowseContentHandler,
-        PlayByCreatorHandler,
         PlayByOrganizationHandler,
         PlayContentHandler,
         BrowseNavigationHandler,

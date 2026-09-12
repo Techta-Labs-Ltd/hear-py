@@ -84,6 +84,8 @@ class Speech:
     )
     BROWSE_EXHAUSTED = "That's everything I found."
     ASK_TALKING_NEWSPAPER = "Which talking newspaper would you like?"
+    ASK_CREATOR_CITY = "Which city would you like me to find creators in?"
+    ASK_CREATOR_CITY_REPROMPT = "You can say a city, such as Manchester."
     ASK_PUBLICATION = "Which publication would you like?"
     ASK_PUBLICATION_REPROMPT = "Please say the publication name."
     TALKING_NEWSPAPER_ASR_REPAIR = "Did you mean a talking newspaper?"

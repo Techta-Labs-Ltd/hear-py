@@ -14,8 +14,8 @@ class CanFulfillPolicy:
         "OpenDiscoveryIntent",
         "CarrierlessDiscoveryIntent",
         "PlayContentIntent",
-        "PlayByCreatorIntent",
-        "SelectCreatorIntent",
+        "SearchCreatorIntent",
+        "SelectCreatorCityIntent",
         "PlayByOrganizationIntent",
         "SelectOrganizationIntent",
         "PlayPublicationIntent",
@@ -31,6 +31,7 @@ class CanFulfillPolicy:
     STRONG_INTENTS = {"creator", "organization", "publication", "category", "local"}
     SLOT_PRIORITY = [
         "creatorQuery",
+        "cityQuery",
         "organizationQuery",
         "publicationSourceQuery",
         "topic",

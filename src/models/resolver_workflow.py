@@ -25,9 +25,8 @@ class ResolverWorkflow:
         "PlayContentIntent",
         "SearchContentIntent",
         "PlayLatestContentIntent",
-        "PlayByCreatorIntent",
         "SearchCreatorIntent",
-        "SelectCreatorIntent",
+        "SelectCreatorCityIntent",
         "PlayByOrganizationIntent",
         "SearchOrganizationIntent",
         "SelectOrganizationIntent",
@@ -56,8 +55,6 @@ class ResolverWorkflow:
     CANONICAL_ZERO_SLOT_DISCOVERY = {
         "PlayContentIntent": "play",
         "PlayLatestContentIntent": "play latest",
-        "PlayByCreatorIntent": "play",
-        "SelectCreatorIntent": "play",
         "PlayByOrganizationIntent": "play",
         "SelectOrganizationIntent": "play",
         "PlayPublicationIntent": "play publication",
@@ -89,7 +86,7 @@ class ResolverWorkflow:
         "general": "residualQuery",
     }
     CARRIERLESS_SELECTOR_SLOTS = {
-        "SelectCreatorIntent": "creatorQuery",
+        "SelectCreatorCityIntent": "cityQuery",
         "SelectOrganizationIntent": "organizationQuery",
         "SelectPublicationSourceIntent": "publicationSourceQuery",
     }
@@ -198,17 +195,6 @@ class ResolverWorkflow:
                 ):
                     return source
                 return " ".join(value for value in ("play", topic, "from", source) if value)
-        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS:
-            topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
-            creator = AlexaRequest.get_resolved_slot_value(slots.get("creatorQuery"))
-            if creator:
-                if (
-                    SearchFilterUtils.normalize_discovery_phrase(creator)
-                    in DiscoveryConstants.LOCAL_HINTS
-                    or not SearchFilterUtils.is_meaningful_creator_source(creator)
-                ):
-                    return creator
-                return " ".join(("play", topic or "something", "by", creator))
         if alexa_intent == "PlayLocalIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             location = AlexaRequest.get_resolved_slot_value(
@@ -331,6 +317,8 @@ class ResolverWorkflow:
     def _reject_implausible_search_query_source(
         result: dict, alexa_intent: str, intent_slots: dict
     ) -> dict:
+        if result.get("directDiscoveryRequest"):
+            return result
         fallback = ResolverWorkflow.SEARCH_QUERY_SOURCE_INTENTS.get(alexa_intent)
         if not fallback:
             return result
@@ -390,7 +378,7 @@ class ResolverWorkflow:
         search_plan["sort"] = "trending"
         slots.update(
             {
-                "isRecommended": True,
+                "isRecommended": alexa_intent == "PlayRecommendationIntent",
                 "sort": "trending",
                 "searchPlan": search_plan,
             }
@@ -443,19 +431,6 @@ class ResolverWorkflow:
         ):
             intent_name, sort = direct[alexa_intent]
             return ResolverWorkflow._direct_discovery_result(alexa_intent, intent_name, sort)
-        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS and (
-            not SearchFilterUtils.is_meaningful_creator_source(raw)
-        ):
-            return {
-                "status": "resolved",
-                "intent": "creator",
-                "alexaIntent": "creator",
-                "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": True,
-                "needsRedirect": False,
-                "localResolved": True,
-                "slots": {"creatorQuery": "", "genericCreatorRequest": True},
-            }
         organization_request_kind = SearchFilterUtils.organization_request_kind(
             raw,
             organization_intent=alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
@@ -588,7 +563,7 @@ class ResolverWorkflow:
             },
             "slots": {
                 "residualQuery": "",
-                "isRecommended": intent_name == "trending",
+                "isRecommended": alexa_intent == "PlayRecommendationIntent",
                 "sort": sort,
             },
         }

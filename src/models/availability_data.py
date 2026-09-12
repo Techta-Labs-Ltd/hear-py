@@ -53,7 +53,7 @@ class AvailabilityData:
                 return None
             source_count += len(populated)
         if payload.get("isRecommended"):
-            return None
+            return AvailabilityConstants.LOCATION_KIND if source_count == 0 else None
         if source_count > 0:
             return None if payload.get("sort") else AvailabilityConstants.SOURCE_KIND
         if active_keys & AvailabilityConstants.LOCATION_FILTER_KEYS or payload.get("isLocal"):
@@ -137,6 +137,8 @@ class AvailabilityData:
             if not location:
                 return None
             output["location"] = location
+        if payload.get("isRecommended"):
+            return output
         return output or None
 
     @staticmethod
@@ -173,14 +175,17 @@ class AvailabilityData:
         )
 
     @staticmethod
-    def source_candidates(result: dict) -> list[dict]:
+    def source_candidates(result: dict, source_type: str | None = None) -> list[dict]:
         combined = list(result.get("organizations") or []) + list(result.get("creators") or [])
         unique = []
         names: set[tuple[str, str]] = set()
         for candidate in combined:
+            candidate_type = str(candidate.get("type") or "source").strip().casefold()
+            if source_type and candidate_type != source_type:
+                continue
             name = str(candidate.get("name") or "").strip()
             key = (
-                str(candidate.get("type") or "source").strip().casefold(),
+                candidate_type,
                 DialogSelection.normalize(name),
             )
             if not name or key in names:

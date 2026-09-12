@@ -27,6 +27,7 @@ class IntentDispatcher:
             "trending",
             "local",
             "creator",
+            "creator_location",
             "organization",
             "publication",
             "category",
@@ -127,6 +128,8 @@ class IntentDispatcher:
             return self._deps.browse.more(handler_input)
         if intent == "local":
             return self._deps.availability.begin_local(handler_input, nlp_data)
+        if intent == "creator_location":
+            return self._deps.availability.begin_creator_location(handler_input, nlp_data)
         action_type = self.ACTIONS.get(intent)
         if action_type:
             return action_type(deps=self._deps).execute(handler_input)

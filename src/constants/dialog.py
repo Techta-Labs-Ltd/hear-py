@@ -8,15 +8,14 @@ class DialogConstants:
         "report_decision": "awaitingReportDecision",
         "resume": "awaitingResume",
         "notification": "awaitingNotificationChoice",
-        "creator_name": "awaitingCreatorName",
         "organization_name": "awaitingOrganizationName",
         "publication_source": "awaitingPublicationSource",
         "feedback_continuation": "awaitingFeedbackContinuation",
     }
-    SOURCE_CAPTURE = {
-        "creator_name": {
-            "intentName": "SelectCreatorIntent",
-            "slotName": "creatorQuery",
+    SLOT_CAPTURE = {
+        "creator_location": {
+            "intentName": "SelectCreatorCityIntent",
+            "slotName": "cityQuery",
         },
         "organization_name": {
             "intentName": "SelectOrganizationIntent",
@@ -34,7 +33,7 @@ class DialogConstants:
             "availability",
             "asr_repair",
             "organization_name",
-            "creator_name",
+            "creator_location",
             "publication_source",
         }
     )
@@ -46,8 +45,7 @@ class DialogConstants:
             "PlayRecommendationIntent",
             "PlayByOrganizationIntent",
             "SelectOrganizationIntent",
-            "PlayByCreatorIntent",
-            "SelectCreatorIntent",
+            "SelectCreatorCityIntent",
             "SelectPublicationSourceIntent",
             "PlayPublicationIntent",
             "BrowseContentIntent",

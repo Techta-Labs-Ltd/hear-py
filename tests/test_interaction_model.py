@@ -39,8 +39,7 @@ def test_discovery_intents_use_domain_specific_generated_slots():
         "SelectOrganizationIntent",
         "PlayPublicationIntent",
         "SelectPublicationSourceIntent",
-        "PlayByCreatorIntent",
-        "SelectCreatorIntent",
+        "SelectCreatorCityIntent",
         "ChooseSourceKindIntent",
         "WhatsTrendingIntent",
     }
@@ -54,7 +53,7 @@ def test_discovery_intents_use_domain_specific_generated_slots():
         for intent_name in protected
         for slot in intents[intent_name].get("slots", [])
         if slot["type"].startswith("HEAR_")
-    }.issuperset({"HEAR_LOCATION", "HEAR_ORGANIZATION", "HEAR_CREATOR", "HEAR_TOPIC"})
+    }.issuperset({"HEAR_LOCATION", "HEAR_ORGANIZATION", "HEAR_TOPIC"})
     assert intents["ChooseSourceKindIntent"]["slots"][0]["type"] == "HEAR_SOURCE_KIND"
 
 
@@ -86,11 +85,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         "SelectPublicationSourceIntent": {
             "publicationSourceQuery": "HEAR_ORGANIZATION"
         },
-        "PlayByCreatorIntent": {
-            "creatorQuery": "HEAR_CREATOR",
-            "topic": "HEAR_TOPIC",
-        },
-        "SelectCreatorIntent": {"creatorQuery": "HEAR_CREATOR"},
+        "SelectCreatorCityIntent": {"cityQuery": "HEAR_LOCATION"},
         "PlayPublicationIntent": {
             "publicationSourceQuery": "HEAR_ORGANIZATION",
             "publicationSort": "HEAR_PUBLICATION_SORT",
@@ -223,7 +218,7 @@ def test_content_discovery_intents_accept_date_constraints():
         "PlayLocalIntent",
         "PlayRecommendationIntent",
         "PlayByOrganizationIntent",
-        "PlayByCreatorIntent",
+        "SelectCreatorCityIntent",
     }:
         assert all((slot["name"] != "dateQuery" for slot in intents[intent_name].get("slots", [])))
         assert all(("{dateQuery}" not in sample for sample in intents[intent_name]["samples"]))
@@ -269,25 +264,20 @@ def test_generic_source_search_is_neutral_and_specialized_routes_are_explicit():
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     general = set(intents["PlayContentIntent"]["samples"])
-    creators = set(intents["PlayByCreatorIntent"]["samples"])
+    creators = set(intents["SearchCreatorIntent"]["samples"])
     organizations = set(intents["PlayByOrganizationIntent"]["samples"])
     content_topic = next(
         slot for slot in intents["PlayContentIntent"]["slots"] if slot["name"] == "topic"
     )
-    creator_slot = next(
-        slot
-        for slot in intents["PlayByCreatorIntent"]["slots"]
-        if slot["name"] == "creatorQuery"
-    )
+    creator_slot = intents["SearchCreatorIntent"]["slots"][0]
     assert {"play from {topic}", "play content from {topic}"}.isdisjoint(general)
     assert "play" in general
     assert "from {topic}" not in content_topic["samples"]
-    assert "by {creatorQuery}" in creator_slot["samples"]
-    assert "play content by {creatorQuery}" in creators
+    assert creator_slot == {"name": "searchQuery", "type": "AMAZON.SearchQuery"}
+    assert "play content by {searchQuery}" in creators
     assert "play from {organizationQuery}" in organizations
     assert "play {topic} from {organizationQuery}" in organizations
-    assert "play {topic} by {creatorQuery}" in creators
-    assert "find the creator {creatorQuery}" in creators
+    assert "find the creator {searchQuery}" in creators
     assert "find the talking newspaper {organizationQuery}" in organizations
 
 
@@ -308,7 +298,7 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
     intents = {item["name"]: item for item in model["languageModel"]["intents"]}
     for intent_name, slot_name in {
         "PlayContentIntent": "topic",
-        "PlayByCreatorIntent": "creatorQuery",
+        "SelectCreatorCityIntent": "cityQuery",
         "PlayByOrganizationIntent": "organizationQuery",
         "PlayPublicationIntent": "publicationSourceQuery",
         "ClarifySelectionIntent": "selection",
@@ -324,10 +314,9 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
         for dialog_slot in dialog_intent["slots"]:
             assert dialog_slot["type"] == language_slots[dialog_slot["name"]]
     for source_intent in (
-        "PlayByCreatorIntent",
+        "SelectCreatorCityIntent",
         "PlayByOrganizationIntent",
         "PlayPublicationIntent",
-        "SelectCreatorIntent",
         "SelectOrganizationIntent",
     ):
         assert dialog_intents[source_intent]["slots"][0]["elicitationRequired"] is True
@@ -450,7 +439,8 @@ def test_source_kind_slot_has_no_ids_and_owns_generic_source_requests():
     assert "play from a talking newspaper" not in set(
         intents["PlayByOrganizationIntent"]["samples"]
     )
-    assert "play from a creator" not in set(intents["PlayByCreatorIntent"]["samples"])
+    assert "PlayByCreatorIntent" not in intents
+    assert "SelectCreatorIntent" not in intents
     assert "play a publication" not in set(intents["PlayPublicationIntent"]["samples"])
 
 
@@ -492,7 +482,6 @@ def test_generated_domain_slots_have_id_free_backend_replaceable_values():
     generated = {
         "HEAR_LOCATION",
         "HEAR_ORGANIZATION",
-        "HEAR_CREATOR",
         "HEAR_TOPIC",
     }
     assert generated.issubset(types)
@@ -519,7 +508,7 @@ def test_carrierless_discovery_uses_topic_and_combined_hear_slots():
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     for intent_name, bare_sample in {
         "TownCaptureIntent": "{townName}",
-        "SelectCreatorIntent": "{creatorQuery}",
+        "SelectCreatorCityIntent": "{cityQuery}",
         "SelectOrganizationIntent": "{organizationQuery}",
         "SelectPublicationSourceIntent": "{publicationSourceQuery}",
     }.items():
@@ -570,14 +559,12 @@ def test_topic_slot_includes_multi_word_catalog_topics():
     assert "English Premier League" in topics["Premier League"]["synonyms"]
 
 
-def test_development_creator_slot_uses_a_real_backend_creator():
+def test_creator_name_slot_is_removed():
     types = {
         item["name"]: item
         for item in _model()["interactionModel"]["languageModel"]["types"]
     }
-    creators = {item["name"]["value"] for item in types["HEAR_CREATOR"]["values"]}
-    assert "Crawley Audio News" in creators
-    assert "Sample Creator" not in creators
+    assert "HEAR_CREATOR" not in types
 
 
 def test_backend_domain_slot_schema_forbids_value_ids():
@@ -591,7 +578,6 @@ def test_backend_domain_slot_schema_forbids_value_ids():
         for item in (
             schema["$defs"]["locationSlot"],
             schema["$defs"]["organizationSlot"],
-            schema["$defs"]["creatorSlot"],
             schema["$defs"]["topicSlot"],
         )
     ]
@@ -599,7 +585,6 @@ def test_backend_domain_slot_schema_forbids_value_ids():
     assert slot_names == [
         "HEAR_LOCATION",
         "HEAR_ORGANIZATION",
-        "HEAR_CREATOR",
         "HEAR_TOPIC",
     ]
     assert value_schema["additionalProperties"] is False

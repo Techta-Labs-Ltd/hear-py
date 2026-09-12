@@ -44,19 +44,152 @@ class Availability:
             builder.add_directive(directive)
         return builder.response
 
-    async def _availability(self, handler_input, availability_filter: dict, page: int) -> dict:
+    async def _availability(
+        self,
+        handler_input,
+        availability_filter: dict,
+        page: int,
+        discovery: dict | None = None,
+    ) -> dict:
+        store = User.snapshot(handler_input)
         payload = {
             "filter": availability_filter,
             "alexaUserId": AlexaRequest.get_user_id(handler_input),
             "page": max(0, int(page or 0)),
             "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
         }
+        if store.get("listenerId"):
+            payload["listenerId"] = store["listenerId"]
+        payload.update(discovery or {})
         if "location" not in availability_filter:
             payload["isLocal"] = False
         return await self._deps.heara.availability(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
+
+    @staticmethod
+    def ask_creator_city(handler_input):
+        DialogStateManager.activate(
+            handler_input,
+            "creator_location",
+            context={"slotName": "cityQuery"},
+        )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_CREATOR_CITY))
+            .reprompt(Ssml.ssml(Speech.ASK_CREATOR_CITY_REPROMPT))
+            .add_directive(DialogStateManager.capture_directive("creator_location"))
+            .set_should_end_session(False)
+            .response
+        )
+
+    async def begin_creator_location(self, handler_input, nlp: dict | None = None):
+        resolved = dict(nlp or RequestContext.request(handler_input).get("_nlp") or {})
+        payload = AvailabilityRequest.local_payload(handler_input, resolved)
+        availability_filter = AvailabilityData.availability_filter(
+            payload,
+            User.snapshot(handler_input),
+        )
+        requested_city = AvailabilityData.requested_city(resolved, payload)
+        if not requested_city or not availability_filter or "location" not in availability_filter:
+            return self.ask_creator_city(handler_input)
+        availability_filter["isCreator"] = True
+        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        result = await self._availability(handler_input, availability_filter, 0)
+        candidates = AvailabilityData.source_candidates(result, "creator")[
+            : DiscoveryConstants.CHOICE_PAGE_SIZE
+        ]
+        if result.get("failed"):
+            return self._creator_terminal_response(
+                handler_input,
+                requested_city,
+                failed=True,
+            )
+        if not candidates:
+            return self._creator_terminal_response(handler_input, requested_city)
+        context = {
+            "kind": AvailabilityConstants.SOURCE_KIND,
+            "candidates": candidates,
+            "offset": 0,
+            "apiPage": int(result.get("page") or 0),
+            "totalPages": int(result.get("total_pages") or 0),
+            "hasMore": bool(result.get("has_more")),
+            "availabilityFilter": availability_filter,
+            "baseSearchPayload": payload,
+            "requestedCity": requested_city,
+            "sourceType": "creator",
+        }
+        if len(candidates) == 1 and not AvailabilityData.remote_more(context):
+            context["singleChoice"] = True
+            self._activate(handler_input, context)
+            return self._response(
+                handler_input,
+                AvailabilitySpeech.one_local_source(
+                    candidates[0]["name"], requested_city=requested_city
+                ),
+                "Say yes to hear it, or no to choose something else.",
+                candidates,
+            )
+        return self._choice_response(handler_input, context)
+
+    @staticmethod
+    def _creator_terminal_response(handler_input, city: str, *, failed: bool = False):
+        DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+        speech = (
+            AvailabilitySpeech.creator_unavailable(city)
+            if failed
+            else AvailabilitySpeech.creator_no_results(city)
+        )
+        return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
+
+    async def begin_recommendations(
+        self,
+        handler_input,
+        *,
+        nlp: dict | None = None,
+    ):
+        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        discovery = {"isRecommended": True}
+        resolved = nlp if isinstance(nlp, dict) else {}
+        search_payload = (
+            resolved.get("searchPayload")
+            if isinstance(resolved.get("searchPayload"), dict)
+            else {}
+        )
+        search_filter = (
+            search_payload.get("filter")
+            if isinstance(search_payload.get("filter"), dict)
+            else {}
+        )
+        availability_filter = {
+            key: search_filter[key]
+            for key in ("categorySlugs", "tags")
+            if search_filter.get(key)
+        }
+        result = await self._availability(
+            handler_input,
+            availability_filter,
+            0,
+            discovery,
+        )
+        candidates = AvailabilityData.source_candidates(result)
+        if result.get("failed"):
+            return self._terminal_response(handler_input, failed=True)
+        if not candidates:
+            return self._terminal_response(handler_input)
+        context = {
+            "kind": AvailabilityConstants.SOURCE_KIND,
+            "candidates": candidates,
+            "offset": 0,
+            "apiPage": int(result.get("page") or 0),
+            "totalPages": int(result.get("total_pages") or 0),
+            "hasMore": bool(result.get("has_more")),
+            "availabilityFilter": availability_filter,
+            "availabilityDiscovery": discovery,
+            "baseSearchPayload": {"query": "", "filter": search_filter},
+            "discoveryMode": "recommended",
+        }
+        return self._choice_response(handler_input, context)
 
     def _terminal_response(
         self,
@@ -86,15 +219,19 @@ class Availability:
     def _choice_response(self, handler_input, context: dict, position: str = "initial"):
         displayed = AvailabilityData.displayed(context)
         has_more = AvailabilityData.has_more(context)
-        has_previous = max(0, int(context.get("offset") or 0)) > 0
+        has_previous = max(0, int(context.get("offset") or 0)) > 0 or bool(
+            context.get("sourceType") == "creator"
+            and int(context.get("apiPage") or 0) > 0
+        )
         kind = str(context.get("kind") or "")
         if kind == AvailabilityConstants.SOURCE_KIND:
-            speech = AvailabilitySpeech.local_source_choices(
+            speech = AvailabilitySpeech.source_choices(
                 displayed,
                 position=position,
                 has_more=has_more,
                 has_previous=has_previous,
                 requested_city=context.get("requestedCity"),
+                discovery_mode=context.get("discoveryMode"),
             )
         elif kind == AvailabilityConstants.PUBLICATION_KIND:
             speech = AvailabilitySpeech.publication_choices(
@@ -484,8 +621,17 @@ class Availability:
             handler_input, candidate, dict(context.get("source") or {})
         )
 
-    async def _load_remote_page(self, handler_input, context: dict) -> dict:
-        next_page = max(0, int(context.get("apiPage") or 0)) + 1
+    async def _load_remote_page(
+        self,
+        handler_input,
+        context: dict,
+        requested_page: int | None = None,
+    ) -> dict:
+        next_page = (
+            max(0, int(requested_page))
+            if requested_page is not None
+            else max(0, int(context.get("apiPage") or 0)) + 1
+        )
         if context.get("kind") == AvailabilityConstants.TRACK_KIND:
             result = await self._search_source(
                 handler_input,
@@ -503,16 +649,29 @@ class Availability:
                 handler_input,
                 dict(context.get("availabilityFilter") or {}),
                 next_page,
+                dict(context.get("availabilityDiscovery") or {}),
             )
             incoming = (
-                AvailabilityData.source_candidates(result)
+                AvailabilityData.source_candidates(result, context.get("sourceType"))
                 if context.get("kind") == AvailabilityConstants.SOURCE_KIND
                 else AvailabilityData.publication_candidates(result)
             )
+            if context.get("sourceType") == "creator":
+                incoming = incoming[: DiscoveryConstants.CHOICE_PAGE_SIZE]
             context["totalPages"] = int(result.get("total_pages") or 0)
             context["hasMore"] = bool(result.get("has_more"))
         if result.get("failed"):
             context["pageLoadFailed"] = True
+            return context
+        if context.get("sourceType") == "creator":
+            context.update(
+                {
+                    "candidates": incoming,
+                    "offset": 0,
+                    "apiPage": next_page,
+                    "pageLoadFailed": False,
+                }
+            )
             return context
         existing = list(context.get("candidates") or [])
         seen = {(str(item.get("type")), str(item.get("id"))) for item in existing}
@@ -531,20 +690,26 @@ class Availability:
     async def _more(self, handler_input, context: dict):
         current_offset = max(0, int(context.get("offset") or 0))
         next_offset = current_offset + len(AvailabilityData.displayed(context))
+        creator_page = context.get("sourceType") == "creator"
         if next_offset >= len(context.get("candidates") or []) and AvailabilityData.remote_more(
             context
         ):
             await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
             context = await self._load_remote_page(handler_input, context)
+            if creator_page and not context.get("pageLoadFailed"):
+                return self._choice_response(handler_input, context, "more")
         if context.get("pageLoadFailed"):
             context["offset"] = current_offset
             displayed = AvailabilityData.displayed(context)
             kind = str(context.get("kind") or "choice")
+            has_previous = current_offset > 0 or bool(
+                creator_page and int(context.get("apiPage") or 0) > 0
+            )
             self._activate(handler_input, context)
             return self._response(
                 handler_input,
                 AvailabilitySpeech.page_unavailable(
-                    kind, displayed, has_previous=current_offset > 0
+                    kind, displayed, has_previous=has_previous
                 ),
                 "Say one of the names, or ask for more choices to try again.",
                 displayed,
@@ -557,7 +722,8 @@ class Availability:
                 kind,
                 displayed,
                 has_more=False,
-                has_previous=current_offset > 0,
+                has_previous=current_offset > 0
+                or bool(creator_page and int(context.get("apiPage") or 0) > 0),
             )
             self._activate(handler_input, context)
             return self._response(
@@ -569,7 +735,21 @@ class Availability:
         context["offset"] = next_offset
         return self._choice_response(handler_input, context, "more")
 
-    def _previous(self, handler_input, context: dict):
+    async def _previous(self, handler_input, context: dict):
+        if context.get("sourceType") == "creator":
+            current_page = max(0, int(context.get("apiPage") or 0))
+            if current_page == 0:
+                return self._choice_response(handler_input, context, "initial")
+            await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+            context = await self._load_remote_page(
+                handler_input,
+                context,
+                current_page - 1,
+            )
+            if context.get("pageLoadFailed"):
+                context["pageLoadFailed"] = False
+                return self._choice_response(handler_input, context, "initial")
+            return self._choice_response(handler_input, context, "previous")
         current_offset = max(0, int(context.get("offset") or 0))
         context["offset"] = max(0, current_offset - DiscoveryConstants.CHOICE_PAGE_SIZE)
         position = "previous" if current_offset else "initial"
@@ -591,7 +771,7 @@ class Availability:
         if intent_name in AvailabilityConstants.MORE_INTENTS:
             return await self._more(handler_input, context)
         if intent_name in AvailabilityConstants.PREVIOUS_INTENTS:
-            return self._previous(handler_input, context)
+            return await self._previous(handler_input, context)
         if intent_name == "AMAZON.NoIntent" and context.get("singleChoice"):
             DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
             return AlexaResponse.present_idle_next(
@@ -633,7 +813,10 @@ class Availability:
             return await self._select(handler_input, context, candidate)
         displayed = AvailabilityData.displayed(context)
         has_more = AvailabilityData.has_more(context)
-        has_previous = max(0, int(context.get("offset") or 0)) > 0
+        has_previous = max(0, int(context.get("offset") or 0)) > 0 or bool(
+            context.get("sourceType") == "creator"
+            and int(context.get("apiPage") or 0) > 0
+        )
         kind = str(context.get("kind") or "choice")
         speech = AvailabilitySpeech.choice_retry(
             kind, displayed, has_more=has_more, has_previous=has_previous

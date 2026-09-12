@@ -6,6 +6,22 @@ from src.constants.discovery import DiscoveryConstants
 
 class AvailabilitySpeech:
     @staticmethod
+    def creator_no_results(city: str) -> str:
+        safe_city = Speech.escape_ssml_lite(city)
+        return (
+            f"I couldn't find any creators in {safe_city} right now. "
+            f"{Speech.WELCOME_REPROMPT}"
+        )
+
+    @staticmethod
+    def creator_unavailable(city: str) -> str:
+        safe_city = Speech.escape_ssml_lite(city)
+        return (
+            f"I had trouble finding creators in {safe_city} just now. "
+            f"{Speech.WELCOME_REPROMPT}"
+        )
+
+    @staticmethod
     def no_results(city: str | None = None, source_name: str | None = None) -> str:
         if source_name:
             safe_source = Speech.escape_ssml_lite(source_name)
@@ -126,13 +142,14 @@ class AvailabilitySpeech:
         return default
 
     @staticmethod
-    def local_source_choices(
+    def source_choices(
         candidates: list[dict],
         *,
         position: str = "initial",
         has_more: bool = False,
         has_previous: bool = False,
         requested_city: str | None = None,
+        discovery_mode: str | None = None,
     ) -> str:
         if not candidates:
             return (
@@ -153,7 +170,9 @@ class AvailabilitySpeech:
             if kinds == {"organization", "creator"}
             else "sources"
         )
-        if requested_city and position == "initial":
+        if discovery_mode == "recommended" and position == "initial":
+            opening = "Here are the creators and talking newspapers I recommend for you."
+        elif requested_city and position == "initial":
             safe_city = Speech.escape_ssml_lite(requested_city)
             opening = f"Here are the {noun} closest to {safe_city}."
         else:
@@ -169,6 +188,8 @@ class AvailabilitySpeech:
             len(candidates), "sources", has_more, has_previous
         )
         return f"{opening} {choices} {instruction}"
+
+    local_source_choices = source_choices
 
     @staticmethod
     def one_local_source(

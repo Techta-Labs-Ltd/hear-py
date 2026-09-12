@@ -13,7 +13,6 @@ class AlexaSlotLexicon:
     SLOT_NAMES = (
         "HEAR_LOCATION",
         "HEAR_ORGANIZATION",
-        "HEAR_CREATOR",
         "HEAR_TOPIC",
     )
     GENERIC_TOPIC_VALUES = frozenset(
@@ -115,13 +114,6 @@ class AlexaSlotLexicon:
             raise ValueError(f"Cross-slot phrase collisions found: {examples}")
 
     @staticmethod
-    def _remove_cross_owned_values(
-        rows: list[list[str]], reference_rows: list[list[str]]
-    ) -> list[list[str]]:
-        reference_values = {row[0].strip().casefold() for row in reference_rows}
-        return [row for row in rows if row[0].strip().casefold() not in reference_values]
-
-    @staticmethod
     def _write_atomic(path: Path, rows: list[list[str]]) -> None:
         with tempfile.NamedTemporaryFile(
             "w", encoding="utf-8", newline="", dir=path.parent, delete=False
@@ -142,10 +134,6 @@ class AlexaSlotLexicon:
         for slot_name in cls.SLOT_NAMES:
             rules = manifest.get(slot_name, {})
             rows = cls._apply_rules(slots[slot_name], rules, slot_name)
-            for reference_slot in rules.get("removeCanonicalValuesPresentIn", []):
-                if reference_slot not in slots:
-                    raise ValueError(f"Unknown reference slot {reference_slot!r}")
-                rows = cls._remove_cross_owned_values(rows, slots[reference_slot])
             cls._validate(rows, slot_name)
             slots[slot_name] = rows
         allowed = {

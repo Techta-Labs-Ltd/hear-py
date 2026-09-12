@@ -9,6 +9,19 @@ delivery in the opposite direction is outside this document.
 
 ## Delivery
 
+The backend ingestion endpoint is:
+
+```http
+POST /api/v1/webhooks/event
+X-Api-Key: <HEAR_WEBHOOK_API_KEY>
+X-Webhook-Timestamp: <unix-seconds>
+X-Webhook-Signature: <hmac-sha256>
+Content-Type: application/json
+```
+
+The endpoint and its version 3 request schema, headers, `202` response, and
+`400`, `401`, `422`, and `503` failures are included in the Alexa OpenAPI docs.
+
 ```text
 Alexa request or AudioPlayer callback
     -> Alexa Lambda creates one event
@@ -23,6 +36,10 @@ that exhaust the retry policy move to the dead-letter queue.
 
 The worker sends the exact SQS body to the configured webhook. Authentication is
 the API key plus an HMAC signature of `<unix-seconds>.<exact-request-body>`.
+The backend validates the envelope, durably enqueues it in Redis, and returns
+HTTP `202`. It returns `503` when the queue is unavailable so the outbound worker
+retries. Redis persistence, worker restart policy, worker retries, and backend
+`eventId` receipts protect events across process and host restarts.
 
 ## The ID rule
 
@@ -96,6 +113,23 @@ These are all event names currently produced by the Alexa code:
 
 Listener registration and notification fetch/update/delivery status are HTTP
 contracts, not domain events in this SQS catalogue.
+
+## Backend creator and administrator notifications
+
+The backend keeps these event-driven in-app and email notifications connected:
+
+| Accepted event | Recipients | Email template |
+| --- | --- | --- |
+| A new `playback.started` session | The track creator or publication source members | `listener-started-listening` |
+| Non-skipped `feedback.given` | The track creator or publication source members | `track-feedback-received` |
+| `user.followed_creator` or `user.followed_organization` | The selected creator or organisation members | `listener-followed-creator` |
+| `user.reported_content` | Site administrators | `track-reported` |
+| `user.reported_creator` | Site administrators | `creator-reported` |
+
+Retries do not create duplicate listener-domain records because `eventId` is
+stored in `alexa_event_receipts` and is unique on feedback, reports, and stream
+events. Publication feedback and reports remain publication records; their
+tracks are retained only as listening context.
 
 ## Listener registration (HTTP)
 

@@ -120,7 +120,12 @@ class ResolverWorkflowRunner:
         return True
 
     async def _resolver_result(
-        self, handler_input, raw: str, alexa_intent: str | None = None
+        self,
+        handler_input,
+        raw: str,
+        alexa_intent: str | None = None,
+        *,
+        prefer_location: bool = False,
     ) -> dict:
         carrier = ResolverConstants.CARRIERS.get(alexa_intent, "")
         normalized = SearchFilterUtils.normalize_discovery_phrase(raw)
@@ -139,6 +144,8 @@ class ResolverWorkflowRunner:
         listener_id = User.snapshot(handler_input).get("listenerId")
         if listener_id:
             options["listener_id"] = listener_id
+        if prefer_location:
+            options["prefer_location"] = True
         await self._deps.progressive.send(handler_input, Speech.RESOLVER_PROGRESSIVE)
         return await self._deps.resolver.resolve_utterance(utterance, **options)
 
@@ -239,10 +246,51 @@ class ResolverWorkflowRunner:
             )
             return True
         dialog_type = (DialogStateManager.active_from_store(store) or {}).get("type")
+        if dialog_type == "creator_location":
+            try:
+                result = await self._resolver_result(
+                    handler_input,
+                    raw,
+                    prefer_location=True,
+                )
+            except ResolverUnavailable:
+                result = {}
+            slots = dict(result.get("slots") or {})
+            city = str(slots.get("city") or slots.get("placeName") or "").strip()
+            if result.get("status") == "resolved" and city:
+                DialogStateManager.clear(handler_input, "creator_location")
+                result.update(
+                    {
+                        "intent": "creator_location",
+                        "requestedLocation": True,
+                        "searchPayload": {
+                            **dict(result.get("searchPayload") or {}),
+                            "query": "",
+                        },
+                    }
+                )
+            else:
+                result = {
+                    "status": "resolved",
+                    "intent": "creator_location",
+                    "requestedLocation": True,
+                    "slots": {},
+                    "searchPayload": {"query": "", "filter": {}},
+                }
+            ResolverWorkflow._set_nlp(
+                handler_input,
+                {
+                    **result,
+                    "alexaIntent": "creator_location",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": True,
+                    "needsRedirect": True,
+                    "localResolved": True,
+                },
+            )
+            return True
         follow_up = (
-            ("creator", "creatorQuery", "PlayByCreatorIntent")
-            if store.get("awaitingCreatorName") or dialog_type == "creator_name"
-            else ("organization", "organizationQuery", "PlayByOrganizationIntent")
+            ("organization", "organizationQuery", "PlayByOrganizationIntent")
             if store.get("awaitingOrganizationName") or dialog_type == "organization_name"
             else ("publication", "publicationSourceQuery", "PlayPublicationIntent")
             if store.get("awaitingPublicationSource") or dialog_type == "publication_source"
@@ -252,9 +300,7 @@ class ResolverWorkflowRunner:
             return False
         intent_name, slot_name, matching_intent = follow_up
         matching_intents = (
-            DiscoveryConstants.CREATOR_INTENTS
-            if intent_name == "creator"
-            else DiscoveryConstants.ORGANIZATION_INTENTS
+            DiscoveryConstants.ORGANIZATION_INTENTS
             if intent_name == "organization"
             else DiscoveryConstants.PUBLICATION_INTENTS
         )

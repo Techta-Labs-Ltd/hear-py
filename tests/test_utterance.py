@@ -5,7 +5,7 @@ from src.container import ApplicationContainer
 from src.controllers.browse import BrowseContentHandler, WhatsTrendingHandler
 from src.controllers.confirmation import NoIntentHandler, YesIntentHandler
 from src.controllers.launch import LaunchRequestHandler
-from src.controllers.play import PlayByCreatorHandler, PlayContentHandler
+from src.controllers.play import PlayContentHandler
 from src.controllers.social import FollowCreatorHandler
 from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
@@ -83,7 +83,6 @@ container = ApplicationContainer()
 RouteRegistry.register_middleware(skill, container)
 skill.add_request_handler(LaunchRequestHandler(deps=container))
 skill.add_request_handler(PlayContentHandler(deps=container))
-skill.add_request_handler(PlayByCreatorHandler(deps=container))
 skill.add_request_handler(BrowseContentHandler(deps=container))
 skill.add_request_handler(WhatsTrendingHandler(deps=container))
 skill.add_request_handler(HelpIntentHandler())
@@ -108,7 +107,7 @@ run(
 run(
     "play from David",
     make_event(
-        "PlayByCreatorIntent",
-        {"creatorQuery": {"name": "creatorQuery", "value": "David"}},
+        "SearchCreatorIntent",
+        {"searchQuery": {"name": "searchQuery", "value": "David"}},
     ),
 )

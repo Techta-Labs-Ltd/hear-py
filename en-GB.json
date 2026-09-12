@@ -749,43 +749,6 @@
           ]
         },
         {
-          "name": "PlayByCreatorIntent",
-          "slots": [
-            {
-              "name": "creatorQuery",
-              "type": "HEAR_CREATOR",
-              "samples": [
-                "{creatorQuery}",
-                "the {creatorQuery}",
-                "by {creatorQuery}",
-                "I want {creatorQuery}"
-              ]
-            },
-            {
-              "name": "topic",
-              "type": "HEAR_TOPIC",
-              "samples": [
-                "{topic}",
-                "about {topic}"
-              ]
-            }
-          ],
-          "samples": [
-            "play content by {creatorQuery}",
-            "play something by {creatorQuery}",
-            "play a publication by {creatorQuery}",
-            "find a publication by {creatorQuery}",
-            "play {topic} by {creatorQuery}",
-            "play me {topic} by {creatorQuery}",
-            "find {topic} by {creatorQuery}",
-            "play from the creator {creatorQuery}",
-            "play something by the creator {creatorQuery}",
-            "find the creator {creatorQuery}",
-            "play recordings by the creator {creatorQuery}",
-            "play the latest by the creator {creatorQuery}"
-          ]
-        },
-        {
           "name": "BrowseContentIntent",
           "slots": [
             {
@@ -811,22 +774,23 @@
           ]
         },
         {
-          "name": "SelectCreatorIntent",
+          "name": "SelectCreatorCityIntent",
           "slots": [
             {
-              "name": "creatorQuery",
-              "type": "HEAR_CREATOR",
+              "name": "cityQuery",
+              "type": "HEAR_LOCATION",
               "samples": [
-                "{creatorQuery}",
-                "the {creatorQuery}",
-                "I want {creatorQuery}"
+                "{cityQuery}",
+                "in {cityQuery}"
               ]
             }
           ],
           "samples": [
-            "{creatorQuery}",
-            "the {creatorQuery}",
-            "{creatorQuery} please"
+            "{cityQuery}",
+            "in {cityQuery}",
+            "creators in {cityQuery}",
+            "my city is {cityQuery}",
+            "find creators in {cityQuery}"
           ]
         },
         {
@@ -1416,19 +1380,6 @@
           ]
         },
         {
-          "name": "HEAR_CREATOR",
-          "values": [
-            {
-              "name": {
-                "value": "Crawley Audio News",
-                "synonyms": [
-                  "Crawley News"
-                ]
-              }
-            }
-          ]
-        },
-        {
           "name": "HEAR_TOPIC",
           "values": [
             {
@@ -1849,22 +1800,6 @@
           ]
         },
         {
-          "name": "PlayByCreatorIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "creatorQuery",
-              "type": "HEAR_CREATOR",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.PlayByCreatorIntent.creatorQuery"
-              }
-            }
-          ]
-        },
-        {
           "name": "PlayByOrganizationIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -1881,18 +1816,18 @@
           ]
         },
         {
-          "name": "SelectCreatorIntent",
+          "name": "SelectCreatorCityIntent",
           "delegationStrategy": "SKILL_RESPONSE",
           "confirmationRequired": false,
           "prompts": {},
           "slots": [
             {
-              "name": "creatorQuery",
-              "type": "HEAR_CREATOR",
+              "name": "cityQuery",
+              "type": "HEAR_LOCATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
-                "elicitation": "Elicit.PlayByCreatorIntent.creatorQuery"
+                "elicitation": "Elicit.SelectCreatorCityIntent.cityQuery"
               }
             }
           ]
@@ -1986,11 +1921,11 @@
         ]
       },
       {
-        "id": "Elicit.PlayByCreatorIntent.creatorQuery",
+        "id": "Elicit.SelectCreatorCityIntent.cityQuery",
         "variations": [
           {
             "type": "PlainText",
-            "value": "Which creator would you like to hear?"
+            "value": "Which city would you like me to find creators in?"
           }
         ]
       },

@@ -70,10 +70,10 @@ class DialogValidationPolicy:
         "AMAZON.YesIntent",
         "AMAZON.NoIntent",
     }
-    _SOURCE_NAME_PROMPTS = {
-        "creator_name": (
-            "Which creator would you like to hear?",
-            "Please say the creator's full name. For example, David Beard.",
+    _SLOT_CAPTURE_PROMPTS = {
+        "creator_location": (
+            "Which city would you like me to find creators in?",
+            "You can say a city, such as Manchester.",
         ),
         "organization_name": (
             Speech.ASK_TALKING_NEWSPAPER,
@@ -84,10 +84,9 @@ class DialogValidationPolicy:
             Speech.ASK_PUBLICATION_REPROMPT,
         ),
     }
-    _SOURCE_NAME_RECOVERY = {
-        "creator_name": (
-            "I couldn't recognize that creator. "
-            "Please say the creator's full name. For example, David Beard."
+    _SLOT_CAPTURE_RECOVERY = {
+        "creator_location": (
+            "Sorry, I didn't catch that city. Which city would you like me to find creators in?"
         ),
         "organization_name": (
             "I couldn't recognize that talking newspaper. "
@@ -179,7 +178,7 @@ class DialogValidationPolicy:
         context = active.get("context") or {}
         onboarding_stage = str(context.get("stage") or "")
         if (
-            dialog_type in DialogValidationPolicy._SOURCE_NAME_PROMPTS
+            dialog_type in DialogValidationPolicy._SLOT_CAPTURE_PROMPTS
             and intent_name not in DialogValidationPolicy._EXIT_INTENTS
             and not any(
                 AlexaRequest.get_resolved_slot_value(slot)
@@ -187,19 +186,26 @@ class DialogValidationPolicy:
             )
         ):
             if intent_name == "AMAZON.FallbackIntent":
-                recovery = DialogValidationPolicy._SOURCE_NAME_RECOVERY[dialog_type]
+                recovery = DialogValidationPolicy._SLOT_CAPTURE_RECOVERY[dialog_type]
+                if dialog_type == "creator_location":
+                    return {
+                        "dialogType": dialog_type,
+                        "speech": recovery,
+                        "reprompt": recovery,
+                        "captureSlot": True,
+                    }
                 return {
                     "dialogType": dialog_type,
                     "speech": recovery,
                     "reprompt": recovery,
                     "endSourceCapture": True,
                 }
-            speech, reprompt = DialogValidationPolicy._SOURCE_NAME_PROMPTS[dialog_type]
+            speech, reprompt = DialogValidationPolicy._SLOT_CAPTURE_PROMPTS[dialog_type]
             return {
                 "dialogType": dialog_type,
                 "speech": speech,
                 "reprompt": reprompt,
-                "captureSource": True,
+                "captureSlot": True,
             }
         if (
             dialog_type == "onboarding"
@@ -276,12 +282,12 @@ class DialogValidationGateHandler(AbstractRequestHandler):
                 .set_should_end_session(False)
                 .response
             )
-        if failure.get("captureSource"):
+        if failure.get("captureSlot"):
             return (
                 handler_input.response_builder.speak(Ssml.ssml(failure["speech"]))
                 .reprompt(Ssml.ssml(failure["reprompt"]))
                 .add_directive(
-                    DialogStateManager.source_capture_directive(failure["dialogType"])
+                    DialogStateManager.capture_directive(failure["dialogType"])
                 )
                 .set_should_end_session(False)
                 .response

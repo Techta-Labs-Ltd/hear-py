@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.alexa.runtime import AttrDict
+from src.alexa.runtime import AttrDict, ResponseBuilder
 from src.clients.resolver import ResolverClient
 from src.constants.discovery import DiscoveryConstants
 from src.constants.state import StateSchema
@@ -13,6 +13,7 @@ from src.middleware.confirmation import ConfirmationMiddleware
 from src.middleware.resolver import ResolverInterceptor
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
+from src.models.dialog import DialogStateManager
 from src.models.play import PlayContent, PlayCreator, PlayOrganization
 from src.models.resolver_workflow import ResolverWorkflow
 from src.models.user import User
@@ -381,7 +382,7 @@ async def test_generic_source_kind_stays_local_and_starts_typed_capture(
     assert nlp["slots"][flag] is True
     assert User.snapshot(mock_handler_input)["activeDialog"]["type"] in {
         "organization_name",
-        "creator_name",
+        "creator_location",
         "publication_source",
     }
 
@@ -661,7 +662,9 @@ async def test_topic_qualified_trending_resolves_topic_and_preserves_trending_se
     assert nlp["intent"] == "trending"
     assert nlp["nlpMatchesAlexa"] is True
     assert nlp["slots"]["category"] == "sport"
-    assert nlp["slots"]["isRecommended"] is True
+    assert nlp["slots"]["isRecommended"] is (
+        intent_name == "PlayRecommendationIntent"
+    )
     assert nlp["slots"]["sort"] == "trending"
     assert nlp["slots"]["searchPlan"]["sort"] == "trending"
     assert nlp["searchPayload"]["sort"] == "trending"
@@ -721,8 +724,8 @@ async def test_date_only_discovery_builds_date_filter_without_resolver_text(
             "organization",
         ),
         (
-            "PlayByCreatorIntent",
-            "creatorQuery",
+            "SearchCreatorIntent",
+            "searchQuery",
             "New Speaker",
             "play something by New Speaker",
             "creator",
@@ -1165,19 +1168,16 @@ async def test_search_query_fallback_preserves_actionable_creator_ambiguity(
     assert nlp["slots"]["ambiguousReferences"] == [reference]
     assert nlp["slots"]["unresolvedReferences"] == []
 
-    await PlayCreator(deps=ApplicationContainer()).execute(mock_handler_input)
+    mock_handler_input.response_builder = ResponseBuilder()
+    response = await PlayCreator(deps=ApplicationContainer()).execute(mock_handler_input)
 
     store = User.snapshot(mock_handler_input)
-    speech = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert store["activeDialog"]["type"] == "ambiguity"
-    assert store["pendingAmbiguity"]["candidates"] == candidates
-    assert "matches beginning Pendle Voice" in speech
-    assert "First, Dalesman" in speech
-    assert "Second, Lancashire Life" in speech
-    assert "Third, Leader and Times" in speech
-    assert "couldn't find" not in speech
-    directive = mock_handler_input.response_builder.add_directive.call_args.args[0]
-    assert directive["type"] == "Dialog.UpdateDynamicEntities"
+    speech = response["outputSpeech"]["ssml"]
+    assert store["activeDialog"]["type"] == "creator_location"
+    assert store["pendingAmbiguity"] is None
+    assert "Which city would you like me to find creators in" in speech
+    directive = response["directives"][0]
+    assert directive == DialogStateManager.capture_directive("creator_location")
 
 
 @pytest.mark.asyncio
@@ -1190,8 +1190,8 @@ async def test_misrouted_local_community_phrase_is_redirected_without_resolver(
             "type": "IntentRequest",
             "locale": "en-GB",
             "intent": {
-                "name": "PlayByCreatorIntent",
-                "slots": {"creatorQuery": {"name": "creatorQuery", "value": "my local community"}},
+                "name": "SearchCreatorIntent",
+                "slots": {"searchQuery": {"name": "searchQuery", "value": "my local community"}},
             },
         }
     )

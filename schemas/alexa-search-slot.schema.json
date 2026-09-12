@@ -7,17 +7,14 @@
   "properties": {
     "types": {
       "type": "array",
-      "minItems": 4,
-      "maxItems": 4,
+      "minItems": 3,
+      "maxItems": 3,
       "prefixItems": [
         {
           "$ref": "#/$defs/locationSlot"
         },
         {
           "$ref": "#/$defs/organizationSlot"
-        },
-        {
-          "$ref": "#/$defs/creatorSlot"
         },
         {
           "$ref": "#/$defs/topicSlot"
@@ -40,14 +37,6 @@
       "properties": {
         "name": {
           "const": "HEAR_ORGANIZATION"
-        }
-      }
-    },
-    "creatorSlot": {
-      "$ref": "#/$defs/baseSlot",
-      "properties": {
-        "name": {
-          "const": "HEAR_CREATOR"
         }
       }
     },

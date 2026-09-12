@@ -24,7 +24,6 @@ class TestAlexaInteractionModelBuild:
 
         assert len(types["HEAR_LOCATION"]) == 5_429
         assert len(types["HEAR_ORGANIZATION"]) == 286
-        assert len(types["HEAR_CREATOR"]) == 14
         assert len(types["HEAR_TOPIC"]) == 4_562
         assert len(types["HEAR_DISCOVERY"]) >= 10_000
         locations = {item["name"]["value"] for item in types["HEAR_LOCATION"]}
@@ -36,6 +35,7 @@ class TestAlexaInteractionModelBuild:
             "Talking News Federation",
             "Premier League",
         }.issubset(discovery)
+        assert "Adeshina Ayomide" not in discovery
         discovery_by_name = {
             item["name"]["value"]: item["name"] for item in types["HEAR_DISCOVERY"]
         }
