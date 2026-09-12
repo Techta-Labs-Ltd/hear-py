@@ -1260,6 +1260,43 @@ def test_location_context_keeps_overlapping_town_for_onboarding():
     assert result["slots"]["city"] == "Gloucester"
 
 
+def test_preferred_location_accepts_resolved_location_entity_at_any_confidence():
+    payload = _response(intent="search")
+    payload["entities"] = [
+        {
+            "entityType": "location",
+            "entityId": "location-1826815474",
+            "canonicalValue": "Sevenoaks",
+            "originalText": "7 ox",
+            "confidence": 98,
+            "method": "bare_match",
+            "start": 0,
+            "end": 4,
+            "latitude": 51.2781,
+            "longitude": 0.1874,
+            "countryCode": "gb",
+            "locationRole": "unspecified",
+        }
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        prefer_location=True,
+        original_utterance="7 ox",
+    )
+
+    assert result["resolution"]["match"] == {
+        "city": "Sevenoaks",
+        "locality": "Sevenoaks",
+        "countryCode": "gb",
+        "latitude": 51.2781,
+        "longitude": 0.1874,
+        "confidence": 98,
+        "method": "bare_match",
+    }
+    assert result["slots"]["city"] == "Sevenoaks"
+    assert result["entities"][0]["entityType"] == "location"
+
+
 def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
     payload = _response(intent="search")
     payload["entities"] = []

@@ -147,12 +147,6 @@ class ResolverResult:
     def entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
         return tuple((entity for entity in self.entities if entity.entity_type == entity_type))
 
-    def fully_matched_entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
-        """Return resolver facets with the maximum 1-100 confidence score."""
-        return tuple(
-            (entity for entity in self.entities_of_type(entity_type) if entity.confidence == 100)
-        )
-
     def selected_entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
         entities = self.entities_of_type(entity_type)
         if self.status == "resolved" and self.intent == entity_type:
@@ -339,7 +333,9 @@ class ResolverResult:
         if self.intent == "location":
             all_locations = self.selected_entities_of_type("location")
         elif prefer_location:
-            all_locations = self.fully_matched_entities_of_type("location")
+            all_locations = (
+                self.entities_of_type("location") if self.status == "resolved" else ()
+            )
         else:
             all_locations = self._credible_source_locations()
             if not all_locations:
