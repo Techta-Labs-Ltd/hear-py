@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.alexa.runtime import ResponseBuilder
+from src.alexa.speech import Speech
 from src.clients.resolver import ResolverClient
 from src.container import ApplicationContainer
 from src.middleware.dialog_validation import (
@@ -311,11 +312,36 @@ def test_creator_location_fallback_keeps_city_capture_active(mock_handler_input)
 
     assert failure == {
         "dialogType": "creator_location",
-        "speech": "Sorry, I didn't catch that city. Which city would you like me to find creators in?",
-        "reprompt": "Sorry, I didn't catch that city. Which city would you like me to find creators in?",
+        "speech": Speech.CREATOR_CITY_NOT_RECOGNISED,
+        "reprompt": Speech.CREATOR_CITY_NOT_RECOGNISED,
         "captureSlot": True,
     }
     assert User.snapshot(mock_handler_input)["activeDialog"]["type"] == "creator_location"
+
+
+def test_creator_location_reply_without_captured_words_uses_city_recovery(
+    mock_handler_input,
+):
+    User.update(
+        mock_handler_input,
+        {
+            "activeDialog": {
+                "type": "creator_location",
+                "context": {"slotName": "cityQuery"},
+                "expiresAt": 4102444800,
+            }
+        },
+    )
+    _intent(mock_handler_input, "PlayContentIntent")
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert failure == {
+        "dialogType": "creator_location",
+        "speech": Speech.CREATOR_CITY_NOT_RECOGNISED,
+        "reprompt": Speech.CREATOR_CITY_NOT_RECOGNISED,
+        "captureSlot": True,
+    }
 
 
 def test_ambiguity_gibberish_does_not_select_an_ordinal(mock_handler_input):

@@ -70,15 +70,23 @@ class Availability:
         )
 
     @staticmethod
-    def ask_creator_city(handler_input):
+    def ask_creator_city(handler_input, *, rejected: bool = False):
         DialogStateManager.activate(
             handler_input,
             "creator_location",
             context={"slotName": "cityQuery"},
         )
+        speech = (
+            Speech.CREATOR_CITY_NOT_RECOGNISED if rejected else Speech.ASK_CREATOR_CITY
+        )
+        reprompt = (
+            Speech.CREATOR_CITY_NOT_RECOGNISED
+            if rejected
+            else Speech.ASK_CREATOR_CITY_REPROMPT
+        )
         return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_CREATOR_CITY))
-            .reprompt(Ssml.ssml(Speech.ASK_CREATOR_CITY_REPROMPT))
+            handler_input.response_builder.speak(Ssml.ssml(speech))
+            .reprompt(Ssml.ssml(reprompt))
             .add_directive(DialogStateManager.capture_directive("creator_location"))
             .set_should_end_session(False)
             .response
@@ -86,6 +94,8 @@ class Availability:
 
     async def begin_creator_location(self, handler_input, nlp: dict | None = None):
         resolved = dict(nlp or RequestContext.request(handler_input).get("_nlp") or {})
+        if resolved.get("locationRejected"):
+            return self.ask_creator_city(handler_input, rejected=True)
         payload = AvailabilityRequest.local_payload(handler_input, resolved)
         availability_filter = AvailabilityData.availability_filter(
             payload,

@@ -86,7 +86,7 @@ class DialogValidationPolicy:
     }
     _SLOT_CAPTURE_RECOVERY = {
         "creator_location": (
-            "Sorry, I didn't catch that city. Which city would you like me to find creators in?"
+            Speech.CREATOR_CITY_NOT_RECOGNISED
         ),
         "organization_name": (
             "I couldn't recognize that talking newspaper. "
@@ -185,7 +185,7 @@ class DialogValidationPolicy:
                 for slot in DialogSelection.request_slots(handler_input).values()
             )
         ):
-            if intent_name == "AMAZON.FallbackIntent":
+            if intent_name == "AMAZON.FallbackIntent" or dialog_type == "creator_location":
                 recovery = DialogValidationPolicy._SLOT_CAPTURE_RECOVERY[dialog_type]
                 if dialog_type == "creator_location":
                     return {

@@ -3619,6 +3619,14 @@ async def test_creator_city_reply_uses_location_resolver_without_saving_profile(
                         "longitude": -2.2426,
                     },
                 },
+                "resolution": {
+                    "match": {
+                        "city": "Manchester",
+                        "countryCode": "gb",
+                        "latitude": 53.4808,
+                        "longitude": -2.2426,
+                    }
+                },
             }
         )
     )
@@ -3674,6 +3682,167 @@ async def test_creator_city_reply_uses_location_resolver_without_saving_profile(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slot_name", "spoken", "alexa_match", "city"),
+    [
+        ("SelectCreatorCityIntent", "cityQuery", "york", "York", "York"),
+        ("PlayContentIntent", "topic", "liverpool", None, "Liverpool"),
+        ("SearchContentIntent", "searchQuery", "york", None, "York"),
+        (
+            "CarrierlessDiscoveryIntent",
+            "discoveryQuery",
+            "york",
+            "York Talking Newspaper",
+            "York",
+        ),
+    ],
+)
+async def test_creator_city_dialog_forwards_spoken_city_from_misrouted_intents(
+    mock_handler_input,
+    intent_name,
+    slot_name,
+    spoken,
+    alexa_match,
+    city,
+):
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    slot = {"name": slot_name, "value": spoken}
+    if alexa_match:
+        slot["resolutions"] = {
+            "resolutionsPerAuthority": [
+                {
+                    "status": {"code": "ER_SUCCESS_MATCH"},
+                    "values": [{"value": {"name": alexa_match}}],
+                }
+            ]
+        }
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "search",
+                "slots": {},
+                "searchPayload": {"query": city, "filter": {"unwanted": True}},
+                "resolution": {
+                    "match": {
+                        "city": city,
+                        "countryCode": "gb",
+                        "latitude": 53.0,
+                        "longitude": -1.0,
+                    }
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {"name": intent_name, "slots": {slot_name: slot}},
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "activeDialog": {
+            "type": "creator_location",
+            "context": {"slotName": "cityQuery"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    DialogValidationInterceptor().process(mock_handler_input)
+    await ResolverInterceptor(deps=container).process(mock_handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once()
+    assert resolver.resolve_utterance.await_args.args == (spoken,)
+    assert resolver.resolve_utterance.await_args.kwargs["prefer_location"] is True
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["slots"]["city"] == city
+    assert nlp["searchPayload"] == {
+        "query": "",
+        "filter": {
+            "city": city,
+            "countryCode": "gb",
+            "latitude": 53.0,
+            "longitude": -1.0,
+        },
+    }
+    assert DialogStateManager.get_active(mock_handler_input) is None
+
+
+@pytest.mark.asyncio
+async def test_creator_city_rejects_non_location_even_when_alexa_matches_a_city(
+    mock_handler_input,
+):
+    from src.controllers.intent_dispatch import IntentDispatchGateHandler
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "search",
+                "slots": {"city": "York"},
+                "searchPayload": {"query": "", "filter": {"city": "York"}},
+                "resolution": {"match": None, "candidates": []},
+            }
+        )
+    )
+    heara = SimpleNamespace(availability=AsyncMock())
+    container = ApplicationContainer(
+        resolver=resolver,
+        progressive=SimpleNamespace(send=AsyncMock(return_value=True)),
+        heara=heara,
+    )
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "SelectCreatorCityIntent",
+                "slots": {
+                    "cityQuery": {
+                        "name": "cityQuery",
+                        "value": "yuck",
+                        "resolutions": {
+                            "resolutionsPerAuthority": [
+                                {
+                                    "status": {"code": "ER_SUCCESS_MATCH"},
+                                    "values": [{"value": {"name": "York"}}],
+                                }
+                            ]
+                        },
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "activeDialog": {
+            "type": "creator_location",
+            "context": {"slotName": "cityQuery"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    DialogValidationInterceptor().process(mock_handler_input)
+    await ResolverInterceptor(deps=container).process(mock_handler_input)
+    response = await IntentDispatchGateHandler(deps=container).handle(mock_handler_input)
+
+    assert resolver.resolve_utterance.await_args.args == ("yuck",)
+    assert Speech.CREATOR_CITY_NOT_RECOGNISED in response["outputSpeech"]["ssml"]
+    heara.availability.assert_not_awaited()
+    assert DialogStateManager.get_active(mock_handler_input)["type"] == "creator_location"
+
+
+@pytest.mark.asyncio
 async def test_creator_city_resolver_failure_reasks_without_entering_onboarding(
     mock_handler_input,
 ):
@@ -3711,7 +3880,7 @@ async def test_creator_city_resolver_failure_reasks_without_entering_onboarding(
     await ResolverInterceptor(deps=container).process(mock_handler_input)
     response = await IntentDispatchGateHandler(deps=container).handle(mock_handler_input)
 
-    assert "Which city would you like me to find creators in" in response["outputSpeech"]["ssml"]
+    assert Speech.CREATOR_CITY_NOT_RECOGNISED in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
         DialogStateManager.capture_directive("creator_location")
     ]

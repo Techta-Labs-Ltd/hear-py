@@ -255,18 +255,23 @@ class ResolverWorkflowRunner:
                 )
             except ResolverUnavailable:
                 result = {}
-            slots = dict(result.get("slots") or {})
-            city = str(slots.get("city") or slots.get("placeName") or "").strip()
-            if result.get("status") == "resolved" and city:
+            location = ResolverWorkflowRunner._canonical_location(result)
+            if location:
                 DialogStateManager.clear(handler_input, "creator_location")
+                slots = {
+                    **dict(result.get("slots") or {}),
+                    **location,
+                    "placeName": location["city"],
+                    "isLocal": True,
+                }
+                search_payload = dict(result.get("searchPayload") or {})
+                search_payload["filter"] = location
                 result.update(
                     {
                         "intent": "creator_location",
                         "requestedLocation": True,
-                        "searchPayload": {
-                            **dict(result.get("searchPayload") or {}),
-                            "query": "",
-                        },
+                        "slots": slots,
+                        "searchPayload": {**search_payload, "query": ""},
                     }
                 )
             else:
@@ -274,6 +279,7 @@ class ResolverWorkflowRunner:
                     "status": "resolved",
                     "intent": "creator_location",
                     "requestedLocation": True,
+                    "locationRejected": True,
                     "slots": {},
                     "searchPayload": {"query": "", "filter": {}},
                 }
@@ -325,6 +331,41 @@ class ResolverWorkflowRunner:
             },
         )
         return True
+
+    @staticmethod
+    def _canonical_location(result: dict) -> dict | None:
+        if result.get("status") != "resolved":
+            return None
+        resolution = result.get("resolution")
+        match = resolution.get("match") if isinstance(resolution, dict) else None
+        if not isinstance(match, dict):
+            return None
+        slots = result.get("slots") if isinstance(result.get("slots"), dict) else {}
+        city = str(match.get("city") or match.get("locality") or "").strip()
+        country_code = str(
+            match.get("countryCode") or slots.get("countryCode") or ""
+        ).strip()
+        latitude = match.get("latitude", slots.get("latitude"))
+        longitude = match.get("longitude", slots.get("longitude"))
+        if not city or not country_code or latitude is None or longitude is None:
+            return None
+        return {
+            "city": city,
+            "countryCode": country_code,
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+
+    @staticmethod
+    def _spoken_follow_up(handler_input, fallback: str | None) -> str | None:
+        return next(
+            (
+                spoken.strip()
+                for slot in DialogSelection.request_slots(handler_input).values()
+                if (spoken := AlexaRequest.get_spoken_slot_value(slot)) and spoken.strip()
+            ),
+            fallback,
+        )
 
     @staticmethod
     def _resolve_known_without_raw(handler_input, alexa_intent: str) -> None:
@@ -404,7 +445,12 @@ class ResolverWorkflowRunner:
             handler_input, context, raw, store.get("pendingAmbiguity")
         ):
             return
-        if await self._resolve_follow_up(handler_input, context, effective, store):
+        follow_up_input = (
+            ResolverWorkflowRunner._spoken_follow_up(handler_input, raw)
+            if dialog_type == "creator_location"
+            else effective
+        )
+        if await self._resolve_follow_up(handler_input, context, follow_up_input, store):
             return
         carrierless_slot = ResolverWorkflow.CARRIERLESS_SELECTOR_SLOTS.get(alexa_intent)
         if carrierless_slot and not dialog_type:
