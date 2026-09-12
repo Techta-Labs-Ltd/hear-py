@@ -552,11 +552,14 @@ async def test_creator_location_pagination_preserves_filter_and_creator_domain(
         "availabilityFilter": availability_filter,
     }
 
-    updated = await Availability(deps=deps)._load_remote_page(handler_input, context)
+    DialogStateManager.activate(handler_input, "availability", context=context)
+
+    await Availability(deps=deps).handle_dialog(handler_input)
 
     request = deps.heara.availability.await_args.args[0]
     assert request["filter"] == availability_filter
     assert request["page"] == 1
+    updated = DialogStateManager.get_active(handler_input)["context"]
     assert [item["id"] for item in updated["candidates"]] == [
         "creator-2",
         "creator-3",
@@ -600,7 +603,9 @@ async def test_creator_location_previous_page_reloads_without_growing_state(
         },
     }
 
-    response = await Availability(deps=deps)._previous(handler_input, context)
+    DialogStateManager.activate(handler_input, "availability", context=context)
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
 
     request = deps.heara.availability.await_args.args[0]
     assert request["page"] == 0
