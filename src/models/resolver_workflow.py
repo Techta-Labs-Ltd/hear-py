@@ -97,8 +97,9 @@ class ResolverWorkflow:
 
     @staticmethod
     def _resolved_pending_candidate(pending: dict, candidate: dict) -> dict:
-        entity_type = str(candidate["type"])
-        entity_id, name = str(candidate["id"]), str(candidate["name"])
+        entity_type = str(candidate.get("type") or candidate.get("entityType") or "")
+        entity_id = str(candidate.get("id") or candidate.get("entityId") or "")
+        name = str(candidate.get("name") or candidate.get("canonicalValue") or "")
         filter_keys = SearchConstants.SEARCH_SOURCE_FILTERS
         filter_key = filter_keys.get(entity_type)
         filters = SearchFilters.replace_source(

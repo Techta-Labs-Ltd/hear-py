@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
@@ -152,6 +153,7 @@ class IntentDispatcher:
         candidates = list(reference.get("candidates") or [])
         displayed = candidates[: DiscoveryConstants.CHOICE_PAGE_SIZE]
         has_more = len(candidates) > DiscoveryConstants.CHOICE_PAGE_SIZE
+        now = int(time.time())
         pending = {
             "phrase": phrase,
             "candidates": candidates,
@@ -159,8 +161,21 @@ class IntentDispatcher:
             "displayedCandidates": displayed,
             "spokenCandidateOffset": min(DiscoveryConstants.CHOICE_PAGE_SIZE, len(candidates)),
             "offset": 0,
+            "intent": nlp_data.get("intent") or "general",
+            "searchPayload": dict(nlp_data.get("searchPayload") or {}),
+            "slots": dict(nlp_data.get("slots") or {}),
+            "createdAt": now,
+            "expiresAt": now + 300,
         }
-        self._deps.user.update(handler_input, {"pendingAmbiguity": pending})
+        self._deps.user.update(
+            handler_input,
+            {
+                "pendingAmbiguity": pending,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "_requiresReliableSave": True,
+            },
+        )
         DialogStateManager.activate(handler_input, "ambiguity", context=pending)
         message = SearchSpeech.ambiguous_reference_message(phrase, displayed, has_more=has_more)
         reprompt = SearchSpeech.choice_reprompt(displayed, has_more=has_more)
