@@ -5,6 +5,7 @@ import time
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
+from src.constants.availability import AvailabilityConstants
 from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.onboarding import OnboardingConstants
@@ -18,7 +19,15 @@ from src.utils.filters import SearchFilterUtils
 
 
 class ResolverWorkflowRunner:
-    def __init__(self, *, deps: object | None = None):
+    def __init__(
+        self,
+        *,
+        alexa_user_id: str | None = None,
+        listener_id: str | None = None,
+        deps: object | None = None,
+    ):
+        self._alexa_user_id = alexa_user_id
+        self._listener_id = listener_id
         self._deps = deps
 
     @staticmethod
@@ -35,8 +44,36 @@ class ResolverWorkflowRunner:
         slots = AlexaRequest.read(intent, "slots") or {}
         store = User.snapshot(handler_input)
         dialog = DialogStateManager.active_from_store(store)
-        if (dialog or {}).get("type") == "availability":
-            return None
+        if (dialog or {}).get("type") == AvailabilityConstants.DIALOG_TYPE:
+            dialog_context = dialog.get("context") or {}
+            raw = ResolverWorkflow._extract_raw_utterance(handler_input, alexa_intent)
+            candidate = DialogSelection.request_candidate(handler_input, dialog_context)
+            if not candidate and raw:
+                candidate = DialogSelection.match_pending_candidate(
+                    handler_input, dialog_context, raw
+                )
+            is_dialog_control = (
+                alexa_intent in AvailabilityConstants.EXIT_INTENTS
+                or alexa_intent in AvailabilityConstants.MORE_INTENTS
+                or alexa_intent in AvailabilityConstants.PREVIOUS_INTENTS
+                or alexa_intent in DialogConstants.CHOICE_DISMISS_INTENTS
+                or (
+                    alexa_intent in {"AMAZON.YesIntent", "AMAZON.NoIntent"}
+                    and dialog_context.get("singleChoice")
+                )
+                or (
+                    alexa_intent in {"AMAZON.YesIntent", "AMAZON.NoIntent"}
+                    and dialog_context.get("kind") == AvailabilityConstants.FORMAT_KIND
+                )
+                or alexa_intent == "AMAZON.NoIntent"
+                or alexa_intent == "ClarifySelectionIntent"
+                or bool(candidate)
+            )
+            if is_dialog_control:
+                return None
+            DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+            store = User.snapshot(handler_input)
+            dialog = None
         ambiguity_active = bool(
             isinstance(store.get("pendingAmbiguity"), dict)
             or (dialog or {}).get("type") == "ambiguity"
@@ -137,11 +174,12 @@ class ResolverWorkflowRunner:
             or (carrier_verb and normalized.startswith(f"{carrier_verb} "))
         )
         utterance = raw if has_carrier else f"{carrier} {raw}"
+        alexa_user_id = self._alexa_user_id or AlexaRequest.get_user_id(handler_input)
         options = {
-            "alexa_user_id": AlexaRequest.get_user_id(handler_input),
+            "alexa_user_id": alexa_user_id,
             "timeout_ms": DeadlineBudget.resolver_timeout_ms(handler_input),
         }
-        listener_id = User.snapshot(handler_input).get("listenerId")
+        listener_id = self._listener_id or User.snapshot(handler_input).get("listenerId")
         if listener_id:
             options["listener_id"] = listener_id
         if prefer_location:
