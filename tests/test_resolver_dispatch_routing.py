@@ -237,3 +237,594 @@ async def test_ambiguity_turn_2_ordinal_selection_resolves_candidate(mock_handle
     assert nlp2["slots"]["creatorName"] == "Pendle Voice Lancashire Life"
     assert User.snapshot(hi2).get("pendingAmbiguity") is None
 
+@pytest.mark.asyncio
+async def test_ambiguity_turn_2_distinguishing_name_resolves_candidate(mock_handler_input):
+    candidates = [
+        {"id": "creator-1", "name": "Pendle Voice Dalesman", "type": "creator"},
+        {"id": "creator-2", "name": "Pendle Voice Lancashire Life", "type": "creator"},
+        {"id": "creator-3", "name": "Pendle Voice Leader and Times", "type": "creator"},
+    ]
+    nlp_data = {
+        "status": "ambiguous",
+        "intent": "creator",
+        "ambiguities": [{"phrase": "pendle voice", "candidates": candidates}],
+        "slots": {},
+    }
+    mock_handler_input.attributes_manager.request_attributes["_nlp"] = nlp_data
+    container = ApplicationContainer()
+    gate = IntentDispatchGateHandler(deps=container)
+    gate.handle(mock_handler_input)
+    store = User.snapshot(mock_handler_input)
+
+    envelope2 = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "PlayContentIntent",
+                    "slots": {"topic": {"name": "topic", "value": "play dalesman"}},
+                },
+            },
+        }
+    )
+    attributes2 = AttributesManager(envelope2)
+    attributes2.request_attributes = {
+        "_store": dict(store),
+        "_dirty": False,
+    }
+    hi2 = HandlerInput(envelope2, attributes2, None, ResponseBuilder())
+
+    await ResolverInterceptor(deps=container).process(hi2)
+    nlp2 = hi2.attributes_manager.request_attributes.get("_nlp")
+    assert nlp2 is not None
+    assert nlp2["status"] == "resolved"
+    assert nlp2["intent"] == "creator"
+    assert nlp2["slots"]["creatorIds"] == ["creator-1"]
+    assert nlp2["slots"]["creatorName"] == "Pendle Voice Dalesman"
+    assert User.snapshot(hi2).get("pendingAmbiguity") is None
+
+
+@pytest.mark.asyncio
+async def test_ambiguity_turn_2_dismissal_phrase_clears_ambiguity_and_returns_to_search(mock_handler_input):
+    candidates = [
+        {"id": "creator-1", "name": "Pendle Voice Dalesman", "type": "creator"},
+        {"id": "creator-2", "name": "Pendle Voice Lancashire Life", "type": "creator"},
+        {"id": "creator-3", "name": "Pendle Voice Leader and Times", "type": "creator"},
+    ]
+    nlp_data = {
+        "status": "ambiguous",
+        "intent": "creator",
+        "ambiguities": [{"phrase": "pendle voice", "candidates": candidates}],
+        "slots": {},
+    }
+    mock_handler_input.attributes_manager.request_attributes["_nlp"] = nlp_data
+    container = ApplicationContainer()
+    gate = IntentDispatchGateHandler(deps=container)
+    gate.handle(mock_handler_input)
+    store = User.snapshot(mock_handler_input)
+
+    for phrase in ("another thing else", "something else", "none of these"):
+        envelope2 = AttrDict(
+            {
+                "version": "1.0",
+                "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+                "request": {
+                    "type": "IntentRequest",
+                    "locale": "en-GB",
+                    "intent": {
+                        "name": "ClarifySelectionIntent",
+                        "slots": {"selection": {"name": "selection", "value": phrase}},
+                    },
+                },
+            }
+        )
+        attributes2 = AttributesManager(envelope2)
+        attributes2.request_attributes = {
+            "_store": dict(store),
+            "_dirty": False,
+        }
+        hi2 = HandlerInput(envelope2, attributes2, None, ResponseBuilder())
+
+        await ResolverInterceptor(deps=container).process(hi2)
+        nlp2 = hi2.attributes_manager.request_attributes.get("_nlp")
+        assert nlp2 is not None
+        assert nlp2["intent"] == "dismiss_choices"
+        assert User.snapshot(hi2).get("pendingAmbiguity") is None
+        assert gate.can_handle(hi2) is True
+        res = gate.handle(hi2)
+        speech = res["outputSpeech"]["ssml"]
+        assert "What would you like to listen to instead" in speech
+
+
+@pytest.mark.asyncio
+async def test_play_from_creator_elicits_city_then_forwards_unmatched_spoken_words_to_resolver():
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    envelope1 = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "SearchContentIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "play from a creator",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes1 = AttributesManager(envelope1)
+    attributes1.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi1 = HandlerInput(envelope1, attributes1, None, ResponseBuilder())
+    resolver = AsyncMock()
+    resolver.resolve_utterance = AsyncMock()
+    progressive = AsyncMock()
+    progressive.send = AsyncMock(return_value=True)
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+
+    DialogValidationInterceptor().process(hi1)
+    await ResolverInterceptor(deps=container).process(hi1)
+    ConfirmationMiddleware().process(hi1)
+    gate = IntentDispatchGateHandler(deps=container)
+    assert gate.can_handle(hi1) is True
+    res1 = await gate.handle(hi1)
+
+    assert "Which city would you like me to find creators in" in res1["outputSpeech"]["ssml"]
+    assert res1["directives"] == [DialogStateManager.capture_directive("creator_location")]
+    assert resolver.resolve_utterance.call_count == 0
+
+    store1 = User.snapshot(hi1)
+    assert store1["activeDialog"]["type"] == "creator_location"
+
+    envelope2 = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "SelectCreatorCityIntent",
+                    "slots": {
+                        "cityQuery": {
+                            "name": "cityQuery",
+                            "value": "Sevenoaks",
+                            "confirmationStatus": "NONE",
+                            "resolutions": {
+                                "resolutionsPerAuthority": [
+                                    {
+                                        "status": {"code": "ER_SUCCESS_NO_MATCH"},
+                                        "authority": "amzn1.er-authority.echo-sdk.1",
+                                    }
+                                ]
+                            },
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes2 = AttributesManager(envelope2)
+    attributes2.request_attributes = {
+        "_store": dict(store1),
+        "_dirty": False,
+    }
+    hi2 = HandlerInput(envelope2, attributes2, None, ResponseBuilder())
+    resolver.resolve_utterance = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "search",
+            "slots": {"city": "Sevenoaks"},
+            "searchPayload": {"query": "", "filter": {"city": "Sevenoaks"}},
+            "resolution": {
+                "match": {
+                    "city": "Sevenoaks",
+                    "countryCode": "gb",
+                    "latitude": 51.27,
+                    "longitude": 0.19,
+                }
+            },
+        }
+    )
+
+    DialogValidationInterceptor().process(hi2)
+    await ResolverInterceptor(deps=container).process(hi2)
+
+    resolver.resolve_utterance.assert_awaited_once()
+    call_args = resolver.resolve_utterance.await_args
+    assert call_args.args == ("Sevenoaks",)
+    assert call_args.kwargs["prefer_location"] is True
+    nlp2 = hi2.attributes_manager.request_attributes.get("_nlp")
+    assert nlp2["intent"] == "creator_location"
+    assert nlp2["slots"]["city"] == "Sevenoaks"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent_name", "slot_name", "spoken_text", "expected_carrier_utterance"),
+    [
+        ("SearchContentIntent", "searchQuery", "unknown creator", "play unknown creator"),
+        ("SearchCreatorIntent", "searchQuery", "David Beard", "play something by David Beard"),
+        ("SearchOrganizationIntent", "searchQuery", "Pendle Audio", "play from Pendle Audio"),
+        ("SearchPublicationIntent", "searchQuery", "Lancashire Life", "play publication from Lancashire Life"),
+        ("PlayContentIntent", "topic", "astronomy today", "play astronomy today"),
+        ("PlayByOrganizationIntent", "organizationQuery", "Ribble Valley TN", "play from Ribble Valley TN"),
+        ("PlayPublicationIntent", "publicationSourceQuery", "Craven Herald", "play publication from Craven Herald"),
+        ("PlayLocalIntent", "localQuery", "Barrow-in-Furness", "play near Barrow-in-Furness"),
+        ("PlayRecommendationIntent", "recommendationQuery", "indie jazz", "play indie jazz"),
+        ("SelectOrganizationIntent", "organizationQuery", "Colne TN", "play Colne TN"),
+        ("SelectPublicationSourceIntent", "publicationSourceQuery", "Yorkshire Post", "play Yorkshire Post"),
+        ("SelectCreatorCityIntent", "cityQuery", "Hebden Bridge", "Hebden Bridge"),
+        ("BrowseByCategoryIntent", "category", "gardening", "play gardening"),
+        ("WhatsTrendingIntent", "topic", "premier league", "play premier league"),
+    ],
+)
+async def test_all_search_slots_forward_unmatched_spoken_words_to_resolver(
+    intent_name, slot_name, spoken_text, expected_carrier_utterance
+):
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": intent_name,
+                    "slots": {
+                        slot_name: {
+                            "name": slot_name,
+                            "value": spoken_text,
+                            "confirmationStatus": "NONE",
+                            "resolutions": {
+                                "resolutionsPerAuthority": [
+                                    {
+                                        "status": {"code": "ER_SUCCESS_NO_MATCH"},
+                                        "authority": "amzn1.er-authority.echo-sdk.1",
+                                    }
+                                ]
+                            },
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolver = AsyncMock()
+    resolver.resolve_utterance = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "search",
+            "slots": {},
+            "searchPayload": {"query": spoken_text, "filter": {}},
+        }
+    )
+    progressive = AsyncMock()
+    progressive.send = AsyncMock(return_value=True)
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+
+    DialogValidationInterceptor().process(hi)
+    await ResolverInterceptor(deps=container).process(hi)
+
+    resolver.resolve_utterance.assert_awaited_once()
+    called_utterance = resolver.resolve_utterance.await_args.args[0]
+    assert called_utterance == expected_carrier_utterance
+
+
+@pytest.mark.asyncio
+async def test_user_idle_no_does_not_trigger_search_confirmation():
+    from src.alexa.context import RequestContext
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "no",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolver = AsyncMock()
+    progressive = AsyncMock(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+
+    DialogValidationInterceptor().process(hi)
+    await ResolverInterceptor(deps=container).process(hi)
+    ConfirmationMiddleware().process(hi)
+
+    assert resolver.resolve_utterance.call_count == 0
+    assert RequestContext.request(hi).get("_pendingConfirmation") is None
+
+    gate = IntentDispatchGateHandler(deps=container)
+    assert gate.can_handle(hi) is True
+    res = gate.handle(hi)
+    assert "Please say the name of a talking newspaper, creator, publication, or city" in res["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
+async def test_user_idle_stop_speaks_goodbye_and_ends_session():
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "stop",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolver = AsyncMock()
+    progressive = AsyncMock(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+
+    DialogValidationInterceptor().process(hi)
+    await ResolverInterceptor(deps=container).process(hi)
+    ConfirmationMiddleware().process(hi)
+
+    assert resolver.resolve_utterance.call_count == 0
+    gate = IntentDispatchGateHandler(deps=container)
+    assert gate.can_handle(hi) is True
+    res = gate.handle(hi)
+    assert "Goodbye" in res["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
+async def test_direct_creator_city_query_routes_to_creator_location_without_generic_confirmation():
+    from src.alexa.context import RequestContext
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "SelectCreatorCityIntent",
+                    "slots": {
+                        "cityQuery": {
+                            "name": "cityQuery",
+                            "value": "Swindon",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolver = AsyncMock()
+    resolver.resolve_utterance = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "search",
+            "slots": {"city": "Swindon"},
+            "searchPayload": {"query": "", "filter": {"city": "Swindon"}},
+            "resolution": {
+                "match": {
+                    "city": "Swindon",
+                    "countryCode": "gb",
+                    "latitude": 51.56,
+                    "longitude": -1.78,
+                }
+            },
+        }
+    )
+    availability = AsyncMock()
+    availability.begin_creator_location = AsyncMock(
+        return_value=ResponseBuilder().speak("I found Adeshina Ayomide near Swindon. Would you like to listen?").response
+    )
+    progressive = AsyncMock(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive, availability=availability)
+
+    DialogValidationInterceptor().process(hi)
+    await ResolverInterceptor(deps=container).process(hi)
+    ConfirmationMiddleware().process(hi)
+
+    assert RequestContext.request(hi).get("_pendingConfirmation") is None
+
+    gate = IntentDispatchGateHandler(deps=container)
+    assert gate.can_handle(hi) is True
+    res = await gate.handle(hi)
+    assert "Adeshina Ayomide near Swindon" in res["outputSpeech"]["ssml"]
+    availability.begin_creator_location.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unrecognized_creator_city_reprompts_for_city_not_topic_creators():
+    from src.alexa.context import RequestContext
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "SearchContentIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "find creators in swidon",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolver = AsyncMock()
+    resolver.resolve_utterance = AsyncMock(
+        return_value={
+            "status": "resolved",
+            "intent": "search",
+            "slots": {},
+            "searchPayload": {"query": "swidon", "filter": {}},
+        }
+    )
+    availability = AsyncMock()
+    availability.begin_creator_location = AsyncMock(
+        return_value=ResponseBuilder().speak("Sorry, I couldn't identify that location. Please try another city.").response
+    )
+    progressive = AsyncMock(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive, availability=availability)
+
+    DialogValidationInterceptor().process(hi)
+    await ResolverInterceptor(deps=container).process(hi)
+    ConfirmationMiddleware().process(hi)
+
+    assert RequestContext.request(hi).get("_pendingConfirmation") is None
+
+    gate = IntentDispatchGateHandler(deps=container)
+    assert gate.can_handle(hi) is True
+    res = await gate.handle(hi)
+    assert "couldn't identify that location" in res["outputSpeech"]["ssml"]
+    assert "creators" not in res["outputSpeech"]["ssml"]
+    availability.begin_creator_location.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_user_idle_yes_does_not_trigger_search_confirmation():
+    from src.alexa.context import RequestContext
+    from src.middleware.confirmation import ConfirmationMiddleware
+    from src.middleware.dialog_validation import DialogValidationInterceptor
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "yes",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    resolver = AsyncMock()
+    progressive = AsyncMock(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+
+    DialogValidationInterceptor().process(hi)
+    await ResolverInterceptor(deps=container).process(hi)
+    ConfirmationMiddleware().process(hi)
+
+    assert resolver.resolve_utterance.call_count == 0
+    assert RequestContext.request(hi).get("_pendingConfirmation") is None
+
+    gate = IntentDispatchGateHandler(deps=container)
+    assert gate.can_handle(hi) is True
+    res = gate.handle(hi)
+    assert "Please say the name of a talking newspaper, creator, publication, or city" in res["outputSpeech"]["ssml"]
+

@@ -86,7 +86,6 @@ class ResolverWorkflow:
         "general": "residualQuery",
     }
     CARRIERLESS_SELECTOR_SLOTS = {
-        "SelectCreatorCityIntent": "cityQuery",
         "SelectOrganizationIntent": "organizationQuery",
         "SelectPublicationSourceIntent": "publicationSourceQuery",
     }

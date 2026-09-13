@@ -8,7 +8,9 @@ from ask_sdk_model import Response
 
 from src.alexa.context import RequestContext
 from src.alexa.entities import AlexaEntities
+from src.alexa.playback import AlexaPlayback
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -41,6 +43,9 @@ class IntentDispatcher:
             "following",
             "general",
             "search",
+            "dismiss_choices",
+            "idle_dismiss",
+            "stop",
             "feedback_enjoyed",
             "feedback_not_enjoyed",
             "feedback_somewhat",
@@ -127,6 +132,26 @@ class IntentDispatcher:
             return self._confirmation_response(handler_input, nlp_data, pending)
         if nlp_data.get("status") == "ambiguous" or (nlp_data.get("slots") or {}).get("ambiguousReferences"):
             return self._ambiguity_response(handler_input, nlp_data)
+        if intent == "dismiss_choices":
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.CHOICES_DISMISSED))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        if intent == "idle_dismiss":
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                f"Ok. {Speech.WELCOME_REPROMPT}",
+                Speech.WELCOME_REPROMPT,
+            )
+        if intent == "stop":
+            DialogStateManager.clear_transient_discovery(handler_input)
+            return (
+                handler_input.response_builder.speak(Speech.GOODBYE)
+                .add_directive(AlexaPlayback.build_stop_directive())
+                .response
+            )
         if intent == "unclear":
             return self._unclear_response(handler_input, nlp_data)
         if intent == "resolver_unavailable":

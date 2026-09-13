@@ -163,11 +163,10 @@ class Affirmative:
         response = response or await self._state_response(handler_input, store)
         if response:
             return response
-        return (
-            handler_input.response_builder.speak(Speech.WELCOME_REPROMPT)
-            .reprompt(Speech.WELCOME_REPROMPT)
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            f"Ok. {Speech.WELCOME_REPROMPT}",
+            Speech.WELCOME_REPROMPT,
         )
 
     async def _confirm_location(self, handler_input, store, session_attrs=None):

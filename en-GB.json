@@ -513,9 +513,6 @@
             "play {topic} in {cityQuery}",
             "find {topic} near {localQuery}",
             "find {topic} in {cityQuery}",
-            "find talking newspapers in {cityQuery}",
-            "find organisations in {cityQuery}",
-            "find creators in {cityQuery}",
             "show me local content",
             "show me content near me",
             "what's local",
@@ -611,7 +608,16 @@
             "go back to search",
             "return to search",
             "leave these choices",
-            "I don't want any of these"
+            "I don't want any of these",
+            "another thing",
+            "another thing else",
+            "neither",
+            "neither of these",
+            "neither of those",
+            "none of those",
+            "something different",
+            "not any of these",
+            "different"
           ]
         },
         {
@@ -1456,13 +1462,20 @@
             {
               "name": {
                 "value": "latest",
-                "synonyms": ["newest", "most recent", "recent"]
+                "synonyms": [
+                  "newest",
+                  "most recent",
+                  "recent"
+                ]
               }
             },
             {
               "name": {
                 "value": "trending",
-                "synonyms": ["popular", "top"]
+                "synonyms": [
+                  "popular",
+                  "top"
+                ]
               }
             }
           ]
@@ -1474,42 +1487,81 @@
               "id": "0.5",
               "name": {
                 "value": "0.5",
-                "synonyms": ["first", "first speed", "first level", "half", "half speed"]
+                "synonyms": [
+                  "first",
+                  "first speed",
+                  "first level",
+                  "half",
+                  "half speed"
+                ]
               }
             },
             {
               "id": "0.75",
               "name": {
                 "value": "0.75",
-                "synonyms": ["second", "second speed", "second level", "point seven five", "three quarters", "three quarter speed"]
+                "synonyms": [
+                  "second",
+                  "second speed",
+                  "second level",
+                  "point seven five",
+                  "three quarters",
+                  "three quarter speed"
+                ]
               }
             },
             {
               "id": "1",
               "name": {
                 "value": "1",
-                "synonyms": ["third", "third speed", "third level", "normal", "normal speed", "regular speed", "reset speed"]
+                "synonyms": [
+                  "third",
+                  "third speed",
+                  "third level",
+                  "normal",
+                  "normal speed",
+                  "regular speed",
+                  "reset speed"
+                ]
               }
             },
             {
               "id": "1.25",
               "name": {
                 "value": "1.25",
-                "synonyms": ["fourth", "fourth speed", "fourth level", "one point two five", "one and a quarter"]
+                "synonyms": [
+                  "fourth",
+                  "fourth speed",
+                  "fourth level",
+                  "one point two five",
+                  "one and a quarter"
+                ]
               }
             },
             {
               "id": "1.5",
               "name": {
                 "value": "1.5",
-                "synonyms": ["fifth", "fifth speed", "fifth level", "one point five", "one and a half"]
+                "synonyms": [
+                  "fifth",
+                  "fifth speed",
+                  "fifth level",
+                  "one point five",
+                  "one and a half"
+                ]
               }
             },
             {
               "id": "2",
               "name": {
                 "value": "2",
-                "synonyms": ["sixth", "sixth speed", "sixth level", "double", "double speed"]
+                "synonyms": [
+                  "sixth",
+                  "sixth speed",
+                  "sixth level",
+                  "double",
+                  "double speed"
+                ]
               }
             }
           ]
@@ -1520,37 +1572,53 @@
             {
               "name": {
                 "value": "Walsall",
-                "synonyms": ["wasall"]
+                "synonyms": [
+                  "wasall"
+                ]
               }
             },
             {
               "name": {
                 "value": "Wakefield",
-                "synonyms": ["wake field"]
+                "synonyms": [
+                  "wake field"
+                ]
               }
             },
             {
               "name": {
                 "value": "Warrington",
-                "synonyms": ["warington"]
+                "synonyms": [
+                  "warington"
+                ]
               }
             },
             {
               "name": {
                 "value": "Sussex Coast",
-                "synonyms": ["sussex"]
+                "synonyms": [
+                  "sussex"
+                ]
               }
             },
             {
               "name": {
                 "value": "publications",
-                "synonyms": ["publication", "a publication", "the publication"]
+                "synonyms": [
+                  "publication",
+                  "a publication",
+                  "the publication"
+                ]
               }
             },
             {
               "name": {
                 "value": "tracks",
-                "synonyms": ["track", "a track", "individual tracks"]
+                "synonyms": [
+                  "track",
+                  "a track",
+                  "individual tracks"
+                ]
               }
             },
             {

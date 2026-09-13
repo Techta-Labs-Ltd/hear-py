@@ -39,6 +39,15 @@ class DialogSelection:
         return re.sub("\\s+(?:one|option|choice)$", "", raw)
 
     @staticmethod
+    def is_dismiss_phrase(value: object) -> bool:
+        normalized = DialogSelection.normalize(value)
+        if not normalized:
+            return False
+        if normalized in DialogConstants.CHOICE_DISMISS_PHRASES:
+            return True
+        return normalized.startswith(("no ", "none of ", "neither of "))
+
+    @staticmethod
     def unique_candidates(candidates: list[dict]) -> list[dict]:
         seen: set[str] = set()
         unique = []

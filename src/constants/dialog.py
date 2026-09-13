@@ -2,6 +2,49 @@ class DialogConstants:
     VALIDATION_FAILURE = "_dialogValidationFailure"
     DIALOG_TTL_SECONDS = 10 * 60
     CHOICE_DISMISS_INTENTS = frozenset({"DismissChoicesIntent"})
+    IDLE_AFFIRMATIVE_PHRASES = frozenset(
+        {
+            "yes",
+            "yeah",
+            "yep",
+            "sure",
+            "ok",
+            "okay",
+            "yes please",
+            "aye",
+            "correct",
+            "right",
+            "alright",
+            "all right",
+        }
+    )
+    CHOICE_DISMISS_PHRASES = frozenset(
+        {
+            "something else",
+            "none of these",
+            "none of those",
+            "neither",
+            "neither of these",
+            "neither of those",
+            "no",
+            "nope",
+            "none",
+            "nothing",
+            "another thing",
+            "another thing else",
+            "different",
+            "something different",
+            "go back",
+            "return to search",
+            "go back to search",
+            "back to search",
+            "i dont want any of these",
+            "i don't want any of these",
+            "none of them",
+            "not any of these",
+            "cancel",
+        }
+    )
     DIALOG_LEGACY_FLAGS = {
         "search_confirmation": "awaitingSearchConfirmation",
         "feedback": "awaitingFeedback",

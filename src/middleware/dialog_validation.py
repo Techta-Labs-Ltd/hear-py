@@ -216,8 +216,11 @@ class DialogValidationPolicy:
         elif (
             dialog_type == "ambiguity"
             and intent_name not in DialogValidationPolicy._AMBIGUITY_INTENTS
-            and DialogSelection.request_candidate(handler_input, context)
-            is None
+            and DialogSelection.request_candidate(handler_input, context) is None
+            and not any(
+                DialogSelection.is_dismiss_phrase(AlexaRequest.get_resolved_slot_value(slot))
+                for slot in DialogSelection.request_slots(handler_input).values()
+            )
         ):
             speech, reprompt = DialogValidationPolicy._ambiguity_prompt(active)
         elif (

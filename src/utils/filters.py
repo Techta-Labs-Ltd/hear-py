@@ -291,6 +291,17 @@ class SearchFilterUtils:
         )
 
     @staticmethod
+    def extract_creator_city(value: object) -> str | None:
+        if not value:
+            return None
+        text = SearchFilterUtils.normalize_discovery_phrase(value)
+        match = re.search(r"\bcreators?\s+(?:in|from|near|around)\s+(.+)$", text)
+        if not match:
+            return None
+        city = re.sub(r"^(?:the\s+(?:city|town)\s+of\s+|(?:city|town)\s+of\s+)", "", match.group(1).strip()).strip()
+        return city or None
+
+    @staticmethod
     def is_meaningful_organization_source(value: object) -> bool:
         return (
             SearchFilterUtils.organization_request_kind(value, organization_intent=True)

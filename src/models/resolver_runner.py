@@ -194,7 +194,7 @@ class ResolverWorkflowRunner:
         raw: str | None,
         pending: dict | None,
     ) -> bool:
-        if not raw or not isinstance(pending, dict):
+        if not isinstance(pending, dict):
             return False
         if int(pending.get("expiresAt") or 0) < int(time.time()):
             self._deps.user.update(handler_input, {"pendingAmbiguity": None})
@@ -202,6 +202,28 @@ class ResolverWorkflowRunner:
             return False
         alexa_intent = context["alexa_intent"]
         if alexa_intent in ResolverWorkflow.AMBIGUITY_CONTROL_INTENTS:
+            return False
+        if (
+            alexa_intent in DialogConstants.CHOICE_DISMISS_INTENTS
+            or alexa_intent == "AMAZON.NoIntent"
+            or DialogSelection.is_dismiss_phrase(raw)
+        ):
+            self._deps.user.update(handler_input, {"pendingAmbiguity": None})
+            DialogStateManager.dismiss_ambiguity(handler_input)
+            ResolverWorkflow._set_nlp(
+                handler_input,
+                {
+                    "intent": "dismiss_choices",
+                    "status": "resolved",
+                    "alexaIntent": "dismiss_choices",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": False,
+                    "needsRedirect": True,
+                    "localResolved": True,
+                },
+            )
+            return True
+        if not raw:
             return False
         candidate = DialogSelection.request_candidate(handler_input, pending)
         if not candidate:
@@ -259,6 +281,61 @@ class ResolverWorkflowRunner:
         )
         return True
 
+    async def _resolve_creator_location_query(
+        self,
+        handler_input,
+        city_candidate: str | None,
+        alexa_intent: str,
+    ) -> bool:
+        try:
+            result = await self._resolver_result(
+                handler_input,
+                city_candidate or "",
+                prefer_location=True,
+            )
+        except ResolverUnavailable:
+            result = {}
+        location = ResolverWorkflowRunner._canonical_location(result)
+        if location:
+            DialogStateManager.clear(handler_input, "creator_location")
+            slots = {
+                **dict(result.get("slots") or {}),
+                **location,
+                "placeName": location["city"],
+                "isLocal": True,
+            }
+            search_payload = dict(result.get("searchPayload") or {})
+            search_payload["filter"] = location
+            result.update(
+                {
+                    "intent": "creator_location",
+                    "requestedLocation": True,
+                    "slots": slots,
+                    "searchPayload": {**search_payload, "query": ""},
+                }
+            )
+        else:
+            result = {
+                "status": "resolved",
+                "intent": "creator_location",
+                "requestedLocation": True,
+                "locationRejected": True,
+                "slots": {},
+                "searchPayload": {"query": "", "filter": {}},
+            }
+        ResolverWorkflow._set_nlp(
+            handler_input,
+            {
+                **result,
+                "alexaIntent": "creator_location",
+                "alexaRawIntent": alexa_intent,
+                "nlpMatchesAlexa": True,
+                "needsRedirect": True,
+                "localResolved": True,
+            },
+        )
+        return True
+
     async def _resolve_follow_up(
         self,
         handler_input,
@@ -285,54 +362,11 @@ class ResolverWorkflowRunner:
             return True
         dialog_type = (DialogStateManager.active_from_store(store) or {}).get("type")
         if dialog_type == "creator_location":
-            try:
-                result = await self._resolver_result(
-                    handler_input,
-                    raw,
-                    prefer_location=True,
-                )
-            except ResolverUnavailable:
-                result = {}
-            location = ResolverWorkflowRunner._canonical_location(result)
-            if location:
-                DialogStateManager.clear(handler_input, "creator_location")
-                slots = {
-                    **dict(result.get("slots") or {}),
-                    **location,
-                    "placeName": location["city"],
-                    "isLocal": True,
-                }
-                search_payload = dict(result.get("searchPayload") or {})
-                search_payload["filter"] = location
-                result.update(
-                    {
-                        "intent": "creator_location",
-                        "requestedLocation": True,
-                        "slots": slots,
-                        "searchPayload": {**search_payload, "query": ""},
-                    }
-                )
-            else:
-                result = {
-                    "status": "resolved",
-                    "intent": "creator_location",
-                    "requestedLocation": True,
-                    "locationRejected": True,
-                    "slots": {},
-                    "searchPayload": {"query": "", "filter": {}},
-                }
-            ResolverWorkflow._set_nlp(
+            return await self._resolve_creator_location_query(
                 handler_input,
-                {
-                    **result,
-                    "alexaIntent": "creator_location",
-                    "alexaRawIntent": alexa_intent,
-                    "nlpMatchesAlexa": True,
-                    "needsRedirect": True,
-                    "localResolved": True,
-                },
+                ResolverWorkflowRunner._creator_location_follow_up(handler_input, raw),
+                alexa_intent,
             )
-            return True
         follow_up = (
             ("organization", "organizationQuery", "PlayByOrganizationIntent")
             if store.get("awaitingOrganizationName") or dialog_type == "organization_name"
@@ -494,6 +528,59 @@ class ResolverWorkflowRunner:
             else effective
         )
         if await self._resolve_follow_up(handler_input, context, follow_up_input, store):
+            return
+        raw_norm = (raw or "").strip().lower()
+        effective_norm = (effective or "").strip().lower()
+        candidate_term = effective_norm or raw_norm
+        if not dialog_type:
+            if candidate_term in {"stop", "cancel"} or raw_norm in {"stop", "cancel"}:
+                ResolverWorkflow._set_nlp(
+                    handler_input,
+                    {
+                        "status": "resolved",
+                        "intent": "stop",
+                        "alexaIntent": "AMAZON.StopIntent",
+                        "alexaRawIntent": alexa_intent,
+                        "nlpMatchesAlexa": False,
+                        "needsRedirect": True,
+                        "slots": {},
+                    },
+                )
+                return
+            if (
+                DialogSelection.is_dismiss_phrase(candidate_term)
+                or DialogSelection.is_dismiss_phrase(raw_norm)
+                or candidate_term in DialogConstants.CHOICE_DISMISS_PHRASES
+                or raw_norm in DialogConstants.CHOICE_DISMISS_PHRASES
+                or candidate_term in DialogConstants.IDLE_AFFIRMATIVE_PHRASES
+                or raw_norm in DialogConstants.IDLE_AFFIRMATIVE_PHRASES
+                or candidate_term in {"no", "nope", "nah", "none", "nothing", "never mind", "no thanks"}
+                or raw_norm in {"no", "nope", "nah", "none", "nothing", "never mind", "no thanks"}
+            ):
+                ResolverWorkflow._set_nlp(
+                    handler_input,
+                    {
+                        "status": "resolved",
+                        "intent": "idle_dismiss",
+                        "alexaIntent": "OpenDiscoveryIntent",
+                        "alexaRawIntent": alexa_intent,
+                        "nlpMatchesAlexa": False,
+                        "needsRedirect": True,
+                        "slots": {},
+                    },
+                )
+                return
+        if alexa_intent == "SelectCreatorCityIntent":
+            city_query = (
+                AlexaRequest.get_spoken_slot_value(context["slots"].get("cityQuery"))
+                or raw
+            )
+            extracted = SearchFilterUtils.extract_creator_city(city_query) or city_query
+            await self._resolve_creator_location_query(handler_input, extracted, alexa_intent)
+            return
+        creator_city = SearchFilterUtils.extract_creator_city(raw) or SearchFilterUtils.extract_creator_city(effective)
+        if creator_city:
+            await self._resolve_creator_location_query(handler_input, creator_city, alexa_intent)
             return
         carrierless_slot = ResolverWorkflow.CARRIERLESS_SELECTOR_SLOTS.get(alexa_intent)
         if carrierless_slot and not dialog_type:
