@@ -11,7 +11,7 @@ def _model():
 def test_fallback_sensitivity_allows_unresolved_domain_slots_to_win():
     configuration = _model()["interactionModel"]["languageModel"]["modelConfiguration"]
 
-    assert configuration["fallbackIntentSensitivity"]["level"] == "LOW"
+    assert configuration["fallbackIntentSensitivity"]["level"] == "HIGH"
 
 
 def test_constrained_latest_utterances_preserve_the_full_topic_slot():

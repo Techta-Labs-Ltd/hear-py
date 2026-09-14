@@ -828,3 +828,136 @@ async def test_user_idle_yes_does_not_trigger_search_confirmation():
     res = gate.handle(hi)
     assert "Please say the name of a talking newspaper, creator, publication, or city" in res["outputSpeech"]["ssml"]
 
+
+@pytest.mark.asyncio
+async def test_resolver_interceptor_preserves_availability_dialog_on_fallback_intent():
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "availability",
+        context={"kind": "publication", "candidates": [{"id": "p1", "name": "Pub 1"}]},
+    )
+    resolver = AsyncMock()
+    container = ApplicationContainer(resolver=resolver)
+
+    await ResolverInterceptor(deps=container).process(hi)
+
+    assert resolver.resolve_utterance.call_count == 0
+    active = DialogStateManager.get_active(hi)
+    assert active is not None
+    assert active["type"] == "availability"
+
+
+@pytest.mark.asyncio
+async def test_resolver_interceptor_preserves_availability_dialog_on_dismiss_phrase():
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "something else",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "availability",
+        context={"kind": "publication", "candidates": [{"id": "p1", "name": "Pub 1"}]},
+    )
+    resolver = AsyncMock()
+    container = ApplicationContainer(resolver=resolver)
+
+    await ResolverInterceptor(deps=container).process(hi)
+
+    assert resolver.resolve_utterance.call_count == 0
+    active = DialogStateManager.get_active(hi)
+    assert active is not None
+    assert active["type"] == "availability"
+
+
+def test_fallback_handler_preserves_ambiguity_dialog_from_active_state():
+    from src.controllers.fallback import FallbackHandler
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "ambiguity",
+        context={
+            "phrase": "dorking",
+            "candidates": [
+                {"id": "c1", "name": "Dorking News", "entityType": "publication"},
+                {"id": "c2", "name": "Dorking Magazine", "entityType": "publication"},
+            ],
+            "slots": {"ambiguousReferences": [{"phrase": "dorking"}]},
+        },
+    )
+    container = ApplicationContainer()
+    handler = FallbackHandler(deps=container)
+    assert handler.can_handle(hi) is True
+
+    res = handler.handle(hi)
+    speech = res["outputSpeech"]["ssml"]
+    assert "Dorking" in speech
+    assert "First, News" in speech
+    assert "Second, Magazine" in speech
+    assert res["shouldEndSession"] is False
+
+

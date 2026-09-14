@@ -67,6 +67,8 @@ class ResolverWorkflowRunner:
                 )
                 or alexa_intent == "AMAZON.NoIntent"
                 or alexa_intent == "ClarifySelectionIntent"
+                or alexa_intent == "AMAZON.FallbackIntent"
+                or DialogSelection.is_dismiss_phrase(raw)
                 or bool(candidate)
             )
             if is_dialog_control:

@@ -10,29 +10,21 @@ from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DialogSelection
+from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.onboarding import Onboarding
 
 
 class FallbackModule:
     logger = logging.getLogger(__name__)
 
-
-class FallbackHandler(AbstractRequestHandler):
-    """Handles AMAZON.FallbackIntent — generic fallback speech."""
-
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
-
-    def can_handle(self, handler_input: HandlerInput) -> bool:
-        return (
-            AlexaRequest.get_request_type(handler_input) == "IntentRequest"
-            and AlexaRequest.get_intent_name(handler_input) == "AMAZON.FallbackIntent"
-        )
-
-    def handle(self, handler_input: HandlerInput):
-        store = self._deps.user.snapshot(handler_input)
+    @staticmethod
+    def fallback_response(handler_input: HandlerInput, deps: object | None):
+        store = deps.user.snapshot(handler_input) if deps and hasattr(deps, "user") else {}
         pending = store.get("pendingAmbiguity")
+        if not pending:
+            active = DialogStateManager.get_active(handler_input) or {}
+            if active.get("type") == "ambiguity":
+                pending = active.get("context")
         if isinstance(pending, dict) and pending.get("candidates"):
             slots = pending.get("slots") or {}
             references = slots.get("ambiguousReferences") or []
@@ -59,7 +51,7 @@ class FallbackHandler(AbstractRequestHandler):
                 .set_should_end_session(False)
                 .response
             )
-        redirect = Onboarding.onboarding_pending_redirect(handler_input, store, deps=self._deps)
+        redirect = Onboarding.onboarding_pending_redirect(handler_input, store, deps=deps)
         if redirect is not None:
             return redirect
         return AlexaResponse.present_idle_next(
@@ -67,6 +59,22 @@ class FallbackHandler(AbstractRequestHandler):
             Speech.FALLBACK_SPEECH,
             Speech.WELCOME_REPROMPT,
         )
+
+
+class FallbackHandler(AbstractRequestHandler):
+    """Handles AMAZON.FallbackIntent — generic fallback speech."""
+
+    def __init__(self, *, deps: object | None = None):
+        self._deps = deps
+
+    def can_handle(self, handler_input: HandlerInput) -> bool:
+        return (
+            AlexaRequest.get_request_type(handler_input) == "IntentRequest"
+            and AlexaRequest.get_intent_name(handler_input) == "AMAZON.FallbackIntent"
+        )
+
+    def handle(self, handler_input: HandlerInput):
+        return FallbackModule.fallback_response(handler_input, self._deps)
 
 
 class UnmatchedIntentHandler(AbstractRequestHandler):
@@ -90,13 +98,5 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
             intent_name,
             dialog_state,
         )
-        redirect = Onboarding.onboarding_pending_redirect(
-            handler_input, self._deps.user.snapshot(handler_input), deps=self._deps
-        )
-        if redirect is not None:
-            return redirect
-        return AlexaResponse.present_idle_next(
-            handler_input,
-            Speech.FALLBACK_SPEECH,
-            Speech.WELCOME_REPROMPT,
-        )
+        return FallbackModule.fallback_response(handler_input, self._deps)
+

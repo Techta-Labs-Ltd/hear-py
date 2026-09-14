@@ -1487,3 +1487,93 @@ async def test_more_page_failure_keeps_dialog_open_for_retry(mock_handler_input)
     )
     assert response["shouldEndSession"] is False
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
+
+
+@pytest.mark.asyncio
+async def test_availability_publication_choice_retry_on_fallback_intent(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.FallbackIntent")
+    candidates = [
+        {"type": "publication", "id": "pub-1", "name": "Dorking Newspaper April"},
+        {"type": "publication", "id": "pub-2", "name": "Dorking Magazine September"},
+        {"type": "publication", "id": "pub-3", "name": "01_August_Welcome"},
+    ]
+    context = {
+        "kind": "publication",
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates,
+    }
+    DialogStateManager.activate(handler_input, "availability", context=context)
+    deps = AvailabilityTestSupport.dependencies({"failed": False})
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "I didn't match that to one of the publication choices." in speech
+    assert "First, Dorking Newspaper April." in speech
+    assert "Second, Dorking Magazine September." in speech
+    assert "Third, 01_August_Welcome." in speech
+    assert "Say no, none of these, or something else to return to search." in speech
+    assert response["shouldEndSession"] is False
+    assert DialogStateManager.get_active(handler_input)["type"] == "availability"
+
+
+@pytest.mark.asyncio
+async def test_availability_format_choice_retry_on_fallback_intent(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.FallbackIntent")
+    context = {
+        "kind": "format",
+        "candidates": [
+            {"id": "publication", "name": "publications"},
+            {"id": "track", "name": "tracks"},
+        ],
+        "choiceCandidates": [
+            {"id": "publication", "name": "publications"},
+            {"id": "track", "name": "tracks"},
+        ],
+        "displayedCandidates": [
+            {"id": "publication", "name": "publications"},
+            {"id": "track", "name": "tracks"},
+        ],
+    }
+    DialogStateManager.activate(handler_input, "availability", context=context)
+    deps = AvailabilityTestSupport.dependencies({"failed": False})
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "I didn't match that to one of the choices." in speech
+    assert "First, publications." in speech
+    assert "Second, tracks." in speech
+    assert "You can say publication, track, first, or second." in speech
+    assert "Say no, none of these, or something else to return to search." in speech
+    assert response["shouldEndSession"] is False
+    assert DialogStateManager.get_active(handler_input)["type"] == "availability"
+
+
+@pytest.mark.asyncio
+async def test_availability_dismiss_phrase_clears_dialog_and_returns_to_search(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(
+        mock_handler_input,
+        "OpenDiscoveryIntent",
+        slots={"searchQuery": {"name": "searchQuery", "value": "none of these"}},
+    )
+    candidates = [
+        {"type": "publication", "id": "pub-1", "name": "Dorking Newspaper April"},
+        {"type": "publication", "id": "pub-2", "name": "Dorking Magazine September"},
+    ]
+    context = {
+        "kind": "publication",
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates,
+    }
+    DialogStateManager.activate(handler_input, "availability", context=context)
+    deps = AvailabilityTestSupport.dependencies({"failed": False})
+
+    response = await Availability(deps=deps).handle_dialog(handler_input)
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "What would you like to listen to instead?" in speech
+    assert response["shouldEndSession"] is False
+    assert DialogStateManager.get_active(handler_input) is None

@@ -318,3 +318,17 @@ class HearApiClient:
             timeout_ms,
         )
         return data if status == 200 and isinstance(data, dict) else None
+
+    async def register_listener(
+        self, profile: dict, *, timeout_ms: int | None = None
+    ) -> dict | None:
+        alexa_user_id = profile.get("alexaUserId") if isinstance(profile, dict) else None
+        if not alexa_user_id:
+            return None
+        status, data = await self._raw_request(
+            "POST",
+            self._build_alexa_relative_path("listeners/register"),
+            profile,
+            timeout_ms,
+        )
+        return data if status == 200 and isinstance(data, dict) else None
