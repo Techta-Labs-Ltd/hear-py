@@ -5,6 +5,7 @@ import logging
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
@@ -26,24 +27,30 @@ class FallbackModule:
             if active.get("type") == "ambiguity":
                 pending = active.get("context")
         if isinstance(pending, dict) and pending.get("candidates"):
-            slots = pending.get("slots") or {}
-            references = slots.get("ambiguousReferences") or []
-            phrase = (
-                references[0].get("phrase")
-                if references and isinstance(references[0], dict)
-                else "that name"
-            )
             displayed = DialogSelection.displayed_choices(pending)
             has_more = DialogSelection.displayed_has_more(pending)
             has_previous = DialogSelection.displayed_has_previous(pending)
-            message = SearchSpeech.ambiguous_reference_message(
-                str(phrase or "that name"),
-                displayed,
-                has_more=has_more,
-                has_previous=has_previous,
+            pagination = pending.get("candidatePagination") or {}
+            publication_picker = pagination.get("kind") == "publication"
+            message = (
+                AvailabilitySpeech.choice_retry(
+                    "publication",
+                    displayed,
+                    has_more=has_more,
+                    has_previous=has_previous,
+                )
+                if publication_picker
+                else SearchSpeech.ambiguity_retry_message(
+                    displayed,
+                    has_more=has_more,
+                    has_previous=has_previous,
+                )
             )
             reprompt = SearchSpeech.choice_reprompt(
-                displayed, has_more=has_more, has_previous=has_previous
+                displayed,
+                publication_picker=publication_picker,
+                has_more=has_more,
+                has_previous=has_previous,
             )
             return (
                 handler_input.response_builder.speak(Ssml.ssml(message))

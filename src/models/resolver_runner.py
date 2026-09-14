@@ -236,15 +236,6 @@ class ResolverWorkflowRunner:
             result = ResolverWorkflow._unmatched_ambiguity_result(pending, raw)
         else:
             result = await self._resolver_result(handler_input, raw, alexa_intent)
-        replace = bool(
-            alexa_intent in ResolverWorkflow.SEARCH_INTENTS
-            and result.get("status") != "resolved"
-            and not result.get("followUpMatched", False)
-        )
-        if replace:
-            self._deps.user.update(handler_input, {"pendingAmbiguity": None})
-            DialogStateManager.clear(handler_input, "ambiguity")
-            return False
         if result.get("status") == "resolved":
             self._deps.user.update(
                 handler_input,
@@ -262,6 +253,16 @@ class ResolverWorkflowRunner:
                 if result.get("followUpMatched", True)
                 else DialogSelection.displayed_choices(pending)
             )
+            narrowed_context = {
+                **pending,
+                "displayedCandidates": displayed,
+                "expiresAt": int(time.time()) + 300,
+            }
+            self._deps.user.update(handler_input, {"pendingAmbiguity": narrowed_context})
+            DialogStateManager.activate(handler_input, "ambiguity", context=narrowed_context)
+        else:
+            result = ResolverWorkflow._unmatched_ambiguity_result(pending, raw)
+            displayed = DialogSelection.displayed_choices(pending)
             narrowed_context = {
                 **pending,
                 "displayedCandidates": displayed,

@@ -961,3 +961,124 @@ def test_fallback_handler_preserves_ambiguity_dialog_from_active_state():
     assert res["shouldEndSession"] is False
 
 
+def test_dialog_validation_gate_speaks_ambiguity_retry_for_unrecognized_utterance():
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {"searchQuery": {"name": "searchQuery", "value": "dan"}},
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "ambiguity",
+        context={
+            "phrase": "pendle voice",
+            "candidates": [
+                {"id": "c1", "name": "Pendle Voice Dalesman", "type": "creator"},
+                {"id": "c2", "name": "Pendle Voice Lancashire Life", "type": "creator"},
+                {"id": "c3", "name": "Pendle Voice Leader and Times", "type": "creator"},
+            ],
+            "displayedCandidates": [
+                {"id": "c1", "name": "Pendle Voice Dalesman", "type": "creator"},
+                {"id": "c2", "name": "Pendle Voice Lancashire Life", "type": "creator"},
+                {"id": "c3", "name": "Pendle Voice Leader and Times", "type": "creator"},
+            ],
+            "slots": {},
+        },
+    )
+
+    DialogValidationInterceptor().process(hi)
+    gate = DialogValidationGateHandler()
+    assert gate.can_handle(hi) is True
+
+    res = gate.handle(hi)
+    speech = res["outputSpeech"]["ssml"]
+    assert "That did not match the available choices beginning Pendle Voice." in speech
+    assert "First, Dalesman." in speech
+    assert "Second, Lancashire Life." in speech
+    assert "Third, Leader and Times." in speech
+    assert res["shouldEndSession"] is False
+
+
+def test_dialog_validation_gate_speaks_publication_retry_for_unrecognized_utterance():
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {"searchQuery": {"name": "searchQuery", "value": "yu"}},
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "ambiguity",
+        context={
+            "phrase": "dorking",
+            "candidates": [
+                {"id": "p1", "name": "Dorking News April", "type": "publication"},
+                {"id": "p2", "name": "Dorking Mag May", "type": "publication"},
+            ],
+            "displayedCandidates": [
+                {"id": "p1", "name": "Dorking News April", "type": "publication"},
+                {"id": "p2", "name": "Dorking Mag May", "type": "publication"},
+            ],
+            "candidatePagination": {"kind": "publication"},
+            "slots": {},
+        },
+    )
+
+    DialogValidationInterceptor().process(hi)
+    gate = DialogValidationGateHandler()
+    assert gate.can_handle(hi) is True
+
+    res = gate.handle(hi)
+    speech = res["outputSpeech"]["ssml"]
+    assert "I didn't match that to one of the publication choices." in speech
+    assert "First, Dorking News April." in speech
+    assert "Second, Dorking Mag May." in speech
+    assert res["shouldEndSession"] is False
+
+
+
