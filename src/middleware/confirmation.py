@@ -28,6 +28,8 @@ class SearchConfirmationGateHandler(AbstractRequestHandler):
         nlp = attrs.get("_nlp")
         if not isinstance(nlp, dict) or not nlp.get("intent"):
             return True
+        if ConfirmationPolicy._skip_confirmation(nlp):
+            return False
         slots = nlp.get("slots") or {}
         blocked = bool(
             nlp.get("intent") in {"unclear", "resolver_unavailable"}
