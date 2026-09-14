@@ -7,6 +7,7 @@ from ask_sdk_core.dispatch_components import (
     AbstractRequestInterceptor,
 )
 
+from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.request import AlexaRequest
@@ -106,12 +107,14 @@ class DialogValidationPolicy:
         has_previous = DialogSelection.displayed_has_previous(context)
         publication_picker = pagination.get("kind") == "publication"
         message = (
-            SearchSpeech.publication_ambiguity_message(
-                candidates, has_more=has_more, has_previous=has_previous
+            AvailabilitySpeech.choice_retry(
+                "publication",
+                candidates,
+                has_more=has_more,
+                has_previous=has_previous,
             )
             if publication_picker
-            else SearchSpeech.ambiguous_reference_message(
-                "that name",
+            else SearchSpeech.ambiguity_retry_message(
                 candidates,
                 has_more=has_more,
                 has_previous=has_previous,

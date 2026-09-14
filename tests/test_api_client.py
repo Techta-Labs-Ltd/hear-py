@@ -783,3 +783,42 @@ async def test_start_playback_awaits_cleanup_and_builds_audio_directive(monkeypa
     assert response["shouldEndSession"] is True
     reminders.cancel.assert_awaited_once_with(handler_input)
     assert directive["audioItem"]["stream"]["token"] == "content-1"
+
+
+@pytest.mark.asyncio
+async def test_register_listener_sends_post_to_alexa_relative_path(monkeypatch):
+    captured = {}
+
+    async def fake_raw(self, method, path, body, timeout_ms):
+        captured["call"] = (method, path, body, timeout_ms)
+        return 200, {"status": "registered", "listenerId": "l-123"}
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_raw)
+    client = HearApiClient(HearApiOptions(base_url="https://api.test", path_prefix="api/v1/alexa"))
+    profile = {"alexaUserId": "amzn1.ask.account.TEST", "locale": "en-GB"}
+    result = await client.register_listener(profile)
+    assert result == {"status": "registered", "listenerId": "l-123"}
+    assert captured["call"] == (
+        "POST",
+        "/listeners/register",
+        profile,
+        None,
+    )
+    assert client._build_api_path(captured["call"][1]) == "/api/v1/alexa/listeners/register"
+
+
+@pytest.mark.asyncio
+async def test_register_listener_without_user_id_returns_none(monkeypatch):
+    called = False
+
+    async def fake_raw(self, *args, **kwargs):
+        nonlocal called
+        called = True
+        return 200, {}
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_raw)
+    client = HearApiClient(HearApiOptions(base_url="https://api.test"))
+    result = await client.register_listener({})
+    assert result is None
+    assert called is False
+

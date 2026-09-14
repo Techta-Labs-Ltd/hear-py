@@ -828,3 +828,257 @@ async def test_user_idle_yes_does_not_trigger_search_confirmation():
     res = gate.handle(hi)
     assert "Please say the name of a talking newspaper, creator, publication, or city" in res["outputSpeech"]["ssml"]
 
+
+@pytest.mark.asyncio
+async def test_resolver_interceptor_preserves_availability_dialog_on_fallback_intent():
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "availability",
+        context={"kind": "publication", "candidates": [{"id": "p1", "name": "Pub 1"}]},
+    )
+    resolver = AsyncMock()
+    container = ApplicationContainer(resolver=resolver)
+
+    await ResolverInterceptor(deps=container).process(hi)
+
+    assert resolver.resolve_utterance.call_count == 0
+    active = DialogStateManager.get_active(hi)
+    assert active is not None
+    assert active["type"] == "availability"
+
+
+@pytest.mark.asyncio
+async def test_resolver_interceptor_preserves_availability_dialog_on_dismiss_phrase():
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "something else",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "availability",
+        context={"kind": "publication", "candidates": [{"id": "p1", "name": "Pub 1"}]},
+    )
+    resolver = AsyncMock()
+    container = ApplicationContainer(resolver=resolver)
+
+    await ResolverInterceptor(deps=container).process(hi)
+
+    assert resolver.resolve_utterance.call_count == 0
+    active = DialogStateManager.get_active(hi)
+    assert active is not None
+    assert active["type"] == "availability"
+
+
+def test_fallback_handler_preserves_ambiguity_dialog_from_active_state():
+    from src.controllers.fallback import FallbackHandler
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": "AMAZON.FallbackIntent", "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "ambiguity",
+        context={
+            "phrase": "dorking",
+            "candidates": [
+                {"id": "c1", "name": "Dorking News", "entityType": "publication"},
+                {"id": "c2", "name": "Dorking Magazine", "entityType": "publication"},
+            ],
+            "slots": {"ambiguousReferences": [{"phrase": "dorking"}]},
+        },
+    )
+    container = ApplicationContainer()
+    handler = FallbackHandler(deps=container)
+    assert handler.can_handle(hi) is True
+
+    res = handler.handle(hi)
+    speech = res["outputSpeech"]["ssml"]
+    assert "Dorking" in speech
+    assert "First, News" in speech
+    assert "Second, Magazine" in speech
+    assert res["shouldEndSession"] is False
+
+
+def test_dialog_validation_gate_speaks_ambiguity_retry_for_unrecognized_utterance():
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {"searchQuery": {"name": "searchQuery", "value": "dan"}},
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "ambiguity",
+        context={
+            "phrase": "pendle voice",
+            "candidates": [
+                {"id": "c1", "name": "Pendle Voice Dalesman", "type": "creator"},
+                {"id": "c2", "name": "Pendle Voice Lancashire Life", "type": "creator"},
+                {"id": "c3", "name": "Pendle Voice Leader and Times", "type": "creator"},
+            ],
+            "displayedCandidates": [
+                {"id": "c1", "name": "Pendle Voice Dalesman", "type": "creator"},
+                {"id": "c2", "name": "Pendle Voice Lancashire Life", "type": "creator"},
+                {"id": "c3", "name": "Pendle Voice Leader and Times", "type": "creator"},
+            ],
+            "slots": {},
+        },
+    )
+
+    DialogValidationInterceptor().process(hi)
+    gate = DialogValidationGateHandler()
+    assert gate.can_handle(hi) is True
+
+    res = gate.handle(hi)
+    speech = res["outputSpeech"]["ssml"]
+    assert "That did not match the available choices beginning Pendle Voice." in speech
+    assert "First, Dalesman." in speech
+    assert "Second, Lancashire Life." in speech
+    assert "Third, Leader and Times." in speech
+    assert res["shouldEndSession"] is False
+
+
+def test_dialog_validation_gate_speaks_publication_retry_for_unrecognized_utterance():
+    from src.middleware.dialog_validation import (
+        DialogValidationGateHandler,
+        DialogValidationInterceptor,
+    )
+
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-alexa-user-123"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {
+                    "name": "OpenDiscoveryIntent",
+                    "slots": {"searchQuery": {"name": "searchQuery", "value": "yu"}},
+                },
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {
+            "onboardingComplete": True,
+            "listenerId": "test-listener-456",
+        },
+        "_dirty": False,
+    }
+    hi = HandlerInput(envelope, attributes, None, ResponseBuilder())
+    DialogStateManager.activate(
+        hi,
+        "ambiguity",
+        context={
+            "phrase": "dorking",
+            "candidates": [
+                {"id": "p1", "name": "Dorking News April", "type": "publication"},
+                {"id": "p2", "name": "Dorking Mag May", "type": "publication"},
+            ],
+            "displayedCandidates": [
+                {"id": "p1", "name": "Dorking News April", "type": "publication"},
+                {"id": "p2", "name": "Dorking Mag May", "type": "publication"},
+            ],
+            "candidatePagination": {"kind": "publication"},
+            "slots": {},
+        },
+    )
+
+    DialogValidationInterceptor().process(hi)
+    gate = DialogValidationGateHandler()
+    assert gate.can_handle(hi) is True
+
+    res = gate.handle(hi)
+    speech = res["outputSpeech"]["ssml"]
+    assert "I didn't match that to one of the publication choices." in speech
+    assert "First, Dorking News April." in speech
+    assert "Second, Dorking Mag May." in speech
+    assert res["shouldEndSession"] is False
+
+
+

@@ -191,26 +191,20 @@ class SearchSpeech:
 
     @staticmethod
     def first_publication_choices_message(
-        candidates: list[dict],
-        *,
-        has_more: bool = False,
-        has_previous: bool = False,
+        candidates: list[dict], *, has_more: bool = False, has_previous: bool = False
     ) -> str:
+        intro = "You are already at the first publication choices."
         return SearchSpeech._publication_choice_message(
-            candidates,
-            "You are already at the first publication choices.",
-            has_more=has_more,
-            has_previous=has_previous,
+            candidates, intro, has_more=has_more, has_previous=has_previous
         )
 
     @staticmethod
     def publication_choices_exhausted_message(
         candidates: list[dict], *, has_previous: bool = False
     ) -> str:
+        intro = "Those are all the publication choices I found."
         return SearchSpeech._publication_choice_message(
-            candidates,
-            "Those are all the publication choices I found.",
-            has_previous=has_previous,
+            candidates, intro, has_previous=has_previous
         )
 
     @staticmethod
@@ -224,13 +218,26 @@ class SearchSpeech:
     def ambiguity_retry_message(
         candidates: list[dict], *, has_more: bool = False, has_previous: bool = False
     ) -> str:
-        _, names = SearchSpeech._candidate_names(candidates)
+        raw_names, names = SearchSpeech._candidate_names(candidates)
+        prefix = SearchSpeech._common_name_prefix(raw_names)
+        if prefix and len(raw_names) > 1:
+            suffixes = [
+                Speech.escape_ssml_lite(n[len(prefix) :].strip(" ,-–—"))
+                for n in raw_names
+                if n[len(prefix) :].strip(" ,-–—")
+            ]
+            if len(suffixes) == len(raw_names):
+                choices = SearchSpeech._numbered_choices(suffixes)
+                ordinals = SearchSpeech._ordinal_choices(len(suffixes))
+                safe_prefix = Speech.escape_ssml_lite(prefix)
+                message = (
+                    f"That did not match the available choices beginning {safe_prefix}. "
+                    f"{choices} You can say the distinguishing part, or {ordinals}."
+                )
+                return SearchSpeech._with_navigation_options(message, has_more, has_previous)
         choices = SearchSpeech._numbered_choices(names)
         ordinals = SearchSpeech._ordinal_choices(len(names))
-        message = (
-            f"That did not match the available choices. {choices} "
-            f"You can say the name, or {ordinals}."
-        )
+        message = f"That did not match the available choices. {choices} You can say the name, or {ordinals}."
         return SearchSpeech._with_navigation_options(message, has_more, has_previous)
 
     @staticmethod

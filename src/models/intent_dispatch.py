@@ -6,6 +6,7 @@ import time
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
+from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.entities import AlexaEntities
 from src.alexa.playback import AlexaPlayback
@@ -15,7 +16,7 @@ from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
-from src.models.dialog import DialogStateManager
+from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.feedback_response import (
     EnjoyedFeedback,
     NotEnjoyedFeedback,
@@ -192,6 +193,18 @@ class IntentDispatcher:
             "createdAt": now,
             "expiresAt": now + 300,
         }
+        existing = (
+            self._deps.user.snapshot(handler_input).get("pendingAmbiguity")
+            or (DialogStateManager.get_active(handler_input) or {}).get("context")
+        )
+        is_retry = bool(
+            existing
+            and isinstance(existing, dict)
+            and existing.get("candidates")
+            and nlp_data.get("followUpMatched")
+        )
+        pagination = (existing or {}).get("candidatePagination") or {}
+        publication_picker = pagination.get("kind") == "publication"
         self._deps.user.update(
             handler_input,
             {
@@ -202,8 +215,29 @@ class IntentDispatcher:
             },
         )
         DialogStateManager.activate(handler_input, "ambiguity", context=pending)
-        message = SearchSpeech.ambiguous_reference_message(phrase, displayed, has_more=has_more)
-        reprompt = SearchSpeech.choice_reprompt(displayed, has_more=has_more)
+        if is_retry:
+            has_previous = DialogSelection.displayed_has_previous(existing or {})
+            message = (
+                AvailabilitySpeech.choice_retry(
+                    "publication",
+                    displayed,
+                    has_more=has_more,
+                    has_previous=has_previous,
+                )
+                if publication_picker
+                else SearchSpeech.ambiguity_retry_message(
+                    displayed,
+                    has_more=has_more,
+                    has_previous=has_previous,
+                )
+            )
+        else:
+            message = SearchSpeech.ambiguous_reference_message(phrase, displayed, has_more=has_more)
+        reprompt = SearchSpeech.choice_reprompt(
+            displayed,
+            publication_picker=publication_picker,
+            has_more=has_more,
+        )
         builder = (
             handler_input.response_builder.speak(Ssml.ssml(message))
             .reprompt(Ssml.ssml(reprompt))

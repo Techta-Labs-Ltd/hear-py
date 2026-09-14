@@ -262,6 +262,13 @@ class AvailabilityDialog:
                 Speech.WELCOME_REPROMPT,
             )
         raw = self._request_text(handler_input)
+        if DialogSelection.is_dismiss_phrase(raw):
+            DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.CHOICES_DISMISSED,
+                Speech.WELCOME_REPROMPT,
+            )
         candidate = DialogSelection.match_pending_candidate(handler_input, context, raw)
         if candidate:
             return await self._select(handler_input, context, candidate)
