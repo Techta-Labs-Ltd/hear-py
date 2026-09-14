@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
 from src.alexa.context import RequestContext
+from src.alexa.entities import AlexaEntities
+from src.alexa.playback import AlexaPlayback
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
+from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.constants.discovery import DiscoveryConstants
 from src.models.dialog import DialogStateManager
 from src.models.feedback_response import (
     EnjoyedFeedback,
@@ -26,7 +32,9 @@ class IntentDispatcher:
         {
             "trending",
             "local",
+            "location",
             "creator",
+            "creator_location",
             "organization",
             "publication",
             "category",
@@ -35,6 +43,9 @@ class IntentDispatcher:
             "following",
             "general",
             "search",
+            "dismiss_choices",
+            "idle_dismiss",
+            "stop",
             "feedback_enjoyed",
             "feedback_not_enjoyed",
             "feedback_somewhat",
@@ -102,7 +113,11 @@ class IntentDispatcher:
         if alexa_intent in self.NON_DISPATCHABLE_INTENTS:
             return False
         nlp_data = RequestContext.request(handler_input).get("_nlp")
-        return bool(nlp_data and nlp_data.get("intent") in self.DISPATCHABLE_INTENTS)
+        if not nlp_data:
+            return False
+        if nlp_data.get("status") == "ambiguous" or (nlp_data.get("slots") or {}).get("ambiguousReferences"):
+            return True
+        return bool(nlp_data.get("intent") in self.DISPATCHABLE_INTENTS)
 
     def dispatch(self, handler_input: HandlerInput) -> Response:
         attrs = RequestContext.request(handler_input)
@@ -115,6 +130,28 @@ class IntentDispatcher:
         RequestContext.replace_request(handler_input, attrs)
         if pending:
             return self._confirmation_response(handler_input, nlp_data, pending)
+        if nlp_data.get("status") == "ambiguous" or (nlp_data.get("slots") or {}).get("ambiguousReferences"):
+            return self._ambiguity_response(handler_input, nlp_data)
+        if intent == "dismiss_choices":
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.CHOICES_DISMISSED))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        if intent == "idle_dismiss":
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                f"Ok. {Speech.WELCOME_REPROMPT}",
+                Speech.WELCOME_REPROMPT,
+            )
+        if intent == "stop":
+            DialogStateManager.clear_transient_discovery(handler_input)
+            return (
+                handler_input.response_builder.speak(Speech.GOODBYE)
+                .add_directive(AlexaPlayback.build_stop_directive())
+                .response
+            )
         if intent == "unclear":
             return self._unclear_response(handler_input, nlp_data)
         if intent == "resolver_unavailable":
@@ -125,12 +162,57 @@ class IntentDispatcher:
             return self._deps.browse.content(handler_input)
         if intent == "show_more":
             return self._deps.browse.more(handler_input)
-        if intent == "local":
+        if intent in {"local", "location"}:
             return self._deps.availability.begin_local(handler_input, nlp_data)
+        if intent == "creator_location":
+            return self._deps.availability.begin_creator_location(handler_input, nlp_data)
         action_type = self.ACTIONS.get(intent)
         if action_type:
             return action_type(deps=self._deps).execute(handler_input)
         return self._fallback_response(handler_input)
+
+    def _ambiguity_response(self, handler_input: HandlerInput, nlp_data: dict) -> Response:
+        ambiguities = nlp_data.get("ambiguities") or (nlp_data.get("slots") or {}).get("ambiguousReferences") or []
+        reference = ambiguities[0] if ambiguities else {}
+        phrase = str(reference.get("phrase") or "").strip() or "that request"
+        candidates = list(reference.get("candidates") or [])
+        displayed = candidates[: DiscoveryConstants.CHOICE_PAGE_SIZE]
+        has_more = len(candidates) > DiscoveryConstants.CHOICE_PAGE_SIZE
+        now = int(time.time())
+        pending = {
+            "phrase": phrase,
+            "candidates": candidates,
+            "choiceCandidates": candidates,
+            "displayedCandidates": displayed,
+            "spokenCandidateOffset": min(DiscoveryConstants.CHOICE_PAGE_SIZE, len(candidates)),
+            "offset": 0,
+            "intent": nlp_data.get("intent") or "general",
+            "searchPayload": dict(nlp_data.get("searchPayload") or {}),
+            "slots": dict(nlp_data.get("slots") or {}),
+            "createdAt": now,
+            "expiresAt": now + 300,
+        }
+        self._deps.user.update(
+            handler_input,
+            {
+                "pendingAmbiguity": pending,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "_requiresReliableSave": True,
+            },
+        )
+        DialogStateManager.activate(handler_input, "ambiguity", context=pending)
+        message = SearchSpeech.ambiguous_reference_message(phrase, displayed, has_more=has_more)
+        reprompt = SearchSpeech.choice_reprompt(displayed, has_more=has_more)
+        builder = (
+            handler_input.response_builder.speak(Ssml.ssml(message))
+            .reprompt(Ssml.ssml(reprompt))
+            .set_should_end_session(False)
+        )
+        directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(displayed)
+        if directive:
+            builder.add_directive(directive)
+        return builder.response
 
     def _clarification_response(
         self, handler_input: HandlerInput, attrs: dict, intent: str, clarification: dict
@@ -147,7 +229,7 @@ class IntentDispatcher:
             builder.add_directive(
                 {"type": "Dialog.ElicitSlot", "slotToElicit": clarification["elicitSlot"]}
             )
-        return builder.get_response()
+        return builder.response
 
     def _confirmation_response(
         self, handler_input: HandlerInput, nlp_data: dict, pending: dict
@@ -184,7 +266,7 @@ class IntentDispatcher:
             handler_input.response_builder.speak(Ssml.ssml(prompt))
             .reprompt(Ssml.ssml(prompt))
             .set_should_end_session(False)
-            .get_response()
+            .response
         )
 
     def _unclear_response(self, handler_input: HandlerInput, nlp_data: dict) -> Response:
@@ -204,7 +286,7 @@ class IntentDispatcher:
             handler_input.response_builder.speak(Ssml.ssml(message))
             .reprompt(Ssml.ssml("Say yes to confirm, or no to skip."))
             .set_should_end_session(False)
-            .get_response()
+            .response
         )
 
     @staticmethod
@@ -222,7 +304,7 @@ class IntentDispatcher:
             )
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
-            .get_response()
+            .response
         )
 
     @staticmethod
@@ -236,7 +318,7 @@ class IntentDispatcher:
             )
             .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
-            .get_response()
+            .response
         )
 
     @staticmethod
@@ -245,5 +327,6 @@ class IntentDispatcher:
             handler_input.response_builder.speak(Speech.FALLBACK_SPEECH)
             .reprompt(Speech.WELCOME_REPROMPT)
             .set_should_end_session(False)
-            .get_response()
+            .response
         )
+

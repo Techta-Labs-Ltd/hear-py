@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class SearchConstants:
-    ALLOWED_SEARCH_SORTS = frozenset({"recommended", "nearest", "popular", "latest", "trending"})
+    ALLOWED_SEARCH_SORTS = frozenset({"nearest", "popular", "latest", "trending"})
     SEARCH_FILTER_KEYS = (
         "contentIds",
         "creatorIds",
@@ -32,7 +32,5 @@ class SearchConstants:
         "listenerId",
         "alexaUserId",
         "filter",
-        "isLocal",
-        "isRecommended",
     )
     SEARCH_DATE_FILTER_KEYS = ("publishedFrom", "publishedTo")

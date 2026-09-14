@@ -10,13 +10,11 @@ class AlexaInteractionModelBuilder:
     SLOT_NAMES = (
         "HEAR_LOCATION",
         "HEAR_ORGANIZATION",
-        "HEAR_CREATOR",
         "HEAR_TOPIC",
     )
     DISCOVERY_SLOT_NAME = "HEAR_DISCOVERY"
     DISCOVERY_ALIAS_SLOT_NAMES = (
         "HEAR_ORGANIZATION",
-        "HEAR_CREATOR",
         "HEAR_TOPIC",
     )
     MAX_MODEL_BYTES = 1_500_000

@@ -3,7 +3,9 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
+from src.constants.creator import CreatorConstants
 from src.constants.discovery import DiscoveryConstants
+from src.constants.organization import OrganizationConstants
 from src.constants.search import SearchConstants
 
 
@@ -266,8 +268,38 @@ class SearchFilterUtils:
         return bool(
             normalized
             and normalized not in DiscoveryConstants.RESERVED_DISCOVERY_PHRASES
-            and (normalized not in DiscoveryConstants.CREATOR_SOURCE_PLACEHOLDERS)
+            and not SearchFilterUtils.is_generic_creator_request(normalized)
         )
+
+    @staticmethod
+    def is_generic_creator_request(value: object) -> bool:
+        normalized = SearchFilterUtils.normalize_discovery_phrase(value)
+        if normalized in CreatorConstants.SOURCE_PLACEHOLDERS:
+            return True
+        tokens = re.findall("[a-z]+", normalized)
+        has_creator_role = any(
+            token in CreatorConstants.ROLE_WORDS for token in tokens
+        )
+        has_creator_asr = any(
+            left == "create" and right == "a"
+            for left, right in zip(tokens, tokens[1:])
+        )
+        return bool(
+            tokens
+            and (has_creator_role or has_creator_asr)
+            and all(token in CreatorConstants.GENERIC_WORDS for token in tokens)
+        )
+
+    @staticmethod
+    def extract_creator_city(value: object) -> str | None:
+        if not value:
+            return None
+        text = SearchFilterUtils.normalize_discovery_phrase(value)
+        match = re.search(r"\bcreators?\s+(?:in|from|near|around)\s+(.+)$", text)
+        if not match:
+            return None
+        city = re.sub(r"^(?:the\s+(?:city|town)\s+of\s+|(?:city|town)\s+of\s+)", "", match.group(1).strip()).strip()
+        return city or None
 
     @staticmethod
     def is_meaningful_organization_source(value: object) -> bool:
@@ -286,29 +318,29 @@ class SearchFilterUtils:
             "",
             normalized,
         ).strip()
-        if repair_phrase in DiscoveryConstants.ORGANIZATION_ASR_REPAIR_PHRASES:
+        if repair_phrase in OrganizationConstants.ASR_REPAIR_PHRASES:
             return "repair"
         if (
-            normalized in DiscoveryConstants.ORGANIZATION_SOURCE_PLACEHOLDERS
-            or repair_phrase in DiscoveryConstants.ORGANIZATION_SOURCE_PLACEHOLDERS
+            normalized in OrganizationConstants.SOURCE_PLACEHOLDERS
+            or repair_phrase in OrganizationConstants.SOURCE_PLACEHOLDERS
         ):
             return "generic"
         tokens = re.findall("[a-z]+", normalized)
-        has_talking_newspaper = "talking" in tokens and (
-            "newspaper" in tokens or ("news" in tokens and "paper" in tokens)
+        has_talking_newspaper = any(
+            prefix in tokens for prefix in ("talking", "audio", "spoken")
+        ) and any(
+            word in tokens for word in ("news", "newspaper", "newspapers", "paper", "papers")
         )
         generic_talking_newspaper = bool(
             has_talking_newspaper
             and tokens
-            and all((token in DiscoveryConstants.GENERIC_ORGANIZATION_WORDS for token in tokens))
+            and all((token in OrganizationConstants.GENERIC_WORDS for token in tokens))
         )
         under_specified = bool(
             organization_intent
             and (
                 not tokens
-                or all(
-                    (token in DiscoveryConstants.GENERIC_ORGANIZATION_WORDS for token in tokens)
-                )
+                or all((token in OrganizationConstants.GENERIC_WORDS for token in tokens))
             )
         )
         return "generic" if generic_talking_newspaper or under_specified else "specific"

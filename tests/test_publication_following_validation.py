@@ -54,7 +54,7 @@ async def test_incomplete_publication_source_skips_resolver_and_elicits_name(
     store = User.snapshot(mock_handler_input)
     assert store["awaitingPublicationSource"] is True
     assert store["activeDialog"]["type"] == "publication_source"
-    directive = DialogStateManager.source_capture_directive("publication_source")
+    directive = DialogStateManager.capture_directive("publication_source")
     assert directive["updatedIntent"]["name"] == "SelectPublicationSourceIntent"
     assert directive["slotToElicit"] == "publicationSourceQuery"
 

@@ -234,22 +234,32 @@ class HearApiClient:
         requested = payload if isinstance(payload, dict) else {}
         availability_filter = AvailabilityResponse.normalize_filter(requested.get("filter"))
         alexa_user_id = str(requested.get("alexaUserId") or "").strip()
+        listener_id = str(requested.get("listenerId") or "").strip()
+        is_recommended = bool(requested.get("isRecommended"))
         body = {
             "filter": availability_filter or {},
-            "alexaUserId": alexa_user_id,
             "page": AvailabilityResponse.integer(requested.get("page")),
             "limit": AvailabilityResponse.integer(
                 requested.get("limit"), DiscoveryConstants.CHOICE_PAGE_SIZE, 1
             ),
         }
+        if alexa_user_id:
+            body["alexaUserId"] = alexa_user_id
+        if listener_id:
+            body["listenerId"] = listener_id
+        if is_recommended:
+            body["isRecommended"] = True
         if availability_filter and "location" not in availability_filter:
             body["isLocal"] = bool(requested.get("isLocal"))
-        if availability_filter is None or not alexa_user_id:
+        if (availability_filter is None and not is_recommended) or not (
+            listener_id or alexa_user_id
+        ):
             supplied_filter = requested.get("filter")
             HearApiSupport.logger.warning(
-                "Hear API availability request rejected invalid filterKeys=%s alexaUserIdPresent=%s",
+                "Hear API availability request rejected invalid filterKeys=%s alexaUserIdPresent=%s listenerIdPresent=%s",
                 sorted(supplied_filter.keys()) if isinstance(supplied_filter, dict) else [],
                 bool(alexa_user_id),
+                bool(listener_id),
             )
             return AvailabilityResponse.failed(body)
         path = self._build_alexa_availability_path()
@@ -285,7 +295,9 @@ class HearApiClient:
         *,
         timeout_ms: int | None = None,
     ) -> dict | None:
-        if not isinstance(identity, dict) or not identity.get("alexaUserId"):
+        if not isinstance(identity, dict) or not (
+            identity.get("listenerId") or identity.get("alexaUserId") or identity.get("userEmail")
+        ):
             return None
         status, data = await self._raw_request(
             "POST",

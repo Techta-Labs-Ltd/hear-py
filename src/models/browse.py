@@ -5,6 +5,7 @@ from typing import Any, Dict
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
+from src.alexa.context import RequestContext
 from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.entities import AlexaEntities
 from src.alexa.request import AlexaRequest
@@ -314,6 +315,16 @@ class Browse:
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
                 .response
+            )
+        nlp = RequestContext.request(handler_input).get("_nlp", {})
+        slots = nlp.get("slots") if isinstance(nlp.get("slots"), dict) else {}
+        recommended = bool(slots.get("isRecommended")) or (
+            AlexaRequest.get_intent_name(handler_input) == "PlayRecommendationIntent"
+        )
+        if recommended:
+            return await self.dependencies.availability.begin_recommendations(
+                handler_input,
+                nlp=nlp,
             )
         active_store = User.snapshot(handler_input)
         search_result = await self.dependencies.search.discover_content_via_search(

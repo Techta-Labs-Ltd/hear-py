@@ -482,7 +482,6 @@ class User:
                 state.get("pendingResolution"),
             ),
             (state.get("pendingAmbiguity"), "ambiguity", state.get("pendingAmbiguity")),
-            (state.get("awaitingCreatorName"), "creator_name", {}),
             (state.get("awaitingOrganizationName"), "organization_name", {}),
             (state.get("awaitingPublicationSource"), "publication_source", {}),
             (
@@ -525,6 +524,10 @@ class User:
     def migrate_dialog(store: dict) -> dict:
         if not isinstance(store, dict):
             return store
+        raw_active = store.get("activeDialog")
+        if isinstance(raw_active, dict) and raw_active.get("type") == "creator_name":
+            store["activeDialog"] = None
+        store.pop("awaitingCreatorName", None)
         active = User.active_dialog({**store, "activeDialog": store.get("activeDialog")})
         if active and not active.get("expiresAt") and active.get("type") != "onboarding":
             now = int(time.time())

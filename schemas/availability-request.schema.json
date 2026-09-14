@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hear-py/availability-request.schema.json",
+  "title": "Hear Alexa availability request",
+  "description": "Source discovery or source inventory body POSTed to /alexa/availability.",
+  "type": "object",
+  "required": ["filter", "page", "limit"],
+  "anyOf": [
+    { "required": ["listenerId"] },
+    { "required": ["alexaUserId"] }
+  ],
+  "properties": {
+    "filter": {
+      "type": "object",
+      "properties": {
+        "creatorId": { "type": "string", "format": "uuid" },
+        "organizationId": { "type": "string", "format": "uuid" },
+        "isCreator": { "type": "boolean" },
+        "categorySlugs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "location": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "minLength": 1 },
+            "countryCode": { "type": "string", "minLength": 2, "maxLength": 2 },
+            "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+            "longitude": { "type": "number", "minimum": -180, "maximum": 180 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "alexaUserId": { "type": "string", "minLength": 1 },
+    "listenerId": { "type": "string", "format": "uuid" },
+    "isLocal": { "type": "boolean" },
+    "isRecommended": { "type": "boolean" },
+    "page": { "type": "integer", "minimum": 0 },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+  },
+  "additionalProperties": false
+}

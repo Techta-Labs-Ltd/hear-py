@@ -5,6 +5,8 @@ from src.constants.discovery import DiscoveryConstants
 
 class AvailabilityResponse:
     SOURCE_FILTER_KEYS = ("creatorId", "organizationId")
+    TAXONOMY_FILTER_KEYS = ("categorySlugs", "tags")
+    BOOLEAN_FILTER_KEYS = ("isCreator",)
     LOCATION_FILTER_KEYS = ("city", "countryCode", "latitude", "longitude")
 
     @staticmethod
@@ -12,6 +14,20 @@ class AvailabilityResponse:
         output = {
             key: value[key] for key in AvailabilityResponse.SOURCE_FILTER_KEYS if value.get(key)
         }
+        output.update(
+            {
+                key: value[key]
+                for key in AvailabilityResponse.TAXONOMY_FILTER_KEYS
+                if value.get(key)
+            }
+        )
+        output.update(
+            {
+                key: value[key]
+                for key in AvailabilityResponse.BOOLEAN_FILTER_KEYS
+                if value.get(key) is not None
+            }
+        )
         location = value.get("location")
         if isinstance(location, dict):
             output["location"] = {
@@ -47,7 +63,12 @@ class AvailabilityResponse:
     def normalize_filter(value: object) -> dict | None:
         if not isinstance(value, dict) or not value:
             return None
-        allowed_keys = set(AvailabilityResponse.SOURCE_FILTER_KEYS) | {"location"}
+        allowed_keys = (
+            set(AvailabilityResponse.SOURCE_FILTER_KEYS)
+            | set(AvailabilityResponse.TAXONOMY_FILTER_KEYS)
+            | set(AvailabilityResponse.BOOLEAN_FILTER_KEYS)
+            | {"location"}
+        )
         if any(key not in allowed_keys for key in value):
             return None
 
@@ -59,6 +80,27 @@ class AvailabilityResponse:
             if not source_id:
                 return None
             output[key] = source_id
+
+        for key in AvailabilityResponse.TAXONOMY_FILTER_KEYS:
+            if key not in value:
+                continue
+            raw_values = value.get(key)
+            values = raw_values if isinstance(raw_values, list) else [raw_values]
+            normalized = []
+            for item in values:
+                text = str(item or "").strip().casefold()
+                if text and text not in normalized:
+                    normalized.append(text)
+            if not normalized:
+                return None
+            output[key] = normalized
+
+        for key in AvailabilityResponse.BOOLEAN_FILTER_KEYS:
+            if key not in value:
+                continue
+            if not isinstance(value[key], bool):
+                return None
+            output[key] = value[key]
 
         if "location" in value:
             raw_location = value.get("location")

@@ -220,8 +220,6 @@ Content-Type: application/json
   "page": 0,
   "alexaUserId": "amzn1.ask.account.current-alias",
   "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
-  "isLocal": true,
-  "isRecommended": false,
   "sort": "nearest",
   "filter": {
     "contentIds": [],
@@ -241,7 +239,12 @@ Content-Type: application/json
 }
 ~~~
 
-Empty filters are omitted in real requests. Allowed sorts are `recommended`, `nearest`, `popular`, `latest`, and `trending`.
+Empty filters are omitted in real requests. Allowed search sorts are `nearest`,
+`popular`, `latest`, and `trending`. Recommendations are source discovery and
+use `/alexa/availability`, never `/alexa/search`.
+The search contract contains neither `isLocal` nor `isRecommended`. Local
+catalogue searches use `sort: "nearest"` with listener identity or filter
+coordinates.
 
 All listener-facing discovery and choice searches use pages of three. Every spoken
 page starts again at first, second, and third, including pages reached through next
@@ -263,15 +266,21 @@ Machine-readable request contract: [`schemas/search-request.schema.json`](../sch
 
 ### 7.1 Alexa availability bridge
 
-Availability is a small catalogue-summary endpoint. It tells the voice client which
-choices to offer; it does not return playable audio and it does not replace
-`/alexa/search`.
+Availability is the recommendation, local-source, and catalogue-summary endpoint.
+It returns ordered creator and organisation choices for recommendation and local
+requests, then reports publication and standalone-track inventory for the source
+the listener selects. It does not return playable audio.
+
+Trending requests remain on `/alexa/search` with `sort: "trending"`.
 
 ~~~http
 POST <HEAR_API_URL>/<HEAR_API_PATH_PREFIX>/availability
 X-Api-Key: <HEAR_API_KEY>
 Content-Type: application/json
 ~~~
+
+Machine-readable request contract:
+[`schemas/availability-request.schema.json`](../schemas/availability-request.schema.json).
 
 Location request:
 
@@ -354,18 +363,20 @@ Source response:
 
 The skill follows these rules:
 
-1. A location response becomes a paged spoken list of organisations and creators.
-2. A source with publications and standalone tracks prompts for publications or tracks.
-3. A source with publications only goes directly to the publication choices.
-4. A source with no publications goes silently to `/alexa/search`, filtered by the selected creator or organisation and `isPublication: false`.
-5. Choosing tracks calls `/alexa/search` with the source filter and `isPublication: false`; choosing a track then performs a `contentIds` lookup.
-6. Choosing a publication performs a `publicationIds` lookup through `/alexa/search`.
-7. Availability and track-choice requests use a limit of three. Each page is spoken as first, second, and third, and supports names, ordinals, next, and previous. The skill offers more choices only when another API page exists.
-8. A timeout, non-2xx response, invalid response, or empty location choice list falls back to the existing search flow without announcing an availability error.
+1. Local and recommendation responses become a paged spoken list of organisations and creators.
+2. Trending calls `/alexa/search` and presents playable content in trending order.
+3. A source with publications and standalone tracks prompts for publications or tracks.
+4. A source with publications only goes directly to the publication choices.
+5. A source with no publications goes silently to `/alexa/search`, filtered by the selected creator or organisation and `isPublication: false`.
+6. Choosing tracks calls `/alexa/search` with the source filter and `isPublication: false`; choosing a track then performs a `contentIds` lookup.
+7. Choosing a publication performs a `publicationIds` lookup through `/alexa/search`.
+8. Availability and track-choice requests use a limit of three. Each page is spoken as first, second, and third, and supports names, ordinals, next, and previous. The skill offers more choices only when another API page exists.
+9. A timeout, non-2xx response, invalid response, or empty source list does not trigger an unrestricted search or playback.
 
-The availability request intentionally carries no listener identity, profile data,
-utterance, or playback history. The source IDs and coordinates already supplied by
-the catalogue or resolver are sufficient for this bridge.
+Availability carries `alexaUserId` and `listenerId` when available. The backend
+uses canonical listener location for recommendations and canonical publication
+history to keep unheard publications above heard publications without excluding
+either group.
 
 ## 8. DynamoDB V2 state contract
 

@@ -23,8 +23,6 @@
         "city": { "type": "string" },
         "countryCode": { "type": "string" },
         "isPublication": { "type": "boolean" },
-        "isLocal": { "type": "boolean" },
-        "isRecommended": { "type": "boolean" },
         "latitude": { "type": "number" },
         "longitude": { "type": "number" },
         "publishedFrom": { "type": ["string", "null"] },
@@ -32,10 +30,8 @@
       },
       "additionalProperties": false
     },
-    "isLocal": { "type": "boolean" },
-    "isRecommended": { "type": "boolean" },
     "sort": {
-      "enum": ["recommended", "nearest", "popular", "latest", "trending"]
+      "enum": ["nearest", "popular", "latest", "trending"]
     }
   },
   "additionalProperties": false

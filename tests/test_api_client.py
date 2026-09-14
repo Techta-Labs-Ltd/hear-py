@@ -287,6 +287,30 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
 
 
 @pytest.mark.asyncio
+async def test_availability_accepts_recommendations_without_a_filter(monkeypatch):
+    captured = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        captured.update(body)
+        return 200, {"total": 0, "organizations": [], "creators": []}
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    result = await HearApiClient().availability(
+        {
+            "filter": {},
+            "listenerId": "listener-1",
+            "isRecommended": True,
+        }
+    )
+
+    assert result["failed"] is False
+    assert captured["filter"] == {}
+    assert captured["listenerId"] == "listener-1"
+    assert captured["isRecommended"] is True
+    assert "alexaUserId" not in captured
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "availability_filter",
     [
@@ -294,6 +318,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
         {"creatorIds": ["creator-1"]},
         {"location": {"city": "Swindon", "tags": ["news"]}},
         {"creatorId": ""},
+        {"isCreator": "true", "location": {"city": "Swindon"}},
         {"location": {}},
     ],
 )
@@ -320,6 +345,7 @@ async def test_availability_rejects_invalid_filters_without_an_http_call(
     ("availability_filter", "is_local"),
     [
         ({"location": {"city": "Swindon"}}, True),
+        ({"isCreator": True, "location": {"city": "Swindon"}}, True),
         ({"creatorId": "creator-1"}, False),
         ({"organizationId": "org-1"}, False),
         (
@@ -403,8 +429,9 @@ async def test_search_omits_sort_values_the_api_rejects(monkeypatch):
     client = HearApiClient()
     await client.search({"query": "news", "sort": "relevance"})
     assert "sort" not in sent
+    sent.clear()
     await client.search({"query": "news", "sort": "recommended"})
-    assert sent["sort"] == "recommended"
+    assert "sort" not in sent
 
 
 @pytest.mark.asyncio
@@ -457,6 +484,30 @@ async def test_search_forwards_canonical_listener_id(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_does_not_forward_legacy_discovery_flags(monkeypatch):
+    sent = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        sent.update(body)
+        return (200, {"results": [], "total": 0})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    await HearApiClient().search(
+        {
+            "query": "local news",
+            "listenerId": "listener-1",
+            "isLocal": True,
+            "isRecommended": True,
+            "sort": "nearest",
+        }
+    )
+
+    assert "isLocal" not in sent
+    assert "isRecommended" not in sent
+    assert sent["sort"] == "nearest"
+
+
+@pytest.mark.asyncio
 async def test_identity_resolution_uses_dedicated_endpoint(monkeypatch):
     captured = {}
 
@@ -474,6 +525,25 @@ async def test_identity_resolution_uses_dedicated_endpoint(monkeypatch):
     assert captured["method"] == "POST"
     assert captured["path"] == "/listeners/resolve"
     assert captured["body"] == {"alexaUserId": "alexa-1"}
+
+
+@pytest.mark.asyncio
+async def test_identity_resolution_accepts_canonical_listener_id(monkeypatch):
+    captured = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        captured.update({"method": method, "path": path, "body": body})
+        return (200, {"listenerId": "listener-1"})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    result = await HearApiClient(HearApiOptions(path_prefix="alexa")).resolve_listener_identity(
+        {"listenerId": "listener-1"},
+        timeout_ms=500,
+    )
+
+    assert result == {"listenerId": "listener-1"}
+    assert captured["path"] == "/listeners/resolve"
+    assert captured["body"] == {"listenerId": "listener-1"}
 
 
 @pytest.mark.asyncio
@@ -500,7 +570,6 @@ async def test_search_normalizes_legacy_top_level_dates_into_filter(monkeypatch)
 
 def test_allowed_sort_values_match_api_enum():
     assert HearApiSupport.ALLOWED_SORT_VALUES == {
-        "recommended",
         "nearest",
         "popular",
         "latest",

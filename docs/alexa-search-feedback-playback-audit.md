@@ -12,10 +12,10 @@ These were real design and coverage problems rather than one isolated bug. The c
 - Explicit mid-session feedback resumes the interrupted recording; return-time feedback asks whether to continue the exact previous discovery context.
 - Raw positive, neutral, negative, and skip feedback phrases are normalized before dispatch.
 - Alexa's `AMAZON.SkipIntent` and `AMAZON.NextIntent` interpretations of “skip” dismiss an active feedback or report question instead of advancing playback.
-- Generic source requests use the static no-ID `HEAR_SOURCE_KIND` slot and then elicit a domain-specific name.
-- Unknown source names captured during an active organisation, creator, or publication dialog still go to the resolver.
-- The generated slot validator covers all four domain slots and enforces domain ownership and approved canonical collisions.
-- The cleaned imports contain 5,429 locations, 286 organisations, 14 creators, and 4,562 topics. The 276 organisation accounts copied into `HEAR_CREATOR` and the two generic talking-newspaper topics were removed.
+- Generic source requests use the static no-ID `HEAR_SOURCE_KIND` slot. Creator requests elicit a city; organisation and publication requests retain their existing name flows.
+- Unknown creator names never reach raw catalogue search. Direct creator phrases continue only when the resolver supplies a concrete creator ID.
+- The generated slot validator covers the three active domain slots and enforces domain ownership and approved canonical collisions.
+- The obsolete creator-name slot import was removed. Locations, organisations, and topics remain generated domains.
 
 Verification completed with 715 passing tests, valid interaction-model JSON, successful byte-code compilation, clean Ruff checks, and a strict architecture audit with 0 errors and 0 warnings.
 
@@ -47,7 +47,7 @@ The deployed development skill was exercised through Alexa after the first corre
 | --- | --- | --- |
 | “Play from a talking newspaper” | `ChooseSourceKindIntent` | “Which talking newspaper would you like?” |
 | “Tynedale Talking News” after that prompt | `SelectOrganizationIntent` | Resolver canonicalised the name and Hear asked, “Did you want me to play content from Tynedale Talking Newspaper?” |
-| “Play from a creator” | `ChooseSourceKindIntent` | “Which creator would you like to hear?” |
+| “Play from a creator” | `ChooseSourceKindIntent` | “Which city would you like me to find creators in?” |
 | “Play something on Premier League” | `PlayContentIntent` | The topic survived confirmation and playback began with “Playing content on Premier League.” |
 | “Play last week sport update” | `SearchContentIntent` | The resolver date range was spoken as “published from 30 August to 5 September 2026.” |
 | “Play yesterday’s sport” | `PlayContentIntent` | The resolved calendar date was retained in the confirmation. |
@@ -307,7 +307,7 @@ This shared wording should be used for generic fallback, no-input, error, idle-r
 
 Context-specific prompts should remain specific:
 
-- “Which creator would you like to hear?”
+- “Which city would you like me to find creators in?”
 - “Which talking newspaper would you like?”
 - “Which publication would you like?”
 - “Which city should I use?”
@@ -341,7 +341,7 @@ This defeats the intended separation between organisations, creators, locations,
 
 - `HEAR_LOCATION`: actual cities, towns, localities, and approved spoken variants.
 - `HEAR_ORGANIZATION`: actual organisations and talking newspapers only.
-- `HEAR_CREATOR`: actual individual creators, authors, readers, narrators, and contributors only.
+- Creator names are not generated into a custom slot. Carrier-based creator phrases use `AMAZON.SearchQuery` and the resolver.
 - `HEAR_TOPIC`: actual topics, categories, subjects, and searchable tags only.
 - Do not place generic source-kind words in these entity slots.
 - Do not copy organisations into the creator slot merely because an organisation owns a creator account in the backend.

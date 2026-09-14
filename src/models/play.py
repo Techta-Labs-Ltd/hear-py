@@ -61,7 +61,7 @@ class PlayContent:
             handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_PUBLICATION))
             .reprompt(Ssml.ssml(Speech.ASK_PUBLICATION_REPROMPT))
             .add_directive(
-                DialogStateManager.source_capture_directive("publication_source")
+                DialogStateManager.capture_directive("publication_source")
             )
             .set_should_end_session(False)
             .response
@@ -140,28 +140,6 @@ class PlayCreator:
     def __init__(self, *, deps: object | None = None):
         self._deps = Search._dependencies(deps)
 
-    @staticmethod
-    def _await_name(handler_input) -> None:
-        DialogStateManager.activate(
-            handler_input,
-            "creator_name",
-            context={"slotName": "creatorQuery"},
-        )
-
-    @staticmethod
-    def _name_retry_response(handler_input):
-        DialogStateManager.clear(handler_input, "creator_name")
-        prompt = (
-            "I couldn't recognize that creator. Please say the creator's full name. "
-            "For example, David Beard."
-        )
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(prompt))
-            .reprompt(Ssml.ssml(prompt))
-            .set_should_end_session(False)
-            .response
-        )
-
     async def execute(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
             return (
@@ -170,59 +148,19 @@ class PlayCreator:
                 .set_should_end_session(False)
                 .response
             )
-        active_store = User.snapshot(handler_input)
         attrs = RequestContext.request(handler_input)
         nlp = attrs.get("_nlp", {}) if attrs else {}
         nlp_slots = nlp.get("slots", {}) if nlp else {}
         generic_creator_request = bool(nlp_slots.get("genericCreatorRequest"))
-        creator_query = (
-            nlp_slots.get("creatorQuery")
-            or Search._extract_slot_value(handler_input, "creatorQuery")
-            or Search._extract_slot_value(handler_input, "query")
-            or Search._raw_search_phrase(handler_input)
-        )
         resolved_creator = bool(nlp_slots.get("creatorIds"))
-        creator_label = nlp_slots.get("creatorName") or creator_query
-        raw_phrase = Search._raw_search_phrase(handler_input)
-        if (
-            creator_query
-            and Search._is_misrouted_browse_pagination(creator_query)
-            and Search._has_active_browse_catalog(active_store)
-        ):
-            return await Search._show_more_browse(handler_input, self._deps)
-        if nlp_slots.get("ambiguousReferences"):
-            result = await Search.discover_content_via_search(
-                handler_input, {"q": "", "intent": "creator"}, deps=self._deps
-            )
-            message = result.get("client_message") or SearchSpeech.unresolved_reference_message(
-                creator_query or "that name", ["creator"]
-            )
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(message))
-                .reprompt(Ssml.ssml("Please say one of the creator names I just offered."))
-                .set_should_end_session(False)
-                .response
-            )
-        if generic_creator_request or (not creator_query and (not resolved_creator)):
-            if AlexaRequest.get_intent_name(handler_input) == "SelectCreatorIntent":
-                return PlayCreator._name_retry_response(handler_input)
-            PlayCreator._await_name(handler_input)
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml("Which creator would you like to hear?")
-                )
-                .reprompt(Ssml.ssml("Just say their name."))
-                .add_directive(
-                    DialogStateManager.source_capture_directive("creator_name")
-                )
-                .set_should_end_session(False)
-                .response
-            )
-        User.update(handler_input, {"awaitingCreatorName": False})
+        if generic_creator_request or not resolved_creator:
+            return self._deps.availability.ask_creator_city(handler_input)
+        creator_query = str(nlp_slots.get("residualQuery") or "")
+        creator_label = nlp_slots.get("creatorName")
         search_result = await Search.discover_content_via_search(
             handler_input,
             {
-                "q": nlp_slots.get("residualQuery", "") if resolved_creator else creator_query,
+                "q": creator_query,
                 "intent": "creator",
             },
             deps=self._deps,
@@ -254,18 +192,11 @@ class PlayCreator:
                 .set_should_end_session(False)
                 .response
             )
-        try:
-            if SearchFilterUtils.wants_latest_playback(raw_phrase or ""):
-                return await Search._play_first_search_result(
-                    handler_input, search_result, label=creator_label, deps=self._deps
-                )
-        except Exception:
-            pass
         response = await Search.auto_play_first_from_search(
             handler_input,
             search_result,
             {
-                "discoveryIntent": "PlayByCreatorIntent",
+                "discoveryIntent": "creator",
                 "q": creator_query,
                 "locality": User.snapshot(handler_input).get("locality"),
                 "introOverride": None,
@@ -368,7 +299,7 @@ class PlayOrganization:
                 handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
                 .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
                 .add_directive(
-                    DialogStateManager.source_capture_directive("organization_name")
+                    DialogStateManager.capture_directive("organization_name")
                 )
                 .set_should_end_session(False)
                 .response

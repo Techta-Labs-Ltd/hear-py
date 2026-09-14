@@ -39,6 +39,15 @@ class DialogSelection:
         return re.sub("\\s+(?:one|option|choice)$", "", raw)
 
     @staticmethod
+    def is_dismiss_phrase(value: object) -> bool:
+        normalized = DialogSelection.normalize(value)
+        if not normalized:
+            return False
+        if normalized in DialogConstants.CHOICE_DISMISS_PHRASES:
+            return True
+        return normalized.startswith(("no ", "none of ", "neither of "))
+
+    @staticmethod
     def unique_candidates(candidates: list[dict]) -> list[dict]:
         seen: set[str] = set()
         unique = []
@@ -263,8 +272,8 @@ class DialogStateManager:
         return None
 
     @staticmethod
-    def source_capture_directive(dialog_type: str) -> dict:
-        capture = DialogConstants.SOURCE_CAPTURE[dialog_type]
+    def capture_directive(dialog_type: str) -> dict:
+        capture = DialogConstants.SLOT_CAPTURE[dialog_type]
         slot_name = capture["slotName"]
         return {
             "type": "Dialog.ElicitSlot",
@@ -357,7 +366,6 @@ class DialogStateManager:
             "suggestionIndex": 0,
             "excludedSuggestions": [],
             "awaitingOrganizationName": False,
-            "awaitingCreatorName": False,
             "awaitingPublicationSource": False,
             "_requiresReliableSave": True,
         }

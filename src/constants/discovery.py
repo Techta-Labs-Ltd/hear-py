@@ -2,7 +2,6 @@ from __future__ import annotations
 
 
 class DiscoveryConstants:
-    CREATOR_INTENTS = frozenset({"PlayByCreatorIntent", "SelectCreatorIntent"})
     ORGANIZATION_INTENTS = frozenset({"PlayByOrganizationIntent", "SelectOrganizationIntent"})
     PUBLICATION_INTENTS = frozenset({"PlayPublicationIntent", "SelectPublicationSourceIntent"})
     CHOICE_PAGE_SIZE = 3
@@ -137,6 +136,10 @@ class DiscoveryConstants:
             "i'd rather not say",
             "just play the next one",
             "whatever",
+            "yeah",
+            "yep",
+            "yes",
+            "yes please",
             "doesn't matter",
             "skip it",
             "not bothered",
@@ -150,9 +153,8 @@ class DiscoveryConstants:
         "PlayContentIntent": "general",
         "SearchContentIntent": "general",
         "PlayLatestContentIntent": "general",
-        "PlayByCreatorIntent": "creator",
         "SearchCreatorIntent": "creator",
-        "SelectCreatorIntent": "creator",
+        "SelectCreatorCityIntent": "creator_location",
         "PlayByOrganizationIntent": "organization",
         "SearchOrganizationIntent": "organization",
         "SelectOrganizationIntent": "organization",
@@ -175,7 +177,11 @@ class DiscoveryConstants:
             "",
             "anything",
             "anything to listen to",
+            "all right",
+            "alright",
             "audio",
+            "aye",
+            "cancel",
             "content",
             "give me anything",
             "give me something",
@@ -187,6 +193,17 @@ class DiscoveryConstants:
             "hear something",
             "let me listen",
             "listen",
+            "nah",
+            "never mind",
+            "no",
+            "no thanks",
+            "none",
+            "none of these",
+            "none of those",
+            "nope",
+            "nothing",
+            "ok",
+            "okay",
             "play",
             "play anything",
             "play audio",
@@ -210,6 +227,8 @@ class DiscoveryConstants:
             "start listening",
             "start playing",
             "start something",
+            "stop",
+            "sure",
             "whatever",
         }
     )
@@ -229,71 +248,5 @@ class DiscoveryConstants:
             "latest publication",
             "the latest publication",
             "something from a publication",
-        }
-    )
-    CREATOR_SOURCE_PLACEHOLDERS = frozenset(
-        {
-            "creator",
-            "a creator",
-            "the creator",
-            "from a creator",
-            "play creator",
-            "play a creator",
-            "play from a creator",
-            "play something from a creator",
-            "play me something from a creator",
-        }
-    )
-    ORGANIZATION_SOURCE_PLACEHOLDERS = frozenset(
-        {
-            "talking newspaper",
-            "talking news paper",
-            "talking news",
-            "talking paper",
-            "audio newspaper",
-            "an audio newspaper",
-            "local talking newspaper",
-            "a talking newspaper",
-            "a talking news paper",
-            "the talking newspaper",
-            "the talking news paper",
-            "from a talking newspaper",
-            "from a talking news paper",
-            "play from a talking newspaper",
-            "play from a talking news paper",
-            "play something from a talking newspaper",
-            "play something from a talking news paper",
-            "play me a talking newspaper",
-            "play me a talking news paper",
-        }
-    )
-    ORGANIZATION_ASR_REPAIR_PHRASES = frozenset(
-        {
-            "top english paper",
-            "top english newspaper",
-            "talk english paper",
-            "talk english newspaper",
-        }
-    )
-    GENERIC_ORGANIZATION_WORDS = frozenset(
-        {
-            "a",
-            "an",
-            "the",
-            "play",
-            "from",
-            "something",
-            "me",
-            "content",
-            "recording",
-            "recordings",
-            "by",
-            "for",
-            "talking",
-            "news",
-            "newspaper",
-            "paper",
-            "organisation",
-            "organization",
         }
     )

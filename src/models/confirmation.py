@@ -25,14 +25,14 @@ class ConfirmationPolicy:
     )
     ALEXA_INTENTS = frozenset(
         {
+            "ClarifySelectionIntent",
             "ChooseSourceKindIntent",
             "OpenDiscoveryIntent",
             "CarrierlessDiscoveryIntent",
             "PlayContentIntent",
             "SearchContentIntent",
-            "PlayByCreatorIntent",
             "SearchCreatorIntent",
-            "SelectCreatorIntent",
+            "SelectCreatorCityIntent",
             "PlayByOrganizationIntent",
             "SearchOrganizationIntent",
             "SelectOrganizationIntent",
@@ -48,6 +48,7 @@ class ConfirmationPolicy:
         }
     )
     SLOT_PRIORITY = {
+        "ClarifySelectionIntent": ("selection",),
         "ChooseSourceKindIntent": ("sourceKind", "publicationSort"),
         "OpenDiscoveryIntent": ("searchQuery",),
         "CarrierlessDiscoveryIntent": ("discoveryQuery", "topic"),
@@ -55,22 +56,7 @@ class ConfirmationPolicy:
         "SearchCreatorIntent": ("searchQuery",),
         "SearchOrganizationIntent": ("searchQuery",),
         "SearchPublicationIntent": ("searchQuery",),
-        "PlayByCreatorIntent": (
-            "creatorQuery",
-            "topic",
-            "organizationQuery",
-            "listPickPhrase",
-            "category",
-            "feedbackPhrase",
-        ),
-        "SelectCreatorIntent": (
-            "creatorQuery",
-            "topic",
-            "organizationQuery",
-            "listPickPhrase",
-            "category",
-            "feedbackPhrase",
-        ),
+        "SelectCreatorCityIntent": ("cityQuery",),
         "PlayByOrganizationIntent": (
             "organizationQuery",
             "topic",
@@ -113,6 +99,7 @@ class ConfirmationPolicy:
         ),
     }
     DEFAULT_SLOT_PRIORITY = (
+        "selection",
         "topic",
         "creatorQuery",
         "organizationQuery",
@@ -339,12 +326,12 @@ class ConfirmationPolicy:
         slots = nlp.get("slots") or {}
         return bool(
             ConfirmationPolicy.has_pending_ambiguity(nlp)
-            or slots.get("unresolvedReferences")
-            or nlp.get("directDiscoveryRequest")
             or (
                 nlp.get("ambiguityResolution")
                 and nlp.get("intent") == "publication"
             )
+            or slots.get("unresolvedReferences")
+            or nlp.get("directDiscoveryRequest")
             or (nlp.get("intent") == "creator" and slots.get("genericCreatorRequest"))
             or (nlp.get("intent") == "organization" and slots.get("genericOrganizationRequest"))
             or (

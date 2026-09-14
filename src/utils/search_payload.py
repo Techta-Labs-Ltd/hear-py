@@ -148,7 +148,6 @@ class SearchPayload:
             {key: slots[key] for key in ("latitude", "longitude") if slots.get(key) is not None}
         )
         filters["isLocal"] = bool(slots.get("isLocal"))
-        filters["isRecommended"] = bool(slots.get("isRecommended"))
         search_plan = slots.get("searchPlan") or {}
         search_plan_filter = search_plan.get("filter") or {}
         if slots.get("isPublication") or search_plan_filter.get("isPublication") or is_publication:
@@ -209,7 +208,6 @@ class SearchPayload:
             "alexaUserId": alexa_user_id,
             "query": SearchFilterUtils.normalize_search_query(options.get("q", "")),
             "isLocal": is_local,
-            "isRecommended": bool((nlp_filter or {}).get("isRecommended")),
             "limit": options.get("limit", DiscoveryConstants.CHOICE_PAGE_SIZE),
             "page": options.get("page", 0),
         }

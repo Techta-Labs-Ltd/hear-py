@@ -25,9 +25,8 @@ class ResolverWorkflow:
         "PlayContentIntent",
         "SearchContentIntent",
         "PlayLatestContentIntent",
-        "PlayByCreatorIntent",
         "SearchCreatorIntent",
-        "SelectCreatorIntent",
+        "SelectCreatorCityIntent",
         "PlayByOrganizationIntent",
         "SearchOrganizationIntent",
         "SelectOrganizationIntent",
@@ -56,8 +55,6 @@ class ResolverWorkflow:
     CANONICAL_ZERO_SLOT_DISCOVERY = {
         "PlayContentIntent": "play",
         "PlayLatestContentIntent": "play latest",
-        "PlayByCreatorIntent": "play",
-        "SelectCreatorIntent": "play",
         "PlayByOrganizationIntent": "play",
         "SelectOrganizationIntent": "play",
         "PlayPublicationIntent": "play publication",
@@ -89,7 +86,6 @@ class ResolverWorkflow:
         "general": "residualQuery",
     }
     CARRIERLESS_SELECTOR_SLOTS = {
-        "SelectCreatorIntent": "creatorQuery",
         "SelectOrganizationIntent": "organizationQuery",
         "SelectPublicationSourceIntent": "publicationSourceQuery",
     }
@@ -100,8 +96,9 @@ class ResolverWorkflow:
 
     @staticmethod
     def _resolved_pending_candidate(pending: dict, candidate: dict) -> dict:
-        entity_type = str(candidate["type"])
-        entity_id, name = str(candidate["id"]), str(candidate["name"])
+        entity_type = str(candidate.get("type") or candidate.get("entityType") or "")
+        entity_id = str(candidate.get("id") or candidate.get("entityId") or "")
+        name = str(candidate.get("name") or candidate.get("canonicalValue") or "")
         filter_keys = SearchConstants.SEARCH_SOURCE_FILTERS
         filter_key = filter_keys.get(entity_type)
         filters = SearchFilters.replace_source(
@@ -198,17 +195,6 @@ class ResolverWorkflow:
                 ):
                     return source
                 return " ".join(value for value in ("play", topic, "from", source) if value)
-        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS:
-            topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
-            creator = AlexaRequest.get_resolved_slot_value(slots.get("creatorQuery"))
-            if creator:
-                if (
-                    SearchFilterUtils.normalize_discovery_phrase(creator)
-                    in DiscoveryConstants.LOCAL_HINTS
-                    or not SearchFilterUtils.is_meaningful_creator_source(creator)
-                ):
-                    return creator
-                return " ".join(("play", topic or "something", "by", creator))
         if alexa_intent == "PlayLocalIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             location = AlexaRequest.get_resolved_slot_value(
@@ -331,6 +317,8 @@ class ResolverWorkflow:
     def _reject_implausible_search_query_source(
         result: dict, alexa_intent: str, intent_slots: dict
     ) -> dict:
+        if result.get("directDiscoveryRequest"):
+            return result
         fallback = ResolverWorkflow.SEARCH_QUERY_SOURCE_INTENTS.get(alexa_intent)
         if not fallback:
             return result
@@ -390,7 +378,7 @@ class ResolverWorkflow:
         search_plan["sort"] = "trending"
         slots.update(
             {
-                "isRecommended": True,
+                "isRecommended": alexa_intent == "PlayRecommendationIntent",
                 "sort": "trending",
                 "searchPlan": search_plan,
             }
@@ -407,12 +395,47 @@ class ResolverWorkflow:
         RequestContext.replace_request(handler_input, attrs)
 
     @staticmethod
+    def _generic_source_resolution(
+        alexa_intent: str,
+        intent_slots: dict,
+        raw: str | None,
+    ) -> dict | None:
+        values = [raw]
+        for slot in intent_slots.values():
+            values.extend(
+                (
+                    AlexaRequest.get_resolved_slot_value(slot),
+                    AlexaRequest.get_spoken_slot_value(slot),
+                )
+            )
+        if any(SearchFilterUtils.is_generic_creator_request(value) for value in values):
+            return ResolverWorkflow._generic_creator_resolution(alexa_intent)
+        organization_kinds = [
+            SearchFilterUtils.organization_request_kind(value) for value in values
+        ]
+        if "repair" in organization_kinds:
+            return ResolverWorkflow._generic_organization_resolution(
+                alexa_intent,
+                repair=True,
+            )
+        if "generic" in organization_kinds:
+            return ResolverWorkflow._generic_organization_resolution(alexa_intent)
+        return None
+
+    @staticmethod
     def _local_discovery_resolution(
         alexa_intent: str, intent_slots: dict, raw: str | None
     ) -> dict | None:
         AlexaRequest.get_resolved_slot_value(intent_slots.get("topic"))
         date_query = AlexaRequest.get_resolved_slot_value(intent_slots.get("dateQuery"))
         normalized_raw = SearchFilterUtils.normalize_discovery_phrase(raw)
+        generic_source = ResolverWorkflow._generic_source_resolution(
+            alexa_intent,
+            intent_slots,
+            raw,
+        )
+        if generic_source:
+            return generic_source
         if alexa_intent == "ChooseSourceKindIntent":
             return ResolverWorkflow._source_kind_resolution(intent_slots)
         if normalized_raw in DiscoveryConstants.LOCAL_HINTS:
@@ -443,19 +466,6 @@ class ResolverWorkflow:
         ):
             intent_name, sort = direct[alexa_intent]
             return ResolverWorkflow._direct_discovery_result(alexa_intent, intent_name, sort)
-        if alexa_intent in DiscoveryConstants.CREATOR_INTENTS and (
-            not SearchFilterUtils.is_meaningful_creator_source(raw)
-        ):
-            return {
-                "status": "resolved",
-                "intent": "creator",
-                "alexaIntent": "creator",
-                "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": True,
-                "needsRedirect": False,
-                "localResolved": True,
-                "slots": {"creatorQuery": "", "genericCreatorRequest": True},
-            }
         organization_request_kind = SearchFilterUtils.organization_request_kind(
             raw,
             organization_intent=alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
@@ -467,22 +477,10 @@ class ResolverWorkflow:
             and organization_request_kind in {"generic", "repair"}
         )
         if generic_organization:
-            organization_slots = {
-                "organizationQuery": "",
-                "genericOrganizationRequest": True,
-            }
-            if organization_request_kind == "repair":
-                organization_slots["talkingNewspaperRepairCandidate"] = True
-            return {
-                "status": "resolved",
-                "intent": "organization",
-                "alexaIntent": "organization",
-                "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
-                "needsRedirect": alexa_intent not in DiscoveryConstants.ORGANIZATION_INTENTS,
-                "localResolved": True,
-                "slots": organization_slots,
-            }
+            return ResolverWorkflow._generic_organization_resolution(
+                alexa_intent,
+                repair=organization_request_kind == "repair",
+            )
         if alexa_intent in DiscoveryConstants.PUBLICATION_INTENTS:
             source = AlexaRequest.get_resolved_slot_value(
                 intent_slots.get("publicationSourceQuery")
@@ -539,13 +537,8 @@ class ResolverWorkflow:
             "localResolved": True,
             "directDiscoveryRequest": True,
         }
-        if source_kind == "creator":
-            return {
-                **base,
-                "intent": "creator",
-                "alexaIntent": "creator",
-                "slots": {"creatorQuery": "", "genericCreatorRequest": True},
-            }
+        if SearchFilterUtils.is_generic_creator_request(source_kind):
+            return ResolverWorkflow._generic_creator_resolution("ChooseSourceKindIntent")
         if source_kind == "publication":
             if SearchFilterUtils.is_meaningful_publication_source(publication_source):
                 return None
@@ -560,13 +553,44 @@ class ResolverWorkflow:
                 },
             }
         if source_kind == "talking newspaper":
-            return {
-                **base,
-                "intent": "organization",
-                "alexaIntent": "organization",
-                "slots": {"organizationQuery": "", "genericOrganizationRequest": True},
-            }
+            return ResolverWorkflow._generic_organization_resolution(
+                "ChooseSourceKindIntent"
+            )
         return None
+
+    @staticmethod
+    def _generic_creator_resolution(alexa_intent: str) -> dict:
+        return {
+            "status": "resolved",
+            "intent": "creator",
+            "alexaIntent": "creator",
+            "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": alexa_intent == "ChooseSourceKindIntent",
+            "needsRedirect": alexa_intent != "ChooseSourceKindIntent",
+            "localResolved": True,
+            "directDiscoveryRequest": True,
+            "slots": {"creatorQuery": "", "genericCreatorRequest": True},
+        }
+
+    @staticmethod
+    def _generic_organization_resolution(alexa_intent: str, *, repair: bool = False) -> dict:
+        slots = {
+            "organizationQuery": "",
+            "genericOrganizationRequest": True,
+        }
+        if repair:
+            slots["talkingNewspaperRepairCandidate"] = True
+        return {
+            "status": "resolved",
+            "intent": "organization",
+            "alexaIntent": "organization",
+            "alexaRawIntent": alexa_intent,
+            "nlpMatchesAlexa": alexa_intent in DiscoveryConstants.ORGANIZATION_INTENTS,
+            "needsRedirect": alexa_intent not in DiscoveryConstants.ORGANIZATION_INTENTS,
+            "localResolved": True,
+            "directDiscoveryRequest": True,
+            "slots": slots,
+        }
 
     @staticmethod
     def _direct_discovery_result(alexa_intent: str, intent_name: str, sort: str) -> dict:
@@ -588,7 +612,7 @@ class ResolverWorkflow:
             },
             "slots": {
                 "residualQuery": "",
-                "isRecommended": intent_name == "trending",
+                "isRecommended": alexa_intent == "PlayRecommendationIntent",
                 "sort": sort,
             },
         }

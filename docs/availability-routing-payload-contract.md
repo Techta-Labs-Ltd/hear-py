@@ -1,520 +1,153 @@
-# Availability Routing and Payload Contract
+# Alexa Availability and Search Contract
 
-## Purpose
+## Endpoint responsibilities
 
-This document defines the required routing, request payloads, response handling,
-playback safeguards, implementation work, tests, and live acceptance checks for
-Alexa availability discovery.
+`POST /alexa/availability` handles source discovery and source inventory.
+It is the only endpoint used for recommendations. It returns creators and
+organisations for the listener to choose from, or publications available from a
+selected source.
 
-The central rule is:
+`POST /alexa/search` handles catalogue search and playable content retrieval.
+It accepts text, taxonomy, publisher, publication, content, date, location, and
+search sort constraints. It does not accept `isRecommended` or
+`sort: "recommended"`.
 
-> Availability discovers whether a location, creator, organisation, or a
-> supported combination of those scopes is available. Content search handles
-> topics, tags, categories, publications, dates, recommendations, sorting, and
-> other content constraints.
+Both endpoints require `X-Api-Key`.
 
-An empty availability result is final for that request. It must never be relaxed
-into a broad or global search.
+## Listener identity
 
-## Confirmed production defect
+`POST /alexa/listeners/register` and `/alexa/listeners/sync` return the canonical
+`listenerId`. The skill persists that value and sends it on recommendation,
+trending, normal search, local search, selected-source availability, playback,
+feedback, follow, and report requests.
 
-The live development Lambda received a request for Shalfleet and correctly sent:
+The backend resolves `listenerId` first. `alexaUserId` remains available as a
+compatibility and alias fallback because Alexa identifiers may rotate. This keeps
+location, listening history, publication ordering, feedback, and engagement tied
+to one persistent listener record.
 
-```json
-{
-  "filter": {
-    "location": {
-      "city": "Shalfleet",
-      "countryCode": "gb",
-      "latitude": 50.7011,
-      "longitude": -1.4152
-    }
-  },
-  "page": 0,
-  "limit": 3
-}
-```
-
-The availability API returned zero organisations and zero creators. The skill
-then incorrectly sent this unrestricted request to `/search`:
+## Trending content search
 
 ```json
 {
   "query": "",
-  "isLocal": false,
-  "isRecommended": false,
+  "alexaUserId": "amzn1.ask.account.example",
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
   "filter": {},
+  "sort": "trending",
   "page": 0,
-  "limit": 3
+  "limit": 20
 }
 ```
 
-That request returned global catalogue content and started playback. The same
-incorrect path produced generic phrases such as `Playing content.` and could
-leave resume state that later produced `You were listening to a recording.`
+Trending is handled only by `POST /alexa/search`. It returns and plays matching
+catalogue content in trending order. A topic constrains the search results:
 
-## Routing vocabulary
+```json
+{
+  "query": "",
+  "alexaUserId": "amzn1.ask.account.example",
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
+  "filter": {"categorySlugs": ["sport"]},
+  "sort": "trending",
+  "page": 0,
+  "limit": 20
+}
+```
 
-### Availability-compatible criteria
-
-The following criteria are supported by `/availability`:
-
-- one `organizationId`;
-- one `creatorId`;
-- one `location` object;
-- any combination of those three fields.
-
-The location object may contain:
-
-- `city`;
-- `countryCode`;
-- `latitude`;
-- `longitude`.
-
-At least one usable availability-compatible criterion must be present.
-
-### Search-only criteria
-
-The presence of any of the following makes the request a `/search` request:
-
-- a non-empty query or topic;
-- tags;
-- categories;
-- a publication ID;
-- a publication-only constraint;
-- a published-from or published-to date;
-- a recommendation constraint;
-- latest, trending, popular, or another explicit sort;
-- more than one creator ID;
-- more than one organisation ID;
-- any other content-level filter.
-
-Availability-compatible criteria remain in the `/search` payload when combined
-with search-only criteria. They must not be discarded.
-
-## Routing decision matrix
-
-| Resolved criteria | Endpoint | Availability `isLocal` field |
-| --- | --- | ---: |
-| Location only | `/availability` | omitted |
-| Organisation only | `/availability` | `false` |
-| Creator only | `/availability` | `false` |
-| Location + organisation | `/availability` | omitted |
-| Location + creator | `/availability` | omitted |
-| Organisation + creator | `/availability` | `false` |
-| Location + organisation + creator | `/availability` | omitted |
-| No availability criterion and no content criterion | normal browse/search policy | derived |
-| Location + query/topic | `/search` | `true` |
-| Location + tag | `/search` | `true` |
-| Location + category | `/search` | `true` |
-| Location + publication | `/search` | `true` |
-| Location + date range | `/search` | `true` |
-| Location + recommended/latest/sort | `/search` | `true` |
-| Creator + query/topic/tag/category | `/search` | derived from location |
-| Organisation + query/topic/tag/category | `/search` | derived from location |
-| Creator + organisation + any search-only criterion | `/search` | derived from location |
-
-## Common availability request contract
-
-Every `/availability` request must contain:
+## Recommended source discovery
 
 ```json
 {
   "filter": {},
-  "alexaUserId": "<current Alexa user ID>",
-  "page": 0,
-  "limit": 3
-}
-```
-
-Rules:
-
-- `alexaUserId` is required and comes from the current Alexa request.
-- `isLocal` must be omitted whenever `filter.location` is present.
-- `isLocal` may be sent only when there is no location filter.
-- Source-only requests currently send `isLocal: false`.
-- `page` is zero-based.
-- `limit` uses the Alexa choice page size, currently three.
-- `/availability` does not receive `query`.
-- Source IDs are singular in availability: `creatorId` and `organizationId`.
-- Empty strings, empty objects, `null` values, and unsupported filter fields are
-  removed before transmission.
-
-## Complete availability request payloads
-
-### A1. Location only
-
-```json
-{
-  "filter": {
-    "location": {
-      "city": "Shalfleet",
-      "countryCode": "gb",
-      "latitude": 50.7011,
-      "longitude": -1.4152
-    }
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "page": 0,
-  "limit": 3
-}
-```
-
-### A2. Organisation only
-
-```json
-{
-  "filter": {
-    "organizationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "page": 0,
-  "limit": 3
-}
-```
-
-### A3. Creator only
-
-```json
-{
-  "filter": {
-    "creatorId": "4fa85f64-5717-4562-b3fc-2c963f66afa7"
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "page": 0,
-  "limit": 3
-}
-```
-
-### A4. Location and organisation
-
-```json
-{
-  "filter": {
-    "organizationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "location": {
-      "city": "Shalfleet",
-      "countryCode": "gb",
-      "latitude": 50.7011,
-      "longitude": -1.4152
-    }
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "page": 0,
-  "limit": 3
-}
-```
-
-### A5. Location and creator
-
-```json
-{
-  "filter": {
-    "creatorId": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
-    "location": {
-      "city": "Shalfleet",
-      "countryCode": "gb",
-      "latitude": 50.7011,
-      "longitude": -1.4152
-    }
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "page": 0,
-  "limit": 3
-}
-```
-
-### A6. Organisation and creator
-
-```json
-{
-  "filter": {
-    "organizationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "creatorId": "4fa85f64-5717-4562-b3fc-2c963f66afa7"
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "page": 0,
-  "limit": 3
-}
-```
-
-### A7. Location, organisation, and creator
-
-```json
-{
-  "filter": {
-    "organizationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "creatorId": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
-    "location": {
-      "city": "Shalfleet",
-      "countryCode": "gb",
-      "latitude": 50.7011,
-      "longitude": -1.4152
-    }
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "page": 0,
-  "limit": 3
-}
-```
-
-## Availability pagination contract
-
-Every subsequent page must preserve the complete original filter and
-`alexaUserId`. It must continue to omit `isLocal` when location is present:
-
-```json
-{
-  "filter": {
-    "organizationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "creatorId": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
-    "location": {
-      "city": "Shalfleet",
-      "countryCode": "gb",
-      "latitude": 50.7011,
-      "longitude": -1.4152
-    }
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "page": 1,
-  "limit": 3
-}
-```
-
-No page may drop part of a combined filter.
-
-## Search request contract
-
-Search uses plural source ID arrays and flat location fields inside `filter`:
-
-```json
-{
-  "query": "",
-  "filter": {},
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3
-}
-```
-
-Rules:
-
-- `creatorIds`, `organizationIds`, and `publicationIds` are arrays.
-- Location fields are flat inside the search filter.
-- `isLocal` is top-level and is true when location is part of the search.
-- A non-empty topic remains in `query` unless the resolver deliberately maps it
-  to a canonical tag or category.
-- Search must preserve every resolved constraint.
-- Search must never be used to relax an empty availability result.
-
-## Representative mixed search payloads
-
-### S1. Location and category
-
-```json
-{
-  "query": "",
-  "filter": {
-    "categorySlugs": ["community-news"],
-    "city": "Shalfleet",
-    "countryCode": "gb",
-    "latitude": 50.7011,
-    "longitude": -1.4152
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3,
-  "sort": "nearest"
-}
-```
-
-### S2. Location and topic query
-
-```json
-{
-  "query": "local history",
-  "filter": {
-    "city": "Shalfleet",
-    "countryCode": "gb",
-    "latitude": 50.7011,
-    "longitude": -1.4152
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3,
-  "sort": "nearest"
-}
-```
-
-### S3. Location and tag
-
-```json
-{
-  "query": "",
-  "filter": {
-    "tags": ["sport"],
-    "city": "Shalfleet",
-    "countryCode": "gb",
-    "latitude": 50.7011,
-    "longitude": -1.4152
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3,
-  "sort": "nearest"
-}
-```
-
-### S4. Creator and tag
-
-```json
-{
-  "query": "",
-  "filter": {
-    "creatorIds": ["4fa85f64-5717-4562-b3fc-2c963f66afa7"],
-    "tags": ["sport"]
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3
-}
-```
-
-### S5. Organisation, creator, and tag
-
-```json
-{
-  "query": "",
-  "filter": {
-    "organizationIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
-    "creatorIds": ["4fa85f64-5717-4562-b3fc-2c963f66afa7"],
-    "tags": ["sport"]
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3
-}
-```
-
-### S6. Location, creator, and tag
-
-```json
-{
-  "query": "",
-  "filter": {
-    "creatorIds": ["4fa85f64-5717-4562-b3fc-2c963f66afa7"],
-    "tags": ["sport"],
-    "city": "Shalfleet",
-    "countryCode": "gb",
-    "latitude": 50.7011,
-    "longitude": -1.4152
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3,
-  "sort": "nearest"
-}
-```
-
-### S7. Source and publication
-
-```json
-{
-  "query": "",
-  "filter": {
-    "organizationIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
-    "publicationIds": ["5fa85f64-5717-4562-b3fc-2c963f66afa8"]
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3
-}
-```
-
-### S8. Location and date range
-
-```json
-{
-  "query": "",
-  "filter": {
-    "city": "Shalfleet",
-    "countryCode": "gb",
-    "latitude": 50.7011,
-    "longitude": -1.4152,
-    "publishedFrom": 1788393600,
-    "publishedTo": 1788998400
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
-  "isRecommended": false,
-  "page": 0,
-  "limit": 3,
-  "sort": "nearest"
-}
-```
-
-### S9. Recommended content from a location
-
-```json
-{
-  "query": "",
-  "filter": {
-    "city": "Shalfleet",
-    "countryCode": "gb",
-    "latitude": 50.7011,
-    "longitude": -1.4152
-  },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": true,
+  "alexaUserId": "amzn1.ask.account.example",
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
   "isRecommended": true,
   "page": 0,
-  "limit": 3,
-  "sort": "recommended"
+  "limit": 3
 }
 ```
 
-### S10. Latest content from a creator
+Recommendations combine the global trending rank with geographical relevance.
+The backend uses coordinates or city supplied in `filter.location`; otherwise it
+uses the canonical listener's registered coordinates or city.
 
 ```json
 {
-  "query": "",
   "filter": {
-    "creatorIds": ["4fa85f64-5717-4562-b3fc-2c963f66afa7"]
+    "location": {
+      "city": "Manchester",
+      "countryCode": "gb",
+      "latitude": 53.4808,
+      "longitude": -2.2426
+    }
   },
-  "alexaUserId": "<current Alexa user ID>",
-  "isLocal": false,
-  "isRecommended": false,
+  "alexaUserId": "amzn1.ask.account.example",
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
+  "isRecommended": true,
   "page": 0,
-  "limit": 3,
-  "sort": "latest"
+  "limit": 3
 }
 ```
 
-## Availability response contracts
+## Local source discovery
 
-### Source discovery response
+An explicit location is sent inside the availability filter:
 
-Location and other source-discovery requests may return organisations and
-creators:
+```json
+{
+  "filter": {
+    "location": {
+      "city": "York",
+      "countryCode": "gb",
+      "latitude": 53.959,
+      "longitude": -1.082
+    }
+  },
+  "alexaUserId": "amzn1.ask.account.example",
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
+  "page": 0,
+  "limit": 3
+}
+```
+
+When the saved listener location should be used, send `isLocal: true` without a
+location filter.
+
+## City-based creator discovery
+
+A generic creator request asks for a city. The resolved canonical location is
+transient and is sent to availability with the creator-only boolean inside
+`filter`:
+
+```json
+{
+  "filter": {
+    "isCreator": true,
+    "location": {
+      "city": "Manchester",
+      "countryCode": "gb",
+      "latitude": 53.4808,
+      "longitude": -2.2426
+    }
+  },
+  "alexaUserId": "amzn1.ask.account.example",
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
+  "page": 0,
+  "limit": 3
+}
+```
+
+The backend applies `isCreator: true` before pagination. Every page uses the
+same location and creator filter. Alexa ignores any organizations returned in
+error, keeps only the current page of up to three creator choices, and reloads
+pages for next or previous navigation. The requested city and coordinates do
+not update the listener profile or onboarding state.
+
+## Source discovery response
+
+The response preserves the existing `organizations` and `creators` fields and
+the established pagination metadata.
 
 ```json
 {
@@ -527,317 +160,93 @@ creators:
   "nextPage": null,
   "organizations": [
     {
-      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "name": "Talking News Federation"
+      "id": "706cb68b-8059-407e-a696-0651018066cd",
+      "name": "York Talking News"
     }
   ],
   "creators": [
     {
-      "id": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
-      "name": "Example Creator"
+      "id": "4cd2cb60-1314-4f66-841d-e49ed4820a3b",
+      "name": "A Reader"
     }
   ]
 }
 ```
 
-The skill offers only candidates returned by the API. It says `next` only when
-the normalized response proves that another page exists.
+## Selected source availability
 
-### Source content availability response
+After the listener selects a creator or organisation, send exactly one singular
+source identifier. Include listener identity so publication history ordering is
+personal to that listener.
 
-A source-scoped request may report publication and standalone-track inventory:
+```json
+{
+  "filter": {
+    "organizationId": "706cb68b-8059-407e-a696-0651018066cd"
+  },
+  "alexaUserId": "amzn1.ask.account.example",
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
+  "page": 0,
+  "limit": 3
+}
+```
 
 ```json
 {
   "page": 0,
   "limit": 3,
-  "total": 4,
+  "total": 2,
   "totalPages": 1,
   "remaining": 0,
   "hasMore": false,
   "nextPage": null,
-  "publicationCount": 1,
-  "standaloneTrackCount": 3,
+  "publicationCount": 2,
+  "standaloneTrackCount": 5,
   "publications": [
     {
-      "publicationId": "5fa85f64-5717-4562-b3fc-2c963f66afa8",
-      "title": "September edition",
-      "trackCount": 3
+      "publicationId": "b7f65f28-5ba0-4775-b4a1-8a58d821eff5",
+      "title": "Morning Briefing",
+      "trackCount": 8,
+      "publishedAt": 1788518929,
+      "updatedAt": 1788518929
     }
   ]
 }
 ```
 
-The skill may retrieve content only when this response positively reports
-available publications or standalone tracks.
+Publications the listener has not heard are returned first. Publications already
+heard remain in the result set and move below every unheard publication. This is
+calculated from the canonical listener's history, never from another listener's
+activity.
 
-### Valid empty response
+## Voice selection flow
 
-```json
-{
-  "page": 0,
-  "limit": 3,
-  "total": 0,
-  "totalPages": 0,
-  "remaining": 0,
-  "hasMore": false,
-  "nextPage": null,
-  "publicationCount": 0,
-  "standaloneTrackCount": 0,
-  "organizations": [],
-  "creators": [],
-  "publications": []
-}
-```
+1. A trending request calls search with `sort: "trending"` and plays the first result.
+2. A recommendation request calls availability with `isRecommended: true`.
+3. A generic creator request asks for a city and calls availability with
+   `filter.isCreator: true` plus the resolved location.
+4. Alexa reads up to three eligible source names.
+5. The listener selects a name or ordinal.
+6. Alexa calls availability with the selected `creatorId` or `organizationId`.
+7. If the selected source has publications and standalone tracks, Alexa asks which format
+   the listener wants.
+8. Alexa reads publication choices, or calls search with `isPublication: false`
+   for standalone tracks.
+9. A selected publication is loaded through search using `publicationIds`; a
+   selected track is loaded using `contentIds`.
 
-This response is successful and authoritative. It is not an API failure and it
-must not trigger `/search`.
+When a single publication container is selected, search always loads that
+container independently of the requested track page and applies `page` and
+`limit` to the embedded track collection. Pagination totals and navigation refer
+to tracks, not to the single publication container.
 
-## Empty-result behavior contract
+An empty or failed availability response does not trigger an unrestricted search
+or playback. The skill reports that no matching source was available and returns
+to discovery.
 
-When `/availability` succeeds with no matching availability:
+## Search publication ordering
 
-1. Do not call `/search`.
-2. Do not broaden, relax, or remove any filter.
-3. Do not create an `AudioPlayer.Play` directive.
-4. Do not create or replace a playback queue.
-5. Do not change current, active, prepared, paused, or resume playback state.
-6. Clear any availability selection dialog created for this request.
-7. Keep the Alexa session open.
-8. Speak a context-appropriate no-result response.
-
-For a location request:
-
-```text
-I couldn't find a talking newspaper or creator near Shalfleet. What would you
-like to listen to instead?
-```
-
-For a source request:
-
-```text
-I couldn't find anything available from that source. What would you like to
-listen to instead?
-```
-
-The response must not claim that content was found, must not say `Playing
-content`, and must not introduce unrelated catalogue content.
-
-## Availability failure behavior contract
-
-Transport failure, timeout, invalid response, or non-success HTTP status is
-different from a valid empty response.
-
-Required behavior:
-
-1. Do not call `/search`.
-2. Do not alter playback or queue state.
-3. Clear request-owned availability dialog state when appropriate.
-4. Keep the Alexa session open.
-5. Tell the listener availability could not be checked and invite a retry.
-
-Example:
-
-```text
-I had trouble finding content in Everton just now. Please say the name of a
-talking newspaper, creator, publication, or city you would like to listen to.
-```
-
-## Post-availability content retrieval
-
-A `/search` call after availability is allowed only when availability positively
-reports content that must be retrieved for playback.
-
-Permitted examples:
-
-- `standaloneTrackCount` is greater than zero and the listener chooses tracks;
-- the listener chooses a returned publication and its content must be loaded;
-- the listener selects a returned creator or organisation whose availability
-  response reports playable inventory.
-
-The retrieval request must remain constrained to the selected source or
-publication. It is not permitted to issue an empty global search.
-
-If both `publicationCount` and `standaloneTrackCount` are zero and no
-publications are returned, retrieval is not permitted.
-
-## Playback and resume safeguards
-
-An empty or failed availability operation must not change:
-
-- `activePlayback`;
-- `preparedPlayback`;
-- `playbackQueue`;
-- current content ID, title, creator, organisation, or publication fields;
-- resume offset;
-- discovery source or discovery context;
-- pending feedback state.
-
-This prevents the availability defect from producing:
-
-- unrelated global playback;
-- `Playing content.`;
-- `Now playing` without meaningful context;
-- `You were listening to a recording.` on the next launch;
-- feedback prompts for content the listener did not request.
-
-## Required implementation changes
-
-### `src/models/availability_data.py`
-
-- Replace the one-source-only scope rule with a rule that accepts any supported
-  combination of location, one creator, and one organisation.
-- Reject availability routing when any search-only criterion is active.
-- Reject multiple creator IDs or multiple organisation IDs.
-- Add one canonical transformation from plural resolver/search source fields to
-  singular availability fields.
-- Preserve location when it is combined with creator or organisation.
-
-### `src/models/availability.py`
-
-- Build the complete availability filter from the resolved payload.
-- Pass `alexaUserId` on every request and omit `isLocal` whenever location is filtered.
-- Preserve combined filters in dialog context and pagination.
-- Separate successful-empty handling from failed-request handling.
-- Remove unrestricted fallback search from both paths.
-- Allow content retrieval only after positive inventory is reported.
-- Clear only availability-owned dialog state on no result or failure.
-- Leave playback, queue, resume, and feedback state untouched.
-
-### `src/clients/availability.py`
-
-- Accept one or more supported availability filter fields.
-- Validate at most one non-empty creator ID and one non-empty organisation ID.
-- Validate the location object and its allowed fields.
-- Reject unsupported or empty filters.
-- Preserve every valid combined filter field.
-- Keep pagination normalization authoritative so `next` is never offered on the
-  final page.
-
-### `src/clients/hear.py`
-
-- Serialize `alexaUserId` at the top level of `/availability` requests.
-- Serialize `isLocal` only when the request has no location filter.
-- Preserve the complete normalized combined filter.
-- Keep `page` and `limit` intact.
-- Keep logs privacy-safe while logging the presence of Alexa identity and the
-  filter keys used.
-
-### `src/alexa/availability_speech.py`
-
-- Add distinct speech for valid no results and availability failure.
-- Include the requested city when it is safe and available.
-- Do not use loading-failure wording for a genuine zero-result response.
-- Do not mention `next` without a proven next page.
-
-### Tests
-
-- Replace tests that expect location to be discarded when combined with a
-  creator or organisation.
-- Remove tests that expect global fallback search after empty availability.
-- Retain source-track retrieval tests only when availability reports a positive
-  standalone-track count.
-
-## Required test matrix
-
-### Routing tests
-
-- location only routes to availability;
-- creator only routes to availability;
-- organisation only routes to availability;
-- location + creator routes to availability;
-- location + organisation routes to availability;
-- creator + organisation routes to availability;
-- location + creator + organisation routes to availability;
-- location + category routes to search;
-- location + topic routes to search;
-- location + tag routes to search;
-- creator + tag routes to search;
-- organisation + category routes to search;
-- creator + organisation + tag routes to search;
-- publication, date, recommended, and explicit-sort requests route to search;
-- multiple creator or organisation IDs route to search.
-
-### Availability client tests
-
-- all seven supported request payloads serialize exactly;
-- `alexaUserId` is included;
-- `isLocal` is absent exactly when location is present;
-- combined filters survive normalization;
-- invalid filter fields are rejected before an HTTP call;
-- page and limit are preserved;
-- final-page metadata cannot produce a false `next` offer.
-
-### Empty and failure tests
-
-- valid empty source discovery does not call search;
-- valid empty source inventory does not call search;
-- failed availability does not call search;
-- no-result response contains no audio directive;
-- failure response contains no audio directive;
-- active playback is unchanged;
-- playback queue is unchanged;
-- resume state is unchanged;
-- availability dialog is cleared;
-- session remains open with a useful reprompt.
-
-### Positive inventory tests
-
-- positive standalone-track count permits constrained track retrieval;
-- returned publication permits constrained publication retrieval;
-- retrieval retains the selected source/publication ID;
-- retrieval never becomes an empty global search.
-
-## Verification commands
-
-```powershell
-python -m pytest -q tests/test_availability_flow.py tests/test_api_client.py
-python -m ruff check src tests
-python -m compileall -q main.py src config
-python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict
-python -m pytest -q
-git diff --check
-```
-
-## Development deployment acceptance test
-
-Use the real Alexa development skill and request Shalfleet.
-
-Expected CloudWatch sequence:
-
-```text
-resolver -> confirmed location request
-/availability -> filter.location=Shalfleet, alexaUserIdPresent=true, isLocal=omitted
-/availability response -> total=0, organizations=[], creators=[]
-Alexa no-result response
-```
-
-The same request must produce none of the following:
-
-```text
-/search with filter={}
-/search with isLocal=false
-AudioPlayer.Play
-AudioPlayer.PlaybackStarted
-Playing content.
-You were listening to a recording.
-```
-
-Repeat the live test for each supported combined availability payload and at
-least one mixed search payload from each search-only category.
-
-## Definition of done
-
-The work is complete only when:
-
-- all seven availability combinations reach `/availability` with the exact
-  contract defined above;
-- mixed content requests reach `/search` without losing constraints;
-- every availability request includes `alexaUserId` and omits `isLocal` for location filters;
-- empty and failed availability never trigger search or playback;
-- positive inventory still supports constrained content retrieval;
-- pagination never offers a nonexistent next page;
-- no-result handling leaves previous playback and resume state untouched;
-- focused and full automated tests pass;
-- strict architecture audit passes with zero errors and warnings;
-- the Shalfleet live development test matches the expected CloudWatch sequence.
+Search accepts `alexaUserId` and `listenerId`. When publication containers match,
+it applies the same unheard-first ordering used by availability. Heard
+publications remain available at the bottom. Standalone tracks retain their
+normal search order.

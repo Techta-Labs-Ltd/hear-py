@@ -127,6 +127,20 @@ class TestPersistence:
         assert merged["pendingFeedback"] is None
         assert merged["activeDialog"] is None
 
+    def test_merge_initial_store_clears_legacy_creator_name_dialog(self):
+        merged = User.merge_persisted(
+            {
+                "awaitingCreatorName": True,
+                "activeDialog": {
+                    "type": "creator_name",
+                    "context": {"slotName": "creatorQuery"},
+                },
+            }
+        )
+
+        assert "awaitingCreatorName" not in merged
+        assert merged["activeDialog"] is None
+
     def test_get_store_returns_copy(self, mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"] = {"playCount": 5}
         store = User.snapshot(mock_handler_input)

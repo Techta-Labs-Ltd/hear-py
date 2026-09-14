@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.alexa.runtime import ResponseBuilder
+from src.alexa.speech import Speech
 from src.clients.resolver import ResolverClient
 from src.container import ApplicationContainer
 from src.middleware.dialog_validation import (
@@ -61,7 +62,7 @@ def test_ambiguity_allows_dismissal_intents(mock_handler_input, intent_name):
 @pytest.mark.parametrize(
     ("intent_name", "slot_name", "spoken_name"),
     [
-        ("PlayByCreatorIntent", "creatorQuery", "Pendle Voice Dalesman"),
+        ("SearchCreatorIntent", "searchQuery", "Pendle Voice Dalesman"),
         ("PlayContentIntent", "topic", "Pendle Voice Dalesman"),
         ("PlayContentIntent", "topic", "Pendle Voice Dale's Men"),
     ],
@@ -294,6 +295,55 @@ def test_ambiguity_ordinal_variants_select_current_spoken_choice(
     assert candidate["id"] == expected_id
 
 
+def test_creator_location_fallback_keeps_city_capture_active(mock_handler_input):
+    User.update(
+        mock_handler_input,
+        {
+            "activeDialog": {
+                "type": "creator_location",
+                "context": {"slotName": "cityQuery"},
+                "expiresAt": 4102444800,
+            }
+        },
+    )
+    _intent(mock_handler_input, "AMAZON.FallbackIntent")
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert failure == {
+        "dialogType": "creator_location",
+        "speech": Speech.CREATOR_CITY_NOT_RECOGNISED,
+        "reprompt": Speech.CREATOR_CITY_NOT_RECOGNISED,
+        "captureSlot": True,
+    }
+    assert User.snapshot(mock_handler_input)["activeDialog"]["type"] == "creator_location"
+
+
+def test_creator_location_reply_without_captured_words_uses_city_recovery(
+    mock_handler_input,
+):
+    User.update(
+        mock_handler_input,
+        {
+            "activeDialog": {
+                "type": "creator_location",
+                "context": {"slotName": "cityQuery"},
+                "expiresAt": 4102444800,
+            }
+        },
+    )
+    _intent(mock_handler_input, "PlayContentIntent")
+
+    failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
+
+    assert failure == {
+        "dialogType": "creator_location",
+        "speech": Speech.CREATOR_CITY_NOT_RECOGNISED,
+        "reprompt": Speech.CREATOR_CITY_NOT_RECOGNISED,
+        "captureSlot": True,
+    }
+
+
 def test_ambiguity_gibberish_does_not_select_an_ordinal(mock_handler_input):
     pending = {
         "displayedCandidates": [
@@ -354,7 +404,7 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
         "TownCaptureIntent",
         "OpenDiscoveryIntent",
         "CarrierlessDiscoveryIntent",
-        "SelectCreatorIntent",
+        "SelectCreatorCityIntent",
         "SelectOrganizationIntent",
         "SelectPublicationSourceIntent",
         "PlayContentIntent",
@@ -584,7 +634,7 @@ def test_onboarding_town_confirmation_accepts_location_correction_and_skip(
     ):
         _intent(mock_handler_input, allowed)
         assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
-    _intent(mock_handler_input, "PlayByCreatorIntent")
+    _intent(mock_handler_input, "SearchCreatorIntent")
     failure = DialogValidationPolicy.dialog_validation_failure(mock_handler_input)
     assert "correct city" in failure["speech"]
 
@@ -635,8 +685,8 @@ async def test_invalid_onboarding_reply_never_reaches_resolver(monkeypatch, mock
     mock_handler_input.request_envelope["request"] = {
         "type": "IntentRequest",
         "intent": {
-            "name": "PlayByCreatorIntent",
-            "slots": {"creatorQuery": {"value": "yes Gloucester"}},
+            "name": "SearchCreatorIntent",
+            "slots": {"searchQuery": {"value": "yes Gloucester"}},
         },
     }
     resolve = AsyncMock()
