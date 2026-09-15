@@ -115,6 +115,13 @@ def test_error_and_basic_system_handlers_use_explicit_collaborators():
         assert "self._deps" not in class_source
 
 
+def test_confirmation_handlers_use_explicit_actions():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "controllers" / "confirmation.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [

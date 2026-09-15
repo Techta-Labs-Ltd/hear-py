@@ -38,6 +38,8 @@ from src.models.feedback_response import (
     SkipFeedback,
     SomewhatFeedback,
 )
+from src.models.affirmative import Affirmative
+from src.models.decline import Decline
 from src.models.intent_dispatch import IntentDispatcher
 from src.models.play import PlayContent, PlayOrganization
 from src.models.playback_events import PlaybackEvents
@@ -252,8 +254,8 @@ class RouteRegistry:
                 SkipFeedback(deps=container),
             ),
             SkipFeedbackHandler(SkipFeedback(deps=container)),
-            YesIntentHandler(deps=container),
-            NoIntentHandler(deps=container),
+            YesIntentHandler(Affirmative(deps=container)),
+            NoIntentHandler(Decline(deps=container)),
             NavigateHomeHandler(container.browse),
             UnsupportedIntentHandler(),
             HelpIntentHandler(),

@@ -9,8 +9,8 @@ from src.models.decline import Decline
 
 
 class YesIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = Affirmative(deps=deps)
+    def __init__(self, action: Affirmative) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -23,8 +23,8 @@ class YesIntentHandler(AbstractRequestHandler):
 
 
 class NoIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = Decline(deps=deps)
+    def __init__(self, action: Decline) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (

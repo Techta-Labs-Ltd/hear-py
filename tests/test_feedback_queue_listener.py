@@ -20,6 +20,7 @@ from src.controllers.feedback import (
 from src.controllers.report import ReportContentHandler
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
 from src.models.feedback import FeedbackService
+from src.models.decline import Decline
 from src.models.feedback_response import (
     EnjoyedFeedback,
     FeedbackContinuation,
@@ -744,7 +745,8 @@ async def test_plain_no_records_not_enjoyed_feedback(monkeypatch, mock_handler_i
     }
     submit = AsyncMock()
     monkeypatch.setattr("src.models.feedback.FeedbackService.submit", submit)
-    await NoIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    container = ApplicationContainer()
+    await NoIntentHandler(Decline(deps=container)).handle(mock_handler_input)
     submit.assert_awaited_once_with(mock_handler_input, "not_enjoyed")
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"]["awaitingFeedback"]

@@ -17,6 +17,8 @@ from src.controllers.browse import BrowseNavigationHandler
 from src.controllers.launch import TownCaptureHandler
 from src.middleware.resolver import ResolverInterceptor
 from src.models.dialog import DialogStateManager
+from src.models.affirmative import Affirmative
+from src.models.decline import Decline
 from src.models.play import PlayOrganization
 from src.models.user import User
 from src.registry import RouteRegistry
@@ -2200,7 +2202,8 @@ async def test_no_declines_ambiguity_confirmation_before_stale_location(
             "expiresAt": 4102444800,
         },
     }
-    await NoIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    container = ApplicationContainer()
+    await NoIntentHandler(Decline(deps=container)).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
     assert Speech.WELCOME_REPROMPT in spoken
@@ -2248,7 +2251,8 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
     play = AsyncMock(return_value={"shouldEndSession": True})
     monkeypatch.setattr(HearApiClient, "search", search)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
-    response = await YesIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    container = ApplicationContainer()
+    response = await YesIntentHandler(Affirmative(deps=container)).handle(mock_handler_input)
     search.assert_awaited_once_with(
         {
             "query": "",
@@ -2325,11 +2329,10 @@ async def test_yes_searches_selected_publication_with_minimal_filter(
     monkeypatch.setattr(HearApiClient, "search", search)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
 
-    response = await YesIntentHandler(
-        deps=ApplicationContainer(
-            progressive=SimpleNamespace(send=progressive),
-        )
-    ).handle(mock_handler_input)
+    container = ApplicationContainer(progressive=SimpleNamespace(send=progressive))
+    response = await YesIntentHandler(Affirmative(deps=container)).handle(
+        mock_handler_input
+    )
 
     progressive.assert_awaited_once_with(
         mock_handler_input,
@@ -2406,7 +2409,8 @@ async def test_confirmed_source_with_multiple_publications_asks_for_publication(
     monkeypatch.setattr(HearApiClient, "search", search)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
 
-    response = await YesIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    container = ApplicationContainer()
+    response = await YesIntentHandler(Affirmative(deps=container)).handle(mock_handler_input)
 
     sent = availability.await_args.args[0]
     assert sent["filter"] == {"organizationId": "org-tnf"}
@@ -4415,7 +4419,8 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
     monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
     monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
     assert OnboardingGateHandler(deps=ApplicationContainer()).can_handle(handler_input) is False
-    response = await YesIntentHandler(deps=ApplicationContainer()).handle(handler_input)
+    container = ApplicationContainer()
+    response = await YesIntentHandler(Affirmative(deps=container)).handle(handler_input)
     assert "I found York Talking News" in response["outputSpeech"]["ssml"]
     assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"]["city"] == "York"
     assert session["awaitingCommunityPlayback"] is False
