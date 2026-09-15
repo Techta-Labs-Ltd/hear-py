@@ -76,7 +76,6 @@ endpoint. Alexa user ID is not placed in SQS or used as a lookup filter.
 ## Local checks
 
 ```sh
-python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict
 python -m ruff check src tests
 python -m compileall -q main.py src config
 python -m pytest -q

@@ -196,7 +196,6 @@ Rules:
 ## Verification commands
 
 ```powershell
-python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict
 python -m ruff check src tests
 python -m compileall -q main.py src config
 python -m pytest -q
