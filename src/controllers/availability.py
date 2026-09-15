@@ -7,11 +7,12 @@ from ask_sdk_model import Response
 from src.alexa.request import AlexaRequest
 from src.constants.availability import AvailabilityConstants
 from src.models.dialog import DialogStateManager
+from src.models.availability import Availability
 
 
 class AvailabilityDialogHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None) -> None:
-        self._deps = deps
+    def __init__(self, availability: Availability) -> None:
+        self._availability = availability
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         active = DialogStateManager.get_active(handler_input) or {}
@@ -23,4 +24,4 @@ class AvailabilityDialogHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput) -> Response:
-        return await self._deps.availability.handle_dialog(handler_input)
+        return await self._availability.handle_dialog(handler_input)

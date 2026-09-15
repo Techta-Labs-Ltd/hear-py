@@ -73,6 +73,14 @@ def test_playback_event_handlers_use_explicit_collaborators():
         assert "self._deps" not in source
 
 
+def test_availability_gate_uses_its_explicit_action():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "controllers" / "availability.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+    assert "self._deps" not in source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [

@@ -181,7 +181,7 @@ class RouteRegistry:
         for handler in (
             CanFulfillIntentHandler(deps=container),
             DialogValidationGateHandler(),
-            AvailabilityDialogHandler(deps=container),
+            AvailabilityDialogHandler(container.availability),
             FeedbackSkipGateHandler(deps=container),
             FeedbackGateHandler(deps=container),
             OnboardingGateHandler(deps=container),
