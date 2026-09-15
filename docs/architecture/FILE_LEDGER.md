@@ -4,17 +4,6 @@ Every tracked baseline file and new deliverable is classified below. Preserved m
 
 | File | Classification | Reason |
 | --- | --- | --- |
-| `.agents/skills/hear-architecture-refactor/SKILL.md` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/agents/openai.yaml` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/references/class-only-mvc.md` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/references/current-audit.md` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/references/feature-template.md` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/references/migration-playbook.md` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/references/routing-and-middleware.md` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/references/state-and-persistence.md` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/scripts/audit_architecture.py` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/scripts/migrate_class_modules.py` | Preserved | Repository skill and audit policy retained without modification. |
-| `.agents/skills/hear-architecture-refactor/scripts/migrate_request_context.py` | Preserved | Repository skill and audit policy retained without modification. |
 | `.dockerignore` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `.env.example` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `.github/workflows/deploy-develop.yml` | Preserved | Entrypoints, deployment paths and infrastructure retained; no deployment performed. |

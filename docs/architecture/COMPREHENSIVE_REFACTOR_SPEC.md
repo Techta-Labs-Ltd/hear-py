@@ -92,7 +92,6 @@ hear-py/
 ├── tests/
 ├── docs/
 ├── scripts/
-├── .agents/skills/hear-architecture-refactor/
 ├── .github/workflows/
 ├── en-GB.json
 ├── requirements.txt
@@ -743,7 +742,6 @@ Run the repository's existing checks from the actual checkout:
 ```sh
 git status --short
 git rev-parse HEAD
-python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict
 python -m ruff check src tests
 python -m compileall -q main.py src config
 python -m pytest -q
@@ -805,7 +803,7 @@ Code observations refer to the baseline commit stated at the top. The links belo
 | Reference | Source |
 |---|---|
 | R1 | Pinned develop commit metadata and README: existing application/worker architecture and reminder removal |
-| R2 | `.agents/skills/hear-architecture-refactor/SKILL.md`: existing project conventions and migration rules |
+| R2 | Existing `src/` modules and repository conventions: project conventions and migration rules |
 | R3 | `src/container.py`, `src/application.py`, `src/registry.py`: composition, driver selection and ordered registration |
 | R4 | `src/models/user.py`, `src/middleware/persistence.py`, `src/database/dynamo_user.py`: current state gateway, load/save handling and scoped writes |
 | R5 | `src/constants/state.py`: version, scopes, field defaults and non-persisted identity/profile fields |

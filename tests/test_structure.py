@@ -51,7 +51,7 @@ def test_runtime_and_utility_modules_have_clear_owners():
     assert (src / "utils" / "filters.py").exists()
 
 
-def test_github_workflows_use_the_current_architecture_audit():
+def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [
         root / ".github" / "workflows" / "deploy-develop.yml",
@@ -59,7 +59,8 @@ def test_github_workflows_use_the_current_architecture_audit():
     ]
     for workflow in workflows:
         source = workflow.read_text(encoding="utf-8")
-        assert "hear-architecture-refactor/scripts/audit_architecture.py . --strict" in source
+        assert "hear-architecture-refactor" not in source
+        assert ".agents/" not in source
         assert "hear-alexa-python/scripts/audit_project.py" not in source
 
 

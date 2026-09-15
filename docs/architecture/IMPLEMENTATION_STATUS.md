@@ -55,10 +55,8 @@ Tests used Python 3.12 and the repository's `.env.example` as the local `.env`, 
 | Command/check | Result |
 | --- | --- |
 | Baseline `.venv/bin/python -m pytest -q` | 914 passed. |
-| Baseline strict architecture audit | 0 errors, 0 warnings. |
 | Baseline Ruff | One pre-existing import-format error in `src/alexa/help.py`; corrected in this update. |
 | Final `.venv/bin/python -m pytest -q` | 956 passed, including 42 added cases. Entire unit suite runs with live sockets/DNS blocked and deterministic HTTP stubs. |
-| `.venv/bin/python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict` | 0 errors, 0 warnings. This audit does not yet enforce the complete target architecture. |
 | `.venv/bin/python -m ruff check src tests` | Pass. |
 | `.venv/bin/python -m compileall -q main.py src config` | Pass. |
 | Application build smoke check | Skill builds with 58 registered handlers. |

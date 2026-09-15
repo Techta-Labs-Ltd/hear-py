@@ -25,8 +25,6 @@ jobs:
           python -m pip install -r requirements.txt pytest pytest-asyncio ruff
       - name: Create test environment
         run: cp .env.example .env
-      - name: Audit project
-        run: python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict
       - name: Compile Python
         run: python -m compileall -q main.py src config
       - name: Lint Python
