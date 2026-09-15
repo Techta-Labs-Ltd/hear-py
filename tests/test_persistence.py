@@ -131,6 +131,19 @@ class TestPersistence:
         assert "answeredFeedbackKeys" not in snapshot
         assert "followedCreators" not in snapshot
 
+        rehydrated = User.merge_persisted(
+            {
+                "feedbackCandidates": [{"feedbackKey": "content-1"}],
+                "publicationFeedbackProgress": {"publication-1": {"completed": 1}},
+                "answeredFeedbackKeys": ["content-1"],
+                "followedCreators": [{"id": "creator-1", "name": "Creator"}],
+            }
+        )
+        assert rehydrated["feedbackCandidates"] == []
+        assert rehydrated["publicationFeedbackProgress"] == {}
+        assert rehydrated["answeredFeedbackKeys"] == []
+        assert rehydrated["followedCreators"] == []
+
     def test_merge_initial_store_clears_legacy_publication_track_feedback(self):
         merged = User.merge_persisted(
             {

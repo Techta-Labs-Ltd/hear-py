@@ -210,7 +210,12 @@ class DynamoDbPersistenceAdapter:
         changed_values = {
             field: document[field] for field in operation["changedFields"] if field in document
         }
-        removed = [field for field in operation["changedFields"] if field not in document]
+        removed = list(
+            dict.fromkeys(
+                [field for field in operation["changedFields"] if field not in document]
+                + operation.get("legacyRemoves", [])
+            )
+        )
         await self._table.update_map_fields(
             operation["userId"],
             self.attributes_name,
@@ -284,7 +289,29 @@ class DynamoDbPersistenceAdapter:
                     "document": document,
                     "version": max(0, int(versions.get(scope) or 0)),
                     "changedFields": scope_fields,
+                    "legacyRemoves": (
+                        list(StateSchema.LEGACY_DATABASE_FIELDS)
+                        if scope == StateSchema.CACHE_SCOPE
+                        else []
+                    ),
                     "original": self._scope_values(original, scope_fields),
+                }
+            )
+        if (
+            int(versions.get(StateSchema.CACHE_SCOPE) or 0) > 0
+            and not any(operation["scope"] == StateSchema.CACHE_SCOPE for operation in operations)
+        ):
+            operations.append(
+                {
+                    "userId": user_id,
+                    "scope": StateSchema.CACHE_SCOPE,
+                    "expiresAt": self._expires_at(StateSchema.CACHE_SCOPE, {}),
+                    "requested": {},
+                    "document": {},
+                    "version": int(versions[StateSchema.CACHE_SCOPE]),
+                    "changedFields": [],
+                    "legacyRemoves": list(StateSchema.LEGACY_DATABASE_FIELDS),
+                    "original": {},
                 }
             )
         if operations:

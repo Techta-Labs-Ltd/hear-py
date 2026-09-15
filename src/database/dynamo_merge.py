@@ -20,14 +20,10 @@ class DynamoConflictMerge:
 
     @staticmethod
     def collection_key(field: str, item) -> str:
-        if field == "answeredFeedbackKeys":
-            return str(item)
         if not isinstance(item, dict):
             return json.dumps(item, sort_keys=True, default=str)
         if field == "playHistory":
             return str(item.get("subjectId") or item.get("id") or "")
-        if field == "followedCreators":
-            return f"{item.get('type', 'creator')}:{item.get('id')}"
         return str(item.get("feedbackKey") or json.dumps(item, sort_keys=True, default=str))
 
     @staticmethod
@@ -43,9 +39,6 @@ class DynamoConflictMerge:
         }
         removed = previous_keys - incoming_keys
         limits = {
-            "answeredFeedbackKeys": 50,
-            "feedbackCandidates": 5,
-            "followedCreators": 50,
             "playHistory": min(settings.max_history, 20),
         }
         limit = limits.get(field, 20)
@@ -118,9 +111,6 @@ class DynamoConflictMerge:
             ):
                 value = max(0, int(current or 0) + incoming - previous)
             elif field in {
-                "answeredFeedbackKeys",
-                "feedbackCandidates",
-                "followedCreators",
                 "playHistory",
             }:
                 value = DynamoConflictMerge.collection(field, current, incoming, previous)

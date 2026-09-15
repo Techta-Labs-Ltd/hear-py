@@ -269,9 +269,14 @@ class User:
 
     @staticmethod
     def merge_persisted(stored: dict | None) -> dict:
+        persisted = {
+            key: value
+            for key, value in (stored.items() if isinstance(stored, dict) else ())
+            if key in StateSchema.PERSISTED_FIELDS
+        }
         merged = {
             **StateSchema.defaults(),
-            **deepcopy(stored if isinstance(stored, dict) else {}),
+            **deepcopy(persisted),
         }
         merged["recentTrackListens"] = User.normalize_recent_track_listens(
             merged.get("recentTrackListens")
@@ -282,12 +287,6 @@ class User:
         pattern = merged.get("listeningPattern")
         if isinstance(pattern, dict):
             merged["listeningPattern"] = dict(list(pattern.items())[:40])
-        merged["followedCreators"] = UserStateNormalizer.followed_creators(
-            merged.get("followedCreators")
-        )
-        merged["publicationFeedbackProgress"] = UserStateNormalizer.publication_progress(
-            merged.get("publicationFeedbackProgress")
-        )
         merged["playHistory"] = [
             normalized
             for item in merged.get("playHistory") or []

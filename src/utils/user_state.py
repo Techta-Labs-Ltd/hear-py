@@ -209,12 +209,6 @@ class UserStateNormalizer:
         if isinstance(prepared, dict):
             normalized["preparedNextContent"] = UserStateNormalizer.content_cache(prepared)
         normalized["playHistory"] = UserStateNormalizer.play_history(normalized.get("playHistory"))
-        normalized["feedbackCandidates"] = UserStateNormalizer.feedback_candidates(
-            normalized.get("feedbackCandidates")
-        )
-        normalized["publicationFeedbackProgress"] = UserStateNormalizer.publication_progress(
-            normalized.get("publicationFeedbackProgress")
-        )
         for key in tuple(normalized):
             if normalized[key] == StateSchema.default_for(key):
                 normalized.pop(key, None)

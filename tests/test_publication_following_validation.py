@@ -59,7 +59,7 @@ async def test_incomplete_publication_source_skips_resolver_and_elicits_name(
     assert directive["slotToElicit"] == "publicationSourceQuery"
 
 
-def test_followed_source_migration_types_legacy_creators_and_deduplicates():
+def test_followed_source_history_is_not_loaded_from_persistence():
     store = User.merge_persisted(
         {
             "followedCreators": [
@@ -69,12 +69,9 @@ def test_followed_source_migration_types_legacy_creators_and_deduplicates():
             ]
         }
     )
-    assert store["followedCreators"] == [
-        {"id": "creator-1", "name": "Creator One", "type": "creator"},
-        {"id": "org-1", "name": "York Talking News", "type": "organization"},
-    ]
-    assert FollowingManager.is_following(store, "creator-1", "creator")
-    assert FollowingManager.is_following(store, "org-1", "organization")
+    assert store["followedCreators"] == []
+    assert not FollowingManager.is_following(store, "creator-1", "creator")
+    assert not FollowingManager.is_following(store, "org-1", "organization")
 
 
 def test_followed_creator_and_organization_with_same_id_are_distinct(

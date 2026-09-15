@@ -109,6 +109,16 @@ class StateSchema:
     PERSISTED_FIELDS = frozenset(
         name for name, specification in FIELD_SPECS.items() if specification[1]
     )
+    LEGACY_DATABASE_FIELDS = frozenset(
+        {
+            "feedbackHistory",
+            "reportHistory",
+            "feedbackCandidates",
+            "publicationFeedbackProgress",
+            "answeredFeedbackKeys",
+            "followedCreators",
+        }
+    )
 
     @classmethod
     def scope_for(cls, field: str) -> str | None:

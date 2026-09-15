@@ -35,7 +35,11 @@ class MemoryPersistenceAdapter:
             list(changed) if isinstance(changed, (list, tuple, set)) else list(document)
         )
         original = document.pop("_persistenceOriginal", {})
+        for field in StateSchema.LEGACY_DATABASE_FIELDS:
+            document.pop(field, None)
         latest = deepcopy(self._store.get(user_id) or {})
+        for field in StateSchema.LEGACY_DATABASE_FIELDS:
+            latest.pop(field, None)
         current_versions = latest.pop("_persistenceVersions", {})
         changed_scopes = {
             scope for field in changed_fields if (scope := StateSchema.scope_for(field)) is not None
