@@ -12,7 +12,7 @@ from config import settings
 from src.constants.state import StateSchema
 from src.database.dynamo_merge import DynamoConflictMerge
 from src.database.dynamodb import DynamoExpressions, DynamoTable
-from src.models.user import User
+from src.models.user import PersistenceReceipt, User
 
 
 class DynamoUserSupport:
@@ -49,6 +49,7 @@ class DynamoUserSupport:
     @staticmethod
     def is_conditional_failure(error: ClientError) -> bool:
         return error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException"
+
 
 class InvalidPersistenceKey(ValueError):
     pass
@@ -148,9 +149,7 @@ class DynamoDbPersistenceAdapter:
         }
         size = DynamoExpressions.item_bytes(DynamoExpressions.encode_value(item))
         if size > settings.HEAR_DDB_ITEM_SIZE_MAX_BYTES:
-            raise PersistenceItemTooLarge(
-                f"DynamoDB {scope} state item is {size} bytes"
-            )
+            raise PersistenceItemTooLarge(f"DynamoDB {scope} state item is {size} bytes")
         if size > settings.HEAR_DDB_ITEM_SIZE_WARN_BYTES:
             DynamoUserSupport.logger.warning(
                 "DynamoDB state item oversized scope=%s bytes=%s table=%s",
@@ -187,8 +186,7 @@ class DynamoDbPersistenceAdapter:
     @staticmethod
     def _scope_values(document: dict, fields: list[str]) -> dict:
         return {
-            field: deepcopy(document.get(field, StateSchema.default_for(field)))
-            for field in fields
+            field: deepcopy(document.get(field, StateSchema.default_for(field))) for field in fields
         }
 
     async def _write(self, operation: dict) -> None:
@@ -211,13 +209,9 @@ class DynamoDbPersistenceAdapter:
             )
             return
         changed_values = {
-            field: document[field]
-            for field in operation["changedFields"]
-            if field in document
+            field: document[field] for field in operation["changedFields"] if field in document
         }
-        removed = [
-            field for field in operation["changedFields"] if field not in document
-        ]
+        removed = [field for field in operation["changedFields"] if field not in document]
         await self._table.update_map_fields(
             operation["userId"],
             self.attributes_name,
@@ -246,18 +240,14 @@ class DynamoDbPersistenceAdapter:
             operation["original"],
             operation["changedFields"],
         )
-        operation["expiresAt"] = self._expires_at(
-            operation["scope"], operation["document"]
-        )
+        operation["expiresAt"] = self._expires_at(operation["scope"], operation["document"])
         backoff_ms = max(0, settings.HEAR_PERSISTENCE_CONFLICT_BACKOFF_MS) * 2**attempt
         if backoff_ms:
             await asyncio.sleep(backoff_ms / 1000.0)
 
     async def _save_scope(self, operation: dict) -> None:
         retries = (
-            max(0, settings.HEAR_PERSISTENCE_CONFLICT_RETRIES)
-            if self.conditional_writes
-            else 0
+            max(0, settings.HEAR_PERSISTENCE_CONFLICT_RETRIES) if self.conditional_writes else 0
         )
         for attempt in range(retries + 1):
             self._validate_document(operation["scope"], operation["document"])
@@ -275,7 +265,7 @@ class DynamoDbPersistenceAdapter:
         attributes: dict,
         *,
         persistence_key: str | None = None,
-    ) -> None:
+    ) -> PersistenceReceipt:
         requested, versions, changed_fields, original = self._payload(attributes)
         user_id = self._user_id(request_envelope, persistence_key)
         operations = []
@@ -300,6 +290,17 @@ class DynamoDbPersistenceAdapter:
             )
         if operations:
             await asyncio.gather(*(self._save_scope(operation) for operation in operations))
+        committed = deepcopy(requested)
+        saved_versions = dict(versions)
+        for operation in operations:
+            scope = operation["scope"]
+            saved_versions[scope] = operation["version"] + int(
+                bool(operation["version"] or operation["document"])
+            )
+            for field in StateSchema.fields_for_scope(scope):
+                committed.pop(field, None)
+            committed.update(deepcopy(operation["document"]))
+        return PersistenceReceipt(versions=saved_versions, snapshot=committed)
 
     async def delete_attributes(
         self, request_envelope: dict, *, persistence_key: str | None = None

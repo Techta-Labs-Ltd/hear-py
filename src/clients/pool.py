@@ -66,6 +66,15 @@ class CircuitHttpClient:
         await self._client.aclose()
 
     async def request(self, method: str, url, **kwargs):
+        requested = httpx.URL(url)
+        upstream = self._client.base_url
+        if (
+            upstream.is_absolute_url
+            and requested.is_absolute_url
+            and (requested.scheme, requested.host, requested.port)
+            != (upstream.scheme, upstream.host, upstream.port)
+        ):
+            raise ValueError("HTTP request does not match the configured upstream")
         self._breaker.before_request()
         try:
             response = await self._client.request(method, url, **kwargs)
@@ -89,20 +98,17 @@ class CircuitHttpClient:
 
 
 class HttpPool:
-    """Thread-safe httpx.AsyncClient pool keyed by event loop.
-
-    Each caller shares the same connection to the same base URL within a
-    loop, avoiding recreation of clients on every request while remaining safe
-    across threads.
-    """
-
     def __init__(
         self,
         *,
+        base_url: str = "",
+        headers: dict[str, str] | None = None,
         timeout_ms: int | None = None,
         max_connections: int | None = None,
         max_keepalive: int | None = None,
     ) -> None:
+        self._base_url = str(base_url).strip().rstrip("/")
+        self._headers = tuple(sorted(httpx.Headers(headers or {}).items()))
         self._pool: dict[asyncio.AbstractEventLoop, CircuitHttpClient] = {}
         self._lock = threading.Lock()
         self._breaker = HttpCircuitBreaker(
@@ -126,18 +132,27 @@ class HttpPool:
             max_keepalive_connections=max(resolved_keepalive, 0),
         )
 
-    def get(self, *, base_url: str = "", headers: dict | None = None) -> CircuitHttpClient:
+    def assert_configuration(self, *, base_url: str, headers: dict[str, str]) -> None:
+        if self._base_url != str(base_url).strip().rstrip("/") or self._headers != tuple(
+            sorted(httpx.Headers(headers).items())
+        ):
+            raise ValueError("HTTP pool configuration does not match this client")
+
+    def get(self) -> CircuitHttpClient:
         key = asyncio.get_running_loop()
         client = self._pool.get(key)
-        if client is None:
+        if client is None or client.is_closed:
             with self._lock:
+                for loop in tuple(self._pool):
+                    if loop.is_closed():
+                        self._pool.pop(loop)
                 client = self._pool.get(key)
-                if client is None:
+                if client is None or client.is_closed:
                     kwargs: dict = {"timeout": self._timeout, "limits": self._limits}
-                    if base_url:
-                        kwargs["base_url"] = base_url
-                    if headers:
-                        kwargs["headers"] = headers
+                    if self._base_url:
+                        kwargs["base_url"] = self._base_url
+                    if self._headers:
+                        kwargs["headers"] = dict(self._headers)
                     client = CircuitHttpClient(httpx.AsyncClient(**kwargs), self._breaker)
                     self._pool[key] = client
         return client

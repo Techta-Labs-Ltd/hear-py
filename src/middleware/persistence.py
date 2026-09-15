@@ -11,7 +11,7 @@ from ask_sdk_core.dispatch_components import (
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
 from src.models.listener import Listener
-from src.models.user import User
+from src.models.user import CommitResult, CommitStatus, EssentialPersistenceError, User
 from src.utils.deadline import DeadlineBudget
 
 
@@ -25,11 +25,7 @@ class PersistenceMiddlewareSupport:
         updates = {}
         if identity and identity.listener_id:
             updates["listenerId"] = identity.listener_id
-        if (
-            identity
-            and identity.user_email
-            and store.get("userEmail") != identity.user_email
-        ):
+        if identity and identity.user_email and store.get("userEmail") != identity.user_email:
             updates["userEmail"] = identity.user_email
         if updates:
             User.update(handler_input, updates)
@@ -50,8 +46,10 @@ class LoadPersistenceInterceptor(AbstractRequestInterceptor):
         if DeadlineBudget.should_skip_persistence_load(request_type, remaining_ms):
             PersistenceMiddlewareSupport.hydrate_unavailable(handler_input)
             return
-        reliable_load = DeadlineBudget.requires_reliable_persistence_load(request_type)
-        budget_ms = 0 if reliable_load else DeadlineBudget.persistence_load_budget_ms(handler_input)
+        budget_ms = DeadlineBudget.persistence_load_budget_ms(handler_input)
+        if budget_ms <= 0:
+            PersistenceMiddlewareSupport.hydrate_unavailable(handler_input)
+            return
         stored: dict = {}
         try:
             if budget_ms > 0:
@@ -94,38 +92,37 @@ class LoadPersistenceInterceptor(AbstractRequestInterceptor):
 
 
 class SavePersistenceInterceptor(AbstractResponseInterceptor):
-    async def process(self, handler_input) -> None:
+    async def process(self, handler_input) -> CommitResult:
+        essential = User.requires_reliable_save(handler_input)
+        if not User.is_dirty(handler_input) or not User.changed_fields(handler_input):
+            return CommitResult(CommitStatus.UNCHANGED, essential)
+        if not User.persistence_available(handler_input):
+            return self._result(CommitStatus.UNAVAILABLE, essential)
+        budget_ms = DeadlineBudget.persistence_save_budget_ms(handler_input)
+        if budget_ms <= 0:
+            return self._result(CommitStatus.DEADLINE_EXCEEDED, essential)
         try:
-            if not User.is_dirty(handler_input):
-                return
-            if not User.changed_fields(handler_input):
-                return
-            if not User.persistence_available(handler_input):
-                AlexaMetrics.increment("PersistenceSaveSkipped")
-                PersistenceMiddlewareSupport.logger.warning(
-                    "Hear: persistence save skipped reason=load_unavailable degraded=true"
-                )
-                return
-            reliable_save = User.requires_reliable_save(handler_input)
-            budget_ms = (
-                None if reliable_save else DeadlineBudget.persistence_save_budget_ms(handler_input)
-            )
             snapshot = User.persisted_snapshot(User.snapshot(handler_input))
-            if not reliable_save and budget_ms is not None and budget_ms < 200:
-                return
-            save_promise = User.write_persisted(handler_input, snapshot)
-            if budget_ms is not None and not reliable_save:
-                try:
-                    await asyncio.wait_for(save_promise, timeout=budget_ms / 1000.0)
-                except asyncio.TimeoutError:
-                    AlexaMetrics.increment("PersistenceSaveTimeout")
-                    PersistenceMiddlewareSupport.logger.warning(
-                        "Hear: persistence save timed out degraded=true"
-                    )
-            else:
-                await save_promise
+            await asyncio.wait_for(
+                User.write_persisted(handler_input, snapshot), timeout=budget_ms / 1000.0
+            )
+        except asyncio.TimeoutError:
+            return self._result(CommitStatus.DEADLINE_EXCEEDED, essential)
         except Exception as exc:
             AlexaMetrics.increment("PersistenceSaveFailure")
             PersistenceMiddlewareSupport.logger.warning(
                 "Hear: persistence save failed error=%s", type(exc).__name__
             )
+            return self._result(CommitStatus.FAILED, essential)
+        return CommitResult(CommitStatus.SAVED, essential)
+
+    @staticmethod
+    def _result(status: CommitStatus, essential: bool) -> CommitResult:
+        result = CommitResult(status, essential)
+        AlexaMetrics.increment("PersistenceCommitFailure")
+        PersistenceMiddlewareSupport.logger.warning(
+            "Hear: persistence commit status=%s essential=%s", status, essential
+        )
+        if essential:
+            raise EssentialPersistenceError(result)
+        return result

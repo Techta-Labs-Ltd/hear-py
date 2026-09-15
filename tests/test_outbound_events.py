@@ -15,6 +15,7 @@ from src.models.report import Report
 from src.models.social import FollowCreator
 from src.models.user import User
 from src.services.events import OutboundEventService
+from src.utils.events import EventUtils
 
 
 class SqsStub:
@@ -300,9 +301,7 @@ def test_notification_preference_event_is_backend_owned_and_repeatable():
     assert envelope["event"] == "notifications.disabled"
     assert envelope["data"]["enabled"] is False
     assert envelope["data"]["permissionGranted"] is True
-    assert envelope["data"]["clientEventId"].startswith(
-        "notifications:listener-1:disabled:"
-    )
+    assert envelope["data"]["clientEventId"].startswith("notifications:listener-1:disabled:")
 
 
 @pytest.mark.asyncio
@@ -417,11 +416,19 @@ async def test_sqs_consumer_reports_only_failed_backend_deliveries():
     records = [
         {
             "messageId": "message-1",
-            "body": json.dumps({"event": "playback.finished", "data": {}}),
+            "body": json.dumps(
+                EventUtils.envelope(
+                    "playback.finished", {"alexaUserId": "user", "clientEventId": "finished-1"}
+                )
+            ),
         },
         {
             "messageId": "message-2",
-            "body": json.dumps({"event": "feedback.given", "data": {}}),
+            "body": json.dumps(
+                EventUtils.envelope(
+                    "feedback.given", {"alexaUserId": "user", "clientEventId": "feedback-1"}
+                )
+            ),
         },
     ]
 

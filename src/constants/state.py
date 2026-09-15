@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 
 class StateSchema:
     SCHEMA_VERSION = 2
@@ -105,12 +107,11 @@ class StateSchema:
         "lastLatestSourceOfferContentId": (None, CACHE_SCOPE),
         "deferredIntent": (None, None),
     }
-    DEFAULT_STORE = {
-        name: specification[0] for name, specification in FIELD_SPECS.items()
-    }
+    DEFAULT_STORE = {name: specification[0] for name, specification in FIELD_SPECS.items()}
     PERSISTED_FIELDS = frozenset(
         name for name, specification in FIELD_SPECS.items() if specification[1]
     )
+
     @classmethod
     def scope_for(cls, field: str) -> str | None:
         specification = cls.FIELD_SPECS.get(field)
@@ -119,12 +120,14 @@ class StateSchema:
     @classmethod
     def default_for(cls, field: str):
         specification = cls.FIELD_SPECS.get(field)
-        return specification[0] if specification else None
+        return deepcopy(specification[0]) if specification else None
+
+    @classmethod
+    def defaults(cls) -> dict:
+        return deepcopy(cls.DEFAULT_STORE)
 
     @classmethod
     def fields_for_scope(cls, scope: str) -> frozenset[str]:
         return frozenset(
-            name
-            for name, specification in cls.FIELD_SPECS.items()
-            if specification[1] == scope
+            name for name, specification in cls.FIELD_SPECS.items() if specification[1] == scope
         )
