@@ -179,7 +179,7 @@ class RouteRegistry:
     @staticmethod
     def register_middleware(builder, container: ApplicationContainer) -> None:
         for handler in (
-            CanFulfillIntentHandler(deps=container),
+            CanFulfillIntentHandler(container.resolver),
             DialogValidationGateHandler(),
             AvailabilityDialogHandler(container.availability),
             FeedbackSkipGateHandler(deps=container),

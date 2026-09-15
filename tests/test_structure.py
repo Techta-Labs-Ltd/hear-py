@@ -81,6 +81,14 @@ def test_availability_gate_uses_its_explicit_action():
     assert "self._deps" not in source
 
 
+def test_can_fulfill_handler_uses_an_explicit_resolver():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "controllers" / "can_fulfill.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+    assert "self._deps" not in source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [
