@@ -41,6 +41,8 @@ from src.models.feedback_response import (
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
 from src.models.intent_dispatch import IntentDispatcher
+from src.models.launch_workflow import LaunchWorkflow
+from src.models.onboarding import TownCapture
 from src.models.play import PlayContent, PlayOrganization
 from src.models.playback_events import PlaybackEvents
 from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
@@ -188,7 +190,7 @@ class RouteRegistry:
             FeedbackSkipGateHandler(deps=container),
             FeedbackGateHandler(deps=container),
             OnboardingGateHandler(deps=container),
-            TownCaptureHandler(deps=container),
+            TownCaptureHandler(TownCapture(deps=container), container.user),
             SearchConfirmationGateHandler(),
             IntentDispatchGateHandler(IntentDispatcher(deps=container)),
         ):
@@ -209,7 +211,7 @@ class RouteRegistry:
     def register_controllers(builder, container: ApplicationContainer) -> None:
         for controller in (
             PermissionResumeHandler(container.permission),
-            LaunchRequestHandler(deps=container),
+            LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback),
             SetUpAccountHandler(container.permission),
             HearNotificationsHandler(container.notifications),
             EnableNotificationsHandler(container.notifications),

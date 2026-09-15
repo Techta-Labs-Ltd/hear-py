@@ -12,6 +12,7 @@ from src.database.persistence import MemoryPersistenceAdapter
 from src.models.browse import Browse
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
+from src.models.launch_workflow import LaunchWorkflow
 from src.models.play import PlayContent
 from src.models.social import FollowCreator
 from src.registry import RouteRegistry
@@ -86,7 +87,7 @@ persistence._store[USER_ID] = {
 skill = AsyncSkill(persistence_adapter=persistence)
 container = ApplicationContainer()
 RouteRegistry.register_middleware(skill, container)
-skill.add_request_handler(LaunchRequestHandler(deps=container))
+skill.add_request_handler(LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback))
 skill.add_request_handler(PlayContentHandler(PlayContent(deps=container)))
 skill.add_request_handler(BrowseContentHandler(container.browse))
 skill.add_request_handler(WhatsTrendingHandler(container.browse))

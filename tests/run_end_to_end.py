@@ -8,6 +8,7 @@ from src.controllers.play import PlayContentHandler
 from src.controllers.report import WhatsThisAboutHandler
 from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
+from src.models.launch_workflow import LaunchWorkflow
 from src.models.play import PlayContent
 from src.registry import RouteRegistry
 
@@ -85,7 +86,7 @@ persistence._store[USER_ID] = {
 builder = AsyncSkill(persistence_adapter=persistence)
 container = ApplicationContainer()
 RouteRegistry.register_middleware(builder, container)
-builder.add_request_handler(LaunchRequestHandler())
+builder.add_request_handler(LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback))
 builder.add_request_handler(PlayContentHandler(PlayContent(deps=ApplicationContainer())))
 builder.add_request_handler(WhatsThisAboutHandler())
 builder.add_request_handler(HelpIntentHandler())
@@ -110,8 +111,11 @@ run_scenario("cancel", builder, make_event("IntentRequest", "AMAZON.CancelIntent
 print()
 persistence2 = MemoryPersistenceAdapter()
 builder2 = AsyncSkill(persistence_adapter=persistence2)
-RouteRegistry.register_middleware(builder2, ApplicationContainer())
-builder2.add_request_handler(LaunchRequestHandler())
+container2 = ApplicationContainer()
+RouteRegistry.register_middleware(builder2, container2)
+builder2.add_request_handler(
+    LaunchRequestHandler(LaunchWorkflow(deps=container2), container2.playback)
+)
 print("--- New User (empty store) ---")
 run_scenario("open test development", builder2, make_event("LaunchRequest"))
 run_scenario("help", builder2, make_event("IntentRequest", "AMAZON.HelpIntent"))

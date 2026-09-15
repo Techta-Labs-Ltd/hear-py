@@ -19,9 +19,14 @@ from src.middleware.resolver import ResolverInterceptor
 from src.models.dialog import DialogStateManager
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
+from src.models.onboarding import TownCapture
 from src.models.play import PlayOrganization
 from src.models.user import User
 from src.registry import RouteRegistry
+
+
+def _town_capture_handler(container: ApplicationContainer) -> TownCaptureHandler:
+    return TownCaptureHandler(TownCapture(deps=container), container.user)
 
 
 @pytest.mark.asyncio
@@ -753,7 +758,7 @@ async def test_active_location_change_owns_city_misclassified_as_local_search(
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
     assert nlp["slots"] == {"townName": "Swindon", "placeName": "Swindon"}
-    assert TownCaptureHandler(deps=container).can_handle(handler_input) is True
+    assert _town_capture_handler(container).can_handle(handler_input) is True
 
 
 @pytest.mark.asyncio
@@ -808,8 +813,8 @@ async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_han
     )
     handler_input = _town_request(mock_handler_input, "swidon")
     await ResolverInterceptor(deps=ApplicationContainer()).process(handler_input)
-    assert TownCaptureHandler(deps=ApplicationContainer()).can_handle(handler_input)
-    await TownCaptureHandler(deps=ApplicationContainer()).handle(handler_input)
+    assert _town_capture_handler(ApplicationContainer()).can_handle(handler_input)
+    await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     store = User.snapshot(handler_input)
     assert store["pendingLocationConfirm"]["city"] == "Swindon"
     assert store["awaitingLocationConfirm"] is True
@@ -845,7 +850,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
         ]
     }
     await ResolverInterceptor(deps=ApplicationContainer()).process(handler_input)
-    await TownCaptureHandler(deps=ApplicationContainer()).handle(handler_input)
+    await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"] == {
         "townName": "Herne Bay",
         "placeName": "Herne Bay",
@@ -895,9 +900,9 @@ async def test_unknown_city_search_query_reaches_the_location_resolver(mock_hand
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
     assert nlp["slots"] == {"townName": "dorking", "placeName": "dorking"}
-    assert TownCaptureHandler(deps=container).can_handle(handler_input) is True
+    assert _town_capture_handler(container).can_handle(handler_input) is True
 
-    await TownCaptureHandler(deps=container).handle(handler_input)
+    await _town_capture_handler(container).handle(handler_input)
 
     resolver.resolve_utterance.assert_awaited_once_with(
         "dorking",
@@ -1004,8 +1009,8 @@ async def test_onboarding_treats_creator_misclassification_as_town(monkeypatch, 
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
     assert nlp["slots"]["townName"] == "Gloucester"
-    assert TownCaptureHandler(deps=ApplicationContainer()).can_handle(mock_handler_input)
-    await TownCaptureHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    assert _town_capture_handler(ApplicationContainer()).can_handle(mock_handler_input)
+    await _town_capture_handler(ApplicationContainer()).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["onboardingStage"] == "await_location_confirm"
     assert store["pendingLocationConfirm"]["city"] == "Gloucester"
@@ -1078,7 +1083,7 @@ async def test_town_intent_remains_owned_when_resolver_calls_it_search(
         "entities": [],
         "slots": {"residualQuery": "ammm ba"},
     }
-    handler = TownCaptureHandler(deps=ApplicationContainer())
+    handler = _town_capture_handler(ApplicationContainer())
     assert handler.can_handle(handler_input) is True
     await handler.handle(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
@@ -1101,7 +1106,7 @@ async def test_unknown_city_names_city_and_keeps_session_open(monkeypatch, mock_
         ),
     )
     handler_input = _town_request(mock_handler_input, "nottinghamshire place")
-    await TownCaptureHandler(deps=ApplicationContainer()).handle(handler_input)
+    await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
     assert "couldn't find nottinghamshire place as a city" in speech.casefold()
     retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
@@ -1125,7 +1130,7 @@ async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_h
         ),
     )
     handler_input = _town_request(mock_handler_input, "swidon")
-    await TownCaptureHandler(deps=ApplicationContainer()).handle(handler_input)
+    await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     store = User.snapshot(handler_input)
     assert store["pendingLocationConfirm"]["city"] == "Swindon"
     assert store["awaitingLocationConfirm"] is True
@@ -1141,7 +1146,7 @@ async def test_town_resolver_failure_retries_once_without_closing_session(
         AsyncMock(side_effect=ResolverUnavailable("taxonomy_sync_unavailable")),
     )
     handler_input = _town_request(mock_handler_input, "york")
-    await TownCaptureHandler(deps=ApplicationContainer()).handle(handler_input)
+    await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     store = User.snapshot(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
     assert "try the city name again" in speech
@@ -1167,7 +1172,7 @@ async def test_repeated_town_resolver_failure_continues_without_location(
     handler_input.attributes_manager.request_attributes["_store"][
         "onboardingTownResolverFailures"
     ] = 1
-    await TownCaptureHandler(deps=ApplicationContainer()).handle(handler_input)
+    await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     store = User.snapshot(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
     assert "continue without your location" in speech
@@ -2159,7 +2164,7 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
     assert nlp["searchPayload"]["filter"] == {"organizationIds": ["org-walsall"]}
     assert User.snapshot(mock_handler_input)["pendingAmbiguity"] is None
     assert User.snapshot(mock_handler_input)["activeDialog"] is None
-    assert not TownCaptureHandler(deps=ApplicationContainer()).can_handle(mock_handler_input)
+    assert not _town_capture_handler(ApplicationContainer()).can_handle(mock_handler_input)
     from src.controllers.intent_dispatch import IntentDispatchGateHandler
     from src.middleware.confirmation import ConfirmationMiddleware
 
@@ -3202,7 +3207,7 @@ async def test_wakefield_reply_uses_legacy_ambiguity_before_onboarding(
     assert nlp["searchPayload"]["filter"] == {"organizationIds": ["org-wakefield"]}
     assert store["userCity"] is None
     assert store.get("pendingLocationConfirm") is None
-    assert not TownCaptureHandler(deps=ApplicationContainer()).can_handle(mock_handler_input)
+    assert not _town_capture_handler(ApplicationContainer()).can_handle(mock_handler_input)
 
 
 @pytest.mark.asyncio
