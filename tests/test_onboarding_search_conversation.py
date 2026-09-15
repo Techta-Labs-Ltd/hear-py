@@ -17,6 +17,7 @@ from src.controllers.browse import BrowseNavigationHandler
 from src.controllers.launch import TownCaptureHandler
 from src.middleware.resolver import ResolverInterceptor
 from src.models.dialog import DialogStateManager
+from src.models.play import PlayOrganization
 from src.models.user import User
 from src.registry import RouteRegistry
 
@@ -417,7 +418,7 @@ def test_name_only_organization_selection_uses_domain_handler(mock_handler_input
             },
         }
     )
-    assert PlayByOrganizationHandler(deps=ApplicationContainer()).can_handle(mock_handler_input)
+    assert PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).can_handle(mock_handler_input)
 
 @pytest.mark.asyncio
 async def test_local_resolver_result_does_not_send_interpretation_progressive(
@@ -1719,7 +1720,7 @@ async def test_resolved_organization_requires_confirmation_before_search(
     )
     discover = AsyncMock(return_value={"failed": False, "results": [], "total_hits": 0})
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["awaitingSearchConfirmation"] is True
     assert store["pendingResolution"]["intent"] == "organization"
@@ -1770,7 +1771,7 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
             },
         }
     )
-    await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["activeDialog"]["type"] == "ambiguity"
     assert store["pendingAmbiguity"]["candidates"] == candidates
@@ -1834,7 +1835,7 @@ async def test_ambiguity_response_without_original_slot_reprompts_candidates(
         }
     )
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "more than one match" in spoken
     assert "Which talking newspaper" not in spoken
@@ -3240,7 +3241,7 @@ async def test_misrouted_unresolved_source_is_not_called_talking_newspaper(
             },
         }
     )
-    await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "creator, organisation or publication named paul" in spoken
     assert "talking newspaper" not in spoken
@@ -3280,7 +3281,7 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
     )
     discover = AsyncMock()
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
     assert User.snapshot(mock_handler_input)["awaitingOrganizationName"] is True
     assert DialogStateManager.get_active(mock_handler_input)["type"] == "organization_name"
     chained_builder = mock_handler_input.response_builder.speak.return_value.reprompt.return_value
@@ -3928,7 +3929,7 @@ async def test_empty_delegated_source_reply_gives_name_recovery(
             "expiresAt": 4102444800,
         },
     }
-    response = await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(
+    response = await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(
         mock_handler_input
     )
 
@@ -4150,7 +4151,7 @@ async def test_resolved_talking_newspaper_follow_up_requires_confirmation(
     )
     discover = AsyncMock()
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["awaitingOrganizationName"] is False
     assert store["awaitingSearchConfirmation"] is True

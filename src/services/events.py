@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
+from src.services.logging_control import ApplicationLog
 
 from src.clients.events import BackendEventEnvelope, SqsEventClient, WebhookEventClient
 from src.constants.events import EventConstants
@@ -12,7 +12,7 @@ from src.utils.playback import PlaybackUtils
 
 
 class OutboundEventService:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_producer", "_webhook")
 
     def __init__(

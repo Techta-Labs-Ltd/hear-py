@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
@@ -125,7 +125,7 @@ class PlaybackStoppedHandler(AbstractRequestHandler):
 
 
 class PlaybackFailedHandler(AbstractRequestHandler):
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     def __init__(self, *, deps: object | None = None):
         self._deps = deps

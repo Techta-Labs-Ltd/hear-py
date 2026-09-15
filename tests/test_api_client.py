@@ -232,7 +232,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
         )
 
     monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
-    with caplog.at_level(logging.INFO, logger="src.clients.hear"):
+    with caplog.at_level(logging.INFO, logger="hear"):
         result = await HearApiClient().availability(
             {
                 "filter": {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -16,7 +16,7 @@ from src.models.user import PersistenceReceipt, User
 
 
 class DynamoUserSupport:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     _VERSIONS_FIELD = "_persistenceVersions"
     _CHANGED_FIELDS = "_persistenceChangedFields"
     _ORIGINAL_FIELDS = "_persistenceOriginal"

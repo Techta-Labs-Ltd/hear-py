@@ -111,6 +111,26 @@ class TestPersistence:
         assert "reportHistory" not in snapshot
         assert "sessions" not in snapshot["playHistory"][0]
 
+    def test_feedback_and_following_state_stays_out_of_dynamodb(self):
+        snapshot = User.persisted_snapshot(
+            {
+                **StateSchema.DEFAULT_STORE,
+                "feedbackCandidates": [{"feedbackKey": "content-1"}],
+                "publicationFeedbackProgress": {"publication-1": {"completed": 1}},
+                "answeredFeedbackKeys": ["content-1"],
+                "followedCreators": [{"id": "creator-1", "name": "Creator"}],
+            }
+        )
+
+        assert StateSchema.scope_for("feedbackCandidates") is None
+        assert StateSchema.scope_for("publicationFeedbackProgress") is None
+        assert StateSchema.scope_for("answeredFeedbackKeys") is None
+        assert StateSchema.scope_for("followedCreators") is None
+        assert "feedbackCandidates" not in snapshot
+        assert "publicationFeedbackProgress" not in snapshot
+        assert "answeredFeedbackKeys" not in snapshot
+        assert "followedCreators" not in snapshot
+
     def test_merge_initial_store_clears_legacy_publication_track_feedback(self):
         merged = User.merge_persisted(
             {

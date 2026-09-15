@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 import sentry_sdk
 from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
@@ -9,7 +9,7 @@ from config import settings
 
 
 class ErrorReporter:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     def __init__(self) -> None:
         self._initialized = False

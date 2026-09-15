@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
+from src.services.logging_control import ApplicationLog
 from datetime import datetime
 from typing import Literal
 
@@ -114,7 +114,7 @@ class BackendEventEnvelope(BaseModel):
 
 
 class SqsEventClient:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_queue_url", "_region", "_client")
 
     def __init__(
@@ -153,7 +153,7 @@ class SqsEventClient:
 
 
 class WebhookEventClient:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_url", "_secret", "_api_key", "_pool")
 
     def __init__(

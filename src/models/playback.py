@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 from typing import Any
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -117,7 +117,7 @@ class Playback:
         )
         return handler_input.response_builder.add_directive(directive).response
 
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_alexa", "_playback", "_queue", "_events")
 
     def __init__(

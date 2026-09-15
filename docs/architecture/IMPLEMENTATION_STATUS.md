@@ -10,8 +10,8 @@ This is the first staged reliability update. It does **not** complete the compre
 
 | Requirement | Status | Evidence and remaining work |
 | --- | --- | --- |
-| A01: explicit composition and dependency injection | OPEN — IMPLEMENT | `ApplicationContainer` still uses `**components`, reflective component construction and whole-container feature dependencies. Replace these in W02; this update does not claim that class-only audit success proves constructor correctness. |
-| A02: inject actions into play controllers | OPEN — IMPLEMENT | `controllers/play.py` still constructs its feature actions. Migrate its callers with the new request graph. |
+| A01: explicit composition and dependency injection | OPEN — IMPLEMENT | `ApplicationContainer` now has an explicit typed constructor and `RouteRegistry` no longer uses reflection to construct handlers. Whole-container feature dependencies and request factories remain to be removed. |
+| A02: inject actions into play controllers | FIXED — DO NOT MODIFY | Play controllers require injected actions, and `RouteRegistry` is their sole production construction site. No `deps` fallback remains in either controller. |
 | A03: typed feature inputs and outcomes | OPEN — IMPLEMENT | Models still parse Alexa input and produce platform responses. Full feature migration is required. |
 | A04: request-owned User and RequestContext contracts | OPEN — IMPLEMENT, with completed isolation fixes | `User.snapshot`, update inputs/results, defaults and memory storage now copy nested values. Typed commit results/receipts belong to User. Feature operations still receive `handler_input`; their framework-independent gateway remains open. |
 | A05: application versus request lifetimes | EXISTING — PRESERVE; request graph OPEN | The runtime continues to create a fresh envelope, attribute manager, deadline and response builder per invocation. The application container and feature graph remain cached; explicit request factories are not implemented. |

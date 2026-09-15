@@ -122,15 +122,6 @@ class UserStateCollections:
             capped[str(publication_id)]["tracks"] = tracks
         return capped
 
-    @staticmethod
-    def history(value) -> list:
-        return (
-            [item for item in value if isinstance(item, dict)][-100:]
-            if isinstance(value, list)
-            else []
-        )
-
-
 class UserStateNormalizer:
     PLAYBACK_FIELDS = frozenset(
         {
@@ -285,10 +276,6 @@ class UserStateNormalizer:
     @staticmethod
     def publication_progress(value) -> dict:
         return UserStateCollections.publication_progress(value)
-
-    @staticmethod
-    def history(value) -> list:
-        return UserStateCollections.history(value)
 
     @staticmethod
     def feedback(store: dict) -> None:

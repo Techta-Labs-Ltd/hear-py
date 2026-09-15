@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from config import settings
 from src.alexa.context import RequestContext
@@ -17,7 +17,7 @@ from src.utils.search_payload import SearchPayload
 
 
 class ResolverWorkflow:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     SEARCH_INTENTS = {
         "ChooseSourceKindIntent",
         "OpenDiscoveryIntent",

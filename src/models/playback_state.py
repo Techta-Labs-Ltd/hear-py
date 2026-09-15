@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 import uuid
 from enum import StrEnum
@@ -286,7 +286,7 @@ class PlaybackState:
 
 
 class PlaybackQueue:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_user",)
 
     def __init__(self, store: User) -> None:

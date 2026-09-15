@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from ask_sdk_core.handler_input import HandlerInput
@@ -10,7 +10,7 @@ from src.utils.deadline import DeadlineBudget
 
 
 class DeadlineModule:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
 
 class LambdaDeadlineInterceptor(AbstractRequestInterceptor):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 from dataclasses import replace
 
@@ -16,7 +16,7 @@ from src.utils.deadline import DeadlineBudget
 
 
 class ListenerIdentitySupport:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def normalize_email(value: object) -> str | None:

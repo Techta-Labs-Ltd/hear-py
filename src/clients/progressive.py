@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from config import settings
 from src.alexa.context import RequestContext
@@ -10,7 +10,7 @@ from src.clients.pool import HttpPool
 
 
 class ProgressiveResponseSupport:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
 
 class ProgressiveResponseClient:

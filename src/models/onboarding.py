@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 from typing import Any, Dict, Optional
 
@@ -104,7 +104,7 @@ class SetLocation:
 
 
 class Onboarding(OnboardingService):
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     def __init__(self, store: User | None = None) -> None:
         super().__init__(OnboardingState(store or User()))

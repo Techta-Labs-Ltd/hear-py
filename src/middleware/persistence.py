@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import (
     AbstractRequestInterceptor,
@@ -16,7 +16,7 @@ from src.utils.deadline import DeadlineBudget
 
 
 class PersistenceMiddlewareSupport:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def apply_identity(handler_input) -> None:

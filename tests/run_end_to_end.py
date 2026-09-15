@@ -8,6 +8,7 @@ from src.controllers.play import PlayContentHandler
 from src.controllers.report import WhatsThisAboutHandler
 from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
+from src.models.play import PlayContent
 from src.registry import RouteRegistry
 
 USER_ID = "amzn1.ask.account.AMA5VNMEKZ2IKKQ66FJFFNUFHIZWGKDJXHMTPAWPFIW6Q7NFOQDKCSUNC44TFDRZXRIMA7YZUNKJHK2KAVHFCOAQSSSLDEYEFMJYXTZYYOYK52IGMJMU3KWXBZPGNEUJC4HAKIJUSUZDKD3GRL26OQMBR4BPLCMTN4AVAML7OWIYSU5YAPQOTGCEEPHAMQQFZ4B7EEYUT5H56XOI3SQZ3P5S7IOVYU2UZJJXPGKLG2UA"
@@ -84,7 +85,7 @@ persistence._store[USER_ID] = {
 builder = AsyncSkill(persistence_adapter=persistence)
 RouteRegistry.register_middleware(builder, ApplicationContainer())
 builder.add_request_handler(LaunchRequestHandler())
-builder.add_request_handler(PlayContentHandler())
+builder.add_request_handler(PlayContentHandler(PlayContent(deps=ApplicationContainer())))
 builder.add_request_handler(WhatsThisAboutHandler())
 builder.add_request_handler(HelpIntentHandler())
 builder.add_request_handler(CancelIntentHandler())

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from src.services.logging_control import ApplicationLog
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,7 +18,7 @@ from src.utils.search_payload import SearchPayload
 
 
 class HearApiSupport:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     ALLOWED_SORT_VALUES = SearchConstants.ALLOWED_SEARCH_SORTS
     _EMPTY_SEARCH_RESULT: dict[str, Any] = {
         "results": [],

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 import httpx
 
@@ -10,7 +10,7 @@ from src.utils.notifications import NotificationItem
 
 
 class NotificationApiClient:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_api_key", "_base_url", "_path", "_pool", "_timeout_ms")
 
     def __init__(

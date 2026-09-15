@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
@@ -18,7 +18,7 @@ from src.models.report import Report
 
 
 class ReportModule:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
 
 class ReportContentHandler(AbstractRequestHandler):

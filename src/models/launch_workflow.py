@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -17,7 +17,7 @@ from src.utils.deadline import DeadlineBudget
 
 
 class LaunchWorkflow:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     PROFILE_TTL_MS = 24 * 60 * 60 * 1000
 
     def __init__(self, *, deps: object | None = None):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 from typing import Any, Dict
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
@@ -16,7 +16,7 @@ from src.models.onboarding import Onboarding, TownCapture
 
 
 class OnboardingPolicy:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     _SKIP_INTENTS = frozenset(
         {"SkipFeedbackIntent", "AMAZON.NextIntent", "AMAZON.SkipIntent"}
     )

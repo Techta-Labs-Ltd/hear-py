@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-import logging
+from src.services.logging_control import ApplicationLog
 from typing import Any
 from urllib.parse import urlparse
 
@@ -25,7 +25,7 @@ class AlexaMetrics:
 
 
 class AlexaRuntime:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def _valid_card_image_url(value: Any) -> bool:

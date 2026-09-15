@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 from typing import Any, Dict, Optional
 
@@ -29,7 +29,7 @@ from src.utils.search_payload import SearchPayload
 
 
 class Search:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     @staticmethod
     def initial_search_queue_items(
         search_result: dict[str, Any],

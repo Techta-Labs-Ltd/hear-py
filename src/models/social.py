@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -234,7 +234,7 @@ class UnfollowCreator:
 
 
 class Social:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def _dependencies(deps: object | None):

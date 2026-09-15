@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 import traceback
 from copy import deepcopy
@@ -16,7 +16,7 @@ from src.models.resolver import ResolverResult, ResolverUnavailable
 
 
 class ResolverClientSupport:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def _resolver_response_log(payload: dict[str, Any]) -> dict[str, Any]:

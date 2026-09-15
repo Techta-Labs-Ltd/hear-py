@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from src.alexa.context import RequestContext
 from src.alexa.speech import Speech
@@ -10,7 +10,7 @@ from src.models.play import PlayContent, PlayCreator, PlayOrganization
 
 
 class SuggestionConfirmation:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     def __init__(self, *, deps: object) -> None:
         self._deps = deps

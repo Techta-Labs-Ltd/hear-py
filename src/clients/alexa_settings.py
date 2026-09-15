@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
+from src.services.logging_control import ApplicationLog
 
 from config import settings
 from src.alexa.context import RequestContext
@@ -10,7 +10,7 @@ from src.utils.deadline import DeadlineBudget
 
 
 class AlexaSettingsSupport:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def _safe_address_log(data: dict) -> dict:

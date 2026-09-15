@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import logging
-
 from config import settings
 from src.alexa.runtime import AsyncSkill
 from src.container import ApplicationContainer
 from src.database.dynamo_user import DynamoUserSupport
 from src.database.persistence import MemoryPersistenceAdapter
 from src.registry import RouteRegistry
-from src.services.logging_control import LoggingControl
+from src.services.logging_control import ApplicationLog
 
 
 class Application:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def build_persistence_adapter():
@@ -40,7 +38,7 @@ class Application:
         persistence_adapter=None, *, deps: ApplicationContainer | None = None
     ) -> AsyncSkill:
         """Create a fully configured skill application."""
-        LoggingControl.configure(settings.HEAR_LOGGING_ENABLED)
+        ApplicationLog.configure(settings.HEAR_LOGGING_ENABLED)
         skill = AsyncSkill(
             persistence_adapter=persistence_adapter
             if persistence_adapter is not None

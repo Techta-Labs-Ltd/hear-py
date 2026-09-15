@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -28,7 +28,7 @@ from src.models.play import PlayContent, PlayCreator, PlayOrganization
 
 
 class IntentDispatcher:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     DISPATCHABLE_INTENTS = frozenset(
         {
             "trending",

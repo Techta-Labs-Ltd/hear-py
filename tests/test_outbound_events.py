@@ -86,7 +86,7 @@ async def test_webhook_open_circuit_is_a_deferred_delivery_without_exception_log
         pool=OpenCircuitPoolStub(),
     )
 
-    with caplog.at_level(logging.WARNING, logger="src.clients.events"):
+    with caplog.at_level(logging.WARNING, logger="hear"):
         delivered = await client.send({"event": "playback.stopped", "data": {}})
 
     assert delivered is False

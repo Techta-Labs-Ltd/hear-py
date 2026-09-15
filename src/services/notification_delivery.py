@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from src.services.logging_control import ApplicationLog
 
 from src.utils.deadline import RequestDeadline
 from src.utils.events import SqsBatch
@@ -9,7 +9,7 @@ from src.utils.notifications import NotificationItem, NotificationQueueMessage
 
 
 class NotificationDeliveryService:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_notification_api", "_proactive")
 
     def __init__(self, notification_api, proactive) -> None:

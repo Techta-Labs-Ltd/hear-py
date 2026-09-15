@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from src.models.feedback import FeedbackService
 from src.models.playback_state import PlaybackQueue
@@ -8,7 +8,7 @@ from src.utils.content import ContentUtils
 
 
 class PlaybackEvents:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     def __init__(self, *, deps: object | None = None):
         self._deps = deps

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
@@ -24,7 +24,7 @@ from src.utils.search_payload import SearchPayload
 
 
 class Availability:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     __slots__ = ("_deps", "_dialog")
 
     def __init__(self, *, deps: object | None = None) -> None:

@@ -101,7 +101,7 @@ async def test_client_sends_documented_request_and_api_key(caplog):
             transport=httpx.MockTransport(handler),
         )
     )
-    with caplog.at_level(logging.INFO, logger="src.clients.resolver"):
+    with caplog.at_level(logging.INFO, logger="hear"):
         result = await client.resolve(
             "latest sport by adeshina",
             alexa_user_id="amzn-user",

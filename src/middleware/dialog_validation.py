@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import (
     AbstractRequestHandler,
@@ -21,7 +21,7 @@ from src.models.dialog import DialogSelection, DialogStateManager
 
 
 class DialogValidationPolicy:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     _EXIT_INTENTS = {"AMAZON.CancelIntent", "AMAZON.StopIntent"}
     _BINARY_INTENTS = _EXIT_INTENTS | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
     _AMBIGUITY_INTENTS = _EXIT_INTENTS | {

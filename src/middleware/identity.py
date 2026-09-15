@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
@@ -11,7 +11,7 @@ from src.models.user import User
 
 
 class IdentityPolicy:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
 
     @staticmethod
     def _get_envelope_value(envelope, *path):

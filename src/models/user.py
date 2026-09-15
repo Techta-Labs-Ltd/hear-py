@@ -293,8 +293,6 @@ class User:
             for item in merged.get("playHistory") or []
             if (normalized := PlaybackHistoryUtils.normalize(item))
         ][: settings.max_history]
-        for history_key in ("feedbackHistory", "reportHistory"):
-            merged[history_key] = UserStateNormalizer.history(merged.get(history_key))
         UserStateNormalizer.feedback(merged)
         return merged
 

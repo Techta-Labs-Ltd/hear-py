@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
+from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -32,7 +32,7 @@ from src.utils.search_payload import SearchPayload
 
 
 class Affirmative:
-    logger = logging.getLogger(__name__)
+    logger = ApplicationLog
     "State-machine based Yes handler.\n\n    Routes the Yes intent based on the current store/session state:\n    1. awaitingSearchConfirmation  -> execute confirmed search\n    2. listModeActive              -> play current list item\n    4. awaitingStillListening      -> advance queue\n    5. awaitingContinueAfterFlag   -> acknowledge continue\n    6. awaitingFeedback            -> delegate to FeedbackEnjoyed\n    7. awaitingFollow              -> delegate to FollowCreator\n    9. pendingNlpSuggestion        -> confirm NLP suggestion\n    Fallback                       -> generic welcome reprompt\n    "
 
     def __init__(self, *, deps: object | None = None):
