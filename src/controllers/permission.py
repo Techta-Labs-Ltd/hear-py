@@ -7,8 +7,8 @@ from src.models.permission import Permission
 
 
 class PermissionResumeHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None) -> None:
-        self._permission = Permission(deps=deps)
+    def __init__(self, permission: Permission) -> None:
+        self._permission = permission
 
     def can_handle(self, handler_input) -> bool:
         return AlexaRequest.get_request_type(handler_input) == "SessionResumedRequest"
@@ -18,8 +18,8 @@ class PermissionResumeHandler(AbstractRequestHandler):
 
 
 class SetUpAccountHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None) -> None:
-        self._permission = Permission(deps=deps)
+    def __init__(self, permission: Permission) -> None:
+        self._permission = permission
 
     def can_handle(self, handler_input) -> bool:
         return (

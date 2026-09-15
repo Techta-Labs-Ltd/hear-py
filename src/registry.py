@@ -203,12 +203,12 @@ class RouteRegistry:
     @staticmethod
     def register_controllers(builder, container: ApplicationContainer) -> None:
         for controller in (
-            PermissionResumeHandler(deps=container),
+            PermissionResumeHandler(container.permission),
             LaunchRequestHandler(deps=container),
-            SetUpAccountHandler(deps=container),
-            HearNotificationsHandler(deps=container),
-            EnableNotificationsHandler(deps=container),
-            DisableNotificationsHandler(deps=container),
+            SetUpAccountHandler(container.permission),
+            HearNotificationsHandler(container.notifications),
+            EnableNotificationsHandler(container.notifications),
+            DisableNotificationsHandler(container.notifications),
             WhatsTrendingHandler(container.browse),
             BrowseContentHandler(container.browse),
             PlayByOrganizationHandler(PlayOrganization(deps=container)),
