@@ -9,8 +9,8 @@ from src.models.browse import Browse
 
 
 class WhatsTrendingHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._model = deps.browse if deps else Browse()
+    def __init__(self, model: Browse) -> None:
+        self._model = model
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return AlexaRequest.get_request_type(
@@ -25,8 +25,8 @@ class WhatsTrendingHandler(AbstractRequestHandler):
 
 
 class BrowseContentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._model = deps.browse if deps else Browse()
+    def __init__(self, model: Browse) -> None:
+        self._model = model
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return AlexaRequest.get_request_type(
@@ -41,8 +41,8 @@ class BrowseContentHandler(AbstractRequestHandler):
 
 
 class BrowseNavigationHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._model = deps.browse if deps else Browse()
+    def __init__(self, model: Browse) -> None:
+        self._model = model
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         if AlexaRequest.get_request_type(handler_input) != "IntentRequest":

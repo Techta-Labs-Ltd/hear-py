@@ -9,6 +9,7 @@ from src.controllers.play import PlayContentHandler
 from src.controllers.social import FollowCreatorHandler
 from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
+from src.models.browse import Browse
 from src.models.play import PlayContent
 from src.registry import RouteRegistry
 
@@ -84,8 +85,8 @@ container = ApplicationContainer()
 RouteRegistry.register_middleware(skill, container)
 skill.add_request_handler(LaunchRequestHandler(deps=container))
 skill.add_request_handler(PlayContentHandler(PlayContent(deps=container)))
-skill.add_request_handler(BrowseContentHandler(deps=container))
-skill.add_request_handler(WhatsTrendingHandler(deps=container))
+skill.add_request_handler(BrowseContentHandler(container.browse))
+skill.add_request_handler(WhatsTrendingHandler(container.browse))
 skill.add_request_handler(HelpIntentHandler())
 skill.add_request_handler(CancelIntentHandler(deps=container))
 skill.add_request_handler(YesIntentHandler(deps=container))

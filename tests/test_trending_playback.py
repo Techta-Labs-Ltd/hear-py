@@ -42,7 +42,7 @@ async def test_recommendation_intent_uses_availability_source_selection(
         "src.models.availability.Availability.begin_recommendations",
         begin_recommendations,
     )
-    handler = WhatsTrendingHandler(deps=ApplicationContainer())
+    handler = WhatsTrendingHandler(ApplicationContainer().browse)
     assert handler.can_handle(mock_handler_input)
     response = await handler.handle(mock_handler_input)
 
@@ -84,7 +84,7 @@ async def test_trending_intent_searches_and_plays_trending_content(
     monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
     monkeypatch.setattr("src.models.search.Search.auto_play_first_from_search", autoplay)
 
-    response = await WhatsTrendingHandler(deps=ApplicationContainer()).handle(
+    response = await WhatsTrendingHandler(ApplicationContainer().browse).handle(
         mock_handler_input
     )
 

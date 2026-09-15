@@ -50,7 +50,7 @@ async def test_something_else_leaves_ambiguity_and_returns_to_search(
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    handler = BrowseNavigationHandler(deps=ApplicationContainer())
+    handler = BrowseNavigationHandler(ApplicationContainer().browse)
 
     resolve.assert_not_awaited()
     assert handler.can_handle(mock_handler_input) is True
@@ -2844,7 +2844,7 @@ async def test_publication_choices_support_previous_and_next_navigation(
     }
     search = AsyncMock()
     monkeypatch.setattr(HearApiClient, "search", search)
-    handler = BrowseNavigationHandler(deps=ApplicationContainer())
+    handler = BrowseNavigationHandler(ApplicationContainer().browse)
 
     mock_handler_input.request_envelope.request = AttrDict(
         {
@@ -2901,7 +2901,7 @@ def test_browse_navigation_leaves_transport_intents_to_playback_without_ambiguit
         **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
     }
-    handler = BrowseNavigationHandler(deps=ApplicationContainer())
+    handler = BrowseNavigationHandler(ApplicationContainer().browse)
     assert handler.can_handle(mock_handler_input) is False
 
 
