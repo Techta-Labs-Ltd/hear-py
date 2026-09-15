@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -15,6 +13,7 @@ from src.models.launch_workflow import LaunchWorkflow
 from src.models.onboarding import TownCapture
 from src.models.playback import Playback
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class LaunchRequestHandler(AbstractRequestHandler):

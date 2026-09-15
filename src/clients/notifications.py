@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 import httpx
 
 from config import settings
 from src.clients.pool import HttpPool
+from src.services.logging_control import ApplicationLog
 from src.utils.notifications import NotificationItem
 
 

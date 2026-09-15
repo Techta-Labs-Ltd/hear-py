@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 from typing import Any, Dict, Optional
 
@@ -16,6 +15,7 @@ from src.models.dialog import DialogStateManager
 from src.models.onboarding_state import OnboardingService, OnboardingState
 from src.models.resolver import ResolverUnavailable
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilterUtils

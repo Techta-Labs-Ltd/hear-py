@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import (
     AbstractRequestHandler,
     AbstractRequestInterceptor,
@@ -18,6 +16,7 @@ from src.constants.dialog import DialogConstants
 from src.constants.notifications import NotificationConstants
 from src.constants.playback import PlaybackConstants
 from src.models.dialog import DialogSelection, DialogStateManager
+from src.services.logging_control import ApplicationLog
 
 
 class DialogValidationPolicy:

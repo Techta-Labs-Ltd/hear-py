@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from src.services.logging_control import ApplicationLog
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ from src.constants.state import StateSchema
 from src.database.dynamo_merge import DynamoConflictMerge
 from src.database.dynamodb import DynamoExpressions, DynamoTable
 from src.models.user import PersistenceReceipt, User
+from src.services.logging_control import ApplicationLog
 
 
 class DynamoUserSupport:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from src.services.logging_control import ApplicationLog
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +11,7 @@ from src.clients.availability import AvailabilityResponse
 from src.clients.pool import HttpPool
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
+from src.services.logging_control import ApplicationLog
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.listener_payload import ListenerPayload
 from src.utils.search_payload import SearchPayload

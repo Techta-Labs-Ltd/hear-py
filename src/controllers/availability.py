@@ -6,8 +6,8 @@ from ask_sdk_model import Response
 
 from src.alexa.request import AlexaRequest
 from src.constants.availability import AvailabilityConstants
-from src.models.dialog import DialogStateManager
 from src.models.availability import Availability
+from src.models.dialog import DialogStateManager
 
 
 class AvailabilityDialogHandler(AbstractRequestHandler):

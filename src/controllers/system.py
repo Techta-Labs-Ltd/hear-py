@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -13,11 +11,12 @@ from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.playback import PlaybackConstants
+from src.models.browse import Browse
 from src.models.dialog import DialogStateManager
 from src.models.onboarding import Onboarding
-from src.models.browse import Browse
 from src.models.playback import Playback
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class HelpIntentHandler(AbstractRequestHandler):

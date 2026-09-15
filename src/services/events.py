@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from src.services.logging_control import ApplicationLog
 
 from src.clients.events import BackendEventEnvelope, SqsEventClient, WebhookEventClient
 from src.constants.events import EventConstants
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import RequestDeadline
 from src.utils.events import EventUtils, SqsBatch
 from src.utils.playback import PlaybackUtils

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from src.services.logging_control import ApplicationLog
 import time
 from typing import Any, Dict, Optional
 
@@ -20,6 +19,7 @@ from src.constants.search import SearchConstants
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.playback_state import PlaybackQueue
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.browse import BrowseUtils
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer

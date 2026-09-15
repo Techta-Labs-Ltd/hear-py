@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from src.services.logging_control import ApplicationLog
 from datetime import datetime
 from typing import Literal
 
@@ -10,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from config import settings
 from src.clients.pool import HttpCircuitOpen, HttpPool
+from src.services.logging_control import ApplicationLog
 from src.utils.events import EventUtils
 
 

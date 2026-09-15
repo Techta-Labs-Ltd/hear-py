@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 from dataclasses import replace
 
@@ -12,6 +11,7 @@ from src.alexa.runtime import AlexaMetrics
 from src.clients.alexa_settings import AlexaSettingsClient
 from src.clients.hear import HearApiClient
 from src.models.listener import IdentityContext
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 

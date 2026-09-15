@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -25,6 +24,7 @@ from src.models.playback_state import PlaybackQueue
 from src.models.search import Search
 from src.models.social import FollowCreator
 from src.models.suggestion import SuggestionConfirmation
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters

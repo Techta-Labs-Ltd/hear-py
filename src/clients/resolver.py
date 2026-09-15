@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from src.services.logging_control import ApplicationLog
 import time
 import traceback
 from copy import deepcopy
@@ -13,6 +12,7 @@ import httpx
 from config import settings
 from src.clients.pool import HttpPool
 from src.models.resolver import ResolverResult, ResolverUnavailable
+from src.services.logging_control import ApplicationLog
 
 
 class ResolverClientSupport:

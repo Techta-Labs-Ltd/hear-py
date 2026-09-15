@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 from typing import Any, Dict
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
@@ -13,6 +12,7 @@ from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
 from src.models.decline import Decline
 from src.models.onboarding import Onboarding, TownCapture
+from src.services.logging_control import ApplicationLog
 
 
 class OnboardingPolicy:

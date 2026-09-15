@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 from typing import Any
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -19,6 +18,7 @@ from src.models.playback_history import PlaybackHistory
 from src.models.playback_state import PlaybackQueue, PlaybackState
 from src.models.user import User
 from src.services.events import OutboundEventService
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget

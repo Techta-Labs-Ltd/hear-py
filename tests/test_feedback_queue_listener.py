@@ -19,8 +19,8 @@ from src.controllers.feedback import (
 )
 from src.controllers.report import ReportContentHandler
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
-from src.models.feedback import FeedbackService
 from src.models.decline import Decline
+from src.models.feedback import FeedbackService
 from src.models.feedback_response import (
     EnjoyedFeedback,
     FeedbackContinuation,

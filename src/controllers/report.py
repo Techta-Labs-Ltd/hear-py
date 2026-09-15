@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -15,6 +13,7 @@ from src.models.dialog import DeferredIntentManager, DialogStateManager
 from src.models.feedback_response import FeedbackContinuation
 from src.models.playback_controls import PlaybackControls
 from src.models.report import Report
+from src.services.logging_control import ApplicationLog
 
 
 class ReportContentHandler(AbstractRequestHandler):

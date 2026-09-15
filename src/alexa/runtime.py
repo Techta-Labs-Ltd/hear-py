@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-from src.services.logging_control import ApplicationLog
 from typing import Any
 from urllib.parse import urlparse
 
@@ -10,6 +9,7 @@ from aws_lambda_powertools.metrics import MetricUnit
 
 from config import settings
 from src.alexa.response import AlexaResponse
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import RequestDeadline
 
 

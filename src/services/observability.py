@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 import sentry_sdk
 from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 
 from config import settings
+from src.services.logging_control import ApplicationLog
 
 
 class ErrorReporter:

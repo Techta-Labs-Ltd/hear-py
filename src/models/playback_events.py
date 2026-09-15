@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from src.models.feedback import FeedbackService
 from src.models.playback import Playback
 from src.models.playback_state import PlaybackQueue
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 
 

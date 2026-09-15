@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from src.alexa.context import RequestContext
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.feedback_response import EnjoyedFeedback, NotEnjoyedFeedback
 from src.models.play import PlayContent, PlayCreator, PlayOrganization
+from src.services.logging_control import ApplicationLog
 
 
 class SuggestionConfirmation:

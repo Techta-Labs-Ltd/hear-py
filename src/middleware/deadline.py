@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.request import AlexaRequest
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 

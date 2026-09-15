@@ -9,7 +9,6 @@ from src.controllers.play import PlayContentHandler
 from src.controllers.social import FollowCreatorHandler
 from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
-from src.models.browse import Browse
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
 from src.models.launch_workflow import LaunchWorkflow

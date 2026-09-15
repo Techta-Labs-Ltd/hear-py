@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 import config.permission_scopes as permission_scopes
 from config import settings
 from src.alexa.context import RequestContext
@@ -11,6 +9,7 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogStateManager
 from src.models.search import Search
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
 from src.utils.search_payload import SearchPayload

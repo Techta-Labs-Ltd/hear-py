@@ -16,9 +16,9 @@ from src.container import ApplicationContainer
 from src.controllers.browse import BrowseNavigationHandler
 from src.controllers.launch import TownCaptureHandler
 from src.middleware.resolver import ResolverInterceptor
-from src.models.dialog import DialogStateManager
 from src.models.affirmative import Affirmative
 from src.models.decline import Decline
+from src.models.dialog import DialogStateManager
 from src.models.onboarding import TownCapture
 from src.models.play import PlayOrganization
 from src.models.user import User

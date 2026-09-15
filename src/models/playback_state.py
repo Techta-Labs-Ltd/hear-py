@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 import uuid
 from enum import StrEnum
@@ -10,6 +9,7 @@ from src.alexa.request import AlexaRequest
 from src.constants.discovery import DiscoveryConstants
 from src.constants.playback import PlaybackConstants
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentIdentity, ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget

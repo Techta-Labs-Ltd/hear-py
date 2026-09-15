@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -13,6 +12,7 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogStateManager
 from src.models.onboarding import LaunchTracker, Onboarding
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 

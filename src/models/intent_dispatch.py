@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
@@ -25,6 +24,7 @@ from src.models.feedback_response import (
 )
 from src.models.onboarding import SetLocation, TownCapture
 from src.models.play import PlayContent, PlayCreator, PlayOrganization
+from src.services.logging_control import ApplicationLog
 
 
 class IntentDispatcher:

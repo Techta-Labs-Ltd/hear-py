@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import (
     AbstractRequestInterceptor,
@@ -12,6 +11,7 @@ from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
 from src.models.listener import Listener
 from src.models.user import CommitResult, CommitStatus, EssentialPersistenceError, User
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 

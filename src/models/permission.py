@@ -1,23 +1,23 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
+from dataclasses import dataclass
 
 import config.permission_scopes as permission_scopes
-from dataclasses import dataclass
 from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.constants.onboarding import OnboardingConstants
-from src.models.onboarding import Onboarding
-from src.models.notifications import Notification
-from src.models.user import User
-from src.clients.resolver import ResolverClient
 from src.clients.progressive import ProgressiveResponseClient
+from src.clients.resolver import ResolverClient
+from src.constants.onboarding import OnboardingConstants
+from src.models.notifications import Notification
+from src.models.onboarding import Onboarding
+from src.models.user import User
 from src.services.alexa_locality import AlexaLocalityService
 from src.services.alexa_profile import ListenerProfileService
 from src.services.listener_sync import ListenerSyncService
+from src.services.logging_control import ApplicationLog
 
 
 class PermissionConstants:

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
@@ -11,6 +9,7 @@ from src.constants.resolver import ResolverConstants
 from src.constants.search import SearchConstants
 from src.models.dialog import DialogSelection
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.alexa_date import AlexaDateRange
 from src.utils.filters import SearchFilters, SearchFilterUtils
 from src.utils.search_payload import SearchPayload

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class IdentityPolicy:

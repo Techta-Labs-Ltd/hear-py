@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -13,6 +11,7 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.onboarding import Onboarding
+from src.services.logging_control import ApplicationLog
 
 
 class FallbackModule:
