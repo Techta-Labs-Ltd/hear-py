@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from config import settings
 from src.alexa.context import RequestContext
 from src.constants.listener import ListenerConstants
 from src.models.user import User
@@ -29,18 +28,24 @@ class IdentityContext:
         return {
             key: value
             for key, value in {
+                "listenerId": self.listener_id,
                 "alexaUserId": self.alexa_user_id,
-                "personId": self.person_id,
-                "deviceId": self.device_id,
-                "skillId": self.skill_id,
-                "locale": self.locale,
                 "userEmail": self.user_email,
-                "environment": settings.STAGE,
-                "principalType": self.principal_type.value,
-                "clientVersion": settings.HEAR_CLIENT_VERSION,
             }.items()
             if value is not None
         }
+
+    def with_listener_id(self, listener_id: str) -> IdentityContext:
+        return IdentityContext(
+            principal_type=self.principal_type,
+            alexa_user_id=self.alexa_user_id,
+            person_id=self.person_id,
+            device_id=self.device_id,
+            skill_id=self.skill_id,
+            locale=self.locale,
+            user_email=self.user_email,
+            listener_id=listener_id,
+        )
 
 
 class Listener:
@@ -56,6 +61,10 @@ class Listener:
     def identity(handler_input) -> IdentityContext | None:
         identity = RequestContext.value(handler_input, "_identity")
         return identity if isinstance(identity, IdentityContext) else None
+
+    @staticmethod
+    def set_identity(handler_input, identity: IdentityContext) -> IdentityContext:
+        return RequestContext.set_value(handler_input, "_identity", identity)
 
     def apply_profile(self, handler_input, changes: dict) -> dict:
         unsupported = set(changes).difference(ListenerConstants.LISTENER_PROFILE_FIELDS)

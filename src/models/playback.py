@@ -18,7 +18,6 @@ from src.models.feedback import FeedbackService
 from src.models.playback_history import PlaybackHistory
 from src.models.playback_state import PlaybackQueue, PlaybackState
 from src.models.user import User
-from src.services.alexa_reminder import AlexaReminderService
 from src.services.events import OutboundEventService
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
@@ -119,20 +118,18 @@ class Playback:
         return handler_input.response_builder.add_directive(directive).response
 
     logger = logging.getLogger(__name__)
-    __slots__ = ("_alexa", "_playback", "_queue", "_reminders", "_events")
+    __slots__ = ("_alexa", "_playback", "_queue", "_events")
 
     def __init__(
         self,
         alexa: AlexaClient,
         playback: PlaybackState | None = None,
         queue: PlaybackQueue | None = None,
-        reminders: AlexaReminderService | None = None,
         events: OutboundEventService | None = None,
     ) -> None:
         self._alexa = alexa
         self._playback = playback or PlaybackState(User())
         self._queue = queue or PlaybackQueue(User())
-        self._reminders = reminders or AlexaReminderService(alexa, User())
         self._events = events
 
     @property
@@ -157,7 +154,6 @@ class Playback:
             intro_text,
             track_index,
             options,
-            reminders=self._reminders,
             playback_repository=self._playback,
         )
 
@@ -456,9 +452,7 @@ class Playback:
     ):
         """Return a play response using contentId as the stable Alexa token."""
         del track_index
-        reminders: AlexaReminderService = dependencies["reminders"]
         playback_repository: PlaybackState | None = dependencies.get("playback_repository")
-        await reminders.cancel(handler_input)
         offset_ms = int((options or {}).get("offsetMs") or 0)
         prepared = await Playback.prepare_playback_audio_and_store(
             handler_input, content, offset_ms, playback_repository=playback_repository
@@ -612,7 +606,6 @@ class Playback:
         handler_input,
         *,
         hear_client: HearApiClient,
-        reminders: AlexaReminderService,
         speak_intro: bool = True,
         intro_prefix: str | None = None,
     ):
@@ -637,4 +630,4 @@ class Playback:
         )
         if intro_prefix:
             intro = f"{intro_prefix} {intro}".strip()
-        return await Playback.start_playback(handler_input, content, intro, reminders=reminders)
+        return await Playback.start_playback(handler_input, content, intro)

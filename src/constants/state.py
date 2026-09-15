@@ -65,7 +65,6 @@ class StateSchema:
         "devicePostalCode": (None, CORE_SCOPE),
         "deviceCountryCode": (None, CORE_SCOPE),
         "awaitingContinueAfterFlag": (False, DIALOG_SCOPE),
-        "feedbackReminderAlertToken": (None, None),
         "feedbackAskedForToken": (None, None),
         "feedbackAskedTokens": ([], None),
         "feedbackGivenTokens": ([], None),

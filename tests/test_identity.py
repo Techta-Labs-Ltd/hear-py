@@ -197,8 +197,8 @@ async def test_listener_identity_service_resolves_and_caches_canonical_listener(
     )
     request = hear_api.resolve_listener_identity.await_args.args[0]
     assert request["alexaUserId"] == "alexa-1"
-    assert request["principalType"] == "skill_user"
     assert request["userEmail"] == "alex@example.com"
+    assert set(request) == {"alexaUserId", "userEmail"}
 
 
 @pytest.mark.asyncio

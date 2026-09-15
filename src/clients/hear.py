@@ -13,6 +13,7 @@ from src.clients.pool import HttpPool
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 from src.utils.content_normalizer import ContentNormalizer
+from src.utils.listener_payload import ListenerPayload
 from src.utils.search_payload import SearchPayload
 
 
@@ -295,26 +296,25 @@ class HearApiClient:
         *,
         timeout_ms: int | None = None,
     ) -> dict | None:
-        if not isinstance(identity, dict) or not (
-            identity.get("listenerId") or identity.get("alexaUserId") or identity.get("userEmail")
-        ):
+        body = ListenerPayload.resolution(identity)
+        if not body:
             return None
         status, data = await self._raw_request(
             "POST",
             self._build_alexa_relative_path("listeners/resolve"),
-            identity,
+            body,
             timeout_ms,
         )
         return data if status == 200 and isinstance(data, dict) else None
 
     async def sync_listener(self, profile: dict, *, timeout_ms: int | None = None) -> dict | None:
-        alexa_user_id = profile.get("alexaUserId") if isinstance(profile, dict) else None
-        if not alexa_user_id:
+        body = ListenerPayload.registration(profile)
+        if not body:
             return None
         status, data = await self._raw_request(
             "POST",
             self._build_alexa_relative_path("listeners/sync"),
-            profile,
+            body,
             timeout_ms,
         )
         return data if status == 200 and isinstance(data, dict) else None
@@ -322,13 +322,13 @@ class HearApiClient:
     async def register_listener(
         self, profile: dict, *, timeout_ms: int | None = None
     ) -> dict | None:
-        alexa_user_id = profile.get("alexaUserId") if isinstance(profile, dict) else None
-        if not alexa_user_id:
+        body = ListenerPayload.registration(profile)
+        if not body:
             return None
         status, data = await self._raw_request(
             "POST",
             self._build_alexa_relative_path("listeners/register"),
-            profile,
+            body,
             timeout_ms,
         )
         return data if status == 200 and isinstance(data, dict) else None

@@ -6,9 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.models.listener import IdentityContext, Listener, PrincipalType
 from src.models.permission import Permission, PermissionConstants, PermissionPolicy
 from src.models.user import User
-from src.services.listener_sync import ListenerSyncSupport
+from src.services.listener_sync import ListenerSyncPayload
 
 
 def _handler_input(
@@ -221,11 +222,19 @@ def test_guest_sync_contains_only_alexa_identity_fields():
             "longitude": -2.24,
         }
     )
-    payload = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
+    Listener.set_identity(
+        handler_input,
+        IdentityContext(PrincipalType.SKILL_USER, alexa_user_id="user"),
+    )
+    payload = ListenerSyncPayload.build(handler_input, store)
     assert payload == {
         "action": "alexa",
         "alexaUserId": "user",
         "listenerId": None,
+        "listenerName": "Hidden Name",
+        "city": "Manchester",
+        "latitude": 53.48,
+        "longitude": -2.24,
     }
 
 
@@ -249,7 +258,11 @@ def test_listener_sync_uses_publication_history_subject_instead_of_track():
         }
     ]
 
-    payload = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
+    Listener.set_identity(
+        handler_input,
+        IdentityContext(PrincipalType.SKILL_USER, alexa_user_id="user"),
+    )
+    payload = ListenerSyncPayload.build(handler_input, store)
 
     assert "recentPlayedIds" not in payload
     assert "recentPlays" not in payload

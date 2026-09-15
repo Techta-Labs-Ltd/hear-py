@@ -21,6 +21,7 @@ from src.controllers.report import ReportContentHandler
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
 from src.models.feedback import FeedbackService
 from src.models.feedback_response import FeedbackContinuation
+from src.models.listener import IdentityContext, Listener, PrincipalType
 from src.models.playback import Playback
 from src.models.user import User
 from src.services.listener_sync import ListenerSyncService
@@ -762,12 +763,16 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
     }
     sync = AsyncMock(return_value={"listenerId": "listener-1"})
     service = ListenerSyncService(SimpleNamespace(sync_listener=sync))
+    Listener.set_identity(
+        mock_handler_input,
+        IdentityContext(PrincipalType.SKILL_USER, alexa_user_id="amzn1.ask.account.TEST"),
+    )
     assert await service.sync_for_launch(mock_handler_input)
     profile = sync.await_args.args[0]
     assert profile == {
         "action": "alexa",
-        "alexaUserId": profile["alexaUserId"],
-        "listenerId": "listener-existing",
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "listenerId": None,
         "listenerName": "Alex Hear",
         "email": "alex@example.com",
         "city": "Manchester",

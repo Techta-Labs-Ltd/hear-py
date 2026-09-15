@@ -183,7 +183,6 @@ async def test_voice_next_loads_next_page_at_loaded_boundary(monkeypatch, mock_h
             (),
             {
                 "heara": client,
-                "reminders": AsyncMock(),
                 "playback": playback,
                 "search": Search,
                 "user": User(),

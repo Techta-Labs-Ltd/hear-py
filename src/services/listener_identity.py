@@ -109,7 +109,7 @@ class ListenerIdentityService:
     async def resolve(self, handler_input, identity: IdentityContext) -> IdentityContext:
         if (
             not self._enabled
-            or not identity.alexa_user_id
+            or not (identity.listener_id or identity.alexa_user_id)
             or AlexaRequest.get_request_type(handler_input) == "CanFulfillIntentRequest"
         ):
             return identity

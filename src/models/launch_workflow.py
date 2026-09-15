@@ -104,7 +104,6 @@ class LaunchWorkflow:
     async def _feedback_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
-        await self._deps.reminders.cancel(handler_input)
         title = Speech.humanize_spoken_title(store.get("feedbackContentTitle")) or "that track"
         creator = Speech.escape_ssml_lite(store.get("feedbackCreator") or "the creator")
         prompt = Speech.LAUNCH_PENDING_FEEDBACK(title, creator, user_name)

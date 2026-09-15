@@ -4,27 +4,10 @@
   "title": "Canonical listener identity resolution",
   "description": "Request body sent to POST /alexa/listeners/resolve before Alexa state is loaded.",
   "type": "object",
-  "required": [
-    "alexaUserId",
-    "environment",
-    "principalType",
-    "clientVersion"
-  ],
   "properties": {
-    "alexaUserId": { "type": "string", "minLength": 1 },
-    "personId": { "type": "string", "minLength": 1 },
-    "deviceId": { "type": "string", "minLength": 1 },
-    "skillId": { "type": "string", "minLength": 1 },
-    "locale": { "type": "string" },
-    "userEmail": { "type": "string", "format": "email", "minLength": 3 },
-    "environment": { "type": "string", "minLength": 1 },
-    "principalType": {
-      "enum": [
-        "recognized_person",
-        "skill_user"
-      ]
-    },
-    "clientVersion": { "type": "string", "minLength": 1 }
+    "listenerId": { "type": "string", "format": "uuid" },
+    "alexaUserId": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "userEmail": { "type": "string", "format": "email" }
   },
   "additionalProperties": false,
   "$defs": {

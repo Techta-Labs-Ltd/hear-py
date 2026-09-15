@@ -1,47 +1,32 @@
 from __future__ import annotations
 
-import logging
-
-from src.alexa.request import AlexaRequest
 from src.clients.hear import HearApiClient
 from src.models.listener import Listener
 from src.models.user import User
+from src.utils.listener_payload import ListenerPayload
 
 
-class ListenerSyncSupport:
-    logger = logging.getLogger(__name__)
-
+class ListenerSyncPayload:
     @staticmethod
-    def build_listener_sync_profile(handler_input, store: dict) -> dict | None:
-        alexa_user_id = AlexaRequest.get_user_id(handler_input)
-        if not alexa_user_id:
-            return None
+    def build(handler_input, store: dict) -> dict | None:
         identity = Listener.identity(handler_input)
-        raw_listener_name = store.get("userName") or store.get("fullName")
-        raw_email = store.get("userEmail")
-        listener_name = str(raw_listener_name or "").strip()
-        email = str(raw_email or "").strip().lower()
+        if identity is None or not identity.alexa_user_id:
+            return None
         profile = {
             "action": "alexa",
-            "alexaUserId": alexa_user_id,
-            "listenerId": store.get("listenerId")
-            or (identity.listener_id if identity else None),
+            "alexaUserId": identity.alexa_user_id,
+            "listenerId": identity.listener_id,
         }
-        if listener_name and email:
-            profile.update(
-                {
-                    "listenerName": listener_name,
-                    "email": email,
-                    "city": store.get("userCity") or store.get("city"),
-                    "latitude": store.get("latitude"),
-                    "longitude": store.get("longitude"),
-                }
-            )
-        return {
-            key: value
-            for key, value in profile.items()
-            if value is not None or key == "listenerId"
+        values = {
+            "listenerName": ListenerPayload.text(
+                store.get("userName") or store.get("fullName"), ListenerPayload.MAX_TEXT_LENGTH
+            ),
+            "email": ListenerPayload.email(store.get("userEmail")),
+            "city": ListenerPayload.text(store.get("userCity"), ListenerPayload.MAX_TEXT_LENGTH),
+            "latitude": store.get("latitude"),
+            "longitude": store.get("longitude"),
         }
+        return {**profile, **{key: value for key, value in values.items() if value is not None}}
 
 class ListenerSyncService:
     __slots__ = ("_hear_api", "_enabled")
@@ -54,23 +39,14 @@ class ListenerSyncService:
         if not self._enabled:
             return False
         store = User.snapshot(handler_input)
-        profile = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
+        profile = ListenerSyncPayload.build(handler_input, store)
         if not profile:
             return False
-        ListenerSyncSupport.logger.info(
-            "Hear: listener sync request fields=%s hasLocation=%s hasProfile=%s",
-            sorted((key for key, value in profile.items() if value not in (None, [], {}))),
-            bool(profile.get("city")),
-            bool(profile.get("email") or profile.get("listenerName")),
-        )
         result = await self._hear_api.sync_listener(profile, timeout_ms=2500)
         if not result:
-            ListenerSyncSupport.logger.warning("Hear: listener sync failed")
             return False
-        listener_id = result.get("listenerId")
-        User.update(handler_input, {"listenerId": listener_id or store.get("listenerId")})
-        ListenerSyncSupport.logger.info(
-            "Hear: listener sync success hasListenerId=%s",
-            bool(listener_id or store.get("listenerId")),
-        )
+        listener_id = str(result.get("listenerId") or "").strip()
+        identity = Listener.identity(handler_input)
+        if listener_id and identity is not None:
+            Listener.set_identity(handler_input, identity.with_listener_id(listener_id))
         return True

@@ -7,7 +7,6 @@ from src.constants.notifications import NotificationConstants
 from src.constants.playback import PlaybackConstants
 from src.models.dialog import DialogStateManager
 from src.models.user import User
-from src.services.alexa_reminder import AlexaReminderService
 from src.services.events import OutboundEventService
 from src.utils.content import ContentIdentity, ContentUtils
 from src.utils.playback import PlaybackUtils
@@ -15,14 +14,12 @@ from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class FeedbackService:
-    __slots__ = ("_reminders", "_events")
+    __slots__ = ("_events",)
 
     def __init__(
         self,
-        reminders: AlexaReminderService | None = None,
         events: OutboundEventService | None = None,
     ) -> None:
-        self._reminders = reminders
         self._events = events
 
     rating_intents = {
@@ -581,11 +578,6 @@ class FeedbackService:
         return FeedbackService.mark_answered(handler_input)
 
     async def clear(self, handler_input) -> dict:
-        if self._reminders is not None:
-            try:
-                await self._reminders.cancel(handler_input)
-            except Exception:
-                pass
         return User.update(
             handler_input,
             {
@@ -604,7 +596,6 @@ class FeedbackService:
                 "feedbackCreator": None,
                 "feedbackCreatorId": None,
                 "feedbackContentTitle": None,
-                "feedbackReminderAlertToken": None,
                 "feedbackAskedForToken": None,
                 "playbackDurationEstimateMs": None,
                 "deferredIntent": None,
@@ -618,7 +609,7 @@ class FeedbackService:
             active = None
         reset_keys = (
             "pendingFollowSource pendingFeedback feedbackContentId feedbackCategory feedbackCreator feedbackCreatorId "
-            "feedbackContentTitle feedbackPromptText feedbackAskedForToken feedbackReminderAlertToken playbackDurationEstimateMs deferredIntent"
+            "feedbackContentTitle feedbackPromptText feedbackAskedForToken playbackDurationEstimateMs deferredIntent"
         )
         return User.update(handler_input, {
             **dict.fromkeys(reset_keys.split()),

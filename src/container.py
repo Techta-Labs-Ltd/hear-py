@@ -25,7 +25,6 @@ from src.models.search import Search
 from src.models.user import User
 from src.services.alexa_locality import AlexaLocalityService
 from src.services.alexa_profile import ListenerProfileService
-from src.services.alexa_reminder import AlexaReminderService
 from src.services.events import OutboundEventService
 from src.services.listener_identity import ListenerIdentityService
 from src.services.listener_sync import ListenerSyncService
@@ -45,7 +44,6 @@ class ApplicationContainer:
             "browse",
             "availability",
             "playback",
-            "reminders",
             "user",
             "listeners",
             "onboarding",
@@ -76,7 +74,6 @@ class ApplicationContainer:
         "availability",
         "playback",
         "search",
-        "reminders",
         "user",
         "listeners",
         "onboarding",
@@ -116,13 +113,11 @@ class ApplicationContainer:
             producer=SqsEventClient(),
             webhook=WebhookEventClient(),
         )
-        self.reminders = components.get("reminders") or AlexaReminderService(self.alexa, self.user)
-        self.feedback = components.get("feedback") or FeedbackService(self.reminders, self.events)
+        self.feedback = components.get("feedback") or FeedbackService(events=self.events)
         self.playback = components.get("playback") or Playback(
             self.alexa,
             playback_state,
             playback_items,
-            self.reminders,
             self.events,
         )
         self.heara = components.get("heara") or HearApiClient()

@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from config import Settings, settings
 from config.permission_scopes import (
     GEOLOCATION_READ,
-    REMINDERS_READWRITE,
 )
 from src.utils.deadline import DeadlineBudget
 
@@ -19,7 +18,6 @@ def test_settings_loads_defaults():
 
 def test_permission_scopes():
     assert GEOLOCATION_READ == "alexa::devices:all:geolocation:read"
-    assert REMINDERS_READWRITE.startswith("alexa::")
 
 
 def test_settings_api_timeout_default():

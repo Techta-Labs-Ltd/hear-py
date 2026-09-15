@@ -533,17 +533,17 @@ async def test_identity_resolution_accepts_canonical_listener_id(monkeypatch):
 
     async def fake_request(self, method, path, body, timeout_ms):
         captured.update({"method": method, "path": path, "body": body})
-        return (200, {"listenerId": "listener-1"})
+        return (200, {"listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa"})
 
     monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
     result = await HearApiClient(HearApiOptions(path_prefix="alexa")).resolve_listener_identity(
-        {"listenerId": "listener-1"},
+        {"listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa"},
         timeout_ms=500,
     )
 
-    assert result == {"listenerId": "listener-1"}
+    assert result == {"listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa"}
     assert captured["path"] == "/listeners/resolve"
-    assert captured["body"] == {"listenerId": "listener-1"}
+    assert captured["body"] == {"listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa"}
 
 
 @pytest.mark.asyncio
@@ -741,7 +741,7 @@ async def test_latest_search_initializes_lazy_navigation_queue(monkeypatch, mock
 
 
 @pytest.mark.asyncio
-async def test_start_playback_awaits_cleanup_and_builds_audio_directive(monkeypatch):
+async def test_start_playback_builds_audio_directive(monkeypatch):
     envelope = AttrDict(
         {
             "context": {
@@ -759,7 +759,6 @@ async def test_start_playback_awaits_cleanup_and_builds_audio_directive(monkeypa
         "_dirty": False,
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    reminders = AsyncMock()
     response = await Playback.start_playback(
         handler_input,
         {
@@ -772,7 +771,6 @@ async def test_start_playback_awaits_cleanup_and_builds_audio_directive(monkeypa
             "playbackSpeeds": [],
         },
         "Now playing.",
-        reminders=reminders,
     )
     directive = response["directives"][0]
     assert directive["type"] == "AudioPlayer.Play"
@@ -781,7 +779,6 @@ async def test_start_playback_awaits_cleanup_and_builds_audio_directive(monkeypa
     assert directive["audioItem"]["metadata"]["title"] == "A readable morning update"
     assert directive["audioItem"]["metadata"]["subtitle"] == "Monthly Update"
     assert response["shouldEndSession"] is True
-    reminders.cancel.assert_awaited_once_with(handler_input)
     assert directive["audioItem"]["stream"]["token"] == "content-1"
 
 
@@ -795,7 +792,11 @@ async def test_register_listener_sends_post_to_alexa_relative_path(monkeypatch):
 
     monkeypatch.setattr(HearApiClient, "_raw_request", fake_raw)
     client = HearApiClient(HearApiOptions(base_url="https://api.test", path_prefix="api/v1/alexa"))
-    profile = {"alexaUserId": "amzn1.ask.account.TEST", "locale": "en-GB"}
+    profile = {
+        "action": "alexa",
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "listenerId": None,
+    }
     result = await client.register_listener(profile)
     assert result == {"status": "registered", "listenerId": "l-123"}
     assert captured["call"] == (
@@ -805,6 +806,24 @@ async def test_register_listener_sends_post_to_alexa_relative_path(monkeypatch):
         None,
     )
     assert client._build_api_path(captured["call"][1]) == "/api/v1/alexa/listeners/register"
+
+
+@pytest.mark.asyncio
+async def test_listener_registration_rejects_legacy_fields(monkeypatch):
+    request = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "_raw_request", request)
+
+    result = await HearApiClient().sync_listener(
+        {
+            "action": "alexa",
+            "alexaUserId": "amzn1.ask.account.TEST",
+            "listenerId": None,
+            "locale": "en-GB",
+        }
+    )
+
+    assert result is None
+    request.assert_not_awaited()
 
 
 @pytest.mark.asyncio

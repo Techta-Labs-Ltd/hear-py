@@ -1,7 +1,5 @@
 from __future__ import annotations
-
 from src.alexa.playback_speech import PlaybackSpeech
-
 
 class HelpSpeech:
     GUIDE_OPENING = (

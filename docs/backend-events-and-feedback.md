@@ -65,7 +65,6 @@ Every normal stateful Alexa request follows this sequence:
 | Alexa directives | `POST /v1/directives` | Alexa bearer token | One best-effort progressive response |
 | Alexa profile | `GET /v2/accounts/~current/settings/{setting}` | Alexa bearer token | Granted name/email permission |
 | Alexa address | `GET /v1/devices/{id}/settings/address` | Alexa bearer token | Granted full-address permission |
-| Alexa reminders | `DELETE /v1/alerts/reminders/{token}` | Alexa bearer token | Clear a saved feedback reminder |
 
 ## 4. Canonical listener registration and resolution
 
@@ -79,29 +78,21 @@ Content-Type: application/json
 
 ~~~json
 {
+  "listenerId": "6fd214d5-49d4-42f7-a982-a56cd16c9baa",
   "alexaUserId": "amzn1.ask.account.current-alias",
-  "personId": "amzn1.ask.person.optional",
-  "deviceId": "amzn1.ask.device.current",
-  "skillId": "amzn1.ask.skill.hear",
-  "locale": "en-GB",
-  "userEmail": "listener@example.com",
-  "environment": "production",
-  "principalType": "recognized_person",
-  "clientVersion": "alexa-skill"
+  "userEmail": "listener@example.com"
 }
 ~~~
 
 | Field | Required | Rule |
 | --- | ---: | --- |
-| `alexaUserId` | yes | Current skill-scoped Alexa alias |
-| `personId` | no | Present when Alexa recognises a speaker |
-| `deviceId` | no | Context only; never proof of identity |
-| `skillId` | no | Namespace for Alexa aliases |
-| `locale` | no | Current request locale |
+| `listenerId` | no | Existing canonical UUID, when available |
+| `alexaUserId` | no | Current skill-scoped Alexa alias |
 | `userEmail` | no | Lower-cased exact email, only with granted Alexa permission |
-| `environment` | yes | Deployment stage |
-| `principalType` | yes | `recognized_person` or `skill_user` |
-| `clientVersion` | yes | Alexa client contract identifier |
+
+At least one resolver identity field must be supplied. Device, person, skill,
+locale, environment, principal type, and client-version data are not part of
+the live resolver contract.
 
 Machine-readable request and response contract: [`schemas/listener-identity-resolve.schema.json`](../schemas/listener-identity-resolve.schema.json).
 
@@ -119,16 +110,17 @@ Only `listenerId` is required by the skill. An obsolete generic `id` field is no
 
 ### 4.3 Backend transaction
 
-The endpoint must resolve or register a listener atomically:
+The endpoint resolves a listener without creating or merging a record:
 
 1. Validate the API key and request.
-2. Exact-match `(alexa_user, skillId, alexaUserId)`.
-3. If supplied, exact-match `(alexa_person, skillId, personId)`.
-4. If supplied, exact-match a normalized email using a unique keyed hash. Do not fuzzy-match email, name, device, or location.
-5. If signals map to multiple listeners, return `409`, record an operator-visible conflict, and never merge automatically.
-6. If one listener matches, attach newly observed exact aliases and update their `last_seen_at` values.
-7. If none match, create one listener and its aliases in a single transaction.
-8. Enforce unique identity constraints so concurrent first requests cannot create duplicates.
+2. Exact-match a supplied canonical listener UUID, Alexa alias, or normalized email.
+3. If signals map to multiple listeners, return `409`, record an operator-visible conflict, and never merge automatically.
+4. Return the matched canonical listener or no listener; do not create a record.
+
+`POST /listeners/register` and `POST /listeners/sync` perform canonical
+registration. They accept only `action`, `alexaUserId`, `listenerId`, and the
+permitted profile fields `listenerName`, `email`, `city`, `longitude`, and
+`latitude`.
 
 Recommended backend tables:
 
@@ -427,7 +419,7 @@ Defaults, `null`, `false`, empty lists, and empty maps are omitted. Clearing a v
 - `feedbackHistory` and `reportHistory`;
 - large browse catalogues and pending result item arrays;
 - derived current-content fields, `lastToken`, `lastOffsetMs`, `timeSpentHours`, subject IDs/types, and speed aliases that can be rebuilt from canonical playback state;
-- Alexa device IDs, reminder tokens, deferred request data not required by an active dialog, and raw access tokens.
+- Alexa device IDs, deferred request data not required by an active dialog, and raw access tokens.
 
 Active playback stores only the fields needed to resume and interpret events. Recent local play history is capped at 20 and drops URLs, summaries, nested session ledgers, and nested publication track maps. Feedback candidates are capped at 5; answered keys at 50; followed sources at 50; publication progress at 2 publications and 100 compact tracks each.
 
@@ -739,16 +731,7 @@ All Alexa reads use `Authorization: Bearer <apiAccessToken>` and `Accept: applic
 
 Responses `401/403` are permission/authorization failures, `204` is empty, and temporary failures are fail-open. Raw access tokens, raw full API responses, and raw email values are not logged.
 
-### 11.3 Reminder deletion
-
-~~~http
-DELETE <apiEndpoint>/v1/alerts/reminders/<alertToken>
-Authorization: Bearer <apiAccessToken>
-~~~
-
-Deletion is best-effort. Reminder tokens are no longer durable DynamoDB fields.
-
-### 11.4 Alexa proactive event delivery
+### 11.3 Alexa proactive event delivery
 
 An SQS message invokes `main.notification_handler`. The worker fetches the
 notification with `POST /alexa/notification`, obtains a client-credentials token using scope
