@@ -62,6 +62,17 @@ def test_application_log_has_one_production_owner():
         assert "logger = ApplicationLog" not in source
 
 
+def test_playback_event_handlers_use_explicit_collaborators():
+    root = Path(__file__).resolve().parents[1] / "src"
+    for relative_path in (
+        "controllers/playback_events.py",
+        "models/playback_events.py",
+    ):
+        source = (root / relative_path).read_text(encoding="utf-8")
+        assert "deps:" not in source
+        assert "self._deps" not in source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [

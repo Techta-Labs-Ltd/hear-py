@@ -39,6 +39,7 @@ from src.models.feedback_response import (
     SomewhatFeedback,
 )
 from src.models.play import PlayContent, PlayOrganization
+from src.models.playback_events import PlaybackEvents
 from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
 from src.controllers.playback_controls import (
     DecreaseSpeedHandler,
@@ -231,12 +232,14 @@ class RouteRegistry:
             ReportContentHandler(deps=container),
             ReportCreatorHandler(deps=container),
             WhatsThisAboutHandler(deps=container),
-            PlaybackStartedHandler(deps=container),
-            PlaybackProgressReportHandler(deps=container),
-            PlaybackNearlyFinishedHandler(deps=container),
-            PlaybackFinishedHandler(deps=container),
-            PlaybackStoppedHandler(deps=container),
-            PlaybackFailedHandler(deps=container),
+            PlaybackStartedHandler(
+                container.playback, container.user, container.notifications
+            ),
+            PlaybackProgressReportHandler(container.playback),
+            PlaybackNearlyFinishedHandler(container.playback, container.heara),
+            PlaybackFinishedHandler(PlaybackEvents(container.playback, container.user)),
+            PlaybackStoppedHandler(container.playback),
+            PlaybackFailedHandler(container.playback, container.notifications),
             RateContentHandler(RatingRequest(deps=container)),
             FeedbackEnjoyedHandler(EnjoyedFeedback(deps=container)),
             FeedbackSomewhatHandler(SomewhatFeedback(deps=container)),
