@@ -43,17 +43,13 @@ class ErrorHandler(AbstractExceptionHandler):
         except Exception as inner:
             self.logger.error("Hear: ErrorHandler failed %s", inner)
         try:
-            return AlexaResponse.last_resort_skill_response()
+            return AlexaResponse.last_resort_skill_response(
+                AlexaRequest.get_request_type(handler_input)
+            )
         except Exception:
             return {}
 
     async def _flush_and_report(self, handler_input: HandlerInput, exception: Exception) -> None:
-        try:
-            await self._deps.playback.flush_previous(
-                AlexaRequest.get_user_id(handler_input), None, handler_input
-            )
-        except Exception as flush_err:
-            self.logger.warning("Hear: ErrorHandler flush failed %s", flush_err)
         try:
             self._deps.error_reporter.capture(handler_input, exception)
             await self._deps.error_reporter.flush(2000)

@@ -30,12 +30,8 @@ def test_pipeline_declarations_preserve_behavioral_order():
         "SavePersistenceInterceptor"
     ]
     controllers = [item.__name__ for item in RouteRegistry.REQUEST_CONTROLLERS]
-    assert controllers.index("BrowseNavigationHandler") < controllers.index(
-        "NextIntentHandler"
-    )
-    assert controllers.index("BrowseNavigationHandler") < controllers.index(
-        "PreviousIntentHandler"
-    )
+    assert controllers.index("BrowseNavigationHandler") < controllers.index("NextIntentHandler")
+    assert controllers.index("BrowseNavigationHandler") < controllers.index("PreviousIntentHandler")
 
 
 @pytest.mark.asyncio
@@ -90,7 +86,7 @@ async def test_runtime_preserves_interceptor_dispatch_and_response_order():
 
 
 @pytest.mark.asyncio
-async def test_runtime_runs_response_interceptors_after_exception_handling():
+async def test_runtime_skips_commit_interceptors_after_exception_handling():
     events = []
 
     class FailingInterceptor:
@@ -117,4 +113,4 @@ async def test_runtime_runs_response_interceptors_after_exception_handling():
     skill.add_global_response_interceptor(ResponseInterceptor())
     response = await skill.invoke({"request": {"type": "LaunchRequest"}}, None)
     assert response["response"] == {"shouldEndSession": False}
-    assert events == ["request", "exception:match", "exception:handle", "response"]
+    assert events == ["request", "exception:match", "exception:handle"]

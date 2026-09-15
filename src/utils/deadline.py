@@ -1,6 +1,23 @@
 from __future__ import annotations
 
+import time
+from dataclasses import dataclass
+
 from config import settings
+
+
+@dataclass(frozen=True, slots=True)
+class RequestDeadline:
+    expires_at: float
+
+    @classmethod
+    def from_context(cls, context, *, default_ms: int = 30000) -> RequestDeadline:
+        remaining = getattr(context, "get_remaining_time_in_millis", None)
+        budget_ms = int(remaining()) if callable(remaining) else default_ms
+        return cls(time.monotonic() + max(budget_ms, 0) / 1000.0)
+
+    def remaining_ms(self, reserve_ms: int = 0) -> int:
+        return max(0, int((self.expires_at - time.monotonic()) * 1000) - reserve_ms)
 
 
 class DeadlineBudget:
@@ -10,6 +27,9 @@ class DeadlineBudget:
 
     @staticmethod
     def get_lambda_remaining_ms(handler_input=None) -> int:
+        deadline = getattr(handler_input, "deadline", None)
+        if isinstance(deadline, RequestDeadline):
+            return deadline.remaining_ms()
         if not DeadlineBudget._is_lambda():
             return 30000
         try:
@@ -37,7 +57,7 @@ class DeadlineBudget:
     ) -> int:
         configured = max(int(configured_ms or minimum_ms), minimum_ms)
         remaining = DeadlineBudget.get_lambda_remaining_ms(handler_input)
-        available = max(remaining - reserve_ms, minimum_ms)
+        available = max(remaining - reserve_ms, 0)
         return min(configured, available)
 
     @staticmethod

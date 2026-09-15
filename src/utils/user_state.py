@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from config import settings
+from src.constants.state import StateSchema
+from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class UserStateCollections:
@@ -115,8 +117,7 @@ class UserStateCollections:
             capped[str(publication_id)] = {
                 key: UserStateCollections.value(item)
                 for key, item in progress.items()
-                if key not in {"sessions", "timeSpentHours", "trackListening"}
-                and item is not None
+                if key not in {"sessions", "timeSpentHours", "trackListening"} and item is not None
             }
             capped[str(publication_id)]["tracks"] = tracks
         return capped
@@ -128,3 +129,178 @@ class UserStateCollections:
             if isinstance(value, list)
             else []
         )
+
+
+class UserStateNormalizer:
+    PLAYBACK_FIELDS = frozenset(
+        {
+            "audioUrl",
+            "category",
+            "contentId",
+            "creatorId",
+            "creatorName",
+            "discoverySource",
+            "discoveryContext",
+            "durationMs",
+            "eventTimestamp",
+            "isPublication",
+            "lastEventRequestId",
+            "lastListeningDeltaMs",
+            "listenedMs",
+            "observationOffsetMs",
+            "observationTimestampMs",
+            "offsetMs",
+            "organizationId",
+            "organizationName",
+            "playbackSpeeds",
+            "publicationId",
+            "publicationTitle",
+            "queueId",
+            "queueIndex",
+            "sessionId",
+            "startedAt",
+            "status",
+            "subjectSessionId",
+            "summary",
+            "timeSpentMs",
+            "title",
+            "trackCount",
+            "trackIndex",
+            "updatedAt",
+        }
+    )
+    CONTENT_CACHE_FIELDS = frozenset(
+        {
+            "audioUrl",
+            "category",
+            "contentId",
+            "creatorId",
+            "creatorName",
+            "durationMs",
+            "isPublication",
+            "organizationId",
+            "organizationName",
+            "playbackSpeeds",
+            "publicationId",
+            "publicationTitle",
+            "spokenTitle",
+            "summary",
+            "title",
+            "trackCount",
+            "trackIndex",
+        }
+    )
+
+    @staticmethod
+    def value(value, depth: int = 0):
+        return UserStateCollections.value(value, depth)
+
+    @staticmethod
+    def snapshot(store: dict) -> dict:
+        normalized = {
+            key: UserStateNormalizer.value(value)
+            for key, value in store.items()
+            if key in StateSchema.PERSISTED_FIELDS and value != StateSchema.default_for(key)
+        }
+        active = normalized.get("activePlayback")
+        if isinstance(active, dict):
+            normalized["activePlayback"] = UserStateNormalizer.active_playback(active)
+        queue = normalized.get("playbackQueue")
+        if isinstance(queue, dict) and isinstance(queue.get("orderedContentIds"), list):
+            queue["orderedContentIds"] = queue["orderedContentIds"][
+                : max(settings.HEAR_PERSISTED_COLLECTION_LIMIT, 1)
+            ]
+            queue["currentIndex"] = min(
+                max(0, int(queue.get("currentIndex") or 0)),
+                max(len(queue["orderedContentIds"]) - 1, 0),
+            )
+        prepared = normalized.get("preparedNextContent")
+        if isinstance(prepared, dict):
+            normalized["preparedNextContent"] = UserStateNormalizer.content_cache(prepared)
+        normalized["playHistory"] = UserStateNormalizer.play_history(normalized.get("playHistory"))
+        normalized["feedbackCandidates"] = UserStateNormalizer.feedback_candidates(
+            normalized.get("feedbackCandidates")
+        )
+        normalized["publicationFeedbackProgress"] = UserStateNormalizer.publication_progress(
+            normalized.get("publicationFeedbackProgress")
+        )
+        for key in tuple(normalized):
+            if normalized[key] == StateSchema.default_for(key):
+                normalized.pop(key, None)
+        return normalized
+
+    @staticmethod
+    def active_playback(value: dict) -> dict:
+        return {
+            key: UserStateNormalizer.value(item)
+            for key, item in value.items()
+            if key in UserStateNormalizer.PLAYBACK_FIELDS and item is not None
+        }
+
+    @staticmethod
+    def content_cache(value: dict) -> dict:
+        return {
+            key: UserStateNormalizer.value(item)
+            for key, item in value.items()
+            if key in UserStateNormalizer.CONTENT_CACHE_FIELDS and item is not None
+        }
+
+    @staticmethod
+    def play_history(value) -> list:
+        compact = []
+        for raw in value or []:
+            item = PlaybackHistoryUtils.normalize(raw)
+            if not item:
+                continue
+            compact.append(
+                {
+                    key: item[key]
+                    for key in (
+                        "id",
+                        "subjectType",
+                        "subjectId",
+                        "contentId",
+                        "trackContentId",
+                        "publicationId",
+                        "trackIndex",
+                        "trackCount",
+                        "offsetMs",
+                        "listenedMs",
+                        "timeSpentMs",
+                        "completed",
+                    )
+                    if item.get(key) is not None
+                }
+            )
+        return compact[: min(settings.max_history, 20)]
+
+    @staticmethod
+    def feedback_candidates(value) -> list:
+        return UserStateCollections.feedback_candidates(value)
+
+    @staticmethod
+    def followed_creators(value) -> list:
+        return UserStateCollections.followed_creators(value)
+
+    @staticmethod
+    def publication_progress(value) -> dict:
+        return UserStateCollections.publication_progress(value)
+
+    @staticmethod
+    def history(value) -> list:
+        return UserStateCollections.history(value)
+
+    @staticmethod
+    def feedback(store: dict) -> None:
+        pending = store.get("pendingFeedback")
+        if (
+            not isinstance(pending, dict)
+            or not pending.get("publicationId")
+            or pending.get("subjectType") == "publication"
+        ):
+            return
+        store["pendingFeedback"] = None
+        store["awaitingFeedback"] = False
+        dialog = store.get("activeDialog") or {}
+        if (dialog.get("type") or dialog.get("kind")) == "feedback":
+            store["activeDialog"] = None

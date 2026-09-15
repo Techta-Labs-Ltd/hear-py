@@ -8,6 +8,7 @@ import pytest
 
 import main
 from src.models.resolver import ResolverResult, ResolverUnavailable
+from src.utils.deadline import RequestDeadline
 
 
 @pytest.mark.asyncio
@@ -80,7 +81,9 @@ def test_outbound_lambda_returns_partial_batch_response():
     result = application.handle(event, None)
 
     assert result == {"batchItemFailures": [{"itemIdentifier": "message-2"}]}
-    consume.assert_awaited_once_with(event["Records"])
+    consume.assert_awaited_once()
+    assert consume.await_args.args == (event["Records"],)
+    assert isinstance(consume.await_args.kwargs["deadline"], RequestDeadline)
 
 
 def test_notification_lambda_returns_sqs_partial_batch_response():
@@ -99,7 +102,9 @@ def test_notification_lambda_returns_sqs_partial_batch_response():
     result = application.handle(event, None)
 
     assert result == {"batchItemFailures": [{"itemIdentifier": "message-2"}]}
-    consume.assert_awaited_once_with(event["Records"])
+    consume.assert_awaited_once()
+    assert consume.await_args.args == (event["Records"],)
+    assert isinstance(consume.await_args.kwargs["deadline"], RequestDeadline)
 
 
 async def _running_loop():

@@ -2,6 +2,8 @@
 
 Python Alexa skill backend deployed to AWS Lambda as a container image.
 
+The staged architecture refactor is tracked in [Implementation status](docs/architecture/IMPLEMENTATION_STATUS.md), including verified fixes and remaining work.
+
 ## Structure
 
 - `main.py` - Lambda transport adapter

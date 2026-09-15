@@ -14,6 +14,8 @@ from src.container import ApplicationContainer
 from src.models.resolver import ResolverUnavailable
 from src.services.logging_control import LoggingControl
 from src.services.observability import ErrorReporter
+from src.utils.deadline import RequestDeadline
+from src.utils.events import SqsBatch
 
 
 class LambdaRuntime:
@@ -91,7 +93,11 @@ class LambdaApplication:
             return self._runtime.run(self.skill().invoke(event, context))
         except Exception:
             self.logger.exception("Lambda handler failed")
-            return AlexaResponse.last_resort_skill_response()
+            if isinstance(event, dict) and event.get("diagnostic") == "resolver":
+                return {"ok": False, "service": "resolver", "reason": "diagnostic failed"}
+            request = event.get("request") if isinstance(event, dict) else None
+            request_type = request.get("type", "") if isinstance(request, dict) else ""
+            return AlexaResponse.last_resort_skill_response(request_type)
 
 
 class OutboundLambdaApplication:
@@ -109,18 +115,15 @@ class OutboundLambdaApplication:
         return self._dependencies
 
     def handle(self, event: dict, context) -> dict:
-        del context
         records = (event or {}).get("Records") or []
+        message_ids = SqsBatch.message_ids(records)
+        deadline = RequestDeadline.from_context(context)
         try:
-            return self._runtime.run(self.dependencies().events.consume(records))
+            return self._runtime.run(self.dependencies().events.consume(records, deadline=deadline))
         except Exception:
             self.logger.exception("Outbound event batch failed")
             return {
-                "batchItemFailures": [
-                    {"itemIdentifier": record.get("messageId")}
-                    for record in records
-                    if record.get("messageId")
-                ]
+                "batchItemFailures": [{"itemIdentifier": message_id} for message_id in message_ids]
             }
 
 
@@ -139,18 +142,17 @@ class NotificationLambdaApplication:
         return self._dependencies
 
     def handle(self, event: dict, context) -> dict:
-        del context
         records = (event or {}).get("Records") or []
+        message_ids = SqsBatch.message_ids(records)
+        deadline = RequestDeadline.from_context(context)
         try:
-            return self._runtime.run(self.dependencies().notification_delivery.consume(records))
+            return self._runtime.run(
+                self.dependencies().notification_delivery.consume(records, deadline=deadline)
+            )
         except Exception:
             self.logger.exception("Proactive notification batch failed")
             return {
-                "batchItemFailures": [
-                    {"itemIdentifier": str(record.get("messageId"))}
-                    for record in records
-                    if record.get("messageId")
-                ]
+                "batchItemFailures": [{"itemIdentifier": message_id} for message_id in message_ids]
             }
 
 

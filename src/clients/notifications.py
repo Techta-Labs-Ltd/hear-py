@@ -24,12 +24,21 @@ class NotificationApiClient:
     ) -> None:
         self._api_key = settings.api_key if api_key is None else api_key
         self._base_url = (settings.api_base_url if base_url is None else base_url).rstrip("/")
-        prefix = (
-            settings.HEAR_API_PATH_PREFIX if path_prefix is None else path_prefix
-        ).strip("/")
+        prefix = (settings.HEAR_API_PATH_PREFIX if path_prefix is None else path_prefix).strip("/")
         self._path = f"/{prefix}/notification" if prefix else "/alexa/notification"
         self._timeout_ms = timeout_ms or settings.api_timeout_ms
-        self._pool = pool or HttpPool(timeout_ms=max(self._timeout_ms or 30000, 1))
+        self._pool = (
+            pool
+            if pool is not None
+            else HttpPool(
+                base_url=self._base_url,
+                headers={"X-Api-Key": self._api_key},
+                timeout_ms=max(self._timeout_ms or 30000, 1),
+            )
+        )
+        self._pool.assert_configuration(
+            base_url=self._base_url, headers={"X-Api-Key": self._api_key}
+        )
 
     @property
     def enabled(self) -> bool:
@@ -37,14 +46,10 @@ class NotificationApiClient:
 
     async def _post(self, body: dict, timeout_ms: int | None = None) -> tuple[int, dict | None]:
         timeout = httpx.Timeout(
-            max(timeout_ms or self._timeout_ms or settings.HEAR_HTTP_DEFAULT_TIMEOUT_MS, 1)
-            / 1000.0
+            max(timeout_ms or self._timeout_ms or settings.HEAR_HTTP_DEFAULT_TIMEOUT_MS, 1) / 1000.0
         )
         try:
-            response = await self._pool.get(
-                base_url=self._base_url,
-                headers={"X-Api-Key": self._api_key},
-            ).post(self._path, json=body, timeout=timeout)
+            response = await self._pool.get().post(self._path, json=body, timeout=timeout)
         except Exception as exc:
             self.logger.warning(
                 "Hear: notification API request failed error=%s",
@@ -141,8 +146,6 @@ class NotificationApiClient:
         response_status, _ = await self._post(body, timeout_ms)
         return {
             "updated": 200 <= response_status < 300,
-            "retryable": (
-                response_status == 0 or response_status == 429 or response_status >= 500
-            ),
+            "retryable": (response_status == 0 or response_status == 429 or response_status >= 500),
             "httpStatus": response_status,
         }

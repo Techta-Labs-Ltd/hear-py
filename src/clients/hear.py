@@ -89,7 +89,18 @@ class HearApiClient:
             if configured.page_limit is not None
             else settings.search_page_limit
         )
-        self._pool = pool or HttpPool(timeout_ms=max(self._timeout_ms or 30000, 1))
+        self._pool = (
+            pool
+            if pool is not None
+            else HttpPool(
+                base_url=self._base_url,
+                headers={"X-Api-Key": self._api_key},
+                timeout_ms=max(self._timeout_ms or 30000, 1),
+            )
+        )
+        self._pool.assert_configuration(
+            base_url=self._base_url, headers={"X-Api-Key": self._api_key}
+        )
 
     async def _raw_request(
         self,
@@ -103,7 +114,7 @@ class HearApiClient:
         )
         timeout = httpx.Timeout(max(resolved_timeout_ms, 1) / 1000.0)
         try:
-            client = self._pool.get(base_url=self._base_url, headers={"X-Api-Key": self._api_key})
+            client = self._pool.get()
             response = await client.request(
                 method, self._build_api_path(path), json=json_data, timeout=timeout
             )
