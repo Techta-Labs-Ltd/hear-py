@@ -141,6 +141,15 @@ class ApplicationContainer:
         )
         self.progressive = progressive or ProgressiveResponseClient()
         self.availability = availability or Availability(deps=self)
-        self.permission = permission or Permission(deps=self)
         self.notifications = notifications or Notification(deps=self)
+        self.permission = permission or Permission(
+            self.user,
+            self.onboarding,
+            self.listener_profile,
+            self.listener_sync,
+            self.notifications,
+            self.progressive,
+            self.locality,
+            self.resolver,
+        )
         self.error_reporter = error_reporter or ErrorReporter()

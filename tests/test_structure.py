@@ -122,6 +122,14 @@ def test_confirmation_handlers_use_explicit_actions():
     assert "deps:" not in source
 
 
+def test_permission_model_uses_explicit_collaborators():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "models" / "permission.py"
+    ).read_text(encoding="utf-8")
+    assert "self._deps" not in source
+    assert "def __init__(self, *, deps:" not in source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [

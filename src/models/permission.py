@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.services.logging_control import ApplicationLog
 
 import config.permission_scopes as permission_scopes
+from dataclasses import dataclass
 from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.response import AlexaResponse
@@ -10,6 +11,13 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
 from src.models.onboarding import Onboarding
+from src.models.notifications import Notification
+from src.models.user import User
+from src.clients.resolver import ResolverClient
+from src.clients.progressive import ProgressiveResponseClient
+from src.services.alexa_locality import AlexaLocalityService
+from src.services.alexa_profile import ListenerProfileService
+from src.services.listener_sync import ListenerSyncService
 
 
 class PermissionConstants:
@@ -21,6 +29,18 @@ class PermissionConstants:
         permission_scopes.PROFILE_NAME_READ,
         permission_scopes.PROFILE_EMAIL_READ,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class LocationOnboardingDependencies:
+    """Exact collaborators used by the device-location consent workflow."""
+
+    user: User
+    onboarding: Onboarding
+    progressive: ProgressiveResponseClient
+    locality: AlexaLocalityService
+    resolver: ResolverClient
+    permission: object
 
 
 class PermissionPolicy:
@@ -75,10 +95,30 @@ class PermissionPolicy:
 
 class Permission:
 
-    def __init__(self, *, deps: object | None = None) -> None:
-        if deps is None:
-            raise RuntimeError("Permission requires injected dependencies")
-        self._deps = deps
+    def __init__(
+        self,
+        user: User,
+        onboarding: Onboarding,
+        listener_profile: ListenerProfileService,
+        listener_sync: ListenerSyncService,
+        notifications: Notification,
+        progressive: ProgressiveResponseClient,
+        locality: AlexaLocalityService,
+        resolver: ResolverClient,
+    ) -> None:
+        self._user = user
+        self._onboarding = onboarding
+        self._listener_profile = listener_profile
+        self._listener_sync = listener_sync
+        self._notifications = notifications
+        self._location_onboarding = LocationOnboardingDependencies(
+            user,
+            onboarding,
+            progressive,
+            locality,
+            resolver,
+            self,
+        )
 
     def start_location(self, handler_input):
         RequestContext.set_value(handler_input, "_permissionPurpose", PermissionConstants.LOCATION_PURPOSE)
@@ -94,7 +134,7 @@ class Permission:
         )
 
     def start_profile(self, handler_input):
-        self._deps.user.update(handler_input, {"awaitingProfilePermission": True})
+        self._user.update(handler_input, {"awaitingProfilePermission": True})
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.PROFILE_PERMISSION_REASON))
             .add_directive(
@@ -124,7 +164,7 @@ class Permission:
         purpose, status, connection_code, connection_message = PermissionPolicy.resume_result(
             handler_input
         )
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         if not purpose and store.get("awaitingProfilePermission"):
             purpose = PermissionConstants.PROFILE_PURPOSE
         normalized_status = status.upper()
@@ -139,14 +179,14 @@ class Permission:
         if purpose == PermissionConstants.LOCATION_PURPOSE and accepted:
             return await Onboarding.auto_detect_location_or_manual(
                 handler_input,
-                self._deps.user.snapshot(handler_input),
-                deps=self._deps,
+                self._user.snapshot(handler_input),
+                deps=self._location_onboarding,
                 after_consent=True,
             )
         if purpose == PermissionConstants.PROFILE_PURPOSE and accepted:
             return await self._complete_profile(handler_input)
         if purpose == PermissionConstants.NOTIFICATION_PURPOSE and accepted:
-            return self._deps.notifications.enable_after_permission(handler_input)
+            return self._notifications.enable_after_permission(handler_input)
         if purpose == PermissionConstants.NOTIFICATION_PURPOSE:
             return AlexaResponse.present_idle_next(
                 handler_input,
@@ -154,7 +194,7 @@ class Permission:
                 Speech.WELCOME_REPROMPT,
             )
         if purpose == PermissionConstants.PROFILE_PURPOSE:
-            self._deps.user.update(handler_input, {"awaitingProfilePermission": False})
+            self._user.update(handler_input, {"awaitingProfilePermission": False})
             return self._profile_permission_failure(
                 handler_input,
                 status=normalized_status,
@@ -163,9 +203,9 @@ class Permission:
         return self.location_fallback(handler_input, denied=True)
 
     async def _complete_profile(self, handler_input):
-        store = await self._deps.listener_profile.apply_listener_profile(handler_input)
+        store = await self._listener_profile.apply_listener_profile(handler_input)
         registered = bool(store.get("userEmail") and (store.get("fullName") or store.get("userName")))
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "awaitingProfilePermission": False,
@@ -173,7 +213,7 @@ class Permission:
             },
         )
         try:
-            await self._deps.listener_sync.sync_for_launch(handler_input)
+            await self._listener_sync.sync_for_launch(handler_input)
         except Exception as error:
             ApplicationLog.warning("Hear: post-consent listener sync failed error=%s", type(error).__name__)
         if registered:
@@ -235,7 +275,7 @@ class Permission:
         )
 
     def location_fallback(self, handler_input, *, denied: bool):
-        self._deps.onboarding.decline_permission(handler_input)
+        self._onboarding.decline_permission(handler_input)
         speech = Speech.LOCATION_PERMISSION_DENIED if denied else Speech.LOCATION_PERMISSION_UNAVAILABLE
         speech = f"{speech} {PermissionPolicy.app_guidance()}"
         return (
