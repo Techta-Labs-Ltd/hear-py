@@ -38,6 +38,7 @@ from src.models.feedback_response import (
     SkipFeedback,
     SomewhatFeedback,
 )
+from src.models.intent_dispatch import IntentDispatcher
 from src.models.play import PlayContent, PlayOrganization
 from src.models.playback_events import PlaybackEvents
 from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
@@ -187,7 +188,7 @@ class RouteRegistry:
             OnboardingGateHandler(deps=container),
             TownCaptureHandler(deps=container),
             SearchConfirmationGateHandler(),
-            IntentDispatchGateHandler(deps=container),
+            IntentDispatchGateHandler(IntentDispatcher(deps=container)),
         ):
             builder.add_request_handler(handler)
         builder.add_exception_handler(ErrorHandler(deps=container))

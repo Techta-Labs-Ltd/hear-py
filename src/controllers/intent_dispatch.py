@@ -8,8 +8,8 @@ from src.models.intent_dispatch import IntentDispatcher
 
 
 class IntentDispatchGateHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._dispatcher = IntentDispatcher(deps=deps)
+    def __init__(self, dispatcher: IntentDispatcher) -> None:
+        self._dispatcher = dispatcher
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return self._dispatcher.can_dispatch(handler_input)

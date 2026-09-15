@@ -89,6 +89,16 @@ def test_can_fulfill_handler_uses_an_explicit_resolver():
     assert "self._deps" not in source
 
 
+def test_intent_dispatch_gate_uses_an_explicit_dispatcher():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "controllers"
+        / "intent_dispatch.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [
