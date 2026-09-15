@@ -191,7 +191,7 @@ class RouteRegistry:
             IntentDispatchGateHandler(IntentDispatcher(deps=container)),
         ):
             builder.add_request_handler(handler)
-        builder.add_exception_handler(ErrorHandler(deps=container))
+        builder.add_exception_handler(ErrorHandler(container.error_reporter))
         for interceptor in (
             LambdaDeadlineInterceptor(),
             IdentityInterceptor(deps=container),
@@ -254,11 +254,11 @@ class RouteRegistry:
             SkipFeedbackHandler(SkipFeedback(deps=container)),
             YesIntentHandler(deps=container),
             NoIntentHandler(deps=container),
-            NavigateHomeHandler(deps=container),
+            NavigateHomeHandler(container.browse),
             UnsupportedIntentHandler(),
             HelpIntentHandler(),
-            CancelIntentHandler(deps=container),
-            SessionEndedHandler(deps=container),
+            CancelIntentHandler(container.user, container.playback),
+            SessionEndedHandler(container.playback),
             FallbackHandler(deps=container),
             UnmatchedIntentHandler(deps=container),
             UnknownRequestHandler(deps=container),

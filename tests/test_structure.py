@@ -99,6 +99,22 @@ def test_intent_dispatch_gate_uses_an_explicit_dispatcher():
     assert "deps:" not in source
 
 
+def test_error_and_basic_system_handlers_use_explicit_collaborators():
+    root = Path(__file__).resolve().parents[1] / "src" / "controllers"
+    assert "self._deps" not in (root / "error.py").read_text(encoding="utf-8")
+    source = (root / "system.py").read_text(encoding="utf-8")
+    for handler_name in (
+        "CancelIntentHandler",
+        "NavigateHomeHandler",
+        "SessionEndedHandler",
+    ):
+        class_source = source.split(f"class {handler_name}", 1)[1].split(
+            "\nclass ", 1
+        )[0]
+        assert "deps:" not in class_source
+        assert "self._deps" not in class_source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [

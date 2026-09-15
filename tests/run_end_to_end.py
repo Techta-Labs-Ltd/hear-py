@@ -83,12 +83,13 @@ persistence._store[USER_ID] = {
     "userName": "John",
 }
 builder = AsyncSkill(persistence_adapter=persistence)
-RouteRegistry.register_middleware(builder, ApplicationContainer())
+container = ApplicationContainer()
+RouteRegistry.register_middleware(builder, container)
 builder.add_request_handler(LaunchRequestHandler())
 builder.add_request_handler(PlayContentHandler(PlayContent(deps=ApplicationContainer())))
 builder.add_request_handler(WhatsThisAboutHandler())
 builder.add_request_handler(HelpIntentHandler())
-builder.add_request_handler(CancelIntentHandler())
+builder.add_request_handler(CancelIntentHandler(container.user, container.playback))
 print("=" * 60)
 print("END-TO-END SCENARIO TESTS")
 print("=" * 60)

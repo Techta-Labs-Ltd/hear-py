@@ -15,6 +15,9 @@ from src.alexa.ssml import Ssml
 from src.constants.playback import PlaybackConstants
 from src.models.dialog import DialogStateManager
 from src.models.onboarding import Onboarding
+from src.models.browse import Browse
+from src.models.playback import Playback
+from src.models.user import User
 
 
 class HelpIntentHandler(AbstractRequestHandler):
@@ -38,8 +41,9 @@ class HelpIntentHandler(AbstractRequestHandler):
 
 
 class CancelIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, user: User, playback: Playback) -> None:
+        self._user = user
+        self._playback = playback
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -49,12 +53,12 @@ class CancelIntentHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         DialogStateManager.clear_transient_discovery(handler_input)
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {"awaitingLocationConfirm": False, "pendingLocationConfirm": None},
         )
         try:
-            await self._deps.playback.emit_user(
+            await self._playback.emit_user(
                 handler_input,
                 {
                     "eventType": PlaybackConstants.USER_PLAYBACK_EVENT_TYPES["CANCELLED"],
@@ -73,8 +77,8 @@ class CancelIntentHandler(AbstractRequestHandler):
 
 
 class NavigateHomeHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, browse: Browse) -> None:
+        self._browse = browse
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -83,7 +87,7 @@ class NavigateHomeHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._deps.browse.content(handler_input)
+        return await self._browse.content(handler_input)
 
 
 class UnsupportedIntentHandler(AbstractRequestHandler):
@@ -107,8 +111,8 @@ class UnsupportedIntentHandler(AbstractRequestHandler):
 
 
 class SessionEndedHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, playback: Playback) -> None:
+        self._playback = playback
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return AlexaRequest.get_request_type(handler_input) == "SessionEndedRequest"
@@ -121,7 +125,7 @@ class SessionEndedHandler(AbstractRequestHandler):
             reason = None
         ApplicationLog.info("Session ended: %s", reason)
         try:
-            await self._deps.playback.flush_previous(
+            await self._playback.flush_previous(
                 AlexaRequest.get_user_id(handler_input), None, handler_input
             )
         except Exception as err:

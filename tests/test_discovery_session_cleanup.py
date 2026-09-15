@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -97,8 +96,7 @@ def test_new_play_request_is_not_blocked_after_cleanup():
 @pytest.mark.asyncio
 async def test_session_ended_clears_discovery_state(monkeypatch):
     handler_input = _handler_input("SessionEndedRequest")
-    deps = SimpleNamespace(playback=AsyncMock())
-    await SessionEndedHandler(deps=deps).handle(handler_input)
+    await SessionEndedHandler(AsyncMock()).handle(handler_input)
     _assert_discovery_cleared(handler_input)
 
 
@@ -106,7 +104,8 @@ async def test_session_ended_clears_discovery_state(monkeypatch):
 async def test_cancel_clears_discovery_state(monkeypatch):
     handler_input = _handler_input("IntentRequest", "AMAZON.CancelIntent")
     monkeypatch.setattr("src.models.playback.Playback.emit_user", AsyncMock())
-    await CancelIntentHandler(deps=ApplicationContainer()).handle(handler_input)
+    container = ApplicationContainer()
+    await CancelIntentHandler(container.user, container.playback).handle(handler_input)
     _assert_discovery_cleared(handler_input)
 
 

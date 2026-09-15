@@ -8,12 +8,13 @@ from ask_sdk_core.handler_input import HandlerInput
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
+from src.services.observability import ErrorReporter
 
 
 class ErrorHandler(AbstractExceptionHandler):
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, error_reporter: ErrorReporter) -> None:
+        self._error_reporter = error_reporter
 
     def can_handle(self, handler_input: HandlerInput, exception: Exception) -> bool:
         return True
@@ -50,7 +51,7 @@ class ErrorHandler(AbstractExceptionHandler):
 
     async def _flush_and_report(self, handler_input: HandlerInput, exception: Exception) -> None:
         try:
-            self._deps.error_reporter.capture(handler_input, exception)
-            await self._deps.error_reporter.flush(2000)
+            self._error_reporter.capture(handler_input, exception)
+            await self._error_reporter.flush(2000)
         except Exception as capture_error:
             ApplicationLog.warning("Hear: captureSkillException failed %s", capture_error)
