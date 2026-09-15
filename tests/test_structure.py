@@ -351,6 +351,13 @@ def test_stateful_services_have_explicit_owners():
     )
 
 
+def test_container_allows_search_to_be_replaced_explicitly():
+    from src.models.search import Search
+
+    search = Search()
+    assert ApplicationContainer(search=search).search is search
+
+
 @pytest.mark.asyncio
 async def test_onboarding_yes_returns_permission_card(monkeypatch):
     from src.clients.alexa_settings import AlexaSettingsClient

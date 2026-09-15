@@ -70,6 +70,7 @@ class ApplicationContainer:
         browse: Browse | None = None,
         availability: Availability | None = None,
         playback: Playback | None = None,
+        search: Search | None = None,
         user: User | None = None,
         listeners: Listener | None = None,
         onboarding: Onboarding | None = None,
@@ -90,7 +91,7 @@ class ApplicationContainer:
     ) -> None:
         settings_client = alexa_settings or AlexaSettingsClient()
         self.user = user or User()
-        self.search = Search()
+        self.search = search or Search()
         self.browse = browse or Browse(deps=self, store=self.user)
         self.listeners = listeners or Listener(self.user)
         self.onboarding = onboarding or Onboarding(self.user)
