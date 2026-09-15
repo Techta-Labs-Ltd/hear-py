@@ -16,7 +16,6 @@ from src.utils.deadline import DeadlineBudget
 
 
 class ListenerIdentitySupport:
-    logger = ApplicationLog
 
     @staticmethod
     def normalize_email(value: object) -> str | None:
@@ -95,7 +94,7 @@ class ListenerIdentityService:
                 label="Profile.email",
             )
         except Exception as exc:
-            ListenerIdentitySupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear: identity email lookup failed error=%s",
                 type(exc).__name__,
             )
@@ -129,13 +128,13 @@ class ListenerIdentityService:
         listener_id = str((result or {}).get("listenerId") or "").strip()
         if not listener_id:
             AlexaMetrics.increment("CanonicalIdentityFallback")
-            ListenerIdentitySupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear: canonical listener resolution unavailable fallback=alexa_alias"
             )
             return identity
         self._remember(identity, listener_id)
         AlexaMetrics.increment("CanonicalIdentityResolved")
-        ListenerIdentitySupport.logger.info(
+        ApplicationLog.info(
             "Hear: canonical listener resolved principalType=%s",
             identity.principal_type.value,
         )

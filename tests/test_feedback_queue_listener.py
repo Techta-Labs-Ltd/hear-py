@@ -466,7 +466,6 @@ def test_starting_new_playback_discards_only_temporary_feedback_state(mock_handl
         ],
         "activeDialog": {"type": "feedback", "context": {"contentId": "completed-old"}},
         "answeredFeedbackKeys": ["already-rated"],
-        "feedbackHistory": [{"feedbackKey": "already-rated", "value": "enjoyed"}],
     }
 
     ApplicationContainer().playback.start_session(
@@ -484,9 +483,6 @@ def test_starting_new_playback_discards_only_temporary_feedback_state(mock_handl
     assert store["feedbackCandidates"] == []
     assert store["activeDialog"] is None
     assert store["answeredFeedbackKeys"] == ["already-rated"]
-    assert store["feedbackHistory"] == [
-        {"feedbackKey": "already-rated", "value": "enjoyed"}
-    ]
 
 
 def test_answered_feedback_requires_reliable_persistence(mock_handler_input):
@@ -650,7 +646,7 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
         is None
     )
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
-    assert store["reportHistory"] == []
+    assert "reportHistory" not in store
     assert store["awaitingReportDecision"] is False
 
 

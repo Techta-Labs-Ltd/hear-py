@@ -9,7 +9,6 @@ from config import settings
 
 
 class ErrorReporter:
-    logger = ApplicationLog
 
     def __init__(self) -> None:
         self._initialized = False
@@ -34,7 +33,7 @@ class ErrorReporter:
             )
             self._initialized = True
         except Exception as error:
-            ErrorReporter.logger.warning(
+            ApplicationLog.warning(
                 "Sentry initialization failed error=%s", type(error).__name__
             )
             return
@@ -55,7 +54,7 @@ class ErrorReporter:
                 scope.set_context("alexa", self._alexa_context(handler_input))
                 sentry_sdk.capture_exception(error)
         except Exception as capture_error:
-            ErrorReporter.logger.warning(
+            ApplicationLog.warning(
                 "Sentry capture failed error=%s original=%s",
                 type(capture_error).__name__,
                 type(error).__name__,
@@ -78,5 +77,5 @@ class ErrorReporter:
         try:
             sentry_sdk.flush(timeout=max_ms / 1000.0)
         except Exception as error:
-            ErrorReporter.logger.warning("Sentry flush failed error=%s", type(error).__name__)
+            ApplicationLog.warning("Sentry flush failed error=%s", type(error).__name__)
             return

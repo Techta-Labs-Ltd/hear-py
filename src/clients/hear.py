@@ -18,7 +18,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class HearApiSupport:
-    logger = ApplicationLog
     ALLOWED_SORT_VALUES = SearchConstants.ALLOWED_SEARCH_SORTS
     _EMPTY_SEARCH_RESULT: dict[str, Any] = {
         "results": [],
@@ -119,7 +118,7 @@ class HearApiClient:
                 method, self._build_api_path(path), json=json_data, timeout=timeout
             )
             if not 200 <= response.status_code < 300:
-                HearApiSupport.logger.warning(
+                ApplicationLog.warning(
                     "Hear API request failed method=%s path=%s status=%s",
                     method,
                     self._build_api_path(path),
@@ -133,7 +132,7 @@ class HearApiClient:
             except ValueError:
                 return (response.status_code, None)
         except Exception as exc:
-            HearApiSupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear API request error method=%s path=%s error=%s",
                 method,
                 self._build_api_path(path),
@@ -212,7 +211,7 @@ class HearApiClient:
             body["sort"] = payload["sort"]
         path = self._build_alexa_search_path()
         query_text = body.get("query") or ""
-        HearApiSupport.logger.info(
+        ApplicationLog.info(
             "Hear API search request path=%s queryHash=%s queryChars=%s limit=%s page=%s filterKeys=%s alexaUserIdPresent=%s listenerIdPresent=%s",
             path,
             HearApiSupport._hash_text(str(query_text)),
@@ -225,7 +224,7 @@ class HearApiClient:
         )
         for attempt in range(self._retry_count + 1):
             status, data = await self._raw_request("POST", path, body, timeout_ms)
-            HearApiSupport.logger.info(
+            ApplicationLog.info(
                 "Hear API search response attempt=%s status=%s", attempt + 1, status
             )
             if status == 200 and isinstance(data, dict):
@@ -267,7 +266,7 @@ class HearApiClient:
             listener_id or alexa_user_id
         ):
             supplied_filter = requested.get("filter")
-            HearApiSupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear API availability request rejected invalid filterKeys=%s alexaUserIdPresent=%s listenerIdPresent=%s",
                 sorted(supplied_filter.keys()) if isinstance(supplied_filter, dict) else [],
                 bool(alexa_user_id),
@@ -275,7 +274,7 @@ class HearApiClient:
             )
             return AvailabilityResponse.failed(body)
         path = self._build_alexa_availability_path()
-        HearApiSupport.logger.info(
+        ApplicationLog.info(
             "Hear API availability request path=%s page=%s limit=%s filterKeys=%s query=%s isLocal=%s",
             path,
             body["page"],
@@ -286,11 +285,11 @@ class HearApiClient:
         )
         for attempt in range(self._retry_count + 1):
             status, data = await self._raw_request("POST", path, body, timeout_ms)
-            HearApiSupport.logger.info(
+            ApplicationLog.info(
                 "Hear API availability response attempt=%s status=%s", attempt + 1, status
             )
             if status == 200 and isinstance(data, dict):
-                HearApiSupport.logger.info(
+                ApplicationLog.info(
                     "Hear API availability response data=%s",
                     AvailabilityResponse.log_response(data),
                 )

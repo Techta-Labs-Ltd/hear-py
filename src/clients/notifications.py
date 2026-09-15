@@ -10,7 +10,6 @@ from src.utils.notifications import NotificationItem
 
 
 class NotificationApiClient:
-    logger = ApplicationLog
     __slots__ = ("_api_key", "_base_url", "_path", "_pool", "_timeout_ms")
 
     def __init__(
@@ -51,13 +50,13 @@ class NotificationApiClient:
         try:
             response = await self._pool.get().post(self._path, json=body, timeout=timeout)
         except Exception as exc:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification API request failed error=%s",
                 type(exc).__name__,
             )
             return (0, None)
         if not 200 <= response.status_code < 300:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification API rejected operation=%s status=%s",
                 body.get("operation"),
                 response.status_code,

@@ -8,7 +8,6 @@ from src.utils.content import ContentUtils
 
 
 class PlaybackEvents:
-    logger = ApplicationLog
 
     def __init__(self, *, deps: object | None = None):
         self._deps = deps
@@ -65,7 +64,7 @@ class PlaybackEvents:
         index = int(queue.get("currentIndex") or 0)
         total = len(queue["orderedContentIds"])
         if index < total - 1:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: queue could not advance because Alexa sent PlaybackFinished without an accepted PlaybackNearlyFinished enqueue token=%s index=%s total=%s",
                 token,
                 index,

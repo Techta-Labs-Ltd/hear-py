@@ -16,7 +16,6 @@ from src.models.user import PersistenceReceipt, User
 
 
 class DynamoUserSupport:
-    logger = ApplicationLog
     _VERSIONS_FIELD = "_persistenceVersions"
     _CHANGED_FIELDS = "_persistenceChangedFields"
     _ORIGINAL_FIELDS = "_persistenceOriginal"
@@ -151,7 +150,7 @@ class DynamoDbPersistenceAdapter:
         if size > settings.HEAR_DDB_ITEM_SIZE_MAX_BYTES:
             raise PersistenceItemTooLarge(f"DynamoDB {scope} state item is {size} bytes")
         if size > settings.HEAR_DDB_ITEM_SIZE_WARN_BYTES:
-            DynamoUserSupport.logger.warning(
+            ApplicationLog.warning(
                 "DynamoDB state item oversized scope=%s bytes=%s table=%s",
                 scope,
                 size,
@@ -223,7 +222,7 @@ class DynamoDbPersistenceAdapter:
         )
 
     async def _merge_after_conflict(self, operation: dict, attempt: int) -> None:
-        DynamoUserSupport.logger.warning(
+        ApplicationLog.warning(
             "DynamoDB persistence conflict table=%s scope=%s retry=%s",
             self.table_name,
             operation["scope"],

@@ -24,7 +24,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class Availability:
-    logger = ApplicationLog
     __slots__ = ("_deps", "_dialog")
 
     def __init__(self, *, deps: object | None = None) -> None:
@@ -372,7 +371,7 @@ class Availability:
         )
         if result.get("failed"):
             if continue_with_search_on_failure:
-                self.logger.warning("Hear: source availability failed; using catalogue search")
+                ApplicationLog.warning("Hear: source availability failed; using catalogue search")
                 return None
             return self._terminal_response(
                 handler_input,

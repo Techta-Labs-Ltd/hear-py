@@ -286,7 +286,6 @@ class PlaybackState:
 
 
 class PlaybackQueue:
-    logger = ApplicationLog
     __slots__ = ("_user",)
 
     def __init__(self, store: User) -> None:
@@ -598,7 +597,7 @@ class PlaybackQueue:
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
         if result.get("failed"):
-            PlaybackQueue.logger.warning(
+            ApplicationLog.warning(
                 "Hear: lazy queue page failed page=%s totalPages=%s", next_page, total_pages
             )
             return False

@@ -17,7 +17,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class Notification:
-    logger = ApplicationLog
     __slots__ = ("_deps",)
 
     def __init__(self, *, deps: object | None = None) -> None:
@@ -59,7 +58,7 @@ class Notification:
             )
             return bool(result.get("updated"))
         except Exception as exc:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification status update failed status=%s error=%s",
                 status,
                 type(exc).__name__,
@@ -99,7 +98,7 @@ class Notification:
                 raise RuntimeError("notification API unavailable")
             items = result.get("items") or []
         except Exception as exc:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification inbox read failed error=%s", type(exc).__name__
             )
             return (
@@ -176,7 +175,7 @@ class Notification:
                 timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
             )
         except Exception as exc:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification content lookup failed error=%s", type(exc).__name__
             )
             result = {"results": [], "failed": True}

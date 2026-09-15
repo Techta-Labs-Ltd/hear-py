@@ -28,7 +28,6 @@ from src.models.play import PlayContent, PlayCreator, PlayOrganization
 
 
 class IntentDispatcher:
-    logger = ApplicationLog
     DISPATCHABLE_INTENTS = frozenset(
         {
             "trending",
@@ -253,7 +252,7 @@ class IntentDispatcher:
     ) -> Response:
         attrs.pop("_pendingConfirmation", None)
         RequestContext.replace_request(handler_input, attrs)
-        self.logger.info("Hear: resolver discovery clarification asked intent=%s", intent)
+        ApplicationLog.info("Hear: resolver discovery clarification asked intent=%s", intent)
         builder = (
             handler_input.response_builder.speak(Ssml.ssml(clarification["speech"]))
             .reprompt(Ssml.ssml(clarification["reprompt"]))
@@ -284,7 +283,7 @@ class IntentDispatcher:
             "search_confirmation",
             context={**resolution, "confirmationLabel": confirm_text},
         )
-        self.logger.info(
+        ApplicationLog.info(
             "Hear: search confirmation asked intent=%s text=%s",
             pending.get("intent"),
             confirm_text,

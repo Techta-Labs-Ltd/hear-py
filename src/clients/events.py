@@ -114,7 +114,6 @@ class BackendEventEnvelope(BaseModel):
 
 
 class SqsEventClient:
-    logger = ApplicationLog
     __slots__ = ("_queue_url", "_region", "_client")
 
     def __init__(
@@ -146,14 +145,13 @@ class SqsEventClient:
             response = self._client.send_message(**message)
             return bool(response.get("MessageId"))
         except Exception:
-            self.logger.exception(
+            ApplicationLog.exception(
                 "Hear outbound SQS dispatch failed event=%s", envelope.get("event")
             )
             return False
 
 
 class WebhookEventClient:
-    logger = ApplicationLog
     __slots__ = ("_url", "_secret", "_api_key", "_pool")
 
     def __init__(
@@ -191,18 +189,18 @@ class WebhookEventClient:
             )
             if 200 <= response.status_code < 300:
                 return True
-            self.logger.error(
+            ApplicationLog.error(
                 "Hear outbound webhook rejected event=%s status=%s",
                 envelope.get("event"),
                 response.status_code,
             )
             return False
         except HttpCircuitOpen:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear outbound webhook deferred event=%s reason=circuit_open",
                 envelope.get("event"),
             )
             return False
         except Exception:
-            self.logger.exception("Hear outbound webhook failed event=%s", envelope.get("event"))
+            ApplicationLog.exception("Hear outbound webhook failed event=%s", envelope.get("event"))
             return False

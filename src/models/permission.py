@@ -74,7 +74,6 @@ class PermissionPolicy:
 
 
 class Permission:
-    logger = ApplicationLog
 
     def __init__(self, *, deps: object | None = None) -> None:
         if deps is None:
@@ -130,7 +129,7 @@ class Permission:
             purpose = PermissionConstants.PROFILE_PURPOSE
         normalized_status = status.upper()
         accepted = connection_code in {"", "200"} and normalized_status == "ACCEPTED"
-        self.logger.info(
+        ApplicationLog.info(
             "Hear: permission consent resumed purpose=%s status=%s connectionCode=%s connectionMessage=%s",
             purpose or "unknown",
             normalized_status or "missing",
@@ -176,7 +175,7 @@ class Permission:
         try:
             await self._deps.listener_sync.sync_for_launch(handler_input)
         except Exception as error:
-            self.logger.warning("Hear: post-consent listener sync failed error=%s", type(error).__name__)
+            ApplicationLog.warning("Hear: post-consent listener sync failed error=%s", type(error).__name__)
         if registered:
             return AlexaResponse.present_idle_next(
                 handler_input,

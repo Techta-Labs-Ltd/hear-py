@@ -51,6 +51,17 @@ def test_runtime_and_utility_modules_have_clear_owners():
     assert (src / "utils" / "filters.py").exists()
 
 
+def test_application_log_has_one_production_owner():
+    src = Path(__file__).resolve().parents[1] / "src"
+    logging_owner = src / "services" / "logging_control.py"
+    for path in src.rglob("*.py"):
+        if path == logging_owner:
+            continue
+        source = path.read_text(encoding="utf-8")
+        assert "logging.getLogger" not in source
+        assert "logger = ApplicationLog" not in source
+
+
 def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [

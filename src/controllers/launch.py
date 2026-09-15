@@ -16,7 +16,6 @@ from src.models.onboarding import TownCapture
 
 
 class LaunchRequestHandler(AbstractRequestHandler):
-    logger = ApplicationLog
 
     def __init__(self, *, deps: object | None = None):
         self._deps = deps
@@ -38,11 +37,11 @@ class LaunchRequestHandler(AbstractRequestHandler):
                 AlexaRequest.get_user_id(handler_input), None, handler_input
             )
         except Exception as err:
-            self.logger.warning("Hear: launch flush failed error=%s", type(err).__name__)
+            ApplicationLog.warning("Hear: launch flush failed error=%s", type(err).__name__)
         try:
             return await self._workflow.execute(handler_input)
         except Exception as err:
-            self.logger.error("Hear: launch failed %s", err)
+            ApplicationLog.error("Hear: launch failed %s", err)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_ERROR))
                 .reprompt(Ssml.ssml(Speech.REPROMPT_NO_CITY))

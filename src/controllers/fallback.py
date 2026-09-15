@@ -16,7 +16,6 @@ from src.models.onboarding import Onboarding
 
 
 class FallbackModule:
-    logger = ApplicationLog
 
     @staticmethod
     def fallback_response(handler_input: HandlerInput, deps: object | None):
@@ -100,7 +99,7 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
             dialog_state = handler_input.request_envelope.request.dialogState
         except Exception:
             pass
-        FallbackModule.logger.info(
+        ApplicationLog.info(
             "Hear: unmatched IntentRequest intentName=%s dialogState=%s",
             intent_name,
             dialog_state,

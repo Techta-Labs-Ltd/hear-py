@@ -10,7 +10,6 @@ from src.models.play import PlayContent, PlayCreator, PlayOrganization
 
 
 class SuggestionConfirmation:
-    logger = ApplicationLog
 
     def __init__(self, *, deps: object) -> None:
         self._deps = deps
@@ -102,7 +101,7 @@ class SuggestionConfirmation:
         self._deps.user.update(handler_input, {"pendingNlpSuggestion": None})
         intent = str(top.get("intent") or "")
         query = str(top.get("query") or "")
-        self.logger.info("Hear: NLP suggestion confirmed intent=%s query=%s", intent, query)
+        ApplicationLog.info("Hear: NLP suggestion confirmed intent=%s query=%s", intent, query)
         handlers = {
             "creator": self._creator,
             "organization": self._organization,

@@ -9,10 +9,6 @@ from src.alexa.ssml import Ssml
 from src.clients.pool import HttpPool
 
 
-class ProgressiveResponseSupport:
-    logger = ApplicationLog
-
-
 class ProgressiveResponseClient:
     def __init__(self, pool: HttpPool | None = None, *, enabled: bool | None = None) -> None:
         self._pool = pool or HttpPool(timeout_ms=settings.HEAR_PROGRESSIVE_TIMEOUT_MS)
@@ -50,19 +46,19 @@ class ProgressiveResponseClient:
             )
             delivered = response.status_code == 204
             if delivered:
-                ProgressiveResponseSupport.logger.info(
+                ApplicationLog.info(
                     "Hear: progressive response sent requestId=%s",
                     request_id,
                 )
             else:
-                ProgressiveResponseSupport.logger.info(
+                ApplicationLog.info(
                     "Hear: progressive response rejected status=%s requestId=%s",
                     response.status_code,
                     request_id,
                 )
             return delivered
         except Exception as exc:
-            ProgressiveResponseSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: progressive response unavailable requestId=%s error=%s",
                 request_id,
                 type(exc).__name__,

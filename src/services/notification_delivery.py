@@ -9,7 +9,6 @@ from src.utils.notifications import NotificationItem, NotificationQueueMessage
 
 
 class NotificationDeliveryService:
-    logger = ApplicationLog
     __slots__ = ("_notification_api", "_proactive")
 
     def __init__(self, notification_api, proactive) -> None:
@@ -29,7 +28,7 @@ class NotificationDeliveryService:
                     self._consume_record(record), timeout=remaining_ms / 1000.0
                 )
             except Exception as exc:
-                self.logger.warning(
+                ApplicationLog.warning(
                     "Hear: proactive notification record failed error=%s",
                     type(exc).__name__,
                 )
@@ -41,7 +40,7 @@ class NotificationDeliveryService:
     async def _consume_record(self, record: dict) -> bool:
         message = NotificationQueueMessage.decode(record)
         if not message:
-            self.logger.warning("Hear: invalid notification queue record")
+            ApplicationLog.warning("Hear: invalid notification queue record")
             return True
         fetch = await self._notification_api.pending(
             {
@@ -62,7 +61,7 @@ class NotificationDeliveryService:
             or item.get("listenerId") != message["listenerId"]
             or item.get("notificationId") != message["notificationId"]
         ):
-            self.logger.warning("Hear: invalid notification API response")
+            ApplicationLog.warning("Hear: invalid notification API response")
             return True
         listener_id = item["listenerId"]
         notification_id = item["notificationId"]
@@ -88,7 +87,7 @@ class NotificationDeliveryService:
             )
             if not update.get("updated"):
                 return True
-            self.logger.info("Hear: proactive notification delivered")
+            ApplicationLog.info("Hear: proactive notification delivered")
             return False
         status = "retrying" if result.get("retryable") else "failed"
         update = await self._notification_api.update(
@@ -100,7 +99,7 @@ class NotificationDeliveryService:
                 "deliveryErrorCode": result.get("errorCode"),
             }
         )
-        self.logger.warning(
+        ApplicationLog.warning(
             "Hear: proactive notification delivery failed retryable=%s httpStatus=%s error=%s",
             bool(result.get("retryable")),
             result.get("httpStatus"),

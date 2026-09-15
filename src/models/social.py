@@ -176,7 +176,7 @@ class FollowCreator:
                 Speech.FOLLOW_CREATOR_REPROMPT,
             )
         except Exception as err:
-            Social.logger.warning("Follow creator error: %s", err)
+            ApplicationLog.warning("Follow creator error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -224,7 +224,7 @@ class UnfollowCreator:
                 .response
             )
         except Exception as err:
-            Social.logger.warning("Unfollow creator error: %s", err)
+            ApplicationLog.warning("Unfollow creator error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -234,7 +234,6 @@ class UnfollowCreator:
 
 
 class Social:
-    logger = ApplicationLog
 
     @staticmethod
     def _dependencies(deps: object | None):

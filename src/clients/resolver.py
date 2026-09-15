@@ -16,7 +16,6 @@ from src.models.resolver import ResolverResult, ResolverUnavailable
 
 
 class ResolverClientSupport:
-    logger = ApplicationLog
 
     @staticmethod
     def _resolver_response_log(payload: dict[str, Any]) -> dict[str, Any]:
@@ -160,7 +159,7 @@ class ResolverClient:
             listener_id,
         )
         logged_body = ResolverClientSupport.request_log(body, alexa_user_id, listener_id)
-        ResolverClientSupport.logger.info(
+        ApplicationLog.info(
             "Hear: resolver request payload=%s",
             json.dumps(logged_body, sort_keys=True, separators=(",", ":")),
         )
@@ -184,7 +183,7 @@ class ResolverClient:
             payload = response.json()
             if not isinstance(payload, dict):
                 raise ResolverUnavailable("resolver response must be an object")
-            ResolverClientSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: resolver response httpStatus=%s payload=%s",
                 response.status_code,
                 json.dumps(
@@ -198,10 +197,10 @@ class ResolverClient:
                 self._cache.put(cache_key, result)
             return result
         except ResolverUnavailable as exc:
-            ResolverClientSupport.logger.warning("Resolver response rejected reason=%s", exc)
+            ApplicationLog.warning("Resolver response rejected reason=%s", exc)
             raise
         except (httpx.HTTPError, ValueError, TypeError) as exc:
-            ResolverClientSupport.logger.warning(
+            ApplicationLog.warning(
                 "Resolver request failed error=%s traceback=%s",
                 type(exc).__name__,
                 traceback.format_exc(),
@@ -227,7 +226,7 @@ class ResolverClient:
             prefer_location=prefer_location,
             original_utterance=utterance,
         )
-        ResolverClientSupport.logger.info(
+        ApplicationLog.info(
             "Hear: resolver normalized response status=%s intent=%s slotKeys=%s",
             payload.get("status"),
             payload.get("intent"),

@@ -16,7 +16,6 @@ from src.models.onboarding import Onboarding, TownCapture
 
 
 class OnboardingPolicy:
-    logger = ApplicationLog
     _SKIP_INTENTS = frozenset(
         {"SkipFeedbackIntent", "AMAZON.NextIntent", "AMAZON.SkipIntent"}
     )
@@ -134,7 +133,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
         rt = AlexaRequest.get_request_type(handler_input)
         if rt == "LaunchRequest":
             store = self._deps.user.snapshot(handler_input)
-            OnboardingPolicy.logger.info("Hear: checking device address on onboarding launch")
+            ApplicationLog.info("Hear: checking device address on onboarding launch")
             return await Onboarding.auto_detect_location_or_manual(
                 handler_input, store, deps=self._deps
             )
@@ -156,7 +155,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
             attempted_city = (
                 slots.get("townName") or slots.get("placeName") or slots.get("residualQuery")
             )
-            OnboardingPolicy.logger.info(
+            ApplicationLog.info(
                 "Hear: city reply was not captured intent=%s attempted=%s; asking again",
                 intent,
                 bool(attempted_city),

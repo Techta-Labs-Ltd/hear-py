@@ -11,7 +11,6 @@ from src.models.user import User
 
 
 class IdentityPolicy:
-    logger = ApplicationLog
 
     @staticmethod
     def _get_envelope_value(envelope, *path):
@@ -79,7 +78,7 @@ class IdentityInterceptor(AbstractRequestInterceptor):
             try:
                 identity = await self._identity_service.resolve(handler_input, identity)
             except Exception as exc:
-                IdentityPolicy.logger.warning(
+                ApplicationLog.warning(
                     "Hear: canonical listener resolution failed error=%s fallback=alexa_alias",
                     type(exc).__name__,
                 )
@@ -92,6 +91,6 @@ class IdentityInterceptor(AbstractRequestInterceptor):
             alexa_user_id=identity.alexa_user_id,
         )
         if not identity.alexa_user_id:
-            IdentityPolicy.logger.warning(
+            ApplicationLog.warning(
                 "Hear request rejected for backend dispatch: missing Alexa user ID"
             )

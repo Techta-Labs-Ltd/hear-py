@@ -25,7 +25,6 @@ class AlexaMetrics:
 
 
 class AlexaRuntime:
-    logger = ApplicationLog
 
     @staticmethod
     def _valid_card_image_url(value: Any) -> bool:
@@ -322,7 +321,7 @@ class AsyncSkill:
                 can = await AlexaRuntime._resolve(handler.can_handle(handler_input))
             except Exception as exc:
                 AlexaMetrics.increment("HandlerMatchFailure")
-                AlexaRuntime.logger.warning(
+                ApplicationLog.warning(
                     "Alexa handler match failed handler=%s error=%s",
                     type(handler).__name__,
                     type(exc).__name__,
@@ -338,7 +337,7 @@ class AsyncSkill:
                 can = await AlexaRuntime._resolve(handler.can_handle(handler_input, exc))
             except Exception as match_error:
                 AlexaMetrics.increment("ExceptionHandlerMatchFailure")
-                AlexaRuntime.logger.warning(
+                ApplicationLog.warning(
                     "Alexa exception handler match failed handler=%s error=%s",
                     type(handler).__name__,
                     type(match_error).__name__,

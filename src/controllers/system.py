@@ -17,10 +17,6 @@ from src.models.dialog import DialogStateManager
 from src.models.onboarding import Onboarding
 
 
-class SystemControllerSupport:
-    logger = ApplicationLog
-
-
 class HelpIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -123,13 +119,13 @@ class SessionEndedHandler(AbstractRequestHandler):
             reason = handler_input.request_envelope.request.reason
         except Exception:
             reason = None
-        SystemControllerSupport.logger.info("Session ended: %s", reason)
+        ApplicationLog.info("Session ended: %s", reason)
         try:
             await self._deps.playback.flush_previous(
                 AlexaRequest.get_user_id(handler_input), None, handler_input
             )
         except Exception as err:
-            SystemControllerSupport.logger.warning("Hear: SessionEnded flush failed %s", err)
+            ApplicationLog.warning("Hear: SessionEnded flush failed %s", err)
         return handler_input.response_builder.response
 
 
@@ -152,7 +148,7 @@ class UnknownRequestHandler(AbstractRequestHandler):
         if request_type == "System.ExceptionEncountered":
             self._log_system_exception(handler_input)
             return {}
-        SystemControllerSupport.logger.warning("Hear: unmatched request type %s", request_type)
+        ApplicationLog.warning("Hear: unmatched request type %s", request_type)
         if request_type == "IntentRequest":
             redirect = Onboarding.onboarding_pending_redirect(
                 handler_input, self._deps.user.snapshot(handler_input), deps=self._deps
@@ -170,7 +166,7 @@ class UnknownRequestHandler(AbstractRequestHandler):
     def _log_system_exception(handler_input: HandlerInput) -> None:
         try:
             request = handler_input.request_envelope.request
-            SystemControllerSupport.logger.error(
+            ApplicationLog.error(
                 "Hear: System.ExceptionEncountered token=%s errorType=%s errorMessage=%s",
                 request.token,
                 request.error.type,

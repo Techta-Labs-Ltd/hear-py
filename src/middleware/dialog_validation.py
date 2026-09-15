@@ -21,7 +21,6 @@ from src.models.dialog import DialogSelection, DialogStateManager
 
 
 class DialogValidationPolicy:
-    logger = ApplicationLog
     _EXIT_INTENTS = {"AMAZON.CancelIntent", "AMAZON.StopIntent"}
     _BINARY_INTENTS = _EXIT_INTENTS | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
     _AMBIGUITY_INTENTS = _EXIT_INTENTS | {
@@ -267,7 +266,7 @@ class DialogValidationInterceptor(AbstractRequestInterceptor):
         attrs = RequestContext.request(handler_input)
         attrs[DialogConstants.VALIDATION_FAILURE] = failure
         RequestContext.replace_request(handler_input, attrs)
-        DialogValidationPolicy.logger.info(
+        ApplicationLog.info(
             "Hear: dialog input rejected dialog=%s intent=%s",
             failure["dialogType"],
             AlexaRequest.get_intent_name(handler_input),

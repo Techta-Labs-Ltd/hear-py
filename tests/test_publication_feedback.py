@@ -473,5 +473,5 @@ async def test_feedback_value_and_publication_subject_are_not_duplicated_locally
     _store(mock_handler_input, awaitingFeedback=True, pendingFeedback=pending)
     await FeedbackService().submit(mock_handler_input, "enjoyed")
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
-    assert store["feedbackHistory"] == []
+    assert "feedbackHistory" not in store
     assert "publication:publication-1" in store["answeredFeedbackKeys"]

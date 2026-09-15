@@ -10,7 +10,6 @@ from src.services.logging_control import ApplicationLog
 
 
 class Application:
-    logger = ApplicationLog
 
     @staticmethod
     def build_persistence_adapter():
@@ -30,7 +29,7 @@ class Application:
                 table_name=table_name,
                 partition_key_name=settings.HEAR_DDB_PARTITION_KEY,
             )
-        Application.logger.warning("HEAR_DDB_TABLE is unset; using non-durable memory persistence")
+        ApplicationLog.warning("HEAR_DDB_TABLE is unset; using non-durable memory persistence")
         return MemoryPersistenceAdapter()
 
     @staticmethod

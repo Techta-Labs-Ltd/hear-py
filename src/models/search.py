@@ -29,7 +29,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class Search:
-    logger = ApplicationLog
     @staticmethod
     def initial_search_queue_items(
         search_result: dict[str, Any],
@@ -375,7 +374,7 @@ class Search:
             nlp_filter=filters,
         )
         logged_payload = {key: value for key, value in payload.items() if key not in {"alexaUserId", "listenerId"}}
-        Search.logger.info(
+        ApplicationLog.info(
             "Hear: search request intent=%s payload=%s",
             intent,
             json.dumps(logged_payload, sort_keys=True, separators=(",", ":")),
@@ -384,7 +383,7 @@ class Search:
         result = await d.heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
-        Search.logger.info(
+        ApplicationLog.info(
             "Hear: search response intent=%s failed=%s total=%s returned=%s",
             intent,
             bool(result.get("failed")),

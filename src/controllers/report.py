@@ -17,10 +17,6 @@ from src.models.playback_controls import PlaybackControls
 from src.models.report import Report
 
 
-class ReportModule:
-    logger = ApplicationLog
-
-
 class ReportContentHandler(AbstractRequestHandler):
     """Flags the currently playing content for review."""
 
@@ -41,7 +37,7 @@ class ReportContentHandler(AbstractRequestHandler):
         )
         content_id = report.get("contentId")
         if not content_id:
-            ReportModule.logger.warning("Hear: report content blocked contentId=%s", content_id)
+            ApplicationLog.warning("Hear: report content blocked contentId=%s", content_id)
             return handler_input.response_builder.speak(Speech.REPORT_NOTHING_PLAYING).response
         try:
             await self._deps.reports.record_report(
@@ -62,7 +58,7 @@ class ReportContentHandler(AbstractRequestHandler):
                 return await DeferredIntentManager.resume(handler_input)
             return await self._present_continue_question(handler_input, report, store)
         except Exception as err:
-            ReportModule.logger.warning("Report content error: %s", err)
+            ApplicationLog.warning("Report content error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -138,7 +134,7 @@ class ReportCreatorHandler(AbstractRequestHandler):
             )
             return AlexaResponse.present_idle_next(handler_input, confirm)
         except Exception as err:
-            ReportModule.logger.warning("Report creator error: %s", err)
+            ApplicationLog.warning("Report creator error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)

@@ -32,7 +32,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class Affirmative:
-    logger = ApplicationLog
     "State-machine based Yes handler.\n\n    Routes the Yes intent based on the current store/session state:\n    1. awaitingSearchConfirmation  -> execute confirmed search\n    2. listModeActive              -> play current list item\n    4. awaitingStillListening      -> advance queue\n    5. awaitingContinueAfterFlag   -> acknowledge continue\n    6. awaitingFeedback            -> delegate to FeedbackEnjoyed\n    7. awaitingFollow              -> delegate to FollowCreator\n    9. pendingNlpSuggestion        -> confirm NLP suggestion\n    Fallback                       -> generic welcome reprompt\n    "
 
     def __init__(self, *, deps: object | None = None):
@@ -342,7 +341,7 @@ class Affirmative:
         payload: dict,
         label: str,
     ):
-        self.logger.info(
+        ApplicationLog.info(
             "Hear: confirmed resolver search START id=%s label=%s payload=%s",
             resolution.get("requestId"),
             label,

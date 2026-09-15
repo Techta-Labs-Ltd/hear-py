@@ -12,7 +12,6 @@ from src.utils.playback import PlaybackUtils
 
 
 class OutboundEventService:
-    logger = ApplicationLog
     __slots__ = ("_producer", "_webhook")
 
     def __init__(
@@ -194,7 +193,7 @@ class OutboundEventService:
                         )
                     )
             except Exception as exc:
-                self.logger.warning("Hear outbound record failed error=%s", type(exc).__name__)
+                ApplicationLog.warning("Hear outbound record failed error=%s", type(exc).__name__)
                 delivered = False
             if not delivered:
                 failures.append({"itemIdentifier": message_id})

@@ -17,7 +17,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class ResolverWorkflow:
-    logger = ApplicationLog
     SEARCH_INTENTS = {
         "ChooseSourceKindIntent",
         "OpenDiscoveryIntent",
@@ -345,7 +344,7 @@ class ResolverWorkflow:
             "phrase": requested,
             "expectedTypes": list(expected_types),
         }
-        ResolverWorkflow.logger.warning(
+        ApplicationLog.warning(
             "Hear: rejected implausible source match intent=%s requested=%s canonical=%s",
             alexa_intent,
             requested,

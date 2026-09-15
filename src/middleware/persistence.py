@@ -16,7 +16,6 @@ from src.utils.deadline import DeadlineBudget
 
 
 class PersistenceMiddlewareSupport:
-    logger = ApplicationLog
 
     @staticmethod
     def apply_identity(handler_input) -> None:
@@ -64,7 +63,7 @@ class LoadPersistenceInterceptor(AbstractRequestInterceptor):
                 except asyncio.TimeoutError:
                     PersistenceMiddlewareSupport.hydrate_unavailable(handler_input)
                     AlexaMetrics.increment("PersistenceLoadTimeout")
-                    PersistenceMiddlewareSupport.logger.warning(
+                    ApplicationLog.warning(
                         "Hear: persistence load timed out degraded=true"
                     )
                     return
@@ -72,7 +71,7 @@ class LoadPersistenceInterceptor(AbstractRequestInterceptor):
                 stored = await User.read_persisted(handler_input)
         except Exception as exc:
             AlexaMetrics.increment("PersistenceLoadFailure")
-            PersistenceMiddlewareSupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear: persistence load failed error=%s degraded=true",
                 type(exc).__name__,
             )
@@ -110,7 +109,7 @@ class SavePersistenceInterceptor(AbstractResponseInterceptor):
             return self._result(CommitStatus.DEADLINE_EXCEEDED, essential)
         except Exception as exc:
             AlexaMetrics.increment("PersistenceSaveFailure")
-            PersistenceMiddlewareSupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear: persistence save failed error=%s", type(exc).__name__
             )
             return self._result(CommitStatus.FAILED, essential)
@@ -120,7 +119,7 @@ class SavePersistenceInterceptor(AbstractResponseInterceptor):
     def _result(status: CommitStatus, essential: bool) -> CommitResult:
         result = CommitResult(status, essential)
         AlexaMetrics.increment("PersistenceCommitFailure")
-        PersistenceMiddlewareSupport.logger.warning(
+        ApplicationLog.warning(
             "Hear: persistence commit status=%s essential=%s", status, essential
         )
         if essential:

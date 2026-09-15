@@ -53,7 +53,7 @@ class Playback:
         next_id = queue["orderedContentIds"][next_index]
         prepared = store.get("preparedNextContent")
         if isinstance(prepared, dict) and prepared.get("contentId") == next_id:
-            Playback.logger.info(
+            ApplicationLog.info(
                 "Hear: queue item already prepared current=%s next=%s index=%s",
                 token,
                 next_id,
@@ -77,7 +77,7 @@ class Playback:
                 timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
             )
             if not result.get("results"):
-                Playback.logger.warning(
+                ApplicationLog.warning(
                     "Hear: queue prefetch found no content current=%s next=%s index=%s",
                     token,
                     next_id,
@@ -109,7 +109,7 @@ class Playback:
                 else None,
             )
         )
-        Playback.logger.info(
+        ApplicationLog.info(
             "Hear: queue item enqueued current=%s next=%s index=%s",
             token,
             next_id,
@@ -117,7 +117,6 @@ class Playback:
         )
         return handler_input.response_builder.add_directive(directive).response
 
-    logger = ApplicationLog
     __slots__ = ("_alexa", "_playback", "_queue", "_events")
 
     def __init__(
@@ -478,7 +477,7 @@ class Playback:
             )
         )
         if not directive:
-            Playback.logger.error(
+            ApplicationLog.error(
                 "Hear: could not build play directive contentId=%s", state["contentId"]
             )
             return (

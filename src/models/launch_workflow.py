@@ -17,7 +17,6 @@ from src.utils.deadline import DeadlineBudget
 
 
 class LaunchWorkflow:
-    logger = ApplicationLog
     PROFILE_TTL_MS = 24 * 60 * 60 * 1000
 
     def __init__(self, *, deps: object | None = None):
@@ -150,15 +149,15 @@ class LaunchWorkflow:
     ) -> dict:
         remaining = DeadlineBudget.get_lambda_remaining_ms(handler_input)
         if isinstance(remaining, (int, float)) and remaining < 3500:
-            self.logger.info("Hear: launch enrichment skipped (budget) remainingMs=%s", remaining)
+            ApplicationLog.info("Hear: launch enrichment skipped (budget) remainingMs=%s", remaining)
             return store
         try:
             if not self._listener_data_is_cached(store):
                 enriched = await self._deps.listener_profile.apply_listener_profile(handler_input)
-                self.logger.info("Hear: launch enrichment done")
+                ApplicationLog.info("Hear: launch enrichment done")
                 return enriched
         except Exception as err:
-            self.logger.warning("Hear: launch enrichment failed %s", err)
+            ApplicationLog.warning("Hear: launch enrichment failed %s", err)
         return store
 
     async def _sync_listener_for_launch(self, handler_input: HandlerInput, store: dict) -> dict:
@@ -166,7 +165,7 @@ class LaunchWorkflow:
             await self._deps.listener_sync.sync_for_launch(handler_input)
             return self._deps.user.snapshot(handler_input)
         except Exception as err:
-            self.logger.warning("Hear: listener launch sync failed error=%s", type(err).__name__)
+            ApplicationLog.warning("Hear: listener launch sync failed error=%s", type(err).__name__)
             return store
 
     @staticmethod

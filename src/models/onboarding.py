@@ -104,7 +104,6 @@ class SetLocation:
 
 
 class Onboarding(OnboardingService):
-    logger = ApplicationLog
 
     def __init__(self, store: User | None = None) -> None:
         super().__init__(OnboardingState(store or User()))
@@ -198,7 +197,7 @@ class Onboarding(OnboardingService):
         DialogStateManager.activate(
             handler_input, "onboarding", context={"stage": "ask_permission"}
         )
-        Onboarding.logger.info(
+        ApplicationLog.info(
             "Hear: permission card requested scopes=%s requestId=%s cardPresent=true",
             permissions,
             Onboarding._request_id(handler_input),
@@ -374,7 +373,7 @@ class Onboarding(OnboardingService):
         deps: object | None = None,
     ):
         d = Onboarding._dependencies(deps)
-        Onboarding.logger.info(
+        ApplicationLog.info(
             "Hear: resolving town intent=%s phrase=%r",
             AlexaRequest.get_intent_name(handler_input),
             phrase,
@@ -391,12 +390,12 @@ class Onboarding(OnboardingService):
             response = await d.resolver.resolve_utterance(phrase, **options)
             resolution = response.get("resolution") or {}
         except ResolverUnavailable as exc:
-            Onboarding.logger.warning("Hear: town resolver unavailable reason=%s", exc)
+            ApplicationLog.warning("Hear: town resolver unavailable reason=%s", exc)
             return Onboarding.handle_town_resolver_unavailable(handler_input, store, deps=d)
         d.onboarding.reset_resolver_failures(handler_input)
         match = resolution.get("match")
         candidates = resolution.get("candidates") or []
-        Onboarding.logger.info(
+        ApplicationLog.info(
             "Hear: onboarding town resolution matched=%s city=%s candidates=%s",
             bool(match),
             (match or {}).get("city"),
@@ -459,7 +458,7 @@ class Onboarding(OnboardingService):
             response = await d.resolver.resolve_utterance(phrase, **options)
             resolution = response.get("resolution") or {}
         except ResolverUnavailable as exc:
-            Onboarding.logger.warning("Hear: town resolver unavailable reason=%s", exc)
+            ApplicationLog.warning("Hear: town resolver unavailable reason=%s", exc)
             return Onboarding.handle_town_resolver_unavailable(handler_input, store, deps=d)
         d.onboarding.reset_resolver_failures(handler_input)
         match = resolution.get("match")
@@ -504,7 +503,7 @@ class Onboarding(OnboardingService):
             )
         d.user.update(handler_input, {"awaitingProfilePermission": True})
         DialogStateManager.clear(handler_input, "onboarding")
-        Onboarding.logger.info("Hear: onboarding town skipped")
+        ApplicationLog.info("Hear: onboarding town skipped")
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
             .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
@@ -584,13 +583,13 @@ class Onboarding(OnboardingService):
                 response = await d.resolver.resolve_utterance(city, **options)
                 resolved = (response.get("resolution") or {}).get("match")
             except ResolverUnavailable as exc:
-                Onboarding.logger.warning(
+                ApplicationLog.warning(
                     "Hear: device-address coordinate resolution unavailable reason=%s",
                     exc,
                 )
                 resolved = None
             if not resolved:
-                Onboarding.logger.info(
+                ApplicationLog.info(
                     "Hear: device-address city could not be resolved to coordinates city=%s",
                     city,
                 )
@@ -602,7 +601,7 @@ class Onboarding(OnboardingService):
                 "source": "device",
                 "_status": "resolved",
             }
-            Onboarding.logger.info(
+            ApplicationLog.info(
                 "Hear: device-address city resolved coordinates=true city=%s",
                 match.get("city"),
             )
