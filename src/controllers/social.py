@@ -8,8 +8,8 @@ from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
 
 
 class WhoIsCreatorHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = CreatorIdentity(deps=deps)
+    def __init__(self, action: CreatorIdentity) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -22,8 +22,8 @@ class WhoIsCreatorHandler(AbstractRequestHandler):
 
 
 class FollowCreatorHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = FollowCreator(deps=deps)
+    def __init__(self, action: FollowCreator) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -36,8 +36,8 @@ class FollowCreatorHandler(AbstractRequestHandler):
 
 
 class UnfollowCreatorHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = UnfollowCreator(deps=deps)
+    def __init__(self, action: UnfollowCreator) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (

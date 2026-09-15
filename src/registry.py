@@ -39,6 +39,7 @@ from src.models.feedback_response import (
     SomewhatFeedback,
 )
 from src.models.play import PlayContent, PlayOrganization
+from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
 from src.controllers.playback_controls import (
     DecreaseSpeedHandler,
     FastForwardIntentHandler,
@@ -224,9 +225,9 @@ class RouteRegistry:
             RepeatIntentHandler(deps=container),
             RewindIntentHandler(deps=container),
             FastForwardIntentHandler(deps=container),
-            WhoIsCreatorHandler(deps=container),
-            FollowCreatorHandler(deps=container),
-            UnfollowCreatorHandler(deps=container),
+            WhoIsCreatorHandler(CreatorIdentity(deps=container)),
+            FollowCreatorHandler(FollowCreator(deps=container)),
+            UnfollowCreatorHandler(UnfollowCreator(deps=container)),
             ReportContentHandler(deps=container),
             ReportCreatorHandler(deps=container),
             WhatsThisAboutHandler(deps=container),
