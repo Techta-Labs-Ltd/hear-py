@@ -31,6 +31,13 @@ from src.controllers.play import (
     PlayByOrganizationHandler,
     PlayContentHandler,
 )
+from src.models.feedback_response import (
+    EnjoyedFeedback,
+    NotEnjoyedFeedback,
+    RatingRequest,
+    SkipFeedback,
+    SomewhatFeedback,
+)
 from src.models.play import PlayContent, PlayOrganization
 from src.controllers.playback_controls import (
     DecreaseSpeedHandler,
@@ -229,12 +236,17 @@ class RouteRegistry:
             PlaybackFinishedHandler(deps=container),
             PlaybackStoppedHandler(deps=container),
             PlaybackFailedHandler(deps=container),
-            RateContentHandler(deps=container),
-            FeedbackEnjoyedHandler(deps=container),
-            FeedbackSomewhatHandler(deps=container),
-            FeedbackNotEnjoyedHandler(deps=container),
-            FeedbackResponseHandler(deps=container),
-            SkipFeedbackHandler(deps=container),
+            RateContentHandler(RatingRequest(deps=container)),
+            FeedbackEnjoyedHandler(EnjoyedFeedback(deps=container)),
+            FeedbackSomewhatHandler(SomewhatFeedback(deps=container)),
+            FeedbackNotEnjoyedHandler(NotEnjoyedFeedback(deps=container)),
+            FeedbackResponseHandler(
+                EnjoyedFeedback(deps=container),
+                SomewhatFeedback(deps=container),
+                NotEnjoyedFeedback(deps=container),
+                SkipFeedback(deps=container),
+            ),
+            SkipFeedbackHandler(SkipFeedback(deps=container)),
             YesIntentHandler(deps=container),
             NoIntentHandler(deps=container),
             NavigateHomeHandler(deps=container),

@@ -7,6 +7,7 @@ from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.controllers.feedback import FeedbackEnjoyedHandler
 from src.models.feedback import FeedbackService
+from src.models.feedback_response import EnjoyedFeedback
 from src.models.playback_state import PlaybackQueue
 from src.models.user import User
 
@@ -433,7 +434,9 @@ async def _enjoy_publication(mock_handler_input, organization_name):
             "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
         }
     )
-    await FeedbackEnjoyedHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await FeedbackEnjoyedHandler(EnjoyedFeedback(deps=ApplicationContainer())).handle(
+        mock_handler_input
+    )
     return mock_handler_input.attributes_manager.request_attributes["_store"]["pendingFollowSource"]
 
 

@@ -20,13 +20,28 @@ from src.controllers.feedback import (
 from src.controllers.report import ReportContentHandler
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
 from src.models.feedback import FeedbackService
-from src.models.feedback_response import FeedbackContinuation
+from src.models.feedback_response import (
+    EnjoyedFeedback,
+    FeedbackContinuation,
+    NotEnjoyedFeedback,
+    SkipFeedback,
+    SomewhatFeedback,
+)
 from src.models.listener import IdentityContext, Listener, PrincipalType
 from src.models.playback import Playback
 from src.models.user import User
 from src.services.listener_sync import ListenerSyncService
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
+
+
+def _feedback_response(deps):
+    return FeedbackResponseHandler(
+        EnjoyedFeedback(deps=deps),
+        SomewhatFeedback(deps=deps),
+        NotEnjoyedFeedback(deps=deps),
+        SkipFeedback(deps=deps),
+    )
 
 
 @pytest.mark.parametrize(
@@ -148,7 +163,7 @@ async def test_return_time_feedback_asks_to_continue_exact_organization(
             },
         }
     )
-    await FeedbackResponseHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await _feedback_response(ApplicationContainer()).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
     assert "continue listening to York Talking News" in spoken
@@ -335,7 +350,7 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
             "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
         }
     )
-    await FeedbackEnjoyedHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await FeedbackEnjoyedHandler(EnjoyedFeedback(deps=ApplicationContainer())).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "feedback on TRACK115 by Tynedale Talking Magazine" in spoken
     assert "WhatsApp Ptt" not in spoken
@@ -626,7 +641,7 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
         }
     )
     monkeypatch.setattr("src.controllers.feedback", AsyncMock())
-    feedback_response = await FeedbackNotEnjoyedHandler(deps=ApplicationContainer()).handle(
+    feedback_response = await FeedbackNotEnjoyedHandler(NotEnjoyedFeedback(deps=ApplicationContainer())).handle(
         mock_handler_input
     )
     assert feedback_response is not None
@@ -706,7 +721,7 @@ async def test_skip_feedback_does_not_restore_rejected_search_confirmation(
         }
     )
     monkeypatch.setattr("src.controllers.feedback", AsyncMock())
-    await SkipFeedbackHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await SkipFeedbackHandler(SkipFeedback(deps=ApplicationContainer())).handle(mock_handler_input)
     mock_handler_input.redispatch.assert_not_awaited()
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"].get("deferredIntent")

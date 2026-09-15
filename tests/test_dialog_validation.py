@@ -367,6 +367,7 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
 ):
     from src.controllers.confirmation import NoIntentHandler
     from src.controllers.feedback import SkipFeedbackHandler
+    from src.models.feedback_response import SkipFeedback
     from src.models.user import User
 
     pending = {"candidates": [{"name": "Pendle Voice", "id": "one"}]}
@@ -387,7 +388,7 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     handler = (
         NoIntentHandler(deps=ApplicationContainer())
         if intent_name == "AMAZON.NoIntent"
-        else SkipFeedbackHandler(deps=ApplicationContainer())
+        else SkipFeedbackHandler(SkipFeedback(deps=ApplicationContainer()))
     )
     response = await handler.handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
