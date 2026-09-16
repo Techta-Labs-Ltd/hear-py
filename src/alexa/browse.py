@@ -327,13 +327,34 @@ class Browse:
             AlexaRequest.get_intent_name(handler_input) == "PlayRecommendationIntent"
         )
         if recommended:
+            requested_topic = AlexaRequest.get_slot_value(
+                handler_input, "recommendationQuery"
+            )
+            if requested_topic:
+                search_payload = dict(nlp.get("searchPayload") or {})
+                search_filter = dict(search_payload.get("filter") or {})
+                nlp = {
+                    **nlp,
+                    "slots": {
+                        **slots,
+                        "isRecommended": True,
+                        "recommendationQuery": requested_topic,
+                    },
+                    "searchPayload": {
+                        **search_payload,
+                        "query": "",
+                        "filter": {**search_filter, "tags": [requested_topic]},
+                    },
+                }
             return await self._begin_recommendations(
                 handler_input,
                 nlp=nlp,
             )
         active_store = self._user.snapshot(handler_input)
+        topic = AlexaRequest.get_topic_slot(handler_input)
         search_result = await Search.discover_content_via_search(
             handler_input,
+            SearchRequest(intent="trending", query=topic),
             heara=self._heara,
             progressive=self._progressive,
             user=self._user,

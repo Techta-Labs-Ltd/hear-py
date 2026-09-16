@@ -705,3 +705,29 @@ def test_feedback_and_follow_samples_do_not_claim_ambiguous_actions():
     assert {"skip", "move on", "carry on", "just play the next one"}.isdisjoint(skip_feedback)
     assert "change it" not in negative
     assert {"I like this creator", "I love this creator", "I want to hear more from them"}.isdisjoint(follow)
+
+
+def test_direct_discovery_intents_include_misrecognition_and_community_phrases():
+    intents = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+
+    assert {
+        "content on {searchQuery}",
+        "content from {searchQuery}",
+    }.issubset(set(intents["SearchContentIntent"]["samples"]))
+    assert {
+        "what do you recommended",
+        "what would you recommend",
+        "what should I listen to",
+    }.issubset(set(intents["PlayRecommendationIntent"]["samples"]))
+    assert {
+        "what's trending content on {topic}",
+        "trending content",
+        "popular picks",
+    }.issubset(set(intents["WhatsTrendingIntent"]["samples"]))
+    assert {
+        "content from my local community",
+        "content from a local community",
+    }.issubset(set(intents["PlayLocalIntent"]["samples"]))

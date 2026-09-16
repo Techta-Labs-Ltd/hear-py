@@ -80,6 +80,7 @@ from src.middleware.dialog_validation import (
     DialogValidationGateHandler,
     DialogValidationInterceptor,
 )
+from src.middleware.direct_intent import DirectIntentPhraseInterceptor
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
 from src.middleware.identity import IdentityInterceptor
 from src.middleware.onboarding_gate import OnboardingGateHandler
@@ -196,6 +197,7 @@ class RouteRegistry:
             IdentityInterceptor(container.listener_identity, container.user),
             LoadPersistenceInterceptor(),
             DialogValidationInterceptor(),
+            DirectIntentPhraseInterceptor(),
             container.build_resolver_interceptor(),
             ConfirmationMiddleware(),
         ):

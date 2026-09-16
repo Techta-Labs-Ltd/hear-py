@@ -5,6 +5,7 @@ import time
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.dialog_request import intent_slots
+from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.clients.progressive import ProgressiveResponseClient
@@ -25,21 +26,8 @@ from src.utils.filters import SearchFilterUtils
 class ResolverWorkflowRunner:
     # These requests have dedicated handlers and must never be interpreted as
     # discovery/search utterances, even if an interaction model slot is present.
-    DIRECT_HANDLER_INTENTS = frozenset(
-        {
-            "WhatsTrendingIntent",
-            "PlayRecommendationIntent",
-            "SetPlaybackSpeedIntent",
-            "IncreaseSpeedIntent",
-            "DecreaseSpeedIntent",
-            "RateContentIntent",
-            "FeedbackEnjoyedIntent",
-            "FeedbackSomewhatIntent",
-            "FeedbackNotEnjoyedIntent",
-            "FeedbackResponseIntent",
-            "SkipFeedbackIntent",
-        }
-    )
+    DIRECT_HANDLER_INTENTS = DirectIntentPolicy.BYPASS_RESOLVER_INTENTS
+
     def __init__(
         self,
         *,

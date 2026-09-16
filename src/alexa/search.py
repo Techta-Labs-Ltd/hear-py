@@ -319,6 +319,8 @@ class Search:
                 latest = False
         if latest:
             return "latest"
+        if AlexaRequest.get_intent_name(handler_input) == "WhatsTrendingIntent":
+            return "trending"
         return "trending" if filters.get("isPublication") else None
 
     @staticmethod

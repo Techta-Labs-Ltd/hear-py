@@ -45,6 +45,10 @@ class TestAlexaInteractionModelBuild:
             "play {searchQuery}",
             "find {searchQuery}",
             "listen to {searchQuery}",
+            "play content on {searchQuery}",
+            "play content from {searchQuery}",
+            "content on {searchQuery}",
+            "content from {searchQuery}",
         ]
         assert "SearchContentIntent" not in dialog_intents
         assert dialog_intents["CarrierlessDiscoveryIntent"]["slots"][0]["type"] == (

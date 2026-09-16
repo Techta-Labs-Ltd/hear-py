@@ -93,3 +93,40 @@ async def test_trending_intent_searches_and_plays_trending_content(
     options = autoplay.await_args.args[2]
     assert options["introOverride"] == "Here are 8 trending stories. Here's the first one."
     assert response["directives"][0]["type"] == "AudioPlayer.Play"
+
+
+@pytest.mark.asyncio
+async def test_recommendation_topic_is_preserved_as_an_availability_filter(
+    monkeypatch, mock_handler_input
+):
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {
+            "type": "IntentRequest",
+            "locale": "en-GB",
+            "intent": {
+                "name": "PlayRecommendationIntent",
+                "slots": {
+                    "recommendationQuery": {
+                        "name": "recommendationQuery",
+                        "value": "sport",
+                    }
+                },
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    begin_recommendations = AsyncMock(return_value={"outputSpeech": {"ssml": "<speak>Choose</speak>"}})
+    monkeypatch.setattr(
+        "src.alexa.availability.Availability.begin_recommendations",
+        begin_recommendations,
+    )
+
+    await WhatsTrendingHandler(ApplicationContainer().browse).handle(mock_handler_input)
+
+    nlp = begin_recommendations.await_args.kwargs["nlp"]
+    assert nlp["slots"]["recommendationQuery"] == "sport"
+    assert nlp["searchPayload"]["filter"]["tags"] == ["sport"]
