@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class DirectIntentPolicy:
     BYPASS_RESOLVER_INTENTS = frozenset(
         {

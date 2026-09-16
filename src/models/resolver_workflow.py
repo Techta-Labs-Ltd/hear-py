@@ -329,7 +329,7 @@ class ResolverWorkflow:
             return ResolverWorkflow._source_kind_resolution(intent_slots)
         if normalized_raw in DiscoveryConstants.LOCAL_HINTS or (
             alexa_intent == "PlayLocalIntent"
-            and SearchFilterUtils.wants_local_community_content(raw)
+            and SearchFilterUtils.wants_local_community_content(raw or "")
         ):
             return ResolverWorkflow._direct_discovery_result(
                 alexa_intent,
