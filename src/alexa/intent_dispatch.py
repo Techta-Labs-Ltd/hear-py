@@ -100,6 +100,11 @@ class IntentDispatcher:
         if AlexaRequest.get_request_type(handler_input) != "IntentRequest":
             return False
         alexa_intent = AlexaRequest.get_intent_name(handler_input)
+        if (
+            alexa_intent == "ShowMoreBrowseIntent"
+            and isinstance(self._user.snapshot(handler_input).get("pendingAmbiguity"), dict)
+        ):
+            return True
         if alexa_intent in self.NON_DISPATCHABLE_INTENTS:
             return False
         nlp_data = RequestContext.request(handler_input).get("_nlp")
@@ -111,6 +116,11 @@ class IntentDispatcher:
 
     def dispatch(self, handler_input: HandlerInput) -> Response:
         attrs = RequestContext.request(handler_input)
+        if (
+            AlexaRequest.get_intent_name(handler_input) == "ShowMoreBrowseIntent"
+            and isinstance(self._user.snapshot(handler_input).get("pendingAmbiguity"), dict)
+        ):
+            return self._browse.more(handler_input)
         nlp_data = attrs.get("_nlp", {})
         intent = nlp_data.get("intent", "general")
         clarification = attrs.pop("_resolverClarification", None)
