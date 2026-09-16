@@ -31,9 +31,7 @@ class ResolverWorkflow:
         "SearchPublicationIntent",
         "BrowseContentIntent",
         "BrowseByCategoryIntent",
-        "WhatsTrendingIntent",
         "PlayLocalIntent",
-        "PlayRecommendationIntent",
     }
     LOCATION_MUTATION_INTENTS = {"location_set", "town_capture"}
     AMBIGUITY_CONTROL_INTENTS = {

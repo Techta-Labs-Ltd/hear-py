@@ -10,6 +10,7 @@ from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, Respons
 from src.container import ApplicationContainer
 from src.controllers.intent_dispatch import IntentDispatchGateHandler
 from src.models.user import User
+from src.models.resolver_workflow import ResolverWorkflow
 
 
 @pytest.fixture
@@ -481,12 +482,10 @@ async def test_play_from_creator_elicits_city_then_forwards_unmatched_spoken_wor
         ("PlayByOrganizationIntent", "organizationQuery", "Ribble Valley TN", "play from Ribble Valley TN"),
         ("PlayPublicationIntent", "publicationSourceQuery", "Craven Herald", "play publication from Craven Herald"),
         ("PlayLocalIntent", "localQuery", "Barrow-in-Furness", "play near Barrow-in-Furness"),
-        ("PlayRecommendationIntent", "recommendationQuery", "indie jazz", "play indie jazz"),
         ("SelectOrganizationIntent", "organizationQuery", "Colne TN", "play Colne TN"),
         ("SelectPublicationSourceIntent", "publicationSourceQuery", "Yorkshire Post", "play Yorkshire Post"),
         ("SelectCreatorCityIntent", "cityQuery", "Hebden Bridge", "Hebden Bridge"),
         ("BrowseByCategoryIntent", "category", "gardening", "play gardening"),
-        ("WhatsTrendingIntent", "topic", "premier league", "play premier league"),
     ],
 )
 async def test_all_search_slots_forward_unmatched_spoken_words_to_resolver(
@@ -1094,3 +1093,30 @@ async def test_dialog_validation_gate_speaks_publication_retry_for_unrecognized_
     assert "First, Dorking News April." in speech
     assert "Second, Dorking Mag May." in speech
     assert res["shouldEndSession"] is False
+
+
+@pytest.mark.parametrize(
+    "intent_name",
+    (
+        "WhatsTrendingIntent",
+        "PlayRecommendationIntent",
+        "SetPlaybackSpeedIntent",
+        "IncreaseSpeedIntent",
+        "DecreaseSpeedIntent",
+        "RateContentIntent",
+        "FeedbackEnjoyedIntent",
+        "FeedbackSomewhatIntent",
+        "FeedbackNotEnjoyedIntent",
+        "FeedbackResponseIntent",
+        "SkipFeedbackIntent",
+    ),
+)
+def test_direct_handler_intents_bypass_resolver_even_with_slots(
+    mock_handler_input, intent_name
+):
+    intent = mock_handler_input.request_envelope.request.intent
+    intent.name = intent_name
+    intent.slots = {"topic": {"name": "topic", "value": "anything"}}
+
+    assert ResolverWorkflowRunner._request(mock_handler_input) is None
+    assert intent_name not in ResolverWorkflow.SEARCH_INTENTS

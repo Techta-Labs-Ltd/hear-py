@@ -23,6 +23,23 @@ from src.utils.filters import SearchFilterUtils
 
 
 class ResolverWorkflowRunner:
+    # These requests have dedicated handlers and must never be interpreted as
+    # discovery/search utterances, even if an interaction model slot is present.
+    DIRECT_HANDLER_INTENTS = frozenset(
+        {
+            "WhatsTrendingIntent",
+            "PlayRecommendationIntent",
+            "SetPlaybackSpeedIntent",
+            "IncreaseSpeedIntent",
+            "DecreaseSpeedIntent",
+            "RateContentIntent",
+            "FeedbackEnjoyedIntent",
+            "FeedbackSomewhatIntent",
+            "FeedbackNotEnjoyedIntent",
+            "FeedbackResponseIntent",
+            "SkipFeedbackIntent",
+        }
+    )
     def __init__(
         self,
         *,
@@ -158,6 +175,8 @@ class ResolverWorkflowRunner:
             return None
         alexa_intent = AlexaRequest.read(intent, "name")
         if not alexa_intent:
+            return None
+        if alexa_intent in ResolverWorkflowRunner.DIRECT_HANDLER_INTENTS:
             return None
         slots = AlexaRequest.read(intent, "slots") or {}
         store = User.snapshot(handler_input)
