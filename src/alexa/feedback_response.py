@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from ask_sdk_core.handler_input import HandlerInput
-
+from src.alexa.context import RequestContext
+from src.alexa.dialog import DeferredIntentManager, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.feedback_service import FeedbackService
+from src.alexa.playback_controls import PlaybackControls
+from src.alexa.playback_state import PlaybackQueue
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DeferredIntentManager, DialogStateManager
-from src.models.feedback import FeedbackService
-from src.models.playback import Playback
-from src.models.playback_controls import PlaybackControls
-from src.models.playback_state import PlaybackQueue
+from src.models.feedback_contracts import FeedbackCommand
 from src.models.report import Report
 from src.models.social import FollowingManager, ListeningTracker
 from src.models.user import User
@@ -18,21 +17,26 @@ from src.utils.content import ContentUtils
 
 
 class RatingRequest:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Feedback._dependencies(deps)
+    def __init__(
+        self,
+        feedback: FeedbackService,
+        playback_controls: PlaybackControls,
+        user: User,
+    ) -> None:
+        self._feedback = feedback
+        self._playback_controls = playback_controls
+        self._user = user
 
-    async def execute(self, handler_input: HandlerInput):
-        pending = self._deps.feedback.request_current_rating(handler_input)
+    async def execute(self, request: RequestContext):
+        handler_input = request.handler_input
+        pending = self._feedback.request_current_rating(handler_input)
         if pending:
-            directive = await PlaybackControls.pause_active(
-                handler_input,
-                deps=self._deps,
-            )
+            directive = await self._playback_controls.pause_active(handler_input)
             return AlexaFeedback.present_requested_feedback(
                 handler_input,
                 directive,
                 pending,
-                User.snapshot(handler_input),
+                self._user.snapshot(handler_input),
             )
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.RATE_CONTENT_NOTHING))
@@ -79,11 +83,11 @@ class FeedbackContinuation:
         }
 
     @staticmethod
-    def present(handler_input, subject: dict, store: dict, prefix: str):
+    def present(handler_input, subject: dict, store: dict, prefix: str, user: User):
         context = FeedbackContinuation._context(subject, store)
         if not context:
             return None
-        User.update(
+        user.update(
             handler_input,
             {
                 "awaitingFeedbackContinuation": True,
@@ -105,23 +109,24 @@ class FeedbackContinuation:
         )
 
     @staticmethod
-    async def accept(handler_input, *, deps):
-        context = dict(User.snapshot(handler_input).get("feedbackContinuation") or {})
-        User.update(
+    async def accept(
+        handler_input, playback_controls: PlaybackControls, user: User
+    ):
+        context = dict(user.snapshot(handler_input).get("feedbackContinuation") or {})
+        user.update(
             handler_input,
             {"awaitingFeedbackContinuation": False, "feedbackContinuation": None},
         )
         DialogStateManager.clear(handler_input, "feedback_continuation")
-        return await Playback.play_queue_delta(
+        return await playback_controls.play_queue_delta(
             handler_input,
             1,
             AlexaFeedback.discovery_continuing_speech(context),
-            deps=deps,
         )
 
     @staticmethod
-    def decline(handler_input):
-        User.update(
+    def decline(handler_input, user: User):
+        user.update(
             handler_input,
             {"awaitingFeedbackContinuation": False, "feedbackContinuation": None},
         )
@@ -130,11 +135,19 @@ class FeedbackContinuation:
 
 
 class EnjoyedFeedback:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Feedback._dependencies(deps)
+    def __init__(
+        self,
+        feedback: FeedbackService,
+        playback_controls: PlaybackControls,
+        user: User,
+    ) -> None:
+        self._feedback = feedback
+        self._playback_controls = playback_controls
+        self._user = user
 
-    async def execute(self, handler_input: HandlerInput):
-        store = User.snapshot(handler_input)
+    async def execute(self, request: RequestContext):
+        handler_input = request.handler_input
+        store = self._user.snapshot(handler_input)
         if not store.get("awaitingFeedback"):
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_REPROMPT))
@@ -143,46 +156,53 @@ class EnjoyedFeedback:
                 .response
             )
         pending = dict(store.get("pendingFeedback") or {})
-        await self._deps.feedback.submit(handler_input, "enjoyed")
+        await self._feedback.submit(
+            request, FeedbackCommand("enjoyed")
+        )
         selected_source = Feedback._feedback_source(pending, store)
-        ListeningTracker.record(
+        self._user.update(
             handler_input,
-            category=pending.get("category") or store.get("feedbackCategory"),
-            creator=selected_source.get("name"),
-            liked=True,
+            {
+                "listeningPattern": ListeningTracker.record(
+                    store,
+                    category=pending.get("category") or store.get("feedbackCategory"),
+                    creator=selected_source.get("name"),
+                    liked=True,
+                )
+            },
         )
         if pending.get("requested"):
             resume_speech = AlexaFeedback.resuming_speech(pending, store)
-            await self._deps.feedback.clear(handler_input)
-            return await PlaybackControls.restart_active(
+            await self._feedback.clear(handler_input)
+            return await self._playback_controls.restart_active(
                 handler_input,
                 speech=resume_speech,
-                deps=self._deps,
             )
         creator_id = selected_source.get("id")
         creator_name = selected_source.get("name")
         source_type = selected_source.get("kind") or "creator"
-        User.update(handler_input, {"awaitingFollow": False, "pendingFollowSource": None})
+        self._user.update(handler_input, {"awaitingFollow": False, "pendingFollowSource": None})
         if DeferredIntentManager.has(handler_input):
-            await self._deps.feedback.clear(handler_input)
+            await self._feedback.clear(handler_input)
             return await DeferredIntentManager.resume(handler_input)
-        await self._deps.feedback.clear(handler_input)
+        await self._feedback.clear(handler_input)
         continuation = FeedbackContinuation.present(
             handler_input,
             pending,
             store,
             "Thanks for the feedback.",
+            self._user,
         )
         if continuation:
             return continuation
-        updated_store = User.snapshot(handler_input)
+        updated_store = self._user.snapshot(handler_input)
         if (
             creator_id
             and creator_name
             and (not Speech.is_bad_credit(creator_name))
             and (not FollowingManager.is_following(updated_store, creator_id, source_type))
         ):
-            User.update(
+            self._user.update(
                 handler_input,
                 {
                     "awaitingFollow": True,
@@ -214,11 +234,19 @@ class EnjoyedFeedback:
 
 
 class SomewhatFeedback:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Feedback._dependencies(deps)
+    def __init__(
+        self,
+        feedback: FeedbackService,
+        playback_controls: PlaybackControls,
+        user: User,
+    ) -> None:
+        self._feedback = feedback
+        self._playback_controls = playback_controls
+        self._user = user
 
-    async def execute(self, handler_input: HandlerInput):
-        store = User.snapshot(handler_input)
+    async def execute(self, request: RequestContext):
+        handler_input = request.handler_input
+        store = self._user.snapshot(handler_input)
         if not store.get("awaitingFeedback"):
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_REPROMPT))
@@ -227,21 +255,27 @@ class SomewhatFeedback:
                 .response
             )
         pending = dict(store.get("pendingFeedback") or {})
-        await self._deps.feedback.submit(handler_input, "somewhat")
+        await self._feedback.submit(
+            request, FeedbackCommand("somewhat")
+        )
         selected_source = Feedback._feedback_source(pending, store)
-        ListeningTracker.record(
+        self._user.update(
             handler_input,
-            category=pending.get("category") or store.get("feedbackCategory"),
-            creator=selected_source.get("name"),
-            liked=None,
+            {
+                "listeningPattern": ListeningTracker.record(
+                    store,
+                    category=pending.get("category") or store.get("feedbackCategory"),
+                    creator=selected_source.get("name"),
+                    liked=None,
+                )
+            },
         )
         resume_speech = AlexaFeedback.resuming_speech(pending, store)
-        await self._deps.feedback.clear(handler_input)
+        await self._feedback.clear(handler_input)
         if pending.get("requested"):
-            return await PlaybackControls.restart_active(
+            return await self._playback_controls.restart_active(
                 handler_input,
                 speech=resume_speech,
-                deps=self._deps,
             )
         if DeferredIntentManager.has(handler_input):
             return await DeferredIntentManager.resume(handler_input)
@@ -250,6 +284,7 @@ class SomewhatFeedback:
             pending,
             store,
             "Thanks for the feedback.",
+            self._user,
         )
         if continuation:
             return continuation
@@ -257,11 +292,13 @@ class SomewhatFeedback:
 
 
 class NotEnjoyedFeedback:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Feedback._dependencies(deps)
+    def __init__(self, feedback: FeedbackService, user: User) -> None:
+        self._feedback = feedback
+        self._user = user
 
-    async def execute(self, handler_input: HandlerInput):
-        store = User.snapshot(handler_input)
+    async def execute(self, request: RequestContext):
+        handler_input = request.handler_input
+        store = self._user.snapshot(handler_input)
         if not store.get("awaitingFeedback"):
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_REPROMPT))
@@ -270,19 +307,26 @@ class NotEnjoyedFeedback:
                 .response
             )
         pending = dict(store.get("pendingFeedback") or {})
-        await self._deps.feedback.submit(handler_input, "not_enjoyed")
+        await self._feedback.submit(
+            request, FeedbackCommand("not_enjoyed")
+        )
         selected_source = Feedback._feedback_source(pending, store)
-        ListeningTracker.record(
+        self._user.update(
             handler_input,
-            category=pending.get("category") or store.get("feedbackCategory"),
-            creator=selected_source.get("name"),
-            liked=False,
+            {
+                "listeningPattern": ListeningTracker.record(
+                    store,
+                    category=pending.get("category") or store.get("feedbackCategory"),
+                    creator=selected_source.get("name"),
+                    liked=False,
+                )
+            },
         )
         report_context = Report.snapshot_report_context(store) or {}
         if pending.get("requested"):
             report_context["resumeAfterDecision"] = True
         FeedbackService.dismiss(handler_input)
-        User.update(
+        self._user.update(
             handler_input,
             {"awaitingReportDecision": True, "reportContext": report_context},
         )
@@ -290,7 +334,7 @@ class NotEnjoyedFeedback:
             handler_input,
             "report_decision",
             context=report_context,
-            deferred_request=User.snapshot(handler_input).get("deferredIntent")
+            deferred_request=self._user.snapshot(handler_input).get("deferredIntent")
             if DeferredIntentManager.has(handler_input)
             else None,
         )
@@ -303,11 +347,19 @@ class NotEnjoyedFeedback:
 
 
 class SkipFeedback:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Feedback._dependencies(deps)
+    def __init__(
+        self,
+        feedback: FeedbackService,
+        playback_controls: PlaybackControls,
+        user: User,
+    ) -> None:
+        self._feedback = feedback
+        self._playback_controls = playback_controls
+        self._user = user
 
-    async def execute(self, handler_input: HandlerInput):
-        store = User.snapshot(handler_input)
+    async def execute(self, request: RequestContext):
+        handler_input = request.handler_input
+        store = self._user.snapshot(handler_input)
         active_dialog = store.get("activeDialog")
         if (
             isinstance(active_dialog, dict)
@@ -332,12 +384,11 @@ class SkipFeedback:
                 store,
                 skipped=True,
             )
-            await self._deps.feedback.clear(handler_input)
+            await self._feedback.clear(handler_input)
             if resume_after_decision:
-                return await PlaybackControls.restart_active(
+                return await self._playback_controls.restart_active(
                     handler_input,
                     speech=resume_speech,
-                    deps=self._deps,
                 )
             if DeferredIntentManager.has(handler_input):
                 return await DeferredIntentManager.resume(handler_input)
@@ -346,6 +397,7 @@ class SkipFeedback:
                 dict(store.get("reportContext") or {}),
                 store,
                 "Ok.",
+                self._user,
             )
             if continuation:
                 return continuation
@@ -360,13 +412,14 @@ class SkipFeedback:
         pending = store.get("pendingFeedback") or {}
         requested = bool(pending.get("requested"))
         resume_speech = AlexaFeedback.resuming_speech(pending, store, skipped=True)
-        await self._deps.feedback.submit(handler_input, "skipped")
-        await self._deps.feedback.clear(handler_input)
+        await self._feedback.submit(
+            request, FeedbackCommand("skipped")
+        )
+        await self._feedback.clear(handler_input)
         if requested:
-            return await PlaybackControls.restart_active(
+            return await self._playback_controls.restart_active(
                 handler_input,
                 speech=resume_speech,
-                deps=self._deps,
             )
         if DeferredIntentManager.has(handler_input):
             return await DeferredIntentManager.resume(handler_input)
@@ -375,6 +428,7 @@ class SkipFeedback:
             dict(pending),
             store,
             "Ok.",
+            self._user,
         )
         if continuation:
             return continuation
@@ -382,12 +436,6 @@ class SkipFeedback:
 
 
 class Feedback:
-    @staticmethod
-    def _dependencies(deps: object | None):
-        if deps is None:
-            raise RuntimeError("Feedback requires injected dependencies")
-        return deps
-
     @staticmethod
     def _feedback_source(pending: dict, store: dict) -> dict:
         return (

@@ -4,19 +4,19 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
+from src.alexa.dialog import DialogStateManager
+from src.alexa.playback_controls import PlaybackControls
 from src.alexa.playback_speech import PlaybackSpeech
+from src.alexa.playback_workflow import Playback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.constants.playback import PlaybackConstants
-from src.models.dialog import DialogStateManager
-from src.models.playback import Playback
-from src.models.playback_controls import PlaybackControls
 from src.utils.playback import PlaybackUtils
 
 
 class SetPlaybackSpeedHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -34,12 +34,12 @@ class SetPlaybackSpeedHandler(AbstractRequestHandler):
         )
         if speed is None:
             return Playback.open_queue_response(handler_input, PlaybackSpeech.SPEED_INVALID)
-        return await PlaybackControls._apply_speed(handler_input, speed, deps=self._deps)
+        return await self._controls.apply_speed(handler_input, speed)
 
 
 class IncreaseSpeedHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -48,12 +48,12 @@ class IncreaseSpeedHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._step_speed(handler_input, "up", deps=self._deps)
+        return await self._controls.step_speed(handler_input, "up")
 
 
 class DecreaseSpeedHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -62,12 +62,12 @@ class DecreaseSpeedHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._step_speed(handler_input, "down", deps=self._deps)
+        return await self._controls.step_speed(handler_input, "down")
 
 
 class PauseIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = AlexaRequest.get_request_type(handler_input)
@@ -83,21 +83,21 @@ class PauseIntentHandler(AbstractRequestHandler):
             and AlexaRequest.get_intent_name(handler_input) == "AMAZON.StopIntent"
         ):
             DialogStateManager.clear_transient_discovery(handler_input)
-            directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
+            directive = await self._controls.pause_active(handler_input)
             return (
                 handler_input.response_builder.speak(Speech.GOODBYE)
                 .add_directive(directive)
                 .response
             )
-        directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
+        directive = await self._controls.pause_active(handler_input)
         return handler_input.response_builder.add_directive(
             directive
         ).response
 
 
 class ResumeIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = AlexaRequest.get_request_type(handler_input)
@@ -107,12 +107,12 @@ class ResumeIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls.restart_active(handler_input, deps=self._deps)
+        return await self._controls.restart_active(handler_input)
 
 
 class NextIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = AlexaRequest.get_request_type(handler_input)
@@ -123,14 +123,14 @@ class NextIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await Playback.play_queue_delta(
-            handler_input, 1, PlaybackSpeech.PLAYING_NEXT, deps=self._deps
+        return await self._controls.play_queue_delta(
+            handler_input, 1, PlaybackSpeech.PLAYING_NEXT
         )
 
 
 class PreviousIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         request_type = AlexaRequest.get_request_type(handler_input)
@@ -140,14 +140,14 @@ class PreviousIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await Playback.play_queue_delta(
-            handler_input, -1, PlaybackSpeech.PLAYING_PREVIOUS, deps=self._deps
+        return await self._controls.play_queue_delta(
+            handler_input, -1, PlaybackSpeech.PLAYING_PREVIOUS
         )
 
 
 class RepeatIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return AlexaRequest.get_request_type(
@@ -158,14 +158,14 @@ class RepeatIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls.restart_active(
-            handler_input, offset_ms=0, speech=PlaybackSpeech.REPLAYING, deps=self._deps
+        return await self._controls.restart_active(
+            handler_input, offset_ms=0, speech=PlaybackSpeech.REPLAYING
         )
 
 
 class RewindIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -174,12 +174,12 @@ class RewindIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._seek(handler_input, -1, deps=self._deps)
+        return await self._controls.seek(handler_input, -1)
 
 
 class FastForwardIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, controls: PlaybackControls) -> None:
+        self._controls = controls
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -188,4 +188,4 @@ class FastForwardIntentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await PlaybackControls._seek(handler_input, 1, deps=self._deps)
+        return await self._controls.seek(handler_input, 1)

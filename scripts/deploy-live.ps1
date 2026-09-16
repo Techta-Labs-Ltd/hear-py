@@ -55,7 +55,6 @@ function Get-SsmParameter {
 }
 
 $shortStage = if ($Environment -eq "production") { "prod" } else { "dev" }
-$logLevel = if ($Environment -eq "production") { "INFO" } else { "DEBUG" }
 $parameterPrefix = "/hear/$Environment"
 $imageTag = "$Environment-$((Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss'))"
 
@@ -98,7 +97,6 @@ $parameterOverrides = @(
     "WebhookOutboundUrl=$WebhookOutboundUrl",
     "WebhookOutboundSecret=$webhookOutboundSecret",
     "SentryDsn=$sentryDsn",
-    "PowerToolsLogLevel=$logLevel",
     "CanonicalIdentityEnabled=$CanonicalIdentityEnabled"
 )
 

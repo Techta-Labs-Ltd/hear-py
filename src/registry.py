@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.alexa.feedback_response import RatingRequest
+from src.alexa.playback_events import PlaybackEvents
 from src.container import ApplicationContainer
 from src.controllers.availability import AvailabilityDialogHandler
 from src.controllers.browse import (
@@ -31,21 +33,6 @@ from src.controllers.play import (
     PlayByOrganizationHandler,
     PlayContentHandler,
 )
-from src.models.feedback_response import (
-    EnjoyedFeedback,
-    NotEnjoyedFeedback,
-    RatingRequest,
-    SkipFeedback,
-    SomewhatFeedback,
-)
-from src.models.affirmative import Affirmative
-from src.models.decline import Decline
-from src.models.intent_dispatch import IntentDispatcher
-from src.models.launch_workflow import LaunchWorkflow
-from src.models.onboarding import TownCapture
-from src.models.play import PlayContent, PlayOrganization
-from src.models.playback_events import PlaybackEvents
-from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
 from src.controllers.playback_controls import (
     DecreaseSpeedHandler,
     FastForwardIntentHandler,
@@ -183,25 +170,33 @@ class RouteRegistry:
 
     @staticmethod
     def register_middleware(builder, container: ApplicationContainer) -> None:
-        for handler in (
-            CanFulfillIntentHandler(container.resolver),
-            DialogValidationGateHandler(),
-            AvailabilityDialogHandler(container.availability),
-            FeedbackSkipGateHandler(deps=container),
-            FeedbackGateHandler(deps=container),
-            OnboardingGateHandler(deps=container),
-            TownCaptureHandler(TownCapture(deps=container), container.user),
-            SearchConfirmationGateHandler(),
-            IntentDispatchGateHandler(IntentDispatcher(deps=container)),
+        for factory in (
+            lambda _request: CanFulfillIntentHandler(container.resolver),
+            lambda _request: DialogValidationGateHandler(),
+            lambda request: AvailabilityDialogHandler(
+                container.build_request_components(request).availability
+            ),
+            lambda request: FeedbackSkipGateHandler(
+                container.user, container.build_request_skip_feedback(request)
+            ),
+            lambda _request: FeedbackGateHandler(container.feedback, container.user),
+            lambda request: container.build_onboarding_gate(request),
+            lambda _request: TownCaptureHandler(
+                container.build_town_capture(), container.user
+            ),
+            lambda _request: SearchConfirmationGateHandler(),
+            lambda request: IntentDispatchGateHandler(
+                container.build_request_intent_dispatcher(request)
+            ),
         ):
-            builder.add_request_handler(handler)
+            builder.add_request_handler_factory(factory)
         builder.add_exception_handler(ErrorHandler(container.error_reporter))
         for interceptor in (
             LambdaDeadlineInterceptor(),
-            IdentityInterceptor(deps=container),
+            IdentityInterceptor(container.listener_identity, container.user),
             LoadPersistenceInterceptor(),
             DialogValidationInterceptor(),
-            ResolverInterceptor(deps=container),
+            container.build_resolver_interceptor(),
             ConfirmationMiddleware(),
         ):
             builder.add_global_request_interceptor(interceptor)
@@ -209,62 +204,114 @@ class RouteRegistry:
 
     @staticmethod
     def register_controllers(builder, container: ApplicationContainer) -> None:
-        for controller in (
-            PermissionResumeHandler(container.permission),
-            LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback),
-            SetUpAccountHandler(container.permission),
-            HearNotificationsHandler(container.notifications),
-            EnableNotificationsHandler(container.notifications),
-            DisableNotificationsHandler(container.notifications),
-            WhatsTrendingHandler(container.browse),
-            BrowseContentHandler(container.browse),
-            PlayByOrganizationHandler(PlayOrganization(deps=container)),
-            PlayContentHandler(PlayContent(deps=container)),
-            BrowseNavigationHandler(container.browse),
-            SetPlaybackSpeedHandler(deps=container),
-            IncreaseSpeedHandler(deps=container),
-            DecreaseSpeedHandler(deps=container),
-            PauseIntentHandler(deps=container),
-            ResumeIntentHandler(deps=container),
-            NextIntentHandler(deps=container),
-            PreviousIntentHandler(deps=container),
-            RepeatIntentHandler(deps=container),
-            RewindIntentHandler(deps=container),
-            FastForwardIntentHandler(deps=container),
-            WhoIsCreatorHandler(CreatorIdentity(deps=container)),
-            FollowCreatorHandler(FollowCreator(deps=container)),
-            UnfollowCreatorHandler(UnfollowCreator(deps=container)),
-            ReportContentHandler(deps=container),
-            ReportCreatorHandler(deps=container),
-            WhatsThisAboutHandler(deps=container),
-            PlaybackStartedHandler(
-                container.playback, container.user, container.notifications
+        for factory in (
+            lambda _request: PermissionResumeHandler(container.permission),
+            lambda request: LaunchRequestHandler(
+                container.build_request_launch_workflow(request), container.playback
             ),
-            PlaybackProgressReportHandler(container.playback),
-            PlaybackNearlyFinishedHandler(container.playback, container.heara),
-            PlaybackFinishedHandler(PlaybackEvents(container.playback, container.user)),
-            PlaybackStoppedHandler(container.playback),
-            PlaybackFailedHandler(container.playback, container.notifications),
-            RateContentHandler(RatingRequest(deps=container)),
-            FeedbackEnjoyedHandler(EnjoyedFeedback(deps=container)),
-            FeedbackSomewhatHandler(SomewhatFeedback(deps=container)),
-            FeedbackNotEnjoyedHandler(NotEnjoyedFeedback(deps=container)),
-            FeedbackResponseHandler(
-                EnjoyedFeedback(deps=container),
-                SomewhatFeedback(deps=container),
-                NotEnjoyedFeedback(deps=container),
-                SkipFeedback(deps=container),
+            lambda _request: SetUpAccountHandler(container.permission),
+            lambda request: HearNotificationsHandler(
+                container.build_request_notifications(request)
             ),
-            SkipFeedbackHandler(SkipFeedback(deps=container)),
-            YesIntentHandler(Affirmative(deps=container)),
-            NoIntentHandler(Decline(deps=container)),
-            NavigateHomeHandler(container.browse),
-            UnsupportedIntentHandler(),
-            HelpIntentHandler(),
-            CancelIntentHandler(container.user, container.playback),
-            SessionEndedHandler(container.playback),
-            FallbackHandler(deps=container),
-            UnmatchedIntentHandler(deps=container),
-            UnknownRequestHandler(deps=container),
+            lambda request: EnableNotificationsHandler(
+                container.build_request_notifications(request)
+            ),
+            lambda request: DisableNotificationsHandler(
+                container.build_request_notifications(request)
+            ),
+            lambda request: WhatsTrendingHandler(
+                container.build_request_components(request).browse
+            ),
+            lambda request: BrowseContentHandler(
+                container.build_request_components(request).browse
+            ),
+            lambda request: PlayByOrganizationHandler(
+                container.build_request_play_organization(request)
+            ),
+            lambda request: PlayContentHandler(container.build_request_play_content(request)),
+            lambda request: BrowseNavigationHandler(
+                container.build_request_components(request).browse
+            ),
+            lambda request: SetPlaybackSpeedHandler(container.build_playback_controls(request)),
+            lambda request: IncreaseSpeedHandler(container.build_playback_controls(request)),
+            lambda request: DecreaseSpeedHandler(container.build_playback_controls(request)),
+            lambda request: PauseIntentHandler(container.build_playback_controls(request)),
+            lambda request: ResumeIntentHandler(container.build_playback_controls(request)),
+            lambda request: NextIntentHandler(container.build_playback_controls(request)),
+            lambda request: PreviousIntentHandler(container.build_playback_controls(request)),
+            lambda request: RepeatIntentHandler(container.build_playback_controls(request)),
+            lambda request: RewindIntentHandler(container.build_playback_controls(request)),
+            lambda request: FastForwardIntentHandler(container.build_playback_controls(request)),
+            lambda _request: WhoIsCreatorHandler(container.build_creator_identity()),
+            lambda request: FollowCreatorHandler(container.build_request_follow_creator(request)),
+            lambda _request: UnfollowCreatorHandler(container.build_unfollow_creator()),
+            lambda request: ReportContentHandler(
+                container.user,
+                container.reports,
+                container.feedback,
+                container.build_playback_controls(request),
+                container.events,
+            ),
+            lambda _request: ReportCreatorHandler(
+                container.user, container.reports, container.feedback, container.events
+            ),
+            lambda _request: WhatsThisAboutHandler(container.user),
+            lambda _request: PlaybackStartedHandler(
+                PlaybackEvents(container.playback, container.user),
+                container.build_request_notifications(_request),
+            ),
+            lambda _request: PlaybackProgressReportHandler(
+                PlaybackEvents(container.playback, container.user)
+            ),
+            lambda request: PlaybackNearlyFinishedHandler(
+                PlaybackEvents(container.playback, container.user),
+                container.playback,
+                container.bind_hear_client(request),
+            ),
+            lambda _request: PlaybackFinishedHandler(
+                PlaybackEvents(container.playback, container.user)
+            ),
+            lambda _request: PlaybackStoppedHandler(
+                PlaybackEvents(container.playback, container.user)
+            ),
+            lambda _request: PlaybackFailedHandler(
+                PlaybackEvents(container.playback, container.user),
+                container.build_request_notifications(_request),
+            ),
+            lambda request: RateContentHandler(
+                RatingRequest(
+                    container.feedback,
+                    container.build_playback_controls(request),
+                    container.user,
+                )
+            ),
+            lambda request: FeedbackEnjoyedHandler(
+                container.build_request_enjoyed_feedback(request)
+            ),
+            lambda request: FeedbackSomewhatHandler(
+                container.build_request_somewhat_feedback(request)
+            ),
+            lambda request: FeedbackNotEnjoyedHandler(
+                container.build_request_not_enjoyed_feedback(request)
+            ),
+            lambda request: FeedbackResponseHandler(
+                container.build_request_enjoyed_feedback(request),
+                container.build_request_somewhat_feedback(request),
+                container.build_request_not_enjoyed_feedback(request),
+                container.build_request_skip_feedback(request),
+            ),
+            lambda request: SkipFeedbackHandler(container.build_request_skip_feedback(request)),
+            lambda request: YesIntentHandler(container.build_request_affirmative(request)),
+            lambda request: NoIntentHandler(container.build_request_decline(request)),
+            lambda request: NavigateHomeHandler(
+                container.build_request_components(request).browse
+            ),
+            lambda _request: UnsupportedIntentHandler(),
+            lambda _request: HelpIntentHandler(),
+            lambda _request: CancelIntentHandler(container.user, container.playback),
+            lambda _request: SessionEndedHandler(container.playback),
+            lambda _request: FallbackHandler(container.user, container.onboarding),
+            lambda _request: UnmatchedIntentHandler(container.user, container.onboarding),
+            lambda _request: UnknownRequestHandler(container.user, container.onboarding),
         ):
-            builder.add_request_handler(controller)
+            builder.add_request_handler_factory(factory)

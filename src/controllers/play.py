@@ -3,8 +3,8 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.play import PlayContent, PlayOrganization
 from src.alexa.request import AlexaRequest
-from src.models.play import PlayContent, PlayOrganization
 
 
 class PlayContentHandler(AbstractRequestHandler):

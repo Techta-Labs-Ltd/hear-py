@@ -1,3 +1,5 @@
+"""Alexa request/session adapter for onboarding state transitions."""
+
 from __future__ import annotations
 
 import time
@@ -60,7 +62,7 @@ class OnboardingState:
         return self._user.snapshot(handler_input)
 
     def stage_permission(self, handler_input, *, reliable: bool) -> dict:
-        changes = {"onboardingStage": OnboardingStage.ASK_PERMISSION}
+        changes: dict[str, object] = {"onboardingStage": OnboardingStage.ASK_PERMISSION}
         if reliable:
             changes["_requiresReliableSave"] = True
         return self._apply(
@@ -162,7 +164,7 @@ class OnboardingState:
         if preserve_postal_code:
             current = self.snapshot(handler_input)
             changes["devicePostalCode"] = candidate.postal_code or current.get("devicePostalCode")
-        session = {
+        session: dict[str, object] = {
             "onboardingStage": None,
             "onboardingComplete": True,
             "awaitingLocationConfirm": False,

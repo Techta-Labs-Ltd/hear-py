@@ -1,21 +1,8 @@
 import asyncio
 
-from src.alexa.runtime import AsyncSkill
+from src.application import Application
 from src.container import ApplicationContainer
-from src.controllers.browse import BrowseContentHandler, WhatsTrendingHandler
-from src.controllers.confirmation import NoIntentHandler, YesIntentHandler
-from src.controllers.launch import LaunchRequestHandler
-from src.controllers.play import PlayContentHandler
-from src.controllers.social import FollowCreatorHandler
-from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
-from src.models.browse import Browse
-from src.models.affirmative import Affirmative
-from src.models.decline import Decline
-from src.models.launch_workflow import LaunchWorkflow
-from src.models.play import PlayContent
-from src.models.social import FollowCreator
-from src.registry import RouteRegistry
 
 USER_ID = "amzn1.ask.account.TEST"
 
@@ -84,18 +71,7 @@ persistence._store[USER_ID] = {
     "onboardingComplete": True,
     "userName": "John",
 }
-skill = AsyncSkill(persistence_adapter=persistence)
-container = ApplicationContainer()
-RouteRegistry.register_middleware(skill, container)
-skill.add_request_handler(LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback))
-skill.add_request_handler(PlayContentHandler(PlayContent(deps=container)))
-skill.add_request_handler(BrowseContentHandler(container.browse))
-skill.add_request_handler(WhatsTrendingHandler(container.browse))
-skill.add_request_handler(HelpIntentHandler())
-skill.add_request_handler(CancelIntentHandler(container.user, container.playback))
-skill.add_request_handler(YesIntentHandler(Affirmative(deps=container)))
-skill.add_request_handler(NoIntentHandler(Decline(deps=container)))
-skill.add_request_handler(FollowCreatorHandler(FollowCreator(deps=container)))
+skill = Application.build_skill(persistence, container=ApplicationContainer())
 run(
     "play me the latest sport from David",
     make_event(

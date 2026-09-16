@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.launch import LaunchWorkflow
+from src.alexa.onboarding import LaunchTracker
+from src.alexa.search import Search
 from src.clients.proactive import ProactiveEventPayload, ProactiveEventsClient
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
-from src.models.launch_workflow import LaunchWorkflow
-from src.models.onboarding import LaunchTracker
-from src.models.search import Search
 from src.models.user import User
 from src.services.notification_delivery import NotificationDeliveryService
 
@@ -244,7 +244,7 @@ async def test_return_launch_offers_new_update_before_an_unfinished_recording(
         AsyncMock(side_effect=lambda _handler_input, store: store),
     )
 
-    response = await LaunchWorkflow(deps=deps).execute(mock_handler_input)
+    response = await deps.build_request_launch_workflow(mock_handler_input).execute(mock_handler_input)
 
     assert response == {"response": True}
     store = User.snapshot(mock_handler_input)

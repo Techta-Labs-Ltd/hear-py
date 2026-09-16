@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 import httpx
 
 from config import settings
 from src.clients.pool import HttpPool
+from src.services.logging_control import ApplicationLog
 from src.utils.notifications import NotificationItem
 
 
@@ -103,8 +102,10 @@ class NotificationApiClient:
             ]
             if raw_items and not items:
                 return {"items": [], "failed": True, "retryable": True, "httpStatus": status}
+            limit_value = body.get("limit")
+            limit = int(limit_value) if isinstance(limit_value, int) else len(items)
             return {
-                "items": items[: body["limit"]],
+                "items": items[:limit],
                 "failed": False,
                 "retryable": False,
                 "httpStatus": status,

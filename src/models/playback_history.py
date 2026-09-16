@@ -1,30 +1,29 @@
 from __future__ import annotations
 
 from config import settings
-from src.models.user import User
 from src.utils.playback_history import PlaybackHistoryUtils
 
 
 class PlaybackHistory:
     @staticmethod
-    def add(handler_input, content_or_id, recording_id: str | None = None) -> dict:
-        """Add one standalone item or publication cursor to play history."""
-        store = User.snapshot(handler_input)
+    def add(history_items: object, content_or_id: object) -> list[dict]:
+        """Return a new history after adding an item or publication cursor."""
+        raw_items = history_items if isinstance(history_items, (list, tuple)) else ()
         history = [
             normalized
-            for item in store.get("playHistory") or []
+            for item in raw_items
             if (normalized := PlaybackHistoryUtils.normalize(item))
         ]
         if isinstance(content_or_id, dict) and content_or_id.get("audioUrl"):
             entry = PlaybackHistoryUtils.normalize(content_or_id)
             if not entry:
-                return store
+                return history
             subject_id = entry["subjectId"]
         else:
             subject_id = str(content_or_id) if content_or_id is not None else None
             entry = PlaybackHistoryUtils.normalize(subject_id) if subject_id else None
         if not subject_id or not entry:
-            return store
+            return history
         previous = next(
             (
                 history.pop(index)
@@ -36,20 +35,20 @@ class PlaybackHistory:
         if previous:
             PlaybackHistory._preserve_progress(entry, previous)
         history.insert(0, entry)
-        return User.update(handler_input, {"playHistory": history[: settings.max_history]})
+        return history[: settings.max_history]
 
     @staticmethod
     def update(
-        handler_input,
+        history_items: object,
         state: dict,
         *,
         completed: bool = False,
-    ) -> dict:
-        store = User.snapshot(handler_input)
+    ) -> list[dict]:
         subject_id = state.get("publicationId") or state.get("contentId")
+        raw_items = history_items if isinstance(history_items, (list, tuple)) else ()
         history = [
             normalized
-            for item in store.get("playHistory") or []
+            for item in raw_items
             if (normalized := PlaybackHistoryUtils.normalize(item))
         ]
         index = next(
@@ -68,8 +67,7 @@ class PlaybackHistory:
         )
         if updated:
             history.insert(0, updated)
-        return User.update(handler_input, {"playHistory": history[: settings.max_history]})
-
+        return history[: settings.max_history]
     @staticmethod
     def _preserve_progress(entry: dict, previous: dict) -> None:
         for key in (

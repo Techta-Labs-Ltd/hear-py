@@ -60,65 +60,6 @@ class AvailabilityResponse:
         }
 
     @staticmethod
-    def normalize_filter(value: object) -> dict | None:
-        if not isinstance(value, dict) or not value:
-            return None
-        allowed_keys = (
-            set(AvailabilityResponse.SOURCE_FILTER_KEYS)
-            | set(AvailabilityResponse.TAXONOMY_FILTER_KEYS)
-            | set(AvailabilityResponse.BOOLEAN_FILTER_KEYS)
-            | {"location"}
-        )
-        if any(key not in allowed_keys for key in value):
-            return None
-
-        output = {}
-        for key in AvailabilityResponse.SOURCE_FILTER_KEYS:
-            if key not in value:
-                continue
-            source_id = str(value.get(key) or "").strip()
-            if not source_id:
-                return None
-            output[key] = source_id
-
-        for key in AvailabilityResponse.TAXONOMY_FILTER_KEYS:
-            if key not in value:
-                continue
-            raw_values = value.get(key)
-            values = raw_values if isinstance(raw_values, list) else [raw_values]
-            normalized = []
-            for item in values:
-                text = str(item or "").strip().casefold()
-                if text and text not in normalized:
-                    normalized.append(text)
-            if not normalized:
-                return None
-            output[key] = normalized
-
-        for key in AvailabilityResponse.BOOLEAN_FILTER_KEYS:
-            if key not in value:
-                continue
-            if not isinstance(value[key], bool):
-                return None
-            output[key] = value[key]
-
-        if "location" in value:
-            raw_location = value.get("location")
-            if not isinstance(raw_location, dict) or not raw_location:
-                return None
-            if any(item not in AvailabilityResponse.LOCATION_FILTER_KEYS for item in raw_location):
-                return None
-            location = {
-                item: raw_location[item]
-                for item in AvailabilityResponse.LOCATION_FILTER_KEYS
-                if raw_location.get(item) is not None and str(raw_location.get(item)).strip()
-            }
-            if not location:
-                return None
-            output["location"] = location
-        return output or None
-
-    @staticmethod
     def integer(value, default: int = 0, minimum: int = 0) -> int:
         try:
             return max(minimum, int(value if value is not None else default))

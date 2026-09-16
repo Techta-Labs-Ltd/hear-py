@@ -1,3 +1,5 @@
+"""Alexa adapter for browse, selection, and catalogue pagination requests."""
+
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -6,15 +8,17 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.entities import AlexaEntities
+from src.alexa.playback_state import PlaybackQueue
 from src.alexa.request import AlexaRequest
+from src.alexa.search import Search
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
-from src.models.dialog import DialogSelection, DialogStateManager
-from src.models.playback_state import PlaybackQueue
+from src.models.search_contracts import SearchRequest
 from src.models.user import User
 from src.utils.browse import BrowseUtils
 from src.utils.content import ContentUtils
@@ -25,21 +29,25 @@ from src.utils.search_payload import SearchPayload
 
 
 class Browse:
-    def __init__(self, *, deps=None, store=None):
-        self._deps = deps
-        self._store = store or User()
-
-    @property
-    def dependencies(self):
-        if self._deps is None:
-            raise RuntimeError("Browse requires injected dependencies")
-        return self._deps
+    def __init__(
+        self,
+        user: User,
+        heara,
+        progressive,
+        playback,
+        begin_recommendations,
+    ):
+        self._user = user
+        self._heara = heara
+        self._progressive = progressive
+        self._playback = playback
+        self._begin_recommendations = begin_recommendations
 
     def snapshot(self, handler_input) -> dict:
-        return self._store.snapshot(handler_input)
+        return self._user.snapshot(handler_input)
 
     def save_catalog(self, handler_input, fields: dict) -> dict:
-        return self._store.update(handler_input, fields)
+        return self._user.update(handler_input, fields)
 
     def has_active_ambiguity(self, handler_input: HandlerInput) -> bool:
         pending = self.snapshot(handler_input).get("pendingAmbiguity")
@@ -100,13 +108,13 @@ class Browse:
         payload = SearchPayload.with_identity(
             payload,
             alexa_user_id=AlexaRequest.get_user_id(handler_input),
-            listener_id=User.snapshot(handler_input).get("listenerId"),
+            listener_id=self._user.snapshot(handler_input).get("listenerId"),
         )
-        await self.dependencies.progressive.send(
+        await self._progressive.send(
             handler_input,
             Speech.SEARCH_MORE_PROGRESSIVE,
         )
-        result = await self.dependencies.heara.search(
+        result = await self._heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
@@ -273,27 +281,24 @@ class Browse:
     def is_pagination_query(query: str) -> bool:
         return BrowseUtils.is_browse_pagination_query(query)
 
-    @staticmethod
     async def _fetch_next_catalog_page(
+        self,
         handler_input: HandlerInput,
         catalog: Dict[str, Any],
-        *,
-        deps: object | None = None,
     ):
-        if deps is None:
-            raise RuntimeError("Browse requires injected dependencies")
-        d = deps
         next_page = (catalog.get("currentPage") or 0) + 1
         ctx = BrowseUtils.catalog_search_context(catalog)
-        search_result = await d.search.discover_content_via_search(
+        search_result = await Search.discover_content_via_search(
             handler_input,
-            {
-                "intent": ctx.get("intent"),
-                "q": ctx.get("q"),
-                "page": next_page,
-                "limit": catalog.get("limit"),
-            },
-            deps=d,
+            SearchRequest(
+                intent=ctx.get("intent") or "general",
+                query=ctx.get("q") or "",
+                page=next_page,
+                limit=catalog.get("limit"),
+            ),
+            heara=self._heara,
+            progressive=self._progressive,
+            user=self._user,
         )
         if search_result.get("failed") or not search_result.get("results"):
             return {"catalog": catalog, "failed": True}
@@ -305,7 +310,7 @@ class Browse:
             existing_catalog=catalog,
             append=True,
         )
-        d.browse.set_catalog(handler_input, merged, intent=catalog.get("intent"))
+        self.set_catalog(handler_input, merged, intent=catalog.get("intent"))
         return {"catalog": merged, "failed": False}
 
     async def trending(self, handler_input: HandlerInput):
@@ -322,19 +327,22 @@ class Browse:
             AlexaRequest.get_intent_name(handler_input) == "PlayRecommendationIntent"
         )
         if recommended:
-            return await self.dependencies.availability.begin_recommendations(
+            return await self._begin_recommendations(
                 handler_input,
                 nlp=nlp,
             )
-        active_store = User.snapshot(handler_input)
-        search_result = await self.dependencies.search.discover_content_via_search(
-            handler_input, deps=self.dependencies
+        active_store = self._user.snapshot(handler_input)
+        search_result = await Search.discover_content_via_search(
+            handler_input,
+            heara=self._heara,
+            progressive=self._progressive,
+            user=self._user,
         )
         if not search_result.get("results"):
-            return self.dependencies.search._build_search_outcome_response(
+            return Search._build_search_outcome_response(
                 handler_input, search_result
             )
-        response = await self.dependencies.search.auto_play_first_from_search(
+        response = await Search.auto_play_first_from_search(
             handler_input,
             search_result,
             {
@@ -344,9 +352,11 @@ class Browse:
                     search_result.get("total_hits") or len(search_result["results"])
                 ),
             },
-            deps=self.dependencies,
+            user=self._user,
+            browse=self,
+            playback=self._playback,
         )
-        return response or self.dependencies.search._build_no_content_response(handler_input)
+        return response or Search._build_no_content_response(handler_input)
 
     async def content(self, handler_input: HandlerInput):
         if not AlexaRequest.get_user_id(handler_input):
@@ -356,10 +366,10 @@ class Browse:
                 .set_should_end_session(False)
                 .response
             )
-        active_store = User.snapshot(handler_input)
+        active_store = self._user.snapshot(handler_input)
         browse_q = (
-            self.dependencies.search._extract_slot_value(handler_input, "query")
-            or self.dependencies.search._raw_search_phrase(handler_input)
+            Search._extract_slot_value(handler_input, "query")
+            or Search._raw_search_phrase(handler_input)
             or ""
         )
         try:
@@ -374,19 +384,23 @@ class Browse:
                 or active_store.get("devicePostalCode")
             )
             if not has_location:
-                User.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
+                self._user.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
                 return (
                     handler_input.response_builder.speak(Ssml.ssml(Speech.COMMUNITY_NEEDS_TOWN))
                     .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
                     .set_should_end_session(False)
                     .response
                 )
-        search_result = await self.dependencies.search.discover_content_via_search(
-            handler_input, {"q": browse_q}, deps=self.dependencies
+        search_result = await Search.discover_content_via_search(
+            handler_input,
+            SearchRequest(query=browse_q),
+            heara=self._heara,
+            progressive=self._progressive,
+            user=self._user,
         )
         if not search_result.get("results"):
             if search_result.get("client_message"):
-                return self.dependencies.search._build_search_outcome_response(
+                return Search._build_search_outcome_response(
                     handler_input, search_result
                 )
             if browse_q:
@@ -398,13 +412,13 @@ class Browse:
                     .set_should_end_session(False)
                     .response
                 )
-            return self.dependencies.search._build_search_outcome_response(
+            return Search._build_search_outcome_response(
                 handler_input, search_result
             )
         resolved_locality = active_store.get("locality")
         intent_name = AlexaRequest.get_intent_name(handler_input)
         was_relaxed = bool(browse_q and search_result.get("search_relaxation"))
-        response = await self.dependencies.search.auto_play_first_from_search(
+        response = await Search.auto_play_first_from_search(
             handler_input,
             search_result,
             {
@@ -419,9 +433,11 @@ class Browse:
                 if is_community and (not was_relaxed)
                 else None,
             },
-            deps=self.dependencies,
+            user=self._user,
+            browse=self,
+            playback=self._playback,
         )
-        return response or self.dependencies.search._build_no_content_response(handler_input)
+        return response or Search._build_no_content_response(handler_input)
 
     async def _more_ambiguity(self, handler_input: HandlerInput, pending: dict):
         candidates = list(pending.get("choiceCandidates") or pending["candidates"])
@@ -436,7 +452,7 @@ class Browse:
             )
             next_candidates = candidates[offset : offset + page_size]
             if not load_failed:
-                User.update(handler_input, {"pendingAmbiguity": pending})
+                self._user.update(handler_input, {"pendingAmbiguity": pending})
                 DialogStateManager.activate(handler_input, "ambiguity", context=pending)
         if load_failed:
             message = SearchSpeech.publication_choices_unavailable_message()
@@ -486,7 +502,7 @@ class Browse:
                 "displayedCandidates": next_candidates,
                 "spokenCandidateOffset": next_offset,
             }
-            User.update(handler_input, {"pendingAmbiguity": pending})
+            self._user.update(handler_input, {"pendingAmbiguity": pending})
             DialogStateManager.activate(handler_input, "ambiguity", context=pending)
         publication_picker = (pending.get("candidatePagination") or {}).get(
             "kind"
@@ -508,11 +524,11 @@ class Browse:
         )
 
     async def more(self, handler_input: HandlerInput):
-        store = User.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         pending = store.get("pendingAmbiguity")
         if isinstance(pending, dict) and pending.get("candidates"):
             return await self._more_ambiguity(handler_input, pending)
-        catalog = self.dependencies.browse.get_catalog(store)
+        catalog = self.get_catalog(store)
         if not catalog or not catalog.get("items"):
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.PLAY_NO_PENDING_LIST))
@@ -523,9 +539,7 @@ class Browse:
         offset = catalog.get("spokenOffset", 0)
         if offset >= len(catalog["items"]) and BrowseUtils.has_more_server_pages(catalog):
             prev_len = len(catalog["items"])
-            result = await Browse._fetch_next_catalog_page(
-                handler_input, catalog, deps=self.dependencies
-            )
+            result = await self._fetch_next_catalog_page(handler_input, catalog)
             catalog = result["catalog"]
             if result["failed"] or len(catalog["items"]) == prev_len:
                 return (
@@ -542,7 +556,7 @@ class Browse:
                 .response
             )
         next_item = catalog["items"][offset]
-        content = self.dependencies.search._resolve_content_for_playback(next_item, handler_input)
+        content = Search._resolve_content_for_playback(next_item, handler_input)
         if content:
             if ContentNormalizer.is_playable_content_item(content):
                 title = ContentUtils.content_title_for_speech(content)
@@ -553,10 +567,10 @@ class Browse:
                     lead="Next up:",
                 )
                 catalog["spokenOffset"] = offset + 1
-                self.dependencies.browse.set_catalog(
+                self.set_catalog(
                     handler_input, catalog, intent=catalog.get("intent", "general")
                 )
-                return await self.dependencies.playback.start(
+                return await self._playback.start(
                     handler_input, content, intro, 0, {"preserveSessionQueue": True}
                 )
         return (
@@ -610,7 +624,7 @@ class Browse:
                 "displayedCandidates": previous_candidates,
                 "spokenCandidateOffset": previous_start + len(previous_candidates),
             }
-            User.update(handler_input, {"pendingAmbiguity": pending})
+            self._user.update(handler_input, {"pendingAmbiguity": pending})
             DialogStateManager.activate(handler_input, "ambiguity", context=pending)
             message = (
                 SearchSpeech.previous_publication_choices_message(

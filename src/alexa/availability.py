@@ -1,22 +1,24 @@
+"""Alexa adapter for availability request orchestration."""
+
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
+from src.alexa.availability_dialog import AvailabilityDialog
 from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogStateManager
 from src.alexa.entities import AlexaEntities
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
+from src.alexa.search import Search
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.availability import AvailabilityConstants
 from src.constants.discovery import DiscoveryConstants
-from src.models.availability_data import AvailabilityData
-from src.models.availability_dialog import AvailabilityDialog
+from src.models.availability_data import AvailabilityData, AvailabilityOutcome
 from src.models.availability_request import AvailabilityRequest
-from src.models.dialog import DialogStateManager
-from src.models.search import Search
+from src.models.search_contracts import SearchRequest
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
@@ -24,13 +26,15 @@ from src.utils.search_payload import SearchPayload
 
 
 class Availability:
-    __slots__ = ("_deps", "_dialog")
+    __slots__ = ("_heara", "_progressive", "_user", "_browse", "_playback", "_dialog")
 
-    def __init__(self, *, deps: object | None = None) -> None:
-        if deps is None:
-            raise RuntimeError("Availability requires injected dependencies")
-        self._deps = deps
-        self._dialog = AvailabilityDialog(self, deps=deps)
+    def __init__(self, heara, progressive, user: User, browse, playback) -> None:
+        self._heara = heara
+        self._progressive = progressive
+        self._user = user
+        self._browse = browse
+        self._playback = playback
+        self._dialog = AvailabilityDialog(self, progressive)
 
     @staticmethod
     def _response(handler_input, speech: str, reprompt: str, candidates=None):
@@ -51,7 +55,7 @@ class Availability:
         page: int,
         discovery: dict | None = None,
     ) -> dict:
-        store = User.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         payload = {
             "filter": availability_filter,
             "alexaUserId": AlexaRequest.get_user_id(handler_input),
@@ -63,7 +67,7 @@ class Availability:
         payload.update(discovery or {})
         if "location" not in availability_filter:
             payload["isLocal"] = False
-        return await self._deps.heara.availability(
+        return await self._heara.availability(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
@@ -95,16 +99,20 @@ class Availability:
         resolved = dict(nlp or RequestContext.request(handler_input).get("_nlp") or {})
         if resolved.get("locationRejected"):
             return self.ask_creator_city(handler_input, rejected=True)
-        payload = AvailabilityRequest.local_payload(handler_input, resolved)
+        payload = AvailabilityRequest.local(
+            resolved,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            user_state=self._user.snapshot(handler_input),
+        ).to_search_payload()
         availability_filter = AvailabilityData.availability_filter(
             payload,
-            User.snapshot(handler_input),
+            self._user.snapshot(handler_input),
         )
         requested_city = AvailabilityData.requested_city(resolved, payload)
         if not requested_city or not availability_filter or "location" not in availability_filter:
             return self.ask_creator_city(handler_input)
         availability_filter["isCreator"] = True
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._availability(handler_input, availability_filter, 0)
         candidates = AvailabilityData.source_candidates(result, "creator")[
             : DiscoveryConstants.CHOICE_PAGE_SIZE
@@ -158,19 +166,15 @@ class Availability:
         *,
         nlp: dict | None = None,
     ):
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         discovery = {"isRecommended": True}
         resolved = nlp if isinstance(nlp, dict) else {}
-        search_payload = (
-            resolved.get("searchPayload")
-            if isinstance(resolved.get("searchPayload"), dict)
-            else {}
+        payload_candidate = resolved.get("searchPayload")
+        search_payload: dict = (
+            payload_candidate if isinstance(payload_candidate, dict) else {}
         )
-        search_filter = (
-            search_payload.get("filter")
-            if isinstance(search_payload.get("filter"), dict)
-            else {}
-        )
+        filter_candidate = search_payload.get("filter")
+        search_filter: dict = filter_candidate if isinstance(filter_candidate, dict) else {}
         availability_filter = {
             key: search_filter[key]
             for key in ("categorySlugs", "tags")
@@ -271,25 +275,32 @@ class Availability:
 
     async def begin_local(self, handler_input, nlp: dict | None = None):
         resolved = dict(nlp or RequestContext.request(handler_input).get("_nlp") or {})
-        payload = AvailabilityRequest.local_payload(handler_input, resolved)
+        payload = AvailabilityRequest.local(
+            resolved,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            user_state=self._user.snapshot(handler_input),
+        ).to_search_payload()
         if AvailabilityData.request_scope(payload) != AvailabilityConstants.LOCATION_KIND:
             return await self._search_mixed_local_request(handler_input)
         availability_filter = AvailabilityData.availability_filter(
             payload,
-            User.snapshot(handler_input),
+            self._user.snapshot(handler_input),
         )
         requested_city = AvailabilityData.requested_city(resolved, payload)
         if not availability_filter or "location" not in availability_filter:
-            User.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
+            self._user.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
             return self._response(
                 handler_input,
                 Speech.COMMUNITY_NEEDS_TOWN,
                 Speech.REPROMPT_ASK_TOWN,
             )
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._availability(handler_input, availability_filter, 0)
-        candidates = AvailabilityData.source_candidates(result)
-        if result.get("failed"):
+        outcome = AvailabilityOutcome.classify(
+            result, AvailabilityData.source_candidates(result)
+        )
+        candidates = list(outcome.candidates)
+        if outcome.kind == "unavailable":
             return self._terminal_response(
                 handler_input,
                 failed=True,
@@ -327,11 +338,11 @@ class Availability:
         if scope == AvailabilityConstants.SOURCE_KIND and source:
             availability_filter = AvailabilityData.availability_filter(
                 payload,
-                User.snapshot(handler_input),
+                self._user.snapshot(handler_input),
             )
             if not availability_filter:
                 return None
-            await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+            await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
             return await self._begin_source(
                 handler_input, source, payload, availability_filter,
                 continue_with_search_on_failure=True,
@@ -339,8 +350,9 @@ class Availability:
         if scope == AvailabilityConstants.LOCATION_KIND and (
             resolution.get("intent") == "local" or AvailabilityData.has_location_payload(payload)
         ):
-            resolution_slots = (
-                resolution.get("slots") if isinstance(resolution.get("slots"), dict) else {}
+            slots_candidate = resolution.get("slots")
+            resolution_slots: dict = (
+                slots_candidate if isinstance(slots_candidate, dict) else {}
             )
             nlp = {
                 "intent": "local",
@@ -441,9 +453,8 @@ class Availability:
             format_candidates,
         )
 
-    @staticmethod
-    def _source_search_payload(handler_input, source: dict, base_payload: dict, page: int = 0):
-        store = User.snapshot(handler_input)
+    def _source_search_payload(self, handler_input, source: dict, base_payload: dict, page: int = 0):
+        store = self._user.snapshot(handler_input)
         payload = SearchPayload.with_pagination(base_payload, DiscoveryConstants.CHOICE_PAGE_SIZE)
         filters = SearchFilters.replace_source(payload.get("filter"), source["type"], source["id"])
         filters = SearchFilters.without(
@@ -472,7 +483,7 @@ class Availability:
 
     async def _search_source(self, handler_input, source: dict, base_payload: dict, page: int = 0):
         payload = self._source_search_payload(handler_input, source, base_payload, page)
-        result = await self._deps.heara.search(
+        result = await self._heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
@@ -497,14 +508,18 @@ class Availability:
                 "q": result.get("_search_payload", {}).get("query") or "",
                 "introOverride": intro,
             },
-            deps=self._deps,
+            user=self._user,
+            browse=self._browse,
+            playback=self._playback,
         )
 
     async def _search_mixed_local_request(self, handler_input):
         result = await Search.discover_content_via_search(
             handler_input,
-            {"q": "", "intent": "local"},
-            deps=self._deps,
+            SearchRequest(intent="local"),
+            heara=self._heara,
+            progressive=self._progressive,
+            user=self._user,
         )
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
@@ -515,13 +530,15 @@ class Availability:
                 "discoveryIntent": "local",
                 "q": "",
             },
-            deps=self._deps,
+            user=self._user,
+            browse=self._browse,
+            playback=self._playback,
         )
 
     async def _begin_tracks(self, handler_input, context: dict):
         source = dict(context.get("source") or {})
         base_payload = dict(context.get("baseSearchPayload") or {})
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._search_source(handler_input, source, base_payload)
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
@@ -537,11 +554,13 @@ class Availability:
                     ContentUtils.content_title_for_speech(first), source.get("name")
                 ),
             },
-            deps=self._deps,
+            user=self._user,
+            browse=self._browse,
+            playback=self._playback,
         )
 
     async def _play_selected(self, handler_input, candidate: dict, source: dict):
-        store = User.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         if candidate.get("type") == "publication":
             payload = SearchPayload.for_publication(
                 {}, [candidate.get("id")], DiscoveryConstants.CHOICE_PAGE_SIZE
@@ -556,8 +575,8 @@ class Availability:
         payload = SearchPayload.with_identity(
             payload, alexa_user_id=AlexaRequest.get_user_id(handler_input), listener_id=store.get("listenerId")
         )
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
-        result = await self._deps.heara.search(
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        result = await self._heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
@@ -579,7 +598,9 @@ class Availability:
                     source_name,
                 ),
             },
-            deps=self._deps,
+            user=self._user,
+            browse=self._browse,
+            playback=self._playback,
         )
 
     async def handle_dialog(self, handler_input):

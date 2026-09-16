@@ -1,96 +1,26 @@
+"""Alexa adapter for permission requests and consent completion."""
+
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 import config.permission_scopes as permission_scopes
-from dataclasses import dataclass
-from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.onboarding import Onboarding
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.constants.onboarding import OnboardingConstants
-from src.models.onboarding import Onboarding
-from src.models.notifications import Notification
-from src.models.user import User
-from src.clients.resolver import ResolverClient
 from src.clients.progressive import ProgressiveResponseClient
+from src.constants.onboarding import OnboardingConstants
+from src.models.permission_policy import (
+    PermissionConstants,
+    PermissionPolicy,
+    PermissionResumeCommand,
+)
+from src.models.resolver import UtteranceResolver
+from src.models.user import User
 from src.services.alexa_locality import AlexaLocalityService
 from src.services.alexa_profile import ListenerProfileService
 from src.services.listener_sync import ListenerSyncService
-
-
-class PermissionConstants:
-    CONNECTION_URI = "connection://AMAZON.AskForPermissionsConsent/2"
-    LOCATION_PURPOSE = "onboarding_location"
-    PROFILE_PURPOSE = "listener_profile"
-    NOTIFICATION_PURPOSE = "notifications"
-    PROFILE_SCOPES = (
-        permission_scopes.PROFILE_NAME_READ,
-        permission_scopes.PROFILE_EMAIL_READ,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class LocationOnboardingDependencies:
-    """Exact collaborators used by the device-location consent workflow."""
-
-    user: User
-    onboarding: Onboarding
-    progressive: ProgressiveResponseClient
-    locality: AlexaLocalityService
-    resolver: ResolverClient
-    permission: object
-
-
-class PermissionPolicy:
-    @staticmethod
-    def skill_name() -> str:
-        return "Hear service" if settings.STAGE == "production" else "test development"
-
-    @staticmethod
-    def connection_directive(purpose: str, scopes: tuple[str, ...]) -> dict:
-        return {
-            "type": "Connections.StartConnection",
-            "uri": PermissionConstants.CONNECTION_URI,
-            "input": {
-                "@type": "AskForPermissionsConsentRequest",
-                "@version": "2",
-                "permissionScopes": [
-                    {"permissionScope": scope, "consentLevel": "ACCOUNT"}
-                    for scope in scopes
-                ],
-            },
-            "token": purpose,
-        }
-
-    @staticmethod
-    def resume_result(handler_input) -> tuple[str, str, str, str]:
-        request = getattr(handler_input.request_envelope, "request", {}) or {}
-        cause = request.get("cause", {}) if isinstance(request, dict) else getattr(request, "cause", {})
-        token = cause.get("token", "") if isinstance(cause, dict) else getattr(cause, "token", "")
-        result = cause.get("result", {}) if isinstance(cause, dict) else getattr(cause, "result", {})
-        status = result.get("status", "") if isinstance(result, dict) else getattr(result, "status", "")
-        connection = cause.get("status", {}) if isinstance(cause, dict) else getattr(cause, "status", {})
-        code = connection.get("code", "") if isinstance(connection, dict) else getattr(connection, "code", "")
-        message = connection.get("message", "") if isinstance(connection, dict) else getattr(connection, "message", "")
-        return (
-            str(token or ""),
-            str(status or ""),
-            str(code or ""),
-            str(message or ""),
-        )
-
-    @staticmethod
-    def app_guidance() -> str:
-        return f"You can also enable permissions in the Alexa app under {PermissionPolicy.skill_name()}, Settings, Manage Permissions."
-
-    @staticmethod
-    def profile_app_guidance() -> str:
-        return (
-            "Open the Alexa app and use the permission card, or go to "
-            f"{PermissionPolicy.skill_name()}, Settings, then Manage Permissions."
-        )
+from src.services.logging_control import ApplicationLog
 
 
 class Permission:
@@ -101,24 +31,19 @@ class Permission:
         onboarding: Onboarding,
         listener_profile: ListenerProfileService,
         listener_sync: ListenerSyncService,
-        notifications: Notification,
+        notification_enable_after_permission,
         progressive: ProgressiveResponseClient,
         locality: AlexaLocalityService,
-        resolver: ResolverClient,
+        resolver: UtteranceResolver,
     ) -> None:
         self._user = user
         self._onboarding = onboarding
         self._listener_profile = listener_profile
         self._listener_sync = listener_sync
-        self._notifications = notifications
-        self._location_onboarding = LocationOnboardingDependencies(
-            user,
-            onboarding,
-            progressive,
-            locality,
-            resolver,
-            self,
-        )
+        self._notification_enable_after_permission = notification_enable_after_permission
+        self._progressive = progressive
+        self._locality = locality
+        self._resolver = resolver
 
     def start_location(self, handler_input):
         RequestContext.set_value(handler_input, "_permissionPurpose", PermissionConstants.LOCATION_PURPOSE)
@@ -160,45 +85,52 @@ class Permission:
             .response
         )
 
-    async def resume(self, handler_input):
-        purpose, status, connection_code, connection_message = PermissionPolicy.resume_result(
-            handler_input
-        )
+    async def resume(self, handler_input, command: PermissionResumeCommand):
         store = self._user.snapshot(handler_input)
-        if not purpose and store.get("awaitingProfilePermission"):
-            purpose = PermissionConstants.PROFILE_PURPOSE
-        normalized_status = status.upper()
-        accepted = connection_code in {"", "200"} and normalized_status == "ACCEPTED"
-        ApplicationLog.info(
-            "Hear: permission consent resumed purpose=%s status=%s connectionCode=%s connectionMessage=%s",
-            purpose or "unknown",
-            normalized_status or "missing",
-            connection_code or "missing",
-            connection_message or "missing",
+        decision = PermissionPolicy.resume_decision(
+            command,
+            awaiting_profile_permission=bool(store.get("awaitingProfilePermission")),
         )
-        if purpose == PermissionConstants.LOCATION_PURPOSE and accepted:
+        ApplicationLog.info(
+            "Hear: permission consent resumed purpose=%s status=%s connectionCode=%s decision=%s",
+            decision.command.purpose or "unknown",
+            decision.command.status or "missing",
+            decision.command.connection_code or "missing",
+            decision.kind,
+        )
+        if decision.kind == "location_granted":
             return await Onboarding.auto_detect_location_or_manual(
                 handler_input,
                 self._user.snapshot(handler_input),
-                deps=self._location_onboarding,
+                self._onboarding,
+                self._progressive,
+                self._locality,
+                self._resolver,
+                lambda current_input, current_store: Onboarding.ask_for_permission(
+                    current_input, current_store, self._onboarding
+                ),
+                self.location_fallback,
+                lambda current_input, current_store: Onboarding.handle_location_not_found(
+                    current_input, current_store, self._onboarding
+                ),
                 after_consent=True,
             )
-        if purpose == PermissionConstants.PROFILE_PURPOSE and accepted:
+        if decision.kind == "profile_granted":
             return await self._complete_profile(handler_input)
-        if purpose == PermissionConstants.NOTIFICATION_PURPOSE and accepted:
-            return self._notifications.enable_after_permission(handler_input)
-        if purpose == PermissionConstants.NOTIFICATION_PURPOSE:
+        if decision.kind == "notifications_granted":
+            return self._notification_enable_after_permission(handler_input)
+        if decision.kind == "notifications_denied":
             return AlexaResponse.present_idle_next(
                 handler_input,
                 "Ok. Notifications will stay off.",
                 Speech.WELCOME_REPROMPT,
             )
-        if purpose == PermissionConstants.PROFILE_PURPOSE:
+        if decision.kind == "profile_denied":
             self._user.update(handler_input, {"awaitingProfilePermission": False})
             return self._profile_permission_failure(
                 handler_input,
-                status=normalized_status,
-                connection_code=connection_code,
+                status=decision.command.status,
+                connection_code=decision.command.connection_code,
             )
         return self.location_fallback(handler_input, denied=True)
 

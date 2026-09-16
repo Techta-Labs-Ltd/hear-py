@@ -204,12 +204,15 @@ class ContentNormalizer:
         search_payload: dict | None,
         response_data: dict | None = None,
     ) -> list:
-        payload = search_payload if isinstance(search_payload, dict) else {}
-        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
-        response = response_data if isinstance(response_data, dict) else {}
+        payload: dict = search_payload if isinstance(search_payload, dict) else {}
+        filter_candidate = payload.get("filter")
+        filters: dict = filter_candidate if isinstance(filter_candidate, dict) else {}
+        response: dict = response_data if isinstance(response_data, dict) else {}
         raw_publication_ids = filters.get("publicationIds") or []
         if isinstance(raw_publication_ids, str):
             raw_publication_ids = [raw_publication_ids]
+        elif not isinstance(raw_publication_ids, (list, tuple, set)):
+            raw_publication_ids = []
         publication_ids = [
             str(value).strip()
             for value in raw_publication_ids

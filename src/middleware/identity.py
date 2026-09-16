@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
+from src.services.listener_identity import ListenerIdentityService
+from src.services.logging_control import ApplicationLog
 
 
 class IdentityPolicy:
@@ -68,9 +68,13 @@ class IdentityPolicy:
 
 
 class IdentityInterceptor(AbstractRequestInterceptor):
-    def __init__(self, *, deps: object | None = None) -> None:
-        self._identity_service = getattr(deps, "listener_identity", None)
-        self._user = getattr(deps, "user", None) or User()
+    def __init__(
+        self,
+        identity_service: ListenerIdentityService | None,
+        user: User,
+    ) -> None:
+        self._identity_service = identity_service
+        self._user = user
 
     async def process(self, handler_input) -> None:
         identity = IdentityPolicy.capture(handler_input)

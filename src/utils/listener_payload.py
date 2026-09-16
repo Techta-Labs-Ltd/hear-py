@@ -45,7 +45,7 @@ class ListenerPayload:
 
     @staticmethod
     def number(value: object, minimum: float, maximum: float) -> float | None:
-        if isinstance(value, bool):
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
             return None
         try:
             number = float(value)

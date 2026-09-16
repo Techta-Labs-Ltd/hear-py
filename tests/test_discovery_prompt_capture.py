@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.models.search import Search
+from src.alexa.search import Search
 
 
 class TestDiscoveryPromptCapture:

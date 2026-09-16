@@ -1,6 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from config import Settings, settings
 from config.permission_scopes import (
     GEOLOCATION_READ,
@@ -45,6 +47,30 @@ def test_runtime_flags_are_loaded_through_settings():
     assert configured.seek_step_ms == 15000
     assert configured.max_history == 12
     assert configured.HEAR_LOGGING_ENABLED is False
+
+
+def test_deployed_runtime_configuration_requires_durable_and_outbound_settings():
+    configured = Settings(
+        _env_file=None,
+        STAGE="production",
+        HEAR_API_URL="https://api.hear.example",
+        HEAR_API_KEY="api-key",
+        HEAR_DDB_TABLE="listener-state",
+        WEBHOOK_OUTBOUND_URL="https://events.hear.example",
+        WEBHOOK_OUTBOUND_SECRET="secret",
+        HEAR_OUTBOX_ENABLED=True,
+        SQS_OUT_QUEUE_URL="",
+    )
+
+    with pytest.raises(ValueError, match="SQS_OUT_QUEUE_URL"):
+        configured.validate_runtime()
+
+
+def test_runtime_configuration_rejects_non_https_external_urls():
+    configured = Settings(_env_file=None, HEAR_API_URL="http://not-allowed.example")
+
+    with pytest.raises(ValueError, match="HEAR_API_URL must be an HTTPS URL"):
+        configured.validate_runtime()
 
 
 def test_env_example_documents_every_application_setting():

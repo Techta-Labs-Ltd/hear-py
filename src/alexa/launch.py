@@ -1,30 +1,47 @@
+"""Alexa adapter for launch orchestration around the pure launch policy."""
+
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.dialog import DialogStateManager
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.onboarding import LaunchTracker, Onboarding
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.resume_speech import ResumeSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DialogStateManager
-from src.models.onboarding import LaunchTracker, Onboarding
+from src.models.launch_policy import LaunchPolicy
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 
 class LaunchWorkflow:
     PROFILE_TTL_MS = 24 * 60 * 60 * 1000
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(
+        self,
+        *,
+        user,
+        notifications,
+        playback,
+        listener_profile,
+        listener_sync,
+        start_town_capture,
+    ) -> None:
+        self._user = user
+        self._notifications = notifications
+        self._playback = playback
+        self._listener_profile = listener_profile
+        self._listener_sync = listener_sync
+        self._start_town_capture = start_town_capture
 
     async def execute(self, handler_input: HandlerInput):
         store = self._initial_store(handler_input)
-        user_name = self._user_name(store)
+        user_name = LaunchPolicy.user_name(store)
         protected_response = self._protected_response(handler_input, store, user_name)
         if protected_response is not None:
             return protected_response
@@ -33,14 +50,14 @@ class LaunchWorkflow:
         except Exception:
             pass
         store = await self._sync_listener_for_launch(handler_input, store)
-        notification_response = await self._deps.notifications.offer(handler_input)
+        notification_response = await self._notifications.offer(handler_input)
         if notification_response is not None:
             return notification_response
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         pending_response = await self._pending_response(
             handler_input,
             store,
-            self._user_name(store),
+            LaunchPolicy.user_name(store),
         )
         if pending_response is not None:
             return pending_response
@@ -48,21 +65,22 @@ class LaunchWorkflow:
         return self._welcome_response(handler_input, store)
 
     def _initial_store(self, handler_input: HandlerInput) -> dict:
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         DialogStateManager.clear_transient_discovery(handler_input)
-        store = self._deps.user.snapshot(handler_input)
-        launch = LaunchTracker.record(AlexaRequest.get_user_id(handler_input), store)
+        store = self._user.snapshot(handler_input)
+        launch = LaunchTracker.record(AlexaRequest.get_user_id(handler_input) or "", store)
         if launch.get("save"):
-            self._deps.user.update(handler_input, launch["save"])
-            return self._deps.user.snapshot(handler_input)
+            self._user.update(handler_input, launch["save"])
+            return self._user.snapshot(handler_input)
         return store
 
     def _protected_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
-        if store.get("onboardingStage") == "confirm_town_for_community":
-            return Onboarding.start_town_capture(handler_input, store, user_name, deps=self._deps)
-        if store.get("awaitingContinueAfterFlag"):
+        decision = LaunchPolicy.protected(store)
+        if decision.kind == "town_capture":
+            return self._start_town_capture(handler_input, store, user_name)
+        if decision.kind == "continue_after_flag":
             subject = store.get("activePlayback") or store.get("reportContext") or {}
             question = AlexaFeedback.keep_listening_question(subject, store)
             reprompt = AlexaFeedback.keep_listening_reprompt(subject, store)
@@ -77,19 +95,20 @@ class LaunchWorkflow:
     async def _pending_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
-        if self._deps.playback.state.has_unfinished(store):
+        decision = LaunchPolicy.pending(
+            store, has_unfinished_playback=self._playback.state.has_unfinished(store)
+        )
+        if decision.kind == "unfinished_playback":
             return self._unfinished_response(handler_input, store)
-        if store.get("awaitingFeedback") and store.get("pendingFeedback"):
+        if decision.kind == "pending_feedback":
             return AlexaFeedback.present_pending_feedback(handler_input, store)
-        if store.get("awaitingFeedback") and (
-            store.get("feedbackContentTitle") or store.get("feedbackPromptText")
-        ):
+        if decision.kind == "ask_pending_feedback":
             return await self._feedback_response(handler_input, store, user_name)
         return None
 
     def _unfinished_response(self, handler_input: HandlerInput, store: dict):
-        active = self._deps.playback.state.from_store(store) or {}
-        self._deps.user.update(handler_input, {"awaitingResume": True})
+        active = self._playback.state.from_store(store) or {}
+        self._user.update(handler_input, {"awaitingResume": True})
         DialogStateManager.activate(handler_input, "resume", context=active)
         return (
             handler_input.response_builder.speak(
@@ -114,25 +133,20 @@ class LaunchWorkflow:
         )
 
     def _welcome_response(self, handler_input: HandlerInput, store: dict):
-        user_name = self._user_name(store)
-        locality = store.get("locality")
-        city = store.get("userCity") or locality
-        is_first_time = store.get("playCount", 0) == 0 and not store.get("lastToken")
-        if is_first_time and city:
+        decision = LaunchPolicy.welcome(store)
+        if decision.kind == "first_with_city":
             return AlexaResponse.present_idle_next(
                 handler_input,
-                Speech.WELCOME_FIRST_HAS_CITY(user_name, city),
+                Speech.WELCOME_FIRST_HAS_CITY(decision.user_name, decision.city),
             )
-        if is_first_time:
+        if decision.kind == "first_without_city":
             return AlexaResponse.present_idle_next(
                 handler_input,
-                Speech.WELCOME_FIRST(user_name),
+                Speech.WELCOME_FIRST(decision.user_name),
             )
-        return Onboarding.handle_returning_user(handler_input, store, user_name, locality)
-
-    @staticmethod
-    def _user_name(store: dict) -> str | None:
-        return store.get("userName") or store.get("fullName")
+        return Onboarding.handle_returning_user(
+            handler_input, store, decision.user_name, decision.locality
+        )
 
     @classmethod
     def _listener_data_is_cached(cls, store: dict) -> bool:
@@ -153,17 +167,17 @@ class LaunchWorkflow:
             return store
         try:
             if not self._listener_data_is_cached(store):
-                enriched = await self._deps.listener_profile.apply_listener_profile(handler_input)
+                enriched = await self._listener_profile.apply_listener_profile(handler_input)
                 ApplicationLog.info("Hear: launch enrichment done")
                 return enriched
         except Exception as err:
-            ApplicationLog.warning("Hear: launch enrichment failed %s", err)
+            ApplicationLog.warning("Hear: launch enrichment failed error=%s", type(err).__name__)
         return store
 
     async def _sync_listener_for_launch(self, handler_input: HandlerInput, store: dict) -> dict:
         try:
-            await self._deps.listener_sync.sync_for_launch(handler_input)
-            return self._deps.user.snapshot(handler_input)
+            await self._listener_sync.sync_for_launch(handler_input)
+            return self._user.snapshot(handler_input)
         except Exception as err:
             ApplicationLog.warning("Hear: listener launch sync failed error=%s", type(err).__name__)
             return store

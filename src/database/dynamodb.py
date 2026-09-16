@@ -165,7 +165,7 @@ class DynamoTable:
 
     def _key(self, partition_value: Any, sort_value: Any = None) -> dict:
         key = {self.partition_key: DynamoExpressions.encode_value(partition_value)}
-        if sort_value is not None:
+        if self.sort_key and sort_value is not None:
             key[self.sort_key] = DynamoExpressions.encode_value(sort_value)
         return key
 
@@ -283,6 +283,116 @@ class DynamoTable:
             params["ExpressionAttributeNames"].update(condition_names)
             params["ExpressionAttributeValues"].update(condition_values)
         await asyncio.to_thread(self._request, "update_item", params)
+
+    def transaction_update_item(
+        self,
+        partition_value: Any,
+        sort_value: Any,
+        updates: dict[str, Any],
+        *,
+        condition: list[dict] | None = None,
+    ) -> dict:
+        set_clauses = []
+        names: dict[str, str] = {}
+        values: dict[str, dict] = {}
+        for index, (field, raw) in enumerate(updates.items()):
+            name_key = f"#u{index}"
+            value_key = f":u{index}"
+            names[name_key] = field
+            values[value_key] = DynamoExpressions.encode_value(raw)
+            set_clauses.append(f"{name_key} = {value_key}")
+        params: dict[str, Any] = {
+            "TableName": self.table_name,
+            "Key": self._key(partition_value, sort_value),
+            "UpdateExpression": f"SET {', '.join(set_clauses)}",
+            "ExpressionAttributeNames": names,
+            "ExpressionAttributeValues": values,
+        }
+        if condition:
+            expression, condition_names, condition_values = DynamoExpressions.build_condition(
+                condition, start_index=1000
+            )
+            params["ConditionExpression"] = expression
+            params["ExpressionAttributeNames"].update(condition_names)
+            params["ExpressionAttributeValues"].update(condition_values)
+        return {"Update": params}
+
+    def transaction_map_update(
+        self,
+        partition_value: Any,
+        map_name: str,
+        fields: dict[str, Any],
+        *,
+        sort_value: Any,
+        removes: list[str] | tuple[str, ...] | None,
+        updates: dict[str, Any],
+        condition: list[dict] | None = None,
+    ) -> dict:
+        names = {"#document": map_name}
+        values: dict[str, dict] = {}
+        clauses = []
+        for index, (field, raw) in enumerate(fields.items()):
+            name_key = f"#d{index}"
+            value_key = f":d{index}"
+            names[name_key] = field
+            values[value_key] = DynamoExpressions.encode_value(raw)
+            clauses.append(f"#document.{name_key} = {value_key}")
+        remove_clauses = []
+        for index, field in enumerate(removes or [], start=len(fields)):
+            name_key = f"#r{index}"
+            names[name_key] = field
+            remove_clauses.append(f"#document.{name_key}")
+        for index, (field, raw) in enumerate(updates.items(), start=len(fields)):
+            name_key = f"#u{index}"
+            value_key = f":u{index}"
+            names[name_key] = field
+            values[value_key] = DynamoExpressions.encode_value(raw)
+            clauses.append(f"{name_key} = {value_key}")
+        expression_parts = []
+        if clauses:
+            expression_parts.append(f"SET {', '.join(clauses)}")
+        if remove_clauses:
+            expression_parts.append(f"REMOVE {', '.join(remove_clauses)}")
+        params: dict[str, Any] = {
+            "TableName": self.table_name,
+            "Key": self._key(partition_value, sort_value),
+            "UpdateExpression": " ".join(expression_parts),
+            "ExpressionAttributeNames": names,
+            "ExpressionAttributeValues": values,
+        }
+        if condition:
+            expression, condition_names, condition_values = DynamoExpressions.build_condition(
+                condition, start_index=1000
+            )
+            params["ConditionExpression"] = expression
+            params["ExpressionAttributeNames"].update(condition_names)
+            params["ExpressionAttributeValues"].update(condition_values)
+        return {"Update": params}
+
+    def transaction_put_item(
+        self, item: dict[str, Any], *, condition: list[dict] | None = None
+    ) -> dict:
+        params: dict[str, Any] = {
+            "TableName": self.table_name,
+            "Item": {key: DynamoExpressions.encode_value(value) for key, value in item.items()},
+        }
+        if condition:
+            expression, names, values = DynamoExpressions.build_condition(condition)
+            params["ConditionExpression"] = expression
+            params["ExpressionAttributeNames"] = names
+            params["ExpressionAttributeValues"] = values
+        return {"Put": params}
+
+    async def transact_write(self, operations: list[dict]) -> None:
+        if not operations:
+            return
+        if len(operations) > 25:
+            raise ValueError("DynamoDB transactions support at most 25 operations")
+        await asyncio.to_thread(
+            self._request,
+            "transact_write_items",
+            {"TransactItems": operations},
+        )
 
     async def delete_item(
         self,

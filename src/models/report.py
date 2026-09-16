@@ -1,18 +1,55 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
+from typing import Literal
 
-from src.alexa.request import AlexaRequest
-from src.models.user import User
-from src.services.events import OutboundEventService
+
+@dataclass(frozen=True, slots=True)
+class ReportCommand:
+    subject_type: Literal["content", "creator"]
+    subject_id: str
+    subject_name: str | None = None
+    content_id: str | None = None
+    publication_id: str | None = None
+
+    @classmethod
+    def from_subject(cls, subject: dict) -> "ReportCommand":
+        subject_type = str(subject.get("type") or "").strip()
+        subject_id = str(subject.get("id") or "").strip()
+        if subject_type not in {"content", "creator"} or not subject_id:
+            raise ValueError("report command requires a supported subject")
+        typed_subject_type: Literal["content", "creator"] = (
+            "content" if subject_type == "content" else "creator"
+        )
+        return cls(
+            subject_type=typed_subject_type,
+            subject_id=subject_id,
+            subject_name=str(subject["name"]) if subject.get("name") else None,
+            content_id=str(subject["contentId"]) if subject.get("contentId") else None,
+            publication_id=str(subject["publicationId"]) if subject.get("publicationId") else None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ReportReceipt:
+    command: ReportCommand
+    recorded_at: int
+    status: Literal["pending"] = "pending"
+
+    def event_payload(self) -> dict:
+        return {
+            "subjectType": self.command.subject_type,
+            "subjectId": self.command.subject_id,
+            "subjectName": self.command.subject_name,
+            "contentId": self.command.content_id,
+            "publicationId": self.command.publication_id,
+            "recordedAt": self.recorded_at,
+            "status": self.status,
+        }
 
 
 class Report:
-    __slots__ = ("_events",)
-
-    def __init__(self, events: OutboundEventService | None = None) -> None:
-        self._events = events
-
     @staticmethod
     def resolve_report_track_context(store: dict, *, audio_token: str | None = None) -> dict:
         if not isinstance(store, dict):
@@ -78,22 +115,6 @@ class Report:
             return None
         return {**context, "capturedAt": int(time.time() * 1000)}
 
-    async def record_report(self, handler_input, subject: dict) -> dict:
-        report = {
-            "subjectType": subject.get("type"),
-            "subjectId": str(subject.get("id")),
-            "subjectName": subject.get("name"),
-            "contentId": subject.get("contentId"),
-            "publicationId": subject.get("publicationId"),
-            "recordedAt": int(time.time() * 1000),
-            "status": "pending",
-        }
-        store = User.snapshot(handler_input)
-        user_id = AlexaRequest.get_user_id(handler_input)
-        if self._events is not None and user_id:
-            self._events.report(
-                alexa_user_id=user_id,
-                listener_id=store.get("listenerId"),
-                report=report,
-            )
-        return report
+    @staticmethod
+    def record_report(command: ReportCommand) -> ReportReceipt:
+        return ReportReceipt(command=command, recorded_at=int(time.time() * 1000))

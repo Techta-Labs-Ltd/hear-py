@@ -1,6 +1,7 @@
+"""Alexa request-bound playback state and lazy queue paging adapter."""
+
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 import uuid
 from enum import StrEnum
@@ -10,6 +11,7 @@ from src.alexa.request import AlexaRequest
 from src.constants.discovery import DiscoveryConstants
 from src.constants.playback import PlaybackConstants
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentIdentity, ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
@@ -157,7 +159,11 @@ class PlaybackState:
         event_timestamp = AlexaRequest.get_request_timestamp_ms(handler_input) or now
         request_id = AlexaRequest.get_request_id(handler_input)
         event_fields = (
-            {"eventTimestamp": event_timestamp, "lastEventRequestId": request_id}
+            {
+                "eventTimestamp": event_timestamp,
+                "lastEventRequestId": request_id,
+                "lastEventType": request_type,
+            }
             if request_type.startswith("AudioPlayer.")
             else {}
         )
@@ -179,7 +185,13 @@ class PlaybackState:
             return False
         event_timestamp = AlexaRequest.get_request_timestamp_ms(handler_input)
         current_timestamp = int(state.get("eventTimestamp") or 0)
-        return event_timestamp is None or event_timestamp >= current_timestamp
+        if event_timestamp is None or not current_timestamp:
+            return True
+        if event_timestamp < current_timestamp:
+            return False
+        if event_timestamp > current_timestamp:
+            return True
+        return request_type != state.get("lastEventType")
 
     def transition(
         self,
@@ -189,7 +201,7 @@ class PlaybackState:
         offset_ms: int | None = None,
         listened_ms: int | None = None,
     ) -> dict | None:
-        changes = {"status": str(status)}
+        changes: dict[str, object] = {"status": str(status)}
         if isinstance(status, PlaybackStatus):
             changes["status"] = status.value
         if offset_ms is not None:
@@ -371,8 +383,10 @@ class PlaybackQueue:
         queue_index: int | None = None,
     ) -> dict:
         queue = PlaybackQueue.read(store)
-        publication_id = queue.get("publicationId") if queue else None
-        if not publication_id or not isinstance(content, dict):
+        if not isinstance(queue, dict) or not isinstance(content, dict):
+            return content
+        publication_id = queue.get("publicationId")
+        if not publication_id:
             return content
         contextualized = {
             **content,
@@ -465,13 +479,19 @@ class PlaybackQueue:
                 if declared > 0:
                     declared_counts.append(declared)
             publication_track_count = max(declared_counts, default=len(publication_items))
-            durations = [item.get("durationMs") for item in publication_items]
+            durations: list[object] = [
+                item.get("durationMs") for item in publication_items
+            ]
+            duration_values = [
+                int(value)
+                for value in durations
+                if isinstance(value, (int, float)) and value > 0
+            ]
             if (
                 publication_track_count == len(publication_items)
-                and durations
-                and all((isinstance(value, (int, float)) and value > 0 for value in durations))
+                and len(duration_values) == len(durations)
             ):
-                publication_total_duration_ms = sum((int(value) for value in durations))
+                publication_total_duration_ms = sum(duration_values)
         discovery_context = SearchPayload.discovery_context(
             source,
             search_payload,

@@ -4,7 +4,7 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
-from src.models.intent_dispatch import IntentDispatcher
+from src.alexa.intent_dispatch import IntentDispatcher
 
 
 class IntentDispatchGateHandler(AbstractRequestHandler):

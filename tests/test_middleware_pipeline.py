@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.alexa.context import RequestContext
 from src.alexa.runtime import AsyncSkill
 from src.registry import RouteRegistry
 
@@ -34,12 +35,24 @@ def test_pipeline_declarations_preserve_behavioral_order():
     assert controllers.index("BrowseNavigationHandler") < controllers.index("PreviousIntentHandler")
 
 
+def test_runtime_rejects_mixed_interceptor_contracts():
+    class SynchronousInterceptor:
+        def process(self, _handler_input):
+            return None
+
+    skill = AsyncSkill()
+    with pytest.raises(TypeError, match="must be async"):
+        skill.add_global_request_interceptor(SynchronousInterceptor())
+    with pytest.raises(TypeError, match="must be async"):
+        skill.add_global_response_interceptor(SynchronousInterceptor())
+
+
 @pytest.mark.asyncio
 async def test_runtime_preserves_interceptor_dispatch_and_response_order():
     events = []
 
     class FirstInterceptor:
-        def process(self, handler_input):
+        async def process(self, handler_input):
             events.append("request:first")
 
     class SecondInterceptor:
@@ -64,7 +77,7 @@ async def test_runtime_preserves_interceptor_dispatch_and_response_order():
             return {"shouldEndSession": True}
 
     class FinalInterceptor:
-        def process(self, handler_input):
+        async def process(self, handler_input):
             events.append("response:final")
 
     skill = AsyncSkill()
@@ -86,11 +99,34 @@ async def test_runtime_preserves_interceptor_dispatch_and_response_order():
 
 
 @pytest.mark.asyncio
+async def test_runtime_binds_one_transient_request_context_without_state_copy():
+    seen = []
+
+    class Handler:
+        def can_handle(self, _handler_input):
+            return True
+
+        def handle(self, handler_input):
+            context = RequestContext.bind(handler_input)
+            seen.extend([context, handler_input.request_context, context.request_attributes])
+            context.request_attributes["marker"] = "request-only"
+            return {"shouldEndSession": True}
+
+    skill = AsyncSkill()
+    skill.add_request_handler(Handler())
+    await skill.invoke({"request": {"type": "LaunchRequest", "requestId": "request-1"}}, None)
+
+    assert seen[0] is seen[1]
+    assert seen[0].request_id == "request-1"
+    assert seen[2]["marker"] == "request-only"
+
+
+@pytest.mark.asyncio
 async def test_runtime_skips_commit_interceptors_after_exception_handling():
     events = []
 
     class FailingInterceptor:
-        def process(self, handler_input):
+        async def process(self, handler_input):
             events.append("request")
             raise RuntimeError("failure")
 
@@ -104,7 +140,7 @@ async def test_runtime_skips_commit_interceptors_after_exception_handling():
             return {"shouldEndSession": False}
 
     class ResponseInterceptor:
-        def process(self, handler_input):
+        async def process(self, handler_input):
             events.append("response")
 
     skill = AsyncSkill()

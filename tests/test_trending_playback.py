@@ -4,20 +4,22 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.playback_state import PlaybackState
 from src.alexa.runtime import AttrDict
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.controllers.browse import WhatsTrendingHandler
-from src.models.playback import Playback
+from src.models.user import User
 
 
 def test_resume_offer_requires_a_playable_https_url():
+    playback_state = PlaybackState(User())
     state = {"contentId": "legacy-content", "status": "paused", "audioUrl": ""}
-    assert not Playback.has_unfinished_playback({"activePlayback": state})
+    assert not playback_state.has_unfinished({"activePlayback": state})
     state["audioUrl"] = "http://unsafe.example/audio.mp3"
-    assert not Playback.has_unfinished_playback({"activePlayback": state})
+    assert not playback_state.has_unfinished({"activePlayback": state})
     state["audioUrl"] = "https://cdn.hear.media/audio.mp3"
-    assert Playback.has_unfinished_playback({"activePlayback": state})
+    assert playback_state.has_unfinished({"activePlayback": state})
 
 
 @pytest.mark.asyncio
@@ -39,7 +41,7 @@ async def test_recommendation_intent_uses_availability_source_selection(
     selection = {"outputSpeech": {"ssml": "<speak>Choose a source</speak>"}}
     begin_recommendations = AsyncMock(return_value=selection)
     monkeypatch.setattr(
-        "src.models.availability.Availability.begin_recommendations",
+        "src.alexa.availability.Availability.begin_recommendations",
         begin_recommendations,
     )
     handler = WhatsTrendingHandler(ApplicationContainer().browse)
@@ -81,8 +83,8 @@ async def test_trending_intent_searches_and_plays_trending_content(
     }
     discover = AsyncMock(return_value=result)
     autoplay = AsyncMock(return_value={"directives": [{"type": "AudioPlayer.Play"}]})
-    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    monkeypatch.setattr("src.models.search.Search.auto_play_first_from_search", autoplay)
+    monkeypatch.setattr("src.alexa.search.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.alexa.search.Search.auto_play_first_from_search", autoplay)
 
     response = await WhatsTrendingHandler(ApplicationContainer().browse).handle(
         mock_handler_input

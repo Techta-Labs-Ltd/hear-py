@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from src.services.logging_control import ApplicationLog
 
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import RequestDeadline
 from src.utils.events import SqsBatch
 from src.utils.notifications import NotificationItem, NotificationQueueMessage

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import time
 
+from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogStateManager
 from src.alexa.request import AlexaRequest
 from src.constants.notifications import NotificationConstants
 from src.constants.playback import PlaybackConstants
-from src.models.dialog import DialogStateManager
+from src.models.feedback_contracts import FeedbackCommand, FeedbackReceipt
 from src.models.user import User
 from src.services.events import OutboundEventService
 from src.utils.content import ContentIdentity, ContentUtils
@@ -395,7 +397,7 @@ class FeedbackService:
             User.update(handler_input, {"publicationFeedbackProgress": all_progress})
             return None
         all_progress.pop(str(publication_id), None)
-        updates = {"publicationFeedbackProgress": all_progress}
+        updates: dict[str, object] = {"publicationFeedbackProgress": all_progress}
         publication_title = ContentUtils.publication_title(progress)
         if not publication_title:
             User.update(handler_input, updates)
@@ -437,8 +439,10 @@ class FeedbackService:
             "playbackStartedAt": FeedbackService._safe_int(progress.get("latestPlaybackStartedAt")),
             "createdAt": int(time.time() * 1000),
         }
-        existing = [
-            item for item in store.get("feedbackCandidates") or [] if item.get("feedbackKey") != key
+        raw_candidates = store.get("feedbackCandidates")
+        candidate_items = raw_candidates if isinstance(raw_candidates, list) else []
+        existing: list[dict] = [
+            item for item in candidate_items if isinstance(item, dict) and item.get("feedbackKey") != key
         ]
         updates["feedbackCandidates"] = (existing + [candidate])[-20:]
         User.update(handler_input, updates)
@@ -564,18 +568,29 @@ class FeedbackService:
             },
         )
 
-    async def submit(self, handler_input, value: str) -> dict:
+    async def submit(
+        self, request: RequestContext, command: FeedbackCommand
+    ) -> FeedbackReceipt:
+        """Stage one feedback event and mark its candidate answered.
+
+        Alexa request adaptation belongs in the controller/action layer. This
+        service receives the request-scoped gateway and a closed command set,
+        preventing arbitrary slot values from reaching persistence or events.
+        """
+        handler_input = request.handler_input
         store = User.snapshot(handler_input)
         pending = dict(store.get("pendingFeedback") or {})
-        user_id = AlexaRequest.get_user_id(handler_input)
+        user_id = request.alexa_user_id
         if self._events is not None and user_id:
             self._events.feedback(
+                handler_input=handler_input,
                 alexa_user_id=user_id,
                 listener_id=store.get("listenerId"),
                 pending=pending,
-                value=value,
+                value=command.value,
             )
-        return FeedbackService.mark_answered(handler_input)
+        FeedbackService.mark_answered(handler_input)
+        return FeedbackReceipt(command=command, feedback_key=pending.get("feedbackKey"))
 
     async def clear(self, handler_input) -> dict:
         return User.update(

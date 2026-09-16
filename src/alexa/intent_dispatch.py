@@ -1,13 +1,17 @@
+"""Alexa intent-dispatch adapter for request-bound feature actions."""
+
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
+from src.alexa.availability import Availability
 from src.alexa.availability_speech import AvailabilitySpeech
+from src.alexa.browse import Browse
 from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.entities import AlexaEntities
 from src.alexa.playback import AlexaPlayback
 from src.alexa.request import AlexaRequest
@@ -16,15 +20,8 @@ from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
-from src.models.dialog import DialogSelection, DialogStateManager
-from src.models.feedback_response import (
-    EnjoyedFeedback,
-    NotEnjoyedFeedback,
-    SkipFeedback,
-    SomewhatFeedback,
-)
-from src.models.onboarding import SetLocation, TownCapture
-from src.models.play import PlayContent, PlayCreator, PlayOrganization
+from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class IntentDispatcher:
@@ -87,24 +84,17 @@ class IntentDispatcher:
             "AMAZON.HelpIntent",
         }
     )
-    ACTIONS = {
-        "creator": PlayCreator,
-        "organization": PlayOrganization,
-        "publication": PlayContent,
-        "category": PlayContent,
-        "following": PlayContent,
-        "general": PlayContent,
-        "search": PlayContent,
-        "town_capture": TownCapture,
-        "location_set": SetLocation,
-        "feedback_enjoyed": EnjoyedFeedback,
-        "feedback_not_enjoyed": NotEnjoyedFeedback,
-        "feedback_somewhat": SomewhatFeedback,
-        "feedback_skip": SkipFeedback,
-    }
-
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(
+        self,
+        browse: Browse,
+        availability: Availability,
+        user: User,
+        actions: dict[str, object],
+    ) -> None:
+        self._browse = browse
+        self._availability = availability
+        self._user = user
+        self._actions = actions
 
     def can_dispatch(self, handler_input: HandlerInput) -> bool:
         if AlexaRequest.get_request_type(handler_input) != "IntentRequest":
@@ -157,18 +147,18 @@ class IntentDispatcher:
         if intent == "resolver_unavailable":
             return self._resolver_unavailable_response(handler_input)
         if intent == "trending":
-            return self._deps.browse.trending(handler_input)
+            return self._browse.trending(handler_input)
         if intent == "browse":
-            return self._deps.browse.content(handler_input)
+            return self._browse.content(handler_input)
         if intent == "show_more":
-            return self._deps.browse.more(handler_input)
+            return self._browse.more(handler_input)
         if intent in {"local", "location"}:
-            return self._deps.availability.begin_local(handler_input, nlp_data)
+            return self._availability.begin_local(handler_input, nlp_data)
         if intent == "creator_location":
-            return self._deps.availability.begin_creator_location(handler_input, nlp_data)
-        action_type = self.ACTIONS.get(intent)
-        if action_type:
-            return action_type(deps=self._deps).execute(handler_input)
+            return self._availability.begin_creator_location(handler_input, nlp_data)
+        action = self._actions.get(intent)
+        if action and hasattr(action, "execute"):
+            return action.execute(handler_input)
         return self._fallback_response(handler_input)
 
     def _ambiguity_response(self, handler_input: HandlerInput, nlp_data: dict) -> Response:
@@ -193,7 +183,7 @@ class IntentDispatcher:
             "expiresAt": now + 300,
         }
         existing = (
-            self._deps.user.snapshot(handler_input).get("pendingAmbiguity")
+            self._user.snapshot(handler_input).get("pendingAmbiguity")
             or (DialogStateManager.get_active(handler_input) or {}).get("context")
         )
         is_retry = bool(
@@ -204,7 +194,7 @@ class IntentDispatcher:
         )
         pagination = (existing or {}).get("candidatePagination") or {}
         publication_picker = pagination.get("kind") == "publication"
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "pendingAmbiguity": pending,
@@ -269,7 +259,7 @@ class IntentDispatcher:
     ) -> Response:
         confirm_text = pending.get("confirmText")
         resolution = pending.get("resolution") or {}
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "awaitingSearchConfirmation": True,
@@ -284,11 +274,12 @@ class IntentDispatcher:
             context={**resolution, "confirmationLabel": confirm_text},
         )
         ApplicationLog.info(
-            "Hear: search confirmation asked intent=%s text=%s",
+            "Hear: search confirmation asked intent=%s",
             pending.get("intent"),
-            confirm_text,
         )
-        escaped = Speech.escape_ssml_lite(pending.get("ambiguityCandidateName") or confirm_text)
+        escaped = Speech.escape_ssml_lite(
+            str(pending.get("ambiguityCandidateName") or confirm_text)
+        )
         prompt = (
             f"Did you mean {escaped}?"
             if pending.get("ambiguityResolution")
@@ -306,7 +297,7 @@ class IntentDispatcher:
         suggestions = nlp_data.get("suggestions") or []
         if not suggestions:
             return self._missing_suggestion_response(handler_input)
-        self._deps.user.update(handler_input, {"pendingNlpSuggestion": suggestions})
+        self._user.update(handler_input, {"pendingNlpSuggestion": suggestions})
         message = (
             f"I didn't quite catch that. Did you mean {self._suggestion_label(suggestions[0])}?"
         )

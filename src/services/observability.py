@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 import sentry_sdk
 from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 
 from config import settings
+from src.services.logging_control import ApplicationLog
 
 
 class ErrorReporter:
@@ -38,7 +37,7 @@ class ErrorReporter:
             )
             return
 
-    def _before_send(self, event: dict, hint: dict) -> dict | None:
+    def _before_send(self, event: dict, _hint: dict) -> dict | None:
         request = event.get("request")
         if request and isinstance(request, dict):
             data = request.get("data")

@@ -1,11 +1,28 @@
 from __future__ import annotations
 
-from src.alexa.context import RequestContext
-from src.alexa.request import AlexaRequest
-from src.alexa.search_speech import SearchSpeech
-from src.constants.dialog import DialogConstants
+from dataclasses import dataclass
+from typing import Literal
+
 from src.models.resolver import ResolutionBuilder
 from src.utils.filters import SearchFilterUtils
+from src.utils.search_payload import SearchPayload
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmationDecision:
+    kind: Literal["none", "clear", "clarify", "confirm"] = "none"
+    pending: dict | None = None
+    clarification: dict | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind == "confirm" and not isinstance(self.pending, dict):
+            raise ValueError("confirmation decision requires pending data")
+        if self.kind == "clarify" and not isinstance(self.clarification, dict):
+            raise ValueError("clarification decision requires clarification data")
+        if self.kind in {"none", "clear"} and (
+            self.pending is not None or self.clarification is not None
+        ):
+            raise ValueError("empty confirmation decisions cannot carry data")
 
 
 class ConfirmationPolicy:
@@ -177,12 +194,12 @@ class ConfirmationPolicy:
         if intent in {"organization", "creator"} and not source:
             return None
         if intent in {"organization", "creator", "publication"}:
-            return SearchSpeech.resolved_search_request_label(slots, source)
+            return SearchPayload.resolved_request_label(slots, source)
         has_subject = bool(context["category"] or slots.get("tags") or context["residual"])
         if intent in {"category", "general"} and has_subject:
-            return SearchSpeech.resolved_search_request_label(slots)
+            return SearchPayload.resolved_request_label(slots)
         if intent == "search" and context["city"]:
-            return SearchSpeech.resolved_search_request_label(slots)
+            return SearchPayload.resolved_request_label(slots)
         return None
 
     @staticmethod
@@ -252,41 +269,45 @@ class ConfirmationPolicy:
             and has_subject
             and not has_source
         ):
-            subject = SearchSpeech.resolved_search_request_label(slots)
+            subject = SearchPayload.resolved_request_label(slots)
             prefix = (
                 "the latest content on " if subject.startswith("the latest ") else "content on "
             )
             return prefix + subject.removeprefix("the latest ")
         if nlp.get("confirmationLabel"):
             return str(nlp["confirmationLabel"])
-        subject = ConfirmationPolicy._resolved_subject(context)
-        subject = subject or ConfirmationPolicy._discovery_subject(context)
-        subject = subject or ConfirmationPolicy._source_subject(context)
-        if subject:
-            return subject
+        resolved_subject = ConfirmationPolicy._resolved_subject(context)
+        discovery_subject = ConfirmationPolicy._discovery_subject(context)
+        source_subject = ConfirmationPolicy._source_subject(context)
+        selected_subject = resolved_subject or discovery_subject or source_subject
+        if selected_subject:
+            return selected_subject
         if context["intent"] == "category":
             category = context["category"] or "that"
             return f"{category} from {context['residual']}" if context["residual"] else category
         return context["residual"] or slots.get("topic") or slots.get("query")
 
     @staticmethod
-    def raw_utterance(handler_input) -> str | None:
-        intent = AlexaRequest.get_intent_name(handler_input)
-        if intent == "PlayLatestContentIntent":
-            values = [
-                AlexaRequest.get_slot_value(handler_input, name) for name in ("topic", "format")
+    def raw_utterance(alexa_intent: str | None, slot_values: dict | None) -> str | None:
+        values: dict = slot_values if isinstance(slot_values, dict) else {}
+        if alexa_intent == "PlayLatestContentIntent":
+            topic_format = (values.get("topic"), values.get("format"))
+            latest_values = [
+                value for value in topic_format if isinstance(value, str) and value.strip()
             ]
-            return " ".join(
-                ["latest", *(value.strip() for value in values if value and value.strip())]
+            return " ".join(["latest", *(value.strip() for value in latest_values)])
+        priority = (
+            ConfirmationPolicy.SLOT_PRIORITY.get(
+                alexa_intent, ConfirmationPolicy.DEFAULT_SLOT_PRIORITY
             )
-        priority = ConfirmationPolicy.SLOT_PRIORITY.get(
-            intent, ConfirmationPolicy.DEFAULT_SLOT_PRIORITY
+            if alexa_intent
+            else ConfirmationPolicy.DEFAULT_SLOT_PRIORITY
         )
         return next(
             (
                 value.strip()
                 for name in priority
-                if (value := AlexaRequest.get_slot_value(handler_input, name)) and value.strip()
+                if isinstance((value := values.get(name)), str) and value.strip()
             ),
             None,
         )
@@ -317,11 +338,6 @@ class ConfirmationPolicy:
         }
 
     @staticmethod
-    def clear_pending(attrs: dict) -> None:
-        attrs.pop("_pendingConfirmation", None)
-        attrs.pop("_resolverClarification", None)
-
-    @staticmethod
     def _skip_confirmation(nlp: dict) -> bool:
         slots = nlp.get("slots") or {}
         return bool(
@@ -350,52 +366,70 @@ class ConfirmationPolicy:
         return None
 
     @staticmethod
-    def _eligible(handler_input, nlp: dict | None) -> bool:
-        if RequestContext.request(handler_input).get(DialogConstants.VALIDATION_FAILURE):
+    def _eligible(
+        nlp: dict | None,
+        *,
+        request_type: str | None,
+        alexa_intent: str | None,
+        validation_failed: bool,
+    ) -> bool:
+        if validation_failed:
             return False
         return bool(
-            AlexaRequest.get_request_type(handler_input) == "IntentRequest"
-            and AlexaRequest.get_intent_name(handler_input)
+            request_type == "IntentRequest"
+            and alexa_intent
             and isinstance(nlp, dict)
             and nlp.get("intent") in ConfirmationPolicy.RESOLVED_INTENTS
             and (not nlp.get("status") or nlp.get("status") == "resolved")
         )
 
     @staticmethod
-    def apply(handler_input) -> None:
-        attrs = RequestContext.request(handler_input)
-        nlp = attrs.get("_nlp")
-        if not ConfirmationPolicy._eligible(handler_input, nlp):
-            return
-        if ConfirmationPolicy._skip_confirmation(nlp):
-            ConfirmationPolicy.clear_pending(attrs)
-            RequestContext.replace_request(handler_input, attrs)
-            return
-        raw = ConfirmationPolicy.raw_utterance(handler_input)
-        clarification = ConfirmationPolicy._clarification(nlp, raw)
-        confirm_text = ConfirmationPolicy.confirmation_speech(nlp)
+    def decide(
+        nlp: dict | None,
+        *,
+        request_type: str | None,
+        alexa_intent: str | None,
+        raw_utterance: str | None,
+        validation_failed: bool,
+    ) -> ConfirmationDecision:
+        if not ConfirmationPolicy._eligible(
+            nlp,
+            request_type=request_type,
+            alexa_intent=alexa_intent,
+            validation_failed=validation_failed,
+        ):
+            return ConfirmationDecision()
+        resolved_nlp: dict = nlp if isinstance(nlp, dict) else {}
+        if ConfirmationPolicy._skip_confirmation(resolved_nlp):
+            return ConfirmationDecision(kind="clear")
+        clarification = ConfirmationPolicy._clarification(resolved_nlp, raw_utterance)
+        confirm_text = ConfirmationPolicy.confirmation_speech(resolved_nlp)
         if clarification or not confirm_text:
-            attrs["_resolverClarification"] = clarification or {
-                "speech": "Sorry, I didn't catch that. Please say your request again.",
-                "reprompt": "Please say your request again.",
-            }
-            attrs.pop("_pendingConfirmation", None)
-            RequestContext.replace_request(handler_input, attrs)
-            return
-        search_params = ConfirmationPolicy.search_params(nlp) or {}
+            return ConfirmationDecision(
+                kind="clarify",
+                clarification=clarification
+                or {
+                    "speech": "Sorry, I didn't catch that. Please say your request again.",
+                    "reprompt": "Please say your request again.",
+                },
+            )
+        search_params = ConfirmationPolicy.search_params(resolved_nlp) or {}
         search_params["confirmText"] = confirm_text
-        if search_params.get("resolution"):
-            search_params["resolution"]["confirmationLabel"] = confirm_text
-        search_params["alternatives"] = nlp.get("alternatives") or []
-        search_params["ambiguityResolution"] = bool(nlp.get("ambiguityResolution"))
+        resolution = search_params.get("resolution")
+        if isinstance(resolution, dict):
+            resolution["confirmationLabel"] = confirm_text
+        alternatives = resolved_nlp.get("alternatives")
+        search_params["alternatives"] = alternatives if isinstance(alternatives, list) else []
+        search_params["ambiguityResolution"] = bool(resolved_nlp.get("ambiguityResolution"))
         if search_params["ambiguityResolution"]:
+            entities = resolved_nlp.get("entities")
+            entity_values = entities if isinstance(entities, list) else []
             search_params["ambiguityCandidateName"] = next(
                 (
                     str(entity.get("canonicalValue") or "").strip()
-                    for entity in nlp.get("entities") or []
-                    if entity.get("canonicalValue")
+                    for entity in entity_values
+                    if isinstance(entity, dict) and entity.get("canonicalValue")
                 ),
                 confirm_text,
             )
-        attrs["_pendingConfirmation"] = search_params
-        RequestContext.replace_request(handler_input, attrs)
+        return ConfirmationDecision(kind="confirm", pending=search_params)

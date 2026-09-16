@@ -6,11 +6,14 @@ from botocore.exceptions import ClientError
 from src.constants.state import StateSchema
 from src.database.dynamo_merge import DynamoConflictMerge
 from src.database.dynamo_user import (
+    CorruptPersistenceItem,
     DynamoDbPersistenceAdapter,
     DynamoUserOptions,
     InvalidPersistenceKey,
     PersistenceItemTooLarge,
+    UnsupportedPersistenceSchema,
 )
+from src.database.dynamodb import DynamoTable
 
 
 def _adapter_with_mocked_table():
@@ -26,6 +29,10 @@ def _adapter_with_mocked_table():
     adapter._table.get_item = AsyncMock()
     adapter._table.update_item = AsyncMock()
     adapter._table.update_map_fields = AsyncMock()
+    adapter._table.transaction_update_item = MagicMock()
+    adapter._table.transaction_map_update = MagicMock()
+    adapter._table.transaction_put_item = MagicMock()
+    adapter._table.transact_write = AsyncMock()
     adapter._table.delete_item = AsyncMock()
     return adapter
 
@@ -97,6 +104,101 @@ async def test_missing_item_returns_empty_attributes():
 
 
 @pytest.mark.asyncio
+async def test_expired_scope_is_not_hydrated_and_is_conditionally_removed(monkeypatch):
+    adapter = _adapter_with_mocked_table()
+    monkeypatch.setattr("src.database.dynamo_user.time.time", lambda: 1_700_000_000)
+    adapter._table.get_item.side_effect = [
+        {
+            "attributes": {"playbackSpeed": 1.5},
+            "expiresAt": 1_699_999_999,
+            "stateVersion": 4,
+        },
+        None,
+        {
+            "attributes": {"pendingAmbiguity": {"phrase": "still-live"}},
+            "expiresAt": 1_700_000_001,
+            "stateVersion": 2,
+        },
+        None,
+    ]
+
+    result = await adapter.get_attributes(_envelope())
+
+    assert result == {
+        "pendingAmbiguity": {"phrase": "still-live"},
+        "_persistenceVersions": {
+            "CORE": 0,
+            "PLAYBACK": 0,
+            "DIALOG": 2,
+            "CACHE": 0,
+        },
+    }
+    adapter._table.delete_item.assert_awaited_once_with(
+        "alexa-user",
+        "CORE",
+        condition=[{"op": "=", "name": "stateVersion", "value": 4}],
+    )
+
+
+@pytest.mark.asyncio
+async def test_expired_scope_refreshes_after_a_conditional_delete_race(monkeypatch):
+    adapter = _adapter_with_mocked_table()
+    monkeypatch.setattr("src.database.dynamo_user.time.time", lambda: 1_700_000_000)
+    adapter._table.get_item.side_effect = [
+        {
+            "attributes": {"playbackSpeed": 1.5},
+            "expiresAt": 1_699_999_999,
+            "stateVersion": 4,
+        },
+        {
+            "attributes": {"playbackSpeed": 2.0},
+            "expiresAt": 1_700_000_100,
+            "stateVersion": 5,
+        },
+    ]
+    adapter._table.delete_item.side_effect = ClientError(
+        {"Error": {"Code": "ConditionalCheckFailedException", "Message": "changed"}},
+        "DeleteItem",
+    )
+
+    result = await adapter._live_scope_item("alexa-user", StateSchema.CORE_SCOPE)
+
+    assert result == {
+        "attributes": {"playbackSpeed": 2.0},
+        "expiresAt": 1_700_000_100,
+        "stateVersion": 5,
+    }
+
+
+@pytest.mark.asyncio
+async def test_newer_state_schema_is_rejected_instead_of_hydrated_as_new():
+    adapter = _adapter_with_mocked_table()
+    adapter._table.get_item.side_effect = [
+        {"schemaVersion": 3, "attributes": {}, "stateVersion": 1},
+        None,
+        None,
+        None,
+    ]
+
+    with pytest.raises(UnsupportedPersistenceSchema, match="unsupported schema"):
+        await adapter.get_attributes(_envelope())
+
+
+@pytest.mark.asyncio
+async def test_corrupt_state_document_is_rejected_instead_of_silently_discarded():
+    adapter = _adapter_with_mocked_table()
+    adapter._table.get_item.side_effect = [
+        {"schemaVersion": 2, "attributes": ["not", "a", "document"], "stateVersion": 1},
+        None,
+        None,
+        None,
+    ]
+
+    with pytest.raises(CorruptPersistenceItem, match="invalid state document"):
+        await adapter.get_attributes(_envelope())
+
+
+@pytest.mark.asyncio
 async def test_adapter_accepts_canonical_listener_persistence_key():
     adapter = _adapter_with_mocked_table()
     adapter._table.get_item.side_effect = [
@@ -165,6 +267,18 @@ async def test_existing_scope_save_updates_only_changed_fields():
 
 
 @pytest.mark.asyncio
+async def test_dynamo_table_executes_transact_write_items():
+    table = DynamoTable("hear-listener-state", partition_key="id", sort_key="scope")
+    table._client = MagicMock()
+    table._client.transact_write_items.return_value = {}
+    transaction = [{"Update": {"TableName": "hear-listener-state", "Key": {}}}]
+
+    await table.transact_write(transaction)
+
+    table._client.transact_write_items.assert_called_once_with(TransactItems=transaction)
+
+
+@pytest.mark.asyncio
 async def test_save_removes_legacy_feedback_and_following_cache_fields():
     adapter = _adapter_with_mocked_table()
     await adapter.save_attributes(
@@ -218,6 +332,70 @@ async def test_unrelated_scopes_use_independent_versions():
     calls = adapter._table.update_map_fields.call_args_list
     versions = {call.kwargs["sort_value"]: call.kwargs["updates"]["stateVersion"] for call in calls}
     assert versions == {"CORE": 4, "PLAYBACK": 10}
+
+
+@pytest.mark.asyncio
+async def test_essential_multi_scope_save_uses_one_conditional_transaction():
+    adapter = _adapter_with_mocked_table()
+    adapter._table.transaction_map_update.side_effect = lambda *args, **kwargs: {
+        "Update": {"scope": kwargs["sort_value"], "condition": kwargs["condition"]}
+    }
+
+    await adapter.save_attributes(
+        _envelope(),
+        {
+            "playbackSpeed": 1.5,
+            "activePlayback": {"contentId": "track-1"},
+            "_persistenceVersions": {"CORE": 3, "PLAYBACK": 9},
+            "_persistenceChangedFields": ["playbackSpeed", "activePlayback"],
+            "_persistenceCoupledCommit": True,
+        },
+    )
+
+    adapter._table.transact_write.assert_awaited_once_with(
+        [
+            {"Update": {"scope": "CORE", "condition": [{"op": "=", "name": "stateVersion", "value": 3}]}},
+            {"Update": {"scope": "PLAYBACK", "condition": [{"op": "=", "name": "stateVersion", "value": 9}]}},
+        ]
+    )
+    adapter._table.update_item.assert_not_awaited()
+    adapter._table.update_map_fields.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_outbox_event_is_written_in_the_same_transaction_as_state():
+    adapter = _adapter_with_mocked_table()
+    adapter._table.transaction_map_update.side_effect = lambda *args, **kwargs: {
+        "Update": {"scope": kwargs["sort_value"]}
+    }
+    adapter._table.transaction_put_item.side_effect = lambda item, **kwargs: {"Put": item}
+    envelope = {
+        "event": "feedback.given",
+        "schemaVersion": 3,
+        "eventId": "feedback:listener-1:track-1:enjoyed",
+        "timestamp": "2026-09-15T00:00:00Z",
+        "data": {
+            "action": "alexa",
+            "alexaUserId": "alexa-user",
+            "clientEventId": "feedback:listener-1:track-1:enjoyed",
+        },
+    }
+
+    await adapter.save_attributes(
+        _envelope(),
+        {
+            "pendingFeedback": None,
+            "_persistenceVersions": {"DIALOG": 4},
+            "_persistenceChangedFields": ["pendingFeedback"],
+            "_persistenceOutboxEvents": [envelope],
+        },
+    )
+
+    transaction = adapter._table.transact_write.call_args.args[0]
+    assert transaction[0] == {"Update": {"scope": "DIALOG"}}
+    assert transaction[1]["Put"]["scope"] == "OUTBOX#feedback:listener-1:track-1:enjoyed"
+    assert transaction[1]["Put"]["outboxStatus"] == "PENDING"
+    assert transaction[1]["Put"]["envelope"] == envelope
 
 
 @pytest.mark.asyncio
@@ -277,6 +455,45 @@ async def test_concurrent_save_reloads_and_merges_counter(monkeypatch):
     assert second.args == ("alexa-user", "attributes", {"playCount": 11})
     assert second.kwargs["sort_value"] == "CORE"
     assert second.kwargs["updates"]["stateVersion"] == 6
+
+
+@pytest.mark.asyncio
+async def test_conflict_retry_discards_expired_scope_before_merging(monkeypatch):
+    adapter = _adapter_with_mocked_table()
+    conflict = ClientError(
+        {"Error": {"Code": "ConditionalCheckFailedException", "Message": "conflict"}},
+        "UpdateItem",
+    )
+    adapter._table.update_map_fields.side_effect = [conflict]
+    adapter._table.get_item.return_value = {
+        "attributes": {"playCount": 10, "userCity": "Stale city"},
+        "stateVersion": 5,
+        "expiresAt": 1_699_999_999,
+    }
+    monkeypatch.setattr("src.database.dynamo_user.time.time", lambda: 1_700_000_000)
+    monkeypatch.setattr(
+        "src.database.dynamo_user.settings.HEAR_PERSISTENCE_CONFLICT_BACKOFF_MS", 0
+    )
+
+    await adapter.save_attributes(
+        _envelope(),
+        {
+            "playCount": 3,
+            "_persistenceVersions": {"CORE": 4},
+            "_persistenceChangedFields": ["playCount"],
+            "_persistenceOriginal": {"playCount": 2},
+        },
+    )
+
+    adapter._table.delete_item.assert_awaited_once_with(
+        "alexa-user",
+        "CORE",
+        condition=[{"op": "=", "name": "stateVersion", "value": 5}],
+    )
+    adapter._table.update_item.assert_awaited_once()
+    retry = adapter._table.update_item.call_args
+    assert retry.kwargs["updates"]["attributes"] == {"playCount": 1}
+    assert retry.kwargs["updates"]["stateVersion"] == 1
 
 
 @pytest.mark.asyncio

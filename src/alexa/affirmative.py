@@ -1,30 +1,26 @@
 from __future__ import annotations
 
-import json
-from src.services.logging_control import ApplicationLog
 import time
 
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.entities import AlexaEntities
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.feedback_response import FeedbackContinuation
 from src.alexa.playback_speech import PlaybackSpeech
+from src.alexa.playback_state import PlaybackQueue
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
+from src.alexa.search import Search
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
-from src.models.dialog import DialogSelection, DialogStateManager
-from src.models.feedback_response import EnjoyedFeedback, FeedbackContinuation
-from src.models.playback_controls import PlaybackControls
-from src.models.playback_state import PlaybackQueue
-from src.models.search import Search
-from src.models.social import FollowCreator
-from src.models.suggestion import SuggestionConfirmation
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
@@ -32,12 +28,38 @@ from src.utils.search_payload import SearchPayload
 
 
 class Affirmative:
-    "State-machine based Yes handler.\n\n    Routes the Yes intent based on the current store/session state:\n    1. awaitingSearchConfirmation  -> execute confirmed search\n    2. listModeActive              -> play current list item\n    4. awaitingStillListening      -> advance queue\n    5. awaitingContinueAfterFlag   -> acknowledge continue\n    6. awaitingFeedback            -> delegate to FeedbackEnjoyed\n    7. awaitingFollow              -> delegate to FollowCreator\n    9. pendingNlpSuggestion        -> confirm NLP suggestion\n    Fallback                       -> generic welcome reprompt\n    "
-
-    def __init__(self, *, deps: object | None = None):
-        if deps is None:
-            raise RuntimeError("Confirmation requires injected dependencies")
-        self._deps = deps
+    def __init__(
+        self,
+        *,
+        user,
+        notifications,
+        playback_controls,
+        permission,
+        onboarding,
+        progressive,
+        heara,
+        availability,
+        feedback,
+        playback,
+        enjoyed_feedback,
+        follow_creator,
+        suggestion_confirmation,
+        auto_play_from_search,
+    ) -> None:
+        self._user = user
+        self._notifications = notifications
+        self._playback_controls = playback_controls
+        self._permission = permission
+        self._onboarding = onboarding
+        self._progressive = progressive
+        self._heara = heara
+        self._availability = availability
+        self._feedback = feedback
+        self._playback = playback
+        self._enjoyed_feedback = enjoyed_feedback
+        self._follow_creator = follow_creator
+        self._suggestion_confirmation = suggestion_confirmation
+        self._auto_play_from_search = auto_play_from_search
 
     @staticmethod
     def _ambiguity_response(handler_input, store: dict):
@@ -75,9 +97,11 @@ class Affirmative:
         if dialog_type == "latest_source":
             return await self._handle_latest_source_yes(handler_input, store)
         if dialog_type == "notification":
-            return await self._deps.notifications.accept(handler_input)
+            return await self._notifications.accept(handler_input)
         if dialog_type == "feedback_continuation":
-            return await FeedbackContinuation.accept(handler_input, deps=self._deps)
+            return await FeedbackContinuation.accept(
+                handler_input, self._playback_controls, self._user
+            )
         search_pending = bool(
             dialog_type == "search_confirmation"
             or not dialog_type
@@ -106,7 +130,7 @@ class Affirmative:
                 .set_should_end_session(False)
                 .response
             )
-        self._deps.user.update(handler_input, {"awaitingOrganizationName": True})
+        self._user.update(handler_input, {"awaitingOrganizationName": True})
         DialogStateManager.activate(
             handler_input,
             "organization_name",
@@ -121,41 +145,42 @@ class Affirmative:
 
     async def _state_response(self, handler_input, store: dict):
         if store.get("onboardingStage") == "confirm_town_for_community":
-            self._deps.user.update(
+            self._user.update(
                 handler_input,
                 {"onboardingStage": None, "awaitingCommunityPlayback": True},
             )
-            return self._deps.permission.start_location(handler_input)
+            return self._permission.start_location(handler_input)
         if store.get("awaitingProfilePermission"):
-            return self._deps.permission.start_profile(handler_input)
+            return self._permission.start_profile(handler_input)
         if store.get("listModeActive"):
             return await self._handle_list_mode_yes(handler_input, store)
         if store.get("awaitingStillListening"):
             return await self._handle_still_listening_yes(handler_input, store)
         if store.get("awaitingContinueAfterFlag"):
-            self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": False})
-            return await PlaybackControls.restart_active(
+            self._user.update(handler_input, {"awaitingContinueAfterFlag": False})
+            return await self._playback_controls.restart_active(
                 handler_input,
                 speech=AlexaFeedback.continuing_speech(
                     store.get("activePlayback"),
                     store,
                 ),
-                deps=self._deps,
             )
         if store.get("awaitingNotificationChoice"):
-            return await self._deps.notifications.accept(handler_input)
+            return await self._notifications.accept(handler_input)
         if store.get("awaitingFeedbackContinuation"):
-            return await FeedbackContinuation.accept(handler_input, deps=self._deps)
+            return await FeedbackContinuation.accept(
+                handler_input, self._playback_controls, self._user
+            )
         if store.get("awaitingFeedback"):
-            return await EnjoyedFeedback(deps=self._deps).execute(handler_input)
+            return await self._enjoyed_feedback.execute(RequestContext.bind(handler_input))
         if store.get("awaitingFollow"):
-            return await FollowCreator(deps=self._deps).execute(handler_input)
+            return await self._follow_creator.execute(RequestContext.bind(handler_input))
         if store.get("pendingNlpSuggestion"):
-            return await SuggestionConfirmation(deps=self._deps).confirm(handler_input, store)
+            return await self._suggestion_confirmation.confirm(handler_input, store)
         return None
 
     async def execute(self, handler_input: HandlerInput):
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         session = RequestContext.session(handler_input) or {}
         dialog_type = (DialogStateManager.get_active(handler_input) or {}).get("type")
         response = await self._dialog_response(handler_input, store, session, dialog_type)
@@ -179,7 +204,7 @@ class Affirmative:
             pending.get("latitude") is not None and pending.get("longitude") is not None
         )
         if not city and not has_coordinates:
-            self._deps.onboarding.clear_invalid_confirmation(handler_input)
+            self._onboarding.clear_invalid_confirmation(handler_input)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_RETRY))
                 .set_should_end_session(False)
@@ -189,7 +214,7 @@ class Affirmative:
             store.get("awaitingCommunityPlayback")
             or (session_attrs or {}).get("awaitingCommunityPlayback")
         )
-        self._deps.onboarding.complete_location(
+        self._onboarding.complete_location(
             handler_input,
             pending,
             offer_community_playback=resume_community,
@@ -199,10 +224,10 @@ class Affirmative:
         if resume_community:
             return await self._handle_community_play_yes(
                 handler_input,
-                self._deps.user.snapshot(handler_input),
+                self._user.snapshot(handler_input),
                 RequestContext.session(handler_input),
             )
-        self._deps.user.update(handler_input, {"awaitingProfilePermission": True})
+        self._user.update(handler_input, {"awaitingProfilePermission": True})
         confirmation = (
             Speech.LOCATION_CONFIRMED(city)
             if city
@@ -223,7 +248,7 @@ class Affirmative:
         source_kind = source.get("sourceKind") or selected_source.get("kind")
         source_id = source.get("sourceId") or selected_source.get("id")
         source_name = source.get("sourceName") or selected_source.get("name") or "that source"
-        self._deps.user.update(handler_input, {"pendingLatestSource": None})
+        self._user.update(handler_input, {"pendingLatestSource": None})
         DialogStateManager.clear(handler_input, "latest_source")
         if not source_id or source_kind not in {"organization", "creator"}:
             return (
@@ -245,8 +270,8 @@ class Affirmative:
             alexa_user_id=AlexaRequest.get_user_id(handler_input),
             listener_id=store.get("listenerId"),
         )
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_LATEST_PROGRESSIVE)
-        result = await self._deps.heara.search(
+        await self._progressive.send(handler_input, Speech.SEARCH_LATEST_PROGRESSIVE)
+        result = await self._heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
         previous_id = source.get("contentId")
@@ -255,7 +280,7 @@ class Affirmative:
         ]
         result["_search_payload"] = payload
         if result["results"]:
-            return await Search.auto_play_first_from_search(
+            return await self._auto_play_from_search(
                 handler_input,
                 result,
                 {
@@ -263,7 +288,6 @@ class Affirmative:
                     "q": "",
                     "introOverride": f"Here is the latest from {Speech.escape_ssml_lite(source_name)}.",
                 },
-                deps=self._deps,
             )
         speech = f"There is nothing newer from {Speech.escape_ssml_lite(source_name)} right now. What would you like to listen to?"
         return (
@@ -281,7 +305,7 @@ class Affirmative:
             or session_attrs.get("userCity")
             or session_attrs.get("locality")
         )
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "awaitingCommunityPlayback": False,
@@ -303,10 +327,10 @@ class Affirmative:
             "slots": {"city": city, "isLocal": True, "residualQuery": ""},
         }
         RequestContext.replace_request(handler_input, attrs)
-        return await self._deps.availability.begin_local(handler_input, attrs["_nlp"])
+        return await self._availability.begin_local(handler_input, attrs["_nlp"])
 
     def _expired_resolution_response(self, handler_input):
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {"awaitingSearchConfirmation": False, "pendingResolution": None},
         )
@@ -320,7 +344,7 @@ class Affirmative:
         )
 
     def _clear_confirmed_resolution(self, handler_input, resolution: dict) -> None:
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "awaitingSearchConfirmation": False,
@@ -342,21 +366,14 @@ class Affirmative:
         label: str,
     ):
         ApplicationLog.info(
-            "Hear: confirmed resolver search START id=%s label=%s payload=%s",
-            resolution.get("requestId"),
-            label,
-            json.dumps(
-                {
-                    key: value
-                    for key, value in payload.items()
-                    if key not in {"alexaUserId", "listenerId"}
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
+            "Hear: confirmed resolver search START idPresent=%s intent=%s filterKeys=%s queryPresent=%s",
+            bool(resolution.get("requestId")),
+            resolution.get("intent") or "search",
+            sorted((payload.get("filter") or {}).keys()),
+            bool(payload.get("query")),
         )
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
-        result = await self._deps.heara.search(
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        result = await self._heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
         )
@@ -372,14 +389,13 @@ class Affirmative:
             if result.get("client_message"):
                 return result, Search._build_search_outcome_response(handler_input, result)
             return result, None
-        response = await Search.auto_play_first_from_search(
+        response = await self._auto_play_from_search(
             handler_input,
             result,
             {
                 "discoveryIntent": resolution.get("intent") or "search",
                 "q": payload.get("query") or "",
             },
-            deps=self._deps,
         )
         return result, response
 
@@ -392,7 +408,7 @@ class Affirmative:
         relaxed = self._source_only_relaxation(resolution)
         if not relaxed:
             return None
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "awaitingSearchConfirmation": True,
@@ -442,7 +458,7 @@ class Affirmative:
         return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
 
     def _missing_resolution_response(self, handler_input):
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "awaitingSearchConfirmation": False,
@@ -481,7 +497,7 @@ class Affirmative:
         )
         label = str(resolution.get("confirmationLabel") or "that request")
         self._clear_confirmed_resolution(handler_input, resolution)
-        availability_response = await self._deps.availability.handle_resolution(
+        availability_response = await self._availability.handle_resolution(
             handler_input, resolution, payload, label
         )
         if availability_response is not None:
@@ -531,12 +547,12 @@ class Affirmative:
     async def _handle_list_mode_yes(self, handler_input, store):
         content_id = PlaybackQueue.content_id(store)
         if not content_id:
-            self._deps.user.update(handler_input, {"listModeActive": False})
+            self._user.update(handler_input, {"listModeActive": False})
             return handler_input.response_builder.speak(
                 Ssml.ssml(PlaybackSpeech.NO_TRACKS_AVAILABLE)
             ).response
-        self._deps.user.update(handler_input, {"listModeActive": False})
-        await self._deps.feedback.clear(handler_input)
+        self._user.update(handler_input, {"listModeActive": False})
+        await self._feedback.clear(handler_input)
         payload = {
             "query": "",
             "filter": SearchFilters.content(content_id),
@@ -548,44 +564,44 @@ class Affirmative:
             alexa_user_id=AlexaRequest.get_user_id(handler_input),
             listener_id=store.get("listenerId"),
         )
-        result = await self._deps.heara.search(
+        result = await self._heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
         if not result.get("results"):
             return handler_input.response_builder.speak(
                 Ssml.ssml(Speech.NO_CONTENT_AVAILABLE)
             ).response
-        return await self._deps.playback.start(handler_input, result["results"][0], "")
+        return await self._playback.start(handler_input, result["results"][0], "")
 
     async def _handle_resume_yes(self, handler_input, store):
-        state = self._deps.playback.state.current(handler_input)
-        self._deps.user.update(handler_input, {"awaitingResume": False})
+        state = self._playback.state.current(handler_input)
+        self._user.update(handler_input, {"awaitingResume": False})
         DialogStateManager.clear(handler_input, "resume")
         if not state or not state.get("contentId"):
             return handler_input.response_builder.speak(
                 Ssml.ssml(Speech.NO_CONTENT_AVAILABLE)
             ).response
-        return await self._deps.playback.resume(
+        return await self._playback.resume(
             handler_input, state, "Continuing where you stopped."
         )
 
     async def _handle_still_listening_yes(self, handler_input, store):
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {"awaitingStillListening": False, "awaitingContinueAfterFlag": False},
         )
-        self._deps.playback.queue.reset_completed(handler_input)
+        self._playback.queue.reset_completed(handler_input)
         queue = PlaybackQueue.read(store)
-        next_id = self._deps.playback.queue.move(handler_input, 1)
+        next_id = self._playback.queue.move(handler_input, 1)
         if queue and (not next_id):
-            loaded = await self._deps.playback.queue.load_next_page(handler_input, self._deps.heara)
+            loaded = await self._playback.queue.load_next_page(handler_input, self._heara)
             if loaded:
-                queue = PlaybackQueue.read(self._deps.user.snapshot(handler_input))
-                next_id = self._deps.playback.queue.move(handler_input, 1)
+                queue = PlaybackQueue.read(self._user.snapshot(handler_input))
+                next_id = self._playback.queue.move(handler_input, 1)
         if not queue or not next_id:
-            current_queue = PlaybackQueue.read(self._deps.user.snapshot(handler_input))
+            current_queue = PlaybackQueue.read(self._user.snapshot(handler_input))
             if current_queue and not PlaybackQueue.has_more_pages(current_queue):
-                self._deps.playback.queue.clear(handler_input)
+                self._playback.queue.clear(handler_input)
                 message = (
                     PlaybackSpeech.PUBLICATION_QUEUE_FINISHED
                     if current_queue.get("publicationId")
@@ -610,14 +626,14 @@ class Affirmative:
             alexa_user_id=AlexaRequest.get_user_id(handler_input),
             listener_id=store.get("listenerId"),
         )
-        content = PlaybackQueue.cached_content(self._deps.user.snapshot(handler_input), next_id)
+        content = PlaybackQueue.cached_content(self._user.snapshot(handler_input), next_id)
         if not content:
-            result = await self._deps.heara.search(
+            result = await self._heara.search(
                 payload,
                 timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
             )
             if not result.get("results"):
-                self._deps.playback.queue.clear(handler_input)
+                self._playback.queue.clear(handler_input)
                 return (
                     handler_input.response_builder.speak(Ssml.ssml(Speech.NO_CONTENT_AVAILABLE))
                     .reprompt(Speech.WELCOME_REPROMPT)
@@ -625,10 +641,10 @@ class Affirmative:
                     .response
                 )
             content = result["results"][0]
-        current_queue = PlaybackQueue.read(self._deps.user.snapshot(handler_input)) or {}
+        current_queue = PlaybackQueue.read(self._user.snapshot(handler_input)) or {}
         current_index = int(current_queue.get("currentIndex") or 0)
         content = PlaybackQueue.apply_publication_context(
-            self._deps.user.snapshot(handler_input),
+            self._user.snapshot(handler_input),
             content,
             queue_index=current_index,
         )
@@ -636,4 +652,4 @@ class Affirmative:
         intro = Speech.QUEUE_NEXT_ANNOUNCE(
             content.get("title"), content.get("creator"), current_index + 1, total
         )
-        return await self._deps.playback.start(handler_input, content, intro)
+        return await self._playback.start(handler_input, content, intro)

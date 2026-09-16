@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.models.affirmative import Affirmative
-from src.models.playback import Playback
-from src.models.playback_state import PlaybackQueue
-from src.models.search import Search
+from src.alexa.playback_controls import PlaybackControls
+from src.alexa.playback_state import PlaybackQueue
+from src.alexa.search import Search
+from src.container import ApplicationContainer
 from src.models.user import User
 
 
@@ -86,6 +86,7 @@ async def test_next_page_is_loaded_only_when_requested(mock_handler_input):
         page_limit=3,
     )
     client = AsyncMock()
+    client.bind = lambda _identity: client
     client.search.return_value = {
         "results": [
             {
@@ -127,6 +128,7 @@ async def test_failed_next_page_keeps_loaded_queue_intact(mock_handler_input):
         page_limit=1,
     )
     client = AsyncMock()
+    client.bind = lambda _identity: client
     client.search.return_value = {"results": [], "failed": True}
     assert await PlaybackQueue(User()).load_next_page(mock_handler_input, client) is False
     queue = PlaybackQueue.read(User.snapshot(mock_handler_input))
@@ -160,6 +162,7 @@ async def test_voice_next_loads_next_page_at_loaded_boundary(monkeypatch, mock_h
         "totalPages": 2,
     }
     client = AsyncMock()
+    client.bind = lambda _identity: client
     client.search.return_value = {
         "results": [
             {
@@ -174,20 +177,10 @@ async def test_voice_next_loads_next_page_at_loaded_boundary(monkeypatch, mock_h
     }
     start = AsyncMock(return_value={"response": "play"})
     playback = type("Playback", (), {"start": staticmethod(start), "queue": queues})()
-    result = await Playback.play_queue_delta(
+    result = await PlaybackControls(playback, User(), client).play_queue_delta(
         mock_handler_input,
         1,
         "Playing the next recording.",
-        deps=type(
-            "Deps",
-            (),
-            {
-                "heara": client,
-                "playback": playback,
-                "search": Search,
-                "user": User(),
-            },
-        )(),
     )
     assert result == {"response": "play"}
     assert client.search.await_count == 1
@@ -222,21 +215,13 @@ async def test_voice_next_explains_when_the_queue_has_ended(
     queues = PlaybackQueue(User())
     queues.initialize(mock_handler_input, [item])
     client = AsyncMock()
+    client.bind = lambda _identity: client
     playback = type("Playback", (), {"queue": queues})()
 
-    await Playback.play_queue_delta(
+    await PlaybackControls(playback, User(), client).play_queue_delta(
         mock_handler_input,
         1,
         "Playing the next recording.",
-        deps=type(
-            "Deps",
-            (),
-            {
-                "heara": client,
-                "playback": playback,
-                "user": User(),
-            },
-        )(),
     )
 
     client.search.assert_not_awaited()
@@ -259,22 +244,14 @@ async def test_voice_next_does_not_claim_queue_ended_when_next_page_failed(
         page_limit=1,
     )
     client = AsyncMock()
+    client.bind = lambda _identity: client
     client.search.return_value = {"results": [], "failed": True}
     playback = type("Playback", (), {"queue": queues})()
 
-    await Playback.play_queue_delta(
+    await PlaybackControls(playback, User(), client).play_queue_delta(
         mock_handler_input,
         1,
         "Playing the next recording.",
-        deps=type(
-            "Deps",
-            (),
-            {
-                "heara": client,
-                "playback": playback,
-                "user": User(),
-            },
-        )(),
     )
 
     client.search.assert_awaited_once()
@@ -301,19 +278,13 @@ async def test_still_listening_confirmation_uses_publication_end_message(
     )
     feedback = type("Feedback", (), {"clear": AsyncMock()})()
     client = AsyncMock()
+    client.bind = lambda _identity: client
     playback = type("Playback", (), {"queue": queues})()
-    deps = type(
-        "Deps",
-        (),
-        {
-            "feedback": feedback,
-            "heara": client,
-            "playback": playback,
-            "user": user,
-        },
-    )()
+    action = ApplicationContainer(
+        user=user, feedback=feedback, heara=client, playback=playback
+    ).build_request_affirmative(mock_handler_input)
 
-    await Affirmative(deps=deps)._handle_still_listening_yes(
+    await action._handle_still_listening_yes(
         mock_handler_input, user.snapshot(mock_handler_input)
     )
 
@@ -336,20 +307,14 @@ async def test_still_listening_page_failure_preserves_queue(mock_handler_input):
     )
     feedback = type("Feedback", (), {"clear": AsyncMock()})()
     client = AsyncMock()
+    client.bind = lambda _identity: client
     client.search.return_value = {"results": [], "failed": True}
     playback = type("Playback", (), {"queue": queues})()
-    deps = type(
-        "Deps",
-        (),
-        {
-            "feedback": feedback,
-            "heara": client,
-            "playback": playback,
-            "user": user,
-        },
-    )()
+    action = ApplicationContainer(
+        user=user, feedback=feedback, heara=client, playback=playback
+    ).build_request_affirmative(mock_handler_input)
 
-    await Affirmative(deps=deps)._handle_still_listening_yes(
+    await action._handle_still_listening_yes(
         mock_handler_input, user.snapshot(mock_handler_input)
     )
 

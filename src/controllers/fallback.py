@@ -1,25 +1,27 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.availability_speech import AvailabilitySpeech
+from src.alexa.dialog import DialogSelection, DialogStateManager
+from src.alexa.onboarding import Onboarding
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DialogSelection, DialogStateManager
-from src.models.onboarding import Onboarding
+from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class FallbackModule:
 
     @staticmethod
-    def fallback_response(handler_input: HandlerInput, deps: object | None):
-        store = deps.user.snapshot(handler_input) if deps and hasattr(deps, "user") else {}
+    def fallback_response(
+        handler_input: HandlerInput, user: User, onboarding: Onboarding
+    ):
+        store = user.snapshot(handler_input)
         pending = store.get("pendingAmbiguity")
         if not pending:
             active = DialogStateManager.get_active(handler_input) or {}
@@ -57,7 +59,9 @@ class FallbackModule:
                 .set_should_end_session(False)
                 .response
             )
-        redirect = Onboarding.onboarding_pending_redirect(handler_input, store, deps=deps)
+        redirect = Onboarding.onboarding_pending_redirect(
+            handler_input, store, onboarding
+        )
         if redirect is not None:
             return redirect
         return AlexaResponse.present_idle_next(
@@ -70,8 +74,9 @@ class FallbackModule:
 class FallbackHandler(AbstractRequestHandler):
     """Handles AMAZON.FallbackIntent — generic fallback speech."""
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, user: User, onboarding: Onboarding) -> None:
+        self._user = user
+        self._onboarding = onboarding
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -80,14 +85,17 @@ class FallbackHandler(AbstractRequestHandler):
         )
 
     def handle(self, handler_input: HandlerInput):
-        return FallbackModule.fallback_response(handler_input, self._deps)
+        return FallbackModule.fallback_response(
+            handler_input, self._user, self._onboarding
+        )
 
 
 class UnmatchedIntentHandler(AbstractRequestHandler):
     """Catch-all for unmatched IntentRequests."""
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, user: User, onboarding: Onboarding) -> None:
+        self._user = user
+        self._onboarding = onboarding
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return AlexaRequest.get_request_type(handler_input) == "IntentRequest"
@@ -104,5 +112,7 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
             intent_name,
             dialog_state,
         )
-        return FallbackModule.fallback_response(handler_input, self._deps)
+        return FallbackModule.fallback_response(
+            handler_input, self._user, self._onboarding
+        )
 

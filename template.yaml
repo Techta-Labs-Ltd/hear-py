@@ -45,10 +45,6 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ""
-  PowerToolsLogLevel:
-    Type: String
-    Default: INFO
-    AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
   HearLoggingEnabled:
     Type: String
     Default: "true"
@@ -122,11 +118,13 @@ Globals:
         HEAR_IDENTITY_CACHE_TTL_MS: "300000"
         HEAR_IDENTITY_CACHE_MAX_ITEMS: "512"
         SQS_OUT_QUEUE_URL: !Ref OutboundQueue
+        HEAR_OUTBOX_ENABLED: "true"
+        HEAR_OUTBOX_TTL_DAYS: "14"
+        HEAR_OUTBOX_RECOVERY_LIMIT: "25"
         WEBHOOK_OUTBOUND_URL: !Ref WebhookOutboundUrl
         WEBHOOK_OUTBOUND_SECRET: !Ref WebhookOutboundSecret
         SENTRY_DSN: !Ref SentryDsn
         POWERTOOLS_SERVICE_NAME: hear-alexa-skill
-        POWERTOOLS_LOG_LEVEL: !Ref PowerToolsLogLevel
         HEAR_LOGGING_ENABLED: !Ref HearLoggingEnabled
         HEAR_METRICS_NAMESPACE: HearAlexa
 
@@ -142,6 +140,10 @@ Resources:
           AttributeType: S
         - AttributeName: scope
           AttributeType: S
+        - AttributeName: outboxKey
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
       KeySchema:
         - AttributeName: id
           KeyType: HASH
@@ -151,6 +153,17 @@ Resources:
         SSEEnabled: true
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      GlobalSecondaryIndexes:
+        - IndexName: outboxKey-createdAt-index
+          KeySchema:
+            - AttributeName: outboxKey
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       TimeToLiveSpecification:
         AttributeName: expiresAt
         Enabled: true
@@ -249,6 +262,13 @@ Resources:
         deadLetterTargetArn: !GetAtt OutboundDeadLetterQueue.Arn
         maxReceiveCount: 5
 
+  OutboxRelayDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-outbox-relay-${Stage}-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
   OutboundConsumerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -271,6 +291,119 @@ Resources:
             ScalingConfig:
               MaximumConcurrency: 10
             FunctionResponseTypes: [ReportBatchItemFailures]
+
+  OutboxRelayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Outbox-Relay-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: ["main.outbox_relay_handler"]
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref HearListenerStateTable }
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:ListStreams
+            Resource: !GetAtt HearListenerStateTable.StreamArn
+        - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt OutboxRelayDeadLetterQueue.QueueName }
+      Events:
+        OutboxRecords:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt HearListenerStateTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1
+            ParallelizationFactor: 1
+            MaximumRetryAttempts: 5
+            MaximumRecordAgeInSeconds: 3600
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            DestinationConfig:
+              OnFailure:
+                Type: SQS
+                Destination: !GetAtt OutboxRelayDeadLetterQueue.Arn
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName":["INSERT"],"dynamodb":{"NewImage":{"recordType":{"S":["OUTBOX"]},"outboxStatus":{"S":["PENDING"]}}}}'
+
+  OutboxRecoveryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Outbox-Recovery-Python-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: ["main.outbox_recovery_handler"]
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref HearListenerStateTable }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+      Events:
+        PendingOutboxRecovery:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Enabled: true
+
+  OutboxRelayErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear outbox relay Lambda errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OutboxRelayFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  OutboxRelayIteratorAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear outbox relay is falling behind the DynamoDB stream
+      Namespace: AWS/Lambda
+      MetricName: IteratorAge
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OutboxRelayFunction
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 300000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  OutboxRelayDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Hear outbox relay records reached the dead-letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt OutboxRelayDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
 
   HearSkillErrorAlarm:
     Type: AWS::CloudWatch::Alarm

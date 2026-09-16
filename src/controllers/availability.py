@@ -4,10 +4,10 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
+from src.alexa.availability import Availability
+from src.alexa.dialog import DialogStateManager
 from src.alexa.request import AlexaRequest
 from src.constants.availability import AvailabilityConstants
-from src.models.dialog import DialogStateManager
-from src.models.availability import Availability
 
 
 class AvailabilityDialogHandler(AbstractRequestHandler):

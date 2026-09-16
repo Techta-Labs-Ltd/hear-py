@@ -5,11 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.alexa.onboarding import Onboarding
 from src.alexa.runtime import AttrDict, ResponseBuilder
 from src.clients.resolver import ResolverClient
 from src.container import ApplicationContainer
-from src.models.affirmative import Affirmative
-from src.models.onboarding import Onboarding
 from src.models.user import User
 
 
@@ -34,8 +33,8 @@ async def test_manual_town_capture_completes_onboarding(monkeypatch, mock_handle
 
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
-    await Onboarding.finalize_town_captured(
-        mock_handler_input, {}, "Burnley", deps=ApplicationContainer()
+    await ApplicationContainer().finalize_town_captured(
+        mock_handler_input, {}, "Burnley"
     )
     store = User.snapshot(mock_handler_input)
     assert store["userCity"] == "Burnley"
@@ -48,7 +47,7 @@ def test_handle_permission_yes_sends_permission_card(mock_handler_input):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.attributes_manager.set_session_attributes = MagicMock()
     mock_handler_input.response_builder = ResponseBuilder()
-    result = Onboarding.handle_permission_yes(mock_handler_input, {}, deps=ApplicationContainer())
+    result = ApplicationContainer().handle_permission_yes(mock_handler_input, {})
     card = result.get("card")
     assert card is not None, "handle_permission_yes must include a card in the response"
     assert card.get("type") == "AskForPermissionsConsent"
@@ -93,14 +92,13 @@ async def test_device_address_city_is_resolved_to_coordinates_before_confirmatio
         )
     )
     progressive = SimpleNamespace(send=AsyncMock(return_value=True))
-    await Onboarding.auto_detect_location_or_manual(
+    await ApplicationContainer(
+        locality=locality,
+        resolver=resolver,
+        progressive=progressive,
+    ).auto_detect_location_or_manual(
         mock_handler_input,
         User.snapshot(mock_handler_input),
-        deps=ApplicationContainer(
-            locality=locality,
-            resolver=resolver,
-            progressive=progressive,
-        ),
     )
     pending = User.snapshot(mock_handler_input)["pendingLocationConfirm"]
     speech = mock_handler_input.response_builder.response["outputSpeech"]["ssml"]
@@ -131,10 +129,9 @@ async def test_empty_device_address_explains_missing_saved_city_and_allows_manua
     mock_handler_input.response_builder = ResponseBuilder()
     mock_handler_input.attributes_manager.set_session_attributes = MagicMock()
     locality = SimpleNamespace(detect_device_location=AsyncMock(return_value={"_status": "empty"}))
-    result = await Onboarding.auto_detect_location_or_manual(
+    result = await ApplicationContainer(locality=locality).auto_detect_location_or_manual(
         mock_handler_input,
         User.snapshot(mock_handler_input),
-        deps=ApplicationContainer(locality=locality),
     )
     speech = result["outputSpeech"]["ssml"]
     assert "permission is enabled" in speech
@@ -165,14 +162,13 @@ async def test_geolocation_coordinates_do_not_call_resolver(mock_handler_input):
     resolver = SimpleNamespace(resolve_utterance=AsyncMock())
     progressive = SimpleNamespace(send=AsyncMock(return_value=True))
 
-    result = await Onboarding.auto_detect_location_or_manual(
+    result = await ApplicationContainer(
+        locality=locality,
+        resolver=resolver,
+        progressive=progressive,
+    ).auto_detect_location_or_manual(
         mock_handler_input,
         User.snapshot(mock_handler_input),
-        deps=ApplicationContainer(
-            locality=locality,
-            resolver=resolver,
-            progressive=progressive,
-        ),
     )
 
     speech = result["outputSpeech"]["ssml"]
@@ -204,9 +200,9 @@ async def test_coordinate_only_location_can_be_confirmed(mock_handler_input):
         },
     )
 
-    result = await Affirmative(
-        deps=ApplicationContainer(user=user)
-    )._confirm_location(mock_handler_input, user.snapshot(mock_handler_input), {})
+    result = await ApplicationContainer(user=user).build_request_affirmative(mock_handler_input)._confirm_location(
+        mock_handler_input, user.snapshot(mock_handler_input), {}
+    )
 
     store = user.snapshot(mock_handler_input)
     assert store["onboardingComplete"] is True
@@ -238,11 +234,13 @@ async def test_manual_town_lookup_sends_location_progressive(mock_handler_input)
     )
     progressive = SimpleNamespace(send=AsyncMock(return_value=True))
 
-    await Onboarding.stage_town_confirmation(
+    await ApplicationContainer(
+        resolver=resolver,
+        progressive=progressive,
+    ).stage_town_confirmation(
         mock_handler_input,
         User.snapshot(mock_handler_input),
         "Burnley",
-        deps=ApplicationContainer(resolver=resolver, progressive=progressive),
     )
 
     progressive.send.assert_awaited_once_with(
@@ -256,7 +254,10 @@ def test_third_failed_city_attempt_gives_device_setup_guidance(mock_handler_inpu
     mock_handler_input.response_builder = ResponseBuilder()
     store = User.snapshot(mock_handler_input)
     store.update({"onboardingStage": "ask_town", "onboardingTownAttempts": 2})
-    result = Onboarding.resume_town_capture(mock_handler_input, store, deps=ApplicationContainer())
+    container = ApplicationContainer()
+    result = Onboarding.resume_town_capture(
+        mock_handler_input, store, container.onboarding
+    )
     speech = result["outputSpeech"]["ssml"]
     assert "update Device Location for this Echo" in speech
     assert "relaunch Hear" in speech

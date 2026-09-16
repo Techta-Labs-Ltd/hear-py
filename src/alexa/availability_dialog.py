@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 from src.alexa.availability_speech import AvailabilitySpeech
+from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
+from src.clients.progressive import ProgressiveResponseClient
 from src.constants.availability import AvailabilityConstants
 from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
 from src.models.availability_data import AvailabilityData
-from src.models.dialog import DialogSelection, DialogStateManager
 
 
 class AvailabilityDialog:
-    __slots__ = ("_availability", "_deps")
+    __slots__ = ("_availability", "_progressive")
 
-    def __init__(self, availability, *, deps: object) -> None:
+    def __init__(
+        self, availability, progressive: ProgressiveResponseClient
+    ) -> None:
         self._availability = availability
-        self._deps = deps
+        self._progressive = progressive
 
     @staticmethod
     def _request_text(handler_input) -> str:
@@ -34,7 +37,7 @@ class AvailabilityDialog:
 
     async def _select_source(self, handler_input, context: dict, candidate: dict):
         DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
-        await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         return await self._availability._begin_source(
             handler_input,
             candidate,
@@ -142,7 +145,7 @@ class AvailabilityDialog:
         if next_offset >= len(context.get("candidates") or []) and AvailabilityData.remote_more(
             context
         ):
-            await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+            await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
             context = await self._load_remote_page(handler_input, context)
             if creator_page and not context.get("pageLoadFailed"):
                 return self._availability._choice_response(handler_input, context, "more")
@@ -190,7 +193,7 @@ class AvailabilityDialog:
                 return self._availability._choice_response(
                     handler_input, context, "initial"
                 )
-            await self._deps.progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+            await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
             context = await self._load_remote_page(
                 handler_input,
                 context,

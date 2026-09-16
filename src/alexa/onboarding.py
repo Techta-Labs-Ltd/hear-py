@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 import time
 from typing import Any, Dict, Optional
 
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogStateManager
+from src.alexa.onboarding_state import OnboardingService, OnboardingState
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
-from src.models.dialog import DialogStateManager
-from src.models.onboarding_state import OnboardingService, OnboardingState
 from src.models.resolver import ResolverUnavailable
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilterUtils
@@ -44,13 +44,27 @@ class LaunchTracker:
 
 
 class TownCapture:
-    __slots__ = ("_deps",)
+    __slots__ = (
+        "_user",
+        "_onboarding",
+        "_finalize_town_skipped",
+        "_stage_town_confirmation",
+    )
 
-    def __init__(self, *, deps: object | None = None) -> None:
-        self._deps = Onboarding._dependencies(deps)
+    def __init__(
+        self,
+        user: User,
+        onboarding: OnboardingService,
+        finalize_town_skipped,
+        stage_town_confirmation,
+    ) -> None:
+        self._user = user
+        self._onboarding = onboarding
+        self._finalize_town_skipped = finalize_town_skipped
+        self._stage_town_confirmation = stage_town_confirmation
 
     async def execute(self, handler_input: HandlerInput):
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         intent_name = AlexaRequest.get_intent_name(handler_input)
         if intent_name in (
             "AMAZON.NoIntent",
@@ -59,7 +73,7 @@ class TownCapture:
             "AMAZON.SkipIntent",
             "AMAZON.CancelIntent",
         ):
-            return Onboarding.finalize_town_skipped(handler_input, store, deps=self._deps)
+            return self._finalize_town_skipped(handler_input, store)
         attrs = RequestContext.request(handler_input)
         nlp = attrs.get("_nlp", {}) if attrs else {}
         nlp_slots = nlp.get("slots", {}) if nlp else {}
@@ -71,30 +85,31 @@ class TownCapture:
                 or AlexaRequest.get_slot_value(handler_input, "location")
             )
         if town:
-            return await Onboarding.stage_town_confirmation(
-                handler_input, store, town, deps=self._deps
-            )
-        return Onboarding.resume_town_capture(handler_input, store, deps=self._deps)
+            return await self._stage_town_confirmation(handler_input, store, town)
+        return Onboarding.resume_town_capture(
+            handler_input, store, self._onboarding
+        )
 
 
 class SetLocation:
-    __slots__ = ("_deps",)
+    __slots__ = ("_user", "_onboarding", "_stage_town_confirmation")
 
-    def __init__(self, *, deps: object | None = None) -> None:
-        self._deps = Onboarding._dependencies(deps)
+    def __init__(self, user: User, onboarding: OnboardingService, stage_town_confirmation) -> None:
+        self._user = user
+        self._onboarding = onboarding
+        self._stage_town_confirmation = stage_town_confirmation
 
     async def execute(self, handler_input: HandlerInput):
         attrs = RequestContext.request(handler_input)
         nlp = attrs.get("_nlp", {}) if attrs else {}
         town = (nlp.get("slots", {}) or {}).get("townName")
         if town:
-            return await Onboarding.stage_town_confirmation(
+            return await self._stage_town_confirmation(
                 handler_input,
-                self._deps.user.snapshot(handler_input),
+                self._user.snapshot(handler_input),
                 town,
-                deps=self._deps,
             )
-        self._deps.onboarding.request_location_change(handler_input)
+        self._onboarding.request_location_change(handler_input)
         return (
             handler_input.response_builder.speak(Ssml.ssml("Sure. Which city are you in now?"))
             .reprompt(Ssml.ssml("Which city should I set as your location?"))
@@ -109,21 +124,16 @@ class Onboarding(OnboardingService):
         super().__init__(OnboardingState(store or User()))
 
     @staticmethod
-    def _dependencies(deps: object | None):
-        if deps is None:
-            raise RuntimeError("Onboarding requires injected dependencies")
-        return deps
-
-    @staticmethod
     def _town_retry_response(handler_input: HandlerInput, speech: str, reprompt: str):
         """Keep Alexa's active location intent open so a bare town fills its slot."""
         builder = handler_input.response_builder.speak(Ssml.ssml(speech)).reprompt(
             Ssml.ssml(reprompt)
         )
+        intent_name = AlexaRequest.get_intent_name(handler_input)
         slot_name = {
             "TownCaptureIntent": "townName",
             "SetLocationIntent": "location",
-        }.get(AlexaRequest.get_intent_name(handler_input))
+        }.get(intent_name) if intent_name else None
         if slot_name:
             builder = builder.add_directive(
                 {"type": "Dialog.ElicitSlot", "slotToElicit": slot_name}
@@ -134,12 +144,11 @@ class Onboarding(OnboardingService):
     def onboarding_pending_redirect(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
     ):
         stage = store.get("onboardingStage")
         if stage == OnboardingConstants.ONBOARDING_ASK_TOWN:
-            return Onboarding.resume_town_capture(handler_input, store, deps=deps)
+            return Onboarding.resume_town_capture(handler_input, store, onboarding)
         if stage == OnboardingConstants.ONBOARDING_AWAIT_CONFIRM:
             pending = store.get("pendingLocationConfirm") or {}
             city = pending.get("city")
@@ -168,12 +177,10 @@ class Onboarding(OnboardingService):
     def ask_for_permission(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
     ):
         """Prompt the user to grant location permission."""
-        d = Onboarding._dependencies(deps)
-        d.onboarding.ask_permission(handler_input)
+        onboarding.ask_permission(handler_input)
         DialogStateManager.activate(
             handler_input, "onboarding", context={"stage": "ask_permission"}
         )
@@ -187,13 +194,11 @@ class Onboarding(OnboardingService):
     def handle_permission_yes(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
     ):
         """Send the Alexa-owned consent card for the location data we consume."""
         permissions = [OnboardingConstants.PERMISSIONS["GEOLOCATION"]]
-        d = Onboarding._dependencies(deps)
-        d.onboarding.keep_permission_pending(handler_input)
+        onboarding.keep_permission_pending(handler_input)
         DialogStateManager.activate(
             handler_input, "onboarding", context={"stage": "ask_permission"}
         )
@@ -224,11 +229,9 @@ class Onboarding(OnboardingService):
     def handle_permission_no(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
     ):
-        d = Onboarding._dependencies(deps)
-        d.onboarding.decline_permission(handler_input)
+        onboarding.decline_permission(handler_input)
         DialogStateManager.activate(
             handler_input,
             "onboarding",
@@ -296,12 +299,10 @@ class Onboarding(OnboardingService):
         handler_input: HandlerInput,
         store: Dict[str, Any],
         name: Optional[str],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
     ):
         """Begin the town-capture flow asking where the user is based."""
-        d = Onboarding._dependencies(deps)
-        d.onboarding.begin_town_capture(handler_input)
+        onboarding.begin_town_capture(handler_input)
         DialogStateManager.activate(
             handler_input,
             "onboarding",
@@ -318,13 +319,11 @@ class Onboarding(OnboardingService):
     def resume_town_capture(
         handler_input: HandlerInput,
         store: Dict[str, Any],
+        onboarding: OnboardingService,
         attempted_city: str | None = None,
-        *,
-        deps: object | None = None,
     ):
         """Retry city capture, then give actionable setup guidance without auto-skipping."""
-        d = Onboarding._dependencies(deps)
-        attempts = d.onboarding.record_town_attempt(handler_input, store)
+        attempts = onboarding.record_town_attempt(handler_input, store)
         if attempts >= OnboardingConstants.MAX_TOWN_ATTEMPTS:
             speech = Speech.CITY_SETUP_GUIDANCE
         elif attempted_city:
@@ -337,14 +336,12 @@ class Onboarding(OnboardingService):
     def handle_town_resolver_unavailable(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
     ):
         """Keep one retry in-session, then finish onboarding without location."""
         failures = int(store.get("onboardingTownResolverFailures") or 0) + 1
-        d = Onboarding._dependencies(deps)
         if failures < OnboardingConstants.MAX_TOWN_RESOLVER_FAILURES:
-            d.onboarding.record_resolver_failure(handler_input, store)
+            onboarding.record_resolver_failure(handler_input, store)
             DialogStateManager.activate(
                 handler_input,
                 "onboarding",
@@ -355,7 +352,7 @@ class Onboarding(OnboardingService):
                 Speech.TOWN_LOOKUP_UNAVAILABLE_RETRY,
                 Speech.REPROMPT_ASK_TOWN,
             )
-        d.onboarding.complete_without_location(handler_input, reliable=False)
+        onboarding.complete_without_location(handler_input, reliable=False)
         DialogStateManager.clear(handler_input, "onboarding")
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.TOWN_LOOKUP_UNAVAILABLE_CONTINUE))
@@ -369,17 +366,18 @@ class Onboarding(OnboardingService):
         handler_input: HandlerInput,
         store: Dict[str, Any],
         phrase: str,
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
+        progressive,
+        resolver,
+        finalize_town_skipped,
     ):
-        d = Onboarding._dependencies(deps)
         ApplicationLog.info(
-            "Hear: resolving town intent=%s phrase=%r",
+            "Hear: resolving town intent=%s phrasePresent=%s",
             AlexaRequest.get_intent_name(handler_input),
-            phrase,
+            bool(phrase),
         )
         try:
-            await d.progressive.send(handler_input, Speech.LOCATION_PROGRESSIVE)
+            await progressive.send(handler_input, Speech.LOCATION_PROGRESSIVE)
             options = {
                 "alexa_user_id": AlexaRequest.get_user_id(handler_input),
                 "prefer_location": True,
@@ -387,25 +385,24 @@ class Onboarding(OnboardingService):
             }
             if store.get("listenerId"):
                 options["listener_id"] = store["listenerId"]
-            response = await d.resolver.resolve_utterance(phrase, **options)
+            response = await resolver.resolve_utterance(phrase, **options)
             resolution = response.get("resolution") or {}
         except ResolverUnavailable as exc:
-            ApplicationLog.warning("Hear: town resolver unavailable reason=%s", exc)
-            return Onboarding.handle_town_resolver_unavailable(handler_input, store, deps=d)
-        d.onboarding.reset_resolver_failures(handler_input)
+            ApplicationLog.warning("Hear: town resolver unavailable error=%s", type(exc).__name__)
+            return Onboarding.handle_town_resolver_unavailable(handler_input, store, onboarding)
+        onboarding.reset_resolver_failures(handler_input)
         match = resolution.get("match")
         candidates = resolution.get("candidates") or []
         ApplicationLog.info(
-            "Hear: onboarding town resolution matched=%s city=%s candidates=%s",
+            "Hear: onboarding town resolution matched=%s candidates=%s",
             bool(match),
-            (match or {}).get("city"),
             len(candidates),
         )
         if not match:
             if candidates:
                 names = [candidate["city"] for candidate in candidates[:2]]
                 spoken = " or ".join(names)
-                d.onboarding.record_town_attempt(handler_input, store)
+                onboarding.record_town_attempt(handler_input, store)
                 return Onboarding._town_retry_response(
                     handler_input,
                     f"Did you mean {spoken}? Please say the full city name.",
@@ -413,17 +410,19 @@ class Onboarding(OnboardingService):
                 )
             normalized_phrase = SearchFilterUtils.normalize_discovery_phrase(phrase)
             if normalized_phrase in OnboardingConstants.TOWN_SKIP_PHRASES:
-                return Onboarding.finalize_town_skipped(handler_input, store, deps=d)
+                return finalize_town_skipped(handler_input, store)
             if normalized_phrase in OnboardingConstants.CONTENT_REQUEST_PHRASES:
-                d.onboarding.record_town_attempt(handler_input, store)
+                onboarding.record_town_attempt(handler_input, store)
                 return (
                     handler_input.response_builder.speak(Ssml.ssml(Speech.ONBOARDING_DEFER_CONTENT))
                     .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
                     .set_should_end_session(False)
                     .response
                 )
-            return Onboarding.resume_town_capture(handler_input, store, phrase, deps=d)
-        d.onboarding.stage_confirmation(handler_input, match)
+            return Onboarding.resume_town_capture(
+                handler_input, store, onboarding, phrase
+            )
+        onboarding.stage_confirmation(handler_input, match)
         DialogStateManager.activate(
             handler_input,
             "onboarding",
@@ -443,10 +442,11 @@ class Onboarding(OnboardingService):
         handler_input: HandlerInput,
         store: Dict[str, Any],
         phrase: str,
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
+        user: User,
+        resolver,
+        stage_town_confirmation,
     ):
-        d = Onboarding._dependencies(deps)
         try:
             options = {
                 "alexa_user_id": AlexaRequest.get_user_id(handler_input),
@@ -455,17 +455,17 @@ class Onboarding(OnboardingService):
             }
             if store.get("listenerId"):
                 options["listener_id"] = store["listenerId"]
-            response = await d.resolver.resolve_utterance(phrase, **options)
+            response = await resolver.resolve_utterance(phrase, **options)
             resolution = response.get("resolution") or {}
         except ResolverUnavailable as exc:
-            ApplicationLog.warning("Hear: town resolver unavailable reason=%s", exc)
-            return Onboarding.handle_town_resolver_unavailable(handler_input, store, deps=d)
-        d.onboarding.reset_resolver_failures(handler_input)
+            ApplicationLog.warning("Hear: town resolver unavailable error=%s", type(exc).__name__)
+            return Onboarding.handle_town_resolver_unavailable(handler_input, store, onboarding)
+        onboarding.reset_resolver_failures(handler_input)
         match = resolution.get("match")
         if not match:
-            return await Onboarding.stage_town_confirmation(handler_input, store, phrase, deps=d)
-        d.onboarding.complete_location(handler_input, {**match, "source": "manual"})
-        d.user.update(handler_input, {"awaitingProfilePermission": True})
+            return await stage_town_confirmation(handler_input, store, phrase)
+        onboarding.complete_location(handler_input, {**match, "source": "manual"})
+        user.update(handler_input, {"awaitingProfilePermission": True})
         DialogStateManager.clear(handler_input, "onboarding")
         return (
             handler_input.response_builder.speak(
@@ -480,15 +480,14 @@ class Onboarding(OnboardingService):
     def finalize_town_skipped(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
+        user: User,
     ):
         """Skip town capture and proceed without location."""
-        d = Onboarding._dependencies(deps)
         local_playback_pending = bool(store.get("awaitingCommunityPlayback"))
-        d.onboarding.complete_without_location(handler_input)
+        onboarding.complete_without_location(handler_input)
         if local_playback_pending:
-            d.user.update(
+            user.update(
                 handler_input,
                 {"awaitingCommunityPlayback": False, "awaitingProfilePermission": False},
             )
@@ -501,7 +500,7 @@ class Onboarding(OnboardingService):
                 .set_should_end_session(False)
                 .response
             )
-        d.user.update(handler_input, {"awaitingProfilePermission": True})
+        user.update(handler_input, {"awaitingProfilePermission": True})
         DialogStateManager.clear(handler_input, "onboarding")
         ApplicationLog.info("Hear: onboarding town skipped")
         return (
@@ -515,12 +514,10 @@ class Onboarding(OnboardingService):
     def handle_location_not_found(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
     ):
         """Handle device location lookup failure when permissions are granted."""
-        d = Onboarding._dependencies(deps)
-        d.onboarding.location_not_found(handler_input)
+        onboarding.location_not_found(handler_input)
         DialogStateManager.activate(
             handler_input,
             "onboarding",
@@ -537,19 +534,23 @@ class Onboarding(OnboardingService):
     async def auto_detect_location_or_manual(
         handler_input: HandlerInput,
         store: Dict[str, Any],
-        *,
-        deps: object | None = None,
+        onboarding: OnboardingService,
+        progressive,
+        locality,
+        resolver,
+        ask_for_permission,
+        location_fallback,
+        handle_location_not_found,
         after_consent: bool = False,
     ):
-        d = Onboarding._dependencies(deps)
-        await d.progressive.send(handler_input, Speech.LOCATION_PROGRESSIVE)
-        match = await d.locality.detect_device_location(handler_input)
+        await progressive.send(handler_input, Speech.LOCATION_PROGRESSIVE)
+        match = await locality.detect_device_location(handler_input)
         if not match or match.get("_status") == "permission_denied":
             if after_consent:
-                return d.permission.location_fallback(handler_input, denied=True)
-            return Onboarding.ask_for_permission(handler_input, store, deps=d)
+                return location_fallback(handler_input, denied=True)
+            return ask_for_permission(handler_input, store)
         if match.get("_status") != "resolved":
-            d.onboarding.location_not_found(handler_input)
+            onboarding.location_not_found(handler_input)
             speech = (
                 Speech.LOCATION_PERMISSION_EMPTY
                 if match.get("_status") in {"empty", "not_found"}
@@ -564,7 +565,7 @@ class Onboarding(OnboardingService):
         city = str(match.get("city") or "").strip()
         has_coordinates = match.get("latitude") is not None and match.get("longitude") is not None
         if not city and not has_coordinates:
-            d.onboarding.location_not_found(handler_input)
+            onboarding.location_not_found(handler_input)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_PERMISSION_EMPTY))
                 .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
@@ -580,20 +581,19 @@ class Onboarding(OnboardingService):
                 }
                 if store.get("listenerId"):
                     options["listener_id"] = store["listenerId"]
-                response = await d.resolver.resolve_utterance(city, **options)
+                response = await resolver.resolve_utterance(city, **options)
                 resolved = (response.get("resolution") or {}).get("match")
             except ResolverUnavailable as exc:
                 ApplicationLog.warning(
-                    "Hear: device-address coordinate resolution unavailable reason=%s",
-                    exc,
+                    "Hear: device-address coordinate resolution unavailable error=%s",
+                    type(exc).__name__,
                 )
                 resolved = None
             if not resolved:
                 ApplicationLog.info(
-                    "Hear: device-address city could not be resolved to coordinates city=%s",
-                    city,
+                    "Hear: device-address city could not be resolved to coordinates"
                 )
-                return Onboarding.handle_location_not_found(handler_input, store, deps=d)
+                return handle_location_not_found(handler_input, store)
             match = {
                 **match,
                 **resolved,
@@ -602,10 +602,9 @@ class Onboarding(OnboardingService):
                 "_status": "resolved",
             }
             ApplicationLog.info(
-                "Hear: device-address city resolved coordinates=true city=%s",
-                match.get("city"),
+                "Hear: device-address city resolved coordinates=true"
             )
-        d.onboarding.stage_confirmation(handler_input, match, reset_attempts=True)
+        onboarding.stage_confirmation(handler_input, match, reset_attempts=True)
         DialogStateManager.activate(
             handler_input,
             "onboarding",

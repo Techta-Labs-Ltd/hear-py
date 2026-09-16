@@ -1,3 +1,5 @@
+"""Alexa-bound dialog selection and request-state helpers."""
+
 from __future__ import annotations
 
 import re
@@ -6,10 +8,12 @@ from copy import deepcopy
 from difflib import SequenceMatcher
 
 from src.alexa.context import RequestContext
+from src.alexa.dialog_request import intent_slots
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AttrDict
 from src.constants.dialog import DialogConstants
 from src.constants.discovery import DiscoveryConstants
+from src.models.dialog_policy import DialogPolicy
 from src.models.user import User
 
 
@@ -18,55 +22,23 @@ class DialogSelection:
 
     @staticmethod
     def normalize(value: object) -> str:
-        raw = str(value or "").strip().casefold()
-        raw = raw.replace("&", " and ")
-        for apostrophe in ("'", "’", "‘", "ʼ", "`"):
-            raw = raw.replace(apostrophe, "")
-        return re.sub(r"[^a-z0-9]+", " ", raw).strip()
+        return DialogPolicy.normalize(value)
 
     @staticmethod
     def normalize_ordinal(value: object) -> str:
-        raw = DialogSelection.normalize(value)
-        raw = raw.replace("1st", "first").replace("2nd", "second").replace("3rd", "third")
-        raw = raw.replace("4th", "fourth").replace("5th", "fifth").replace("6th", "sixth")
-        raw = re.sub(
-            r"^(?:(?:please\s+)?(?:play|choose|select|pick)|i\s+meant)\s+",
-            "",
-            raw,
-        )
-        raw = re.sub("^(?:the\\s+)", "", raw)
-        raw = re.sub(r"^(?:option|choice|number)\s+", "", raw)
-        return re.sub("\\s+(?:one|option|choice)$", "", raw)
+        return DialogPolicy.normalize_ordinal(value)
 
     @staticmethod
     def is_dismiss_phrase(value: object) -> bool:
-        normalized = DialogSelection.normalize(value)
-        if not normalized:
-            return False
-        if normalized in DialogConstants.CHOICE_DISMISS_PHRASES:
-            return True
-        return normalized.startswith(("no ", "none of ", "neither of "))
+        return DialogPolicy.is_dismiss_phrase(value)
 
     @staticmethod
     def unique_candidates(candidates: list[dict]) -> list[dict]:
-        seen: set[str] = set()
-        unique = []
-        for candidate in candidates:
-            name = str(candidate.get("name") or "").strip()
-            key = name.casefold()
-            if name and key not in seen:
-                seen.add(key)
-                unique.append(candidate)
-        return unique
+        return DialogPolicy.unique_candidates(candidates)
 
     @staticmethod
     def request_slots(handler_input) -> dict:
-        request = AlexaRequest.read(handler_input.request_envelope, "request")
-        intent = AlexaRequest.read(request, "intent")
-        if not intent:
-            return {}
-        slots = intent.get("slots") if hasattr(intent, "get") else None
-        return slots or AlexaRequest.read(intent, "slots") or {}
+        return intent_slots(handler_input)
 
     @staticmethod
     def _selection_slot(handler_input):
@@ -307,7 +279,9 @@ class DialogStateManager:
             "createdAt": now,
             "expiresAt": now + max(1, int(ttl_seconds)),
         }
-        updates = {flag: False for flag in DialogConstants.DIALOG_LEGACY_FLAGS.values()}
+        updates: dict[str, object] = {
+            flag: False for flag in DialogConstants.DIALOG_LEGACY_FLAGS.values()
+        }
         legacy_flag = DialogConstants.DIALOG_LEGACY_FLAGS.get(dialog_type)
         if legacy_flag:
             updates[legacy_flag] = True
@@ -344,7 +318,7 @@ class DialogStateManager:
             if "search_confirmation" in dialog_types:
                 DialogStateManager._clear_search_confirmation_session(handler_input)
             return store
-        updates = {"activeDialog": None}
+        updates: dict[str, object] = {"activeDialog": None}
         if active and active.get("type") in DialogConstants.DIALOG_LEGACY_FLAGS:
             updates[DialogConstants.DIALOG_LEGACY_FLAGS[active["type"]]] = False
         updated = User.update(handler_input, updates)
@@ -358,7 +332,7 @@ class DialogStateManager:
         store = User.snapshot(handler_input)
         raw_active = store.get("activeDialog")
         active_type = raw_active.get("type") if isinstance(raw_active, dict) else None
-        updates = {
+        updates: dict[str, object] = {
             "awaitingSearchConfirmation": False,
             "pendingResolution": None,
             "pendingAmbiguity": None,

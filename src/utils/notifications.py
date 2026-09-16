@@ -45,10 +45,10 @@ class NotificationItem:
         return {
             key: value
             for key, value in {
-                "schemaVersion": int(
+                "schemaVersion": NotificationItem.integer(
                     notification.get("schemaVersion")
-                    or NotificationConstants.SCHEMA_VERSION
-                ),
+                )
+                or NotificationConstants.SCHEMA_VERSION,
                 "listenerId": listener_id,
                 "notificationId": notification_id,
                 "notificationType": notification_type,
@@ -87,8 +87,10 @@ class NotificationItem:
 
     @staticmethod
     def integer(value: object) -> int | None:
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            return None
         try:
-            return int(value) if value is not None else None
+            return int(value)
         except (TypeError, ValueError):
             return None
 
@@ -134,9 +136,8 @@ class NotificationQueueMessage:
             source = decoded if isinstance(decoded, dict) else {}
         listener_id = NotificationItem.optional_text(source.get("listenerId"))
         notification_id = NotificationItem.optional_text(source.get("notificationId"))
-        try:
-            schema_version = int(source.get("schemaVersion"))
-        except (TypeError, ValueError):
+        schema_version = NotificationItem.integer(source.get("schemaVersion"))
+        if schema_version is None:
             return None
         if (
             schema_version != NotificationConstants.SCHEMA_VERSION

@@ -116,6 +116,26 @@ class User:
         return tuple(field for field in fields if field in StateSchema.PERSISTED_FIELDS)
 
     @staticmethod
+    def stage_outbox_event(handler_input, envelope: dict) -> bool:
+        """Stage one immutable outbound envelope for the request commit."""
+        if not isinstance(envelope, dict) or not str(envelope.get("eventId") or "").strip():
+            return False
+        attrs = handler_input.attributes_manager.request_attributes
+        staged = list(attrs.get("_outboxEvents") or ())
+        event_id = str(envelope["eventId"])
+        if any(str(item.get("eventId") or "") == event_id for item in staged if isinstance(item, dict)):
+            return True
+        staged.append(deepcopy(envelope))
+        attrs["_outboxEvents"] = staged
+        handler_input.attributes_manager.request_attributes = attrs
+        return True
+
+    @staticmethod
+    def staged_outbox_events(handler_input) -> tuple[dict, ...]:
+        events = handler_input.attributes_manager.request_attributes.get("_outboxEvents") or ()
+        return tuple(deepcopy(event) for event in events if isinstance(event, dict))
+
+    @staticmethod
     async def read_persisted(handler_input) -> dict:
         return await handler_input.attributes_manager.persistent_attributes or {}
 
@@ -131,6 +151,8 @@ class User:
             "_persistenceOriginal": {
                 field: deepcopy(baseline.get(field)) for field in changed_fields
             },
+            "_persistenceCoupledCommit": User.requires_reliable_save(handler_input),
+            "_persistenceOutboxEvents": list(User.staged_outbox_events(handler_input)),
         }
         handler_input.attributes_manager.persistent_attributes = payload
         receipt = await handler_input.attributes_manager.save_persistent_attributes()
@@ -146,6 +168,7 @@ class User:
         attrs["_persistenceBaseline"] = deepcopy(baseline)
         attrs["_changedFields"] = tuple(sorted(remaining))
         attrs["_dirty"] = bool(remaining)
+        attrs.pop("_outboxEvents", None)
 
     @staticmethod
     def normalize_recent_track_listens(value: object) -> list:
@@ -202,13 +225,13 @@ class User:
             )
             active["timeSpentHours"] = PlaybackUtils.hours(active["timeSpentMs"])
             active["lastListeningDeltaMs"] = max(0, int(active.get("lastListeningDeltaMs") or 0))
+            observation_offset = (
+                active.get("observationOffsetMs")
+                if active.get("observationOffsetMs") is not None
+                else active.get("offsetMs")
+            )
             active["observationOffsetMs"] = max(
-                0,
-                int(
-                    active.get("observationOffsetMs")
-                    if active.get("observationOffsetMs") is not None
-                    else active.get("offsetMs") or 0
-                ),
+                0, PlaybackUtils.integer(observation_offset)
             )
             active["observationTimestampMs"] = max(
                 0,
@@ -269,10 +292,11 @@ class User:
 
     @staticmethod
     def merge_persisted(stored: dict | None) -> dict:
+        accepted_fields = StateSchema.PERSISTED_FIELDS | StateSchema.LEGACY_PLAYBACK_FIELDS
         persisted = {
             key: value
             for key, value in (stored.items() if isinstance(stored, dict) else ())
-            if key in StateSchema.PERSISTED_FIELDS
+            if key in accepted_fields
         }
         merged = {
             **StateSchema.defaults(),
@@ -309,6 +333,19 @@ class User:
         )
 
     @staticmethod
+    def _dialog_expiry(value: object) -> int:
+        if value is None:
+            # A missing legacy expiry is migrated to a bounded TTL by the caller.
+            return 0
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            # A malformed stored timestamp must never keep a dialogue alive.
+            return -1
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return -1
+
+    @staticmethod
     def active_dialog(store: dict | None) -> dict | None:
         state = store if isinstance(store, dict) else {}
         active = state.get("activeDialog")
@@ -319,14 +356,14 @@ class User:
                     **active,
                     "context": {**dict(active.get("context") or {}), "stage": stage},
                 }
-            expires_at = int(active.get("expiresAt") or 0)
+            expires_at = User._dialog_expiry(active.get("expiresAt"))
             if active.get("type") != "onboarding" and (
                 not expires_at or expires_at >= int(time.time())
             ):
                 return active
             if active.get("type") != "onboarding":
                 return None
-        candidates = (
+        candidates: tuple[tuple[object, str, object], ...] = (
             (
                 state.get("awaitingSearchConfirmation") and state.get("pendingResolution"),
                 "search_confirmation",
@@ -379,31 +416,47 @@ class User:
         if isinstance(raw_active, dict) and raw_active.get("type") == "creator_name":
             store["activeDialog"] = None
         store.pop("awaitingCreatorName", None)
+        raw_active = store.get("activeDialog")
+        raw_expiry = (
+            User._dialog_expiry(raw_active.get("expiresAt"))
+            if isinstance(raw_active, dict)
+            else 0
+        )
+        if (
+            isinstance(raw_active, dict)
+            and raw_active.get("type")
+            and raw_active.get("type") != "onboarding"
+            and raw_active.get("expiresAt")
+            and raw_expiry < int(time.time())
+        ):
+            # Do not let the legacy projections resurrect an expired canonical
+            # dialogue during hydration.  TTL deletion is asynchronous, so an
+            # expired Dynamo document is a normal read-time condition.
+            store["activeDialog"] = None
+            for flag in StateSchema.DIALOG_LEGACY_FLAGS.values():
+                store[flag] = False
         active = User.active_dialog({**store, "activeDialog": store.get("activeDialog")})
         if active and not active.get("expiresAt") and active.get("type") != "onboarding":
             now = int(time.time())
             active = {**active, "createdAt": now, "expiresAt": now + 600}
         if active:
             dialog_type = active.get("type")
-            fallback_context = {
+            fallback_contexts: dict[str, object] = {
                 "feedback": store.get("pendingFeedback"),
                 "report_decision": store.get("reportContext"),
                 "search_confirmation": store.get("pendingResolution"),
                 "ambiguity": store.get("pendingAmbiguity"),
                 "latest_source": store.get("pendingLatestSource"),
                 "notification": store.get("pendingNotification"),
-            }.get(dialog_type)
+            }
+            fallback_context = (
+                fallback_contexts.get(dialog_type) if isinstance(dialog_type, str) else None
+            )
             if not active.get("context") and isinstance(fallback_context, dict):
                 active = {**active, "context": deepcopy(fallback_context)}
         store["activeDialog"] = deepcopy(active) if active else None
         if not active:
-            for flag in (
-                "awaitingFeedback",
-                "awaitingReportDecision",
-                "awaitingResume",
-                "awaitingSearchConfirmation",
-                "awaitingNotificationChoice",
-            ):
+            for flag in StateSchema.DIALOG_LEGACY_FLAGS.values():
                 store[flag] = False
             store["pendingFeedback"] = None
             store["reportContext"] = None
@@ -411,14 +464,12 @@ class User:
             store["pendingAmbiguity"] = None
             store["pendingLatestSource"] = None
             store["pendingNotification"] = None
+            store["feedbackContinuation"] = None
             return store
         dialog_type = active.get("type")
         context = deepcopy(active.get("context") or {})
-        store["awaitingFeedback"] = dialog_type == "feedback"
-        store["awaitingReportDecision"] = dialog_type == "report_decision"
-        store["awaitingResume"] = dialog_type == "resume"
-        store["awaitingSearchConfirmation"] = dialog_type == "search_confirmation"
-        store["awaitingNotificationChoice"] = dialog_type == "notification"
+        for kind, flag in StateSchema.DIALOG_LEGACY_FLAGS.items():
+            store[flag] = dialog_type == kind
         if dialog_type == "feedback":
             store["pendingFeedback"] = context
             store["deferredIntent"] = deepcopy(active.get("deferredRequest"))

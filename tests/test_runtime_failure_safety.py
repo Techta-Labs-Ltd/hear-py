@@ -160,12 +160,14 @@ def test_outer_fallback_never_speaks_for_callbacks(monkeypatch, request_type):
 )
 def test_worker_boundary_never_acknowledges_records_without_identifiers(application_type):
     application = application_type()
-    application._dependencies = SimpleNamespace(
-        events=SimpleNamespace(consume=AsyncMock(side_effect=ValueError("missing messageId"))),
-        notification_delivery=SimpleNamespace(
+    if isinstance(application, OutboundLambdaApplication):
+        application._events = SimpleNamespace(
             consume=AsyncMock(side_effect=ValueError("missing messageId"))
-        ),
-    )
+        )
+    else:
+        application._delivery = SimpleNamespace(
+            consume=AsyncMock(side_effect=ValueError("missing messageId"))
+        )
     with pytest.raises(ValueError, match="messageId"):
         application.handle({"Records": [{"body": "{}"}]}, None)
 

@@ -3,35 +3,38 @@ from __future__ import annotations
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogStateManager
+from src.alexa.feedback_response import FeedbackContinuation
+from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback import AlexaPlayback
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DialogStateManager
-from src.models.feedback import FeedbackService
-from src.models.feedback_response import FeedbackContinuation, NotEnjoyedFeedback, SkipFeedback
-from src.models.playback import Playback
 
 
 class Decline:
-    """State-machine based No handler.
-
-    Routes No based on state:
-    1. awaitingSearchConfirmation  -> cycle to next suggestion or give up
-    2. listModeActive              -> advance list position
-    4. awaitingStillListening      -> stop and goodbye
-    5. awaitingContinueAfterFlag   -> skip to next
-    6. awaitingFeedback            -> delegate to FeedbackNotEnjoyed
-    7. awaitingFollow              -> clear feedback
-    9. awaitingReportDecision      -> delegate to SkipFeedback
-    10. pendingNlpSuggestion       -> reject NLP suggestion
-    Fallback                       -> generic welcome reprompt
-    """
-
-    def __init__(self, *, deps: object | None = None):
-        if deps is None:
-            raise RuntimeError("Confirmation requires injected dependencies")
-        self._deps = deps
+    def __init__(
+        self,
+        *,
+        user,
+        notifications,
+        onboarding,
+        feedback,
+        listener_sync,
+        playback,
+        playback_controls,
+        skip_feedback,
+        not_enjoyed_feedback,
+    ) -> None:
+        self._user = user
+        self._notifications = notifications
+        self._onboarding = onboarding
+        self._feedback = feedback
+        self._listener_sync = listener_sync
+        self._playback = playback
+        self._playback_controls = playback_controls
+        self._skip_feedback = skip_feedback
+        self._not_enjoyed_feedback = not_enjoyed_feedback
 
     @staticmethod
     def _generic_response(handler_input):
@@ -63,7 +66,7 @@ class Decline:
                 Speech.WELCOME_REPROMPT,
             )
         if dialog_type == "latest_source":
-            self._deps.user.update(handler_input, {"pendingLatestSource": None})
+            self._user.update(handler_input, {"pendingLatestSource": None})
             DialogStateManager.clear(handler_input, "latest_source")
             return AlexaResponse.present_idle_next(
                 handler_input,
@@ -71,7 +74,7 @@ class Decline:
                 Speech.LATEST_SOURCE_DECLINED,
             )
         if dialog_type == "notification":
-            return await self._deps.notifications.decline(handler_input)
+            return await self._notifications.decline(handler_input)
         search_pending = bool(
             dialog_type == "search_confirmation"
             or not dialog_type
@@ -82,7 +85,7 @@ class Decline:
         if search_pending:
             return self._handle_search_no(handler_input, store, session)
         if store.get("awaitingLocationConfirm"):
-            self._deps.onboarding.clear_invalid_confirmation(handler_input)
+            self._onboarding.clear_invalid_confirmation(handler_input)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_RETRY))
                 .reprompt(Ssml.ssml("Which city should I set?"))
@@ -90,7 +93,7 @@ class Decline:
                 .response
             )
         if store.get("awaitingCommunityPlayback"):
-            self._deps.user.update(handler_input, {"awaitingCommunityPlayback": False})
+            self._user.update(handler_input, {"awaitingCommunityPlayback": False})
             return AlexaResponse.present_idle_next(
                 handler_input,
                 "Ok. What would you like to listen to?",
@@ -109,18 +112,18 @@ class Decline:
             or not dialog_type
             and store.get("awaitingReportDecision")
         ):
-            return await SkipFeedback(deps=self._deps).execute(handler_input)
+            return await self._skip_feedback.execute(RequestContext.bind(handler_input))
         if dialog_type == "feedback_continuation":
-            return FeedbackContinuation.decline(handler_input)
+            return FeedbackContinuation.decline(handler_input, self._user)
         if dialog_type == "feedback" or not dialog_type and store.get("awaitingFeedback"):
-            return await NotEnjoyedFeedback(deps=self._deps).execute(handler_input)
+            return await self._not_enjoyed_feedback.execute(RequestContext.bind(handler_input))
         if dialog_type == "resume" or not dialog_type and store.get("awaitingResume"):
             return self._handle_resume_no(handler_input, store)
         return None
 
     async def _state_response(self, handler_input, store: dict):
         if store.get("onboardingStage") == "confirm_town_for_community":
-            self._deps.user.update(
+            self._user.update(
                 handler_input,
                 {"onboardingStage": None, "awaitingCommunityPlayback": False},
             )
@@ -136,27 +139,27 @@ class Decline:
         if store.get("awaitingStillListening"):
             return self._handle_still_listening_no(handler_input)
         if store.get("awaitingNotificationChoice"):
-            return await self._deps.notifications.decline(handler_input)
+            return await self._notifications.decline(handler_input)
         if store.get("awaitingFeedbackContinuation"):
-            return FeedbackContinuation.decline(handler_input)
+            return FeedbackContinuation.decline(handler_input, self._user)
         if store.get("awaitingContinueAfterFlag"):
-            self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": False})
-            return await Playback.play_queue_delta(
-                handler_input, 1, "Playing the next recording.", deps=self._deps
+            self._user.update(handler_input, {"awaitingContinueAfterFlag": False})
+            return await self._playback_controls.play_queue_delta(
+                handler_input, 1, "Playing the next recording."
             )
         if store.get("awaitingFeedback"):
-            return await NotEnjoyedFeedback(deps=self._deps).execute(handler_input)
+            return await self._not_enjoyed_feedback.execute(RequestContext.bind(handler_input))
         if store.get("awaitingFollow"):
-            await self._deps.feedback.clear(handler_input)
+            await self._feedback.clear(handler_input)
             return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_FOLLOW_DECLINED)
         if store.get("awaitingReportDecision"):
-            return await SkipFeedback(deps=self._deps).execute(handler_input)
+            return await self._skip_feedback.execute(RequestContext.bind(handler_input))
         if store.get("pendingNlpSuggestion"):
             return self._reject_nlp_suggestion(handler_input, store)
         return None
 
     async def execute(self, handler_input: HandlerInput):
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         session = RequestContext.session(handler_input) or {}
         dialog_type = (DialogStateManager.get_active(handler_input) or {}).get("type")
         response = await self._setup_dialog_response(handler_input, store, session, dialog_type)
@@ -167,12 +170,12 @@ class Decline:
         return response or Decline._generic_response(handler_input)
 
     async def finalize_profile_skipped(self, handler_input: HandlerInput):
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {"awaitingProfilePermission": False, "listenerType": "guest"},
         )
         try:
-            await self._deps.listener_sync.sync_for_launch(handler_input)
+            await self._listener_sync.sync_for_launch(handler_input)
         except Exception:
             pass
         return AlexaResponse.present_idle_next(
@@ -184,7 +187,7 @@ class Decline:
     def _handle_search_no(self, handler_input, store, session_attrs):
         """Cycle through search suggestions or give up."""
         if store.get("pendingResolution") or session_attrs.get("pendingResolution"):
-            self._deps.user.update(
+            self._user.update(
                 handler_input,
                 {
                     "awaitingSearchConfirmation": False,
@@ -202,7 +205,7 @@ class Decline:
                 Speech.WELCOME_REPROMPT,
             )
         if store.get("pendingOrganizationConfirmation"):
-            self._deps.user.update(
+            self._user.update(
                 handler_input,
                 {
                     "awaitingSearchConfirmation": False,
@@ -252,7 +255,7 @@ class Decline:
                 .set_should_end_session(False)
                 .response
             )
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {
                 "awaitingSearchConfirmation": False,
@@ -273,7 +276,7 @@ class Decline:
     def _handle_list_mode_no(self, handler_input, store):
         """Decline the offered queue item without creating another queue."""
         del store
-        self._deps.user.update(handler_input, {"listModeActive": False})
+        self._user.update(handler_input, {"listModeActive": False})
         return AlexaResponse.present_idle_next(
             handler_input,
             "Ok. What would you like to listen to?",
@@ -281,13 +284,13 @@ class Decline:
         )
 
     def _handle_resume_no(self, handler_input, store):
-        state = self._deps.playback.state.current(handler_input)
+        state = self._playback.state.current(handler_input)
         if state:
-            state = self._deps.playback.state.merge(handler_input, {"status": "abandoned"})
+            state = self._playback.state.merge(handler_input, {"status": "abandoned"})
             FeedbackService.update_publication_progress(handler_input, state)
             if FeedbackService.finalize_publication(handler_input, state.get("publicationId")):
                 FeedbackService.activate_best(handler_input)
-        self._deps.user.update(handler_input, {"awaitingResume": False})
+        self._user.update(handler_input, {"awaitingResume": False})
         DialogStateManager.clear(handler_input, "resume")
         return AlexaResponse.present_idle_next(
             handler_input,
@@ -297,11 +300,11 @@ class Decline:
 
     def _handle_still_listening_no(self, handler_input):
         """Stop after still-listening prompt declined."""
-        self._deps.user.update(
+        self._user.update(
             handler_input,
             {"awaitingStillListening": False, "awaitingContinueAfterFlag": False},
         )
-        self._deps.playback.queue.clear(handler_input)
+        self._playback.queue.clear(handler_input)
         return (
             handler_input.response_builder.speak(Speech.GOODBYE)
             .add_directive(AlexaPlayback.build_stop_directive())
@@ -313,7 +316,7 @@ class Decline:
         suggestions = store.get("pendingNlpSuggestion") or []
         if len(suggestions) > 1:
             remaining = suggestions[1:]
-            self._deps.user.update(handler_input, {"pendingNlpSuggestion": remaining})
+            self._user.update(handler_input, {"pendingNlpSuggestion": remaining})
             next_sug = remaining[0]
             display_text = (
                 next_sug.get("displayText")
@@ -329,7 +332,7 @@ class Decline:
                 .set_should_end_session(False)
                 .response
             )
-        self._deps.user.update(handler_input, {"pendingNlpSuggestion": None})
+        self._user.update(handler_input, {"pendingNlpSuggestion": None})
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from src.services.logging_control import ApplicationLog
 
 from ask_sdk_core.dispatch_components import (
     AbstractRequestInterceptor,
@@ -10,8 +9,9 @@ from ask_sdk_core.dispatch_components import (
 
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
-from src.models.listener import Listener
 from src.models.user import CommitResult, CommitStatus, EssentialPersistenceError, User
+from src.services.listener_repository import Listener
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 
@@ -93,7 +93,9 @@ class LoadPersistenceInterceptor(AbstractRequestInterceptor):
 class SavePersistenceInterceptor(AbstractResponseInterceptor):
     async def process(self, handler_input) -> CommitResult:
         essential = User.requires_reliable_save(handler_input)
-        if not User.is_dirty(handler_input) or not User.changed_fields(handler_input):
+        if not User.is_dirty(handler_input) and not User.staged_outbox_events(handler_input):
+            return CommitResult(CommitStatus.UNCHANGED, essential)
+        if not User.changed_fields(handler_input) and not User.staged_outbox_events(handler_input):
             return CommitResult(CommitStatus.UNCHANGED, essential)
         if not User.persistence_available(handler_input):
             return self._result(CommitStatus.UNAVAILABLE, essential)

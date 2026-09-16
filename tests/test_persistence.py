@@ -1,18 +1,26 @@
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.playback_state import PlaybackQueue, PlaybackState
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.middleware.persistence import SavePersistenceInterceptor
-from src.models.browse import Browse
 from src.models.playback_history import PlaybackHistory
-from src.models.playback_state import PlaybackQueue, PlaybackState
-from src.models.social import FollowingManager
+from src.models.social import FollowCommand, FollowingManager
 from src.models.user import User
 
 
 class TestPersistence:
+    def test_playback_history_transition_has_no_request_dependency(self):
+        source = (Path(__file__).parents[1] / "src/models/playback_history.py").read_text(
+            encoding="utf-8"
+        )
+        assert "src.alexa" not in source
+        assert "handler_input" not in source
+        assert "src.models.user" not in source
+
     def test_default_store_has_key_fields(self):
         assert "lastToken" in StateSchema.DEFAULT_STORE
         assert "locality" in StateSchema.DEFAULT_STORE
@@ -174,6 +182,82 @@ class TestPersistence:
         assert "awaitingCreatorName" not in merged
         assert merged["activeDialog"] is None
 
+    def test_expired_dialogue_cannot_be_resurrected_by_legacy_flags(self):
+        merged = User.merge_persisted(
+            {
+                "activeDialog": {
+                    "type": "feedback_continuation",
+                    "context": {"source": "completed-playback"},
+                    "createdAt": 1,
+                    "expiresAt": 2,
+                },
+                "awaitingFeedback": True,
+                "awaitingFeedbackContinuation": True,
+                "awaitingOrganizationName": True,
+                "feedbackContinuation": {"source": "completed-playback"},
+                "pendingFeedback": {"feedbackKey": "content-1"},
+            }
+        )
+
+        assert merged["activeDialog"] is None
+        assert all(
+            merged[flag] is False
+            for flag in StateSchema.DIALOG_LEGACY_FLAGS.values()
+        )
+        assert merged["feedbackContinuation"] is None
+        assert merged["pendingFeedback"] is None
+
+    def test_active_dialogue_is_the_single_owner_of_legacy_projections(self):
+        merged = User.merge_persisted(
+            {
+                "activeDialog": {
+                    "type": "feedback",
+                    "context": {"feedbackKey": "content-1"},
+                    "createdAt": 1,
+                    "expiresAt": 4_102_444_800,
+                },
+                "awaitingOrganizationName": True,
+                "awaitingPublicationSource": True,
+                "awaitingFeedbackContinuation": True,
+            }
+        )
+
+        assert merged["awaitingFeedback"] is True
+        assert all(
+            merged[flag] is (flag == "awaitingFeedback")
+            for flag in StateSchema.DIALOG_LEGACY_FLAGS.values()
+        )
+
+    def test_malformed_dialogue_expiry_fails_closed_without_hydration_error(self):
+        merged = User.merge_persisted(
+            {
+                "activeDialog": {
+                    "type": "feedback",
+                    "context": {"feedbackKey": "content-1"},
+                    "expiresAt": "not-a-timestamp",
+                },
+                "awaitingFeedback": True,
+            }
+        )
+
+        assert merged["activeDialog"] is None
+        assert merged["awaitingFeedback"] is False
+
+    def test_legacy_dialogue_without_expiry_is_assigned_a_ttl(self, monkeypatch):
+        monkeypatch.setattr("src.models.user.time.time", lambda: 1_700_000_000)
+        merged = User.merge_persisted(
+            {
+                "activeDialog": {
+                    "type": "feedback",
+                    "context": {"feedbackKey": "content-1"},
+                },
+                "awaitingFeedback": True,
+            }
+        )
+
+        assert merged["activeDialog"]["expiresAt"] == 1_700_000_600
+        assert merged["awaitingFeedback"] is True
+
     def test_get_store_returns_copy(self, mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"] = {"playCount": 5}
         store = User.snapshot(mock_handler_input)
@@ -232,19 +316,13 @@ class TestPersistence:
         await SavePersistenceInterceptor().process(mock_handler_input)
         writer.assert_not_awaited()
 
-    def test_add_to_history(self, mock_handler_input):
-        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
-            StateSchema.DEFAULT_STORE
-        )
-        store = PlaybackHistory.add(mock_handler_input, "content_001")
-        assert any((h["id"] == "content_001" for h in store["playHistory"]))
+    def test_add_to_history(self):
+        history = PlaybackHistory.add([], "content_001")
+        assert any((h["id"] == "content_001" for h in history))
 
     def test_publication_history_is_one_subject_with_latest_track_cursor(
         self, mock_handler_input
     ):
-        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
-            StateSchema.DEFAULT_STORE
-        )
         first = {
             "contentId": "track-1",
             "publicationId": "publication-1",
@@ -260,11 +338,11 @@ class TestPersistence:
             "trackIndex": 1,
         }
 
-        PlaybackHistory.add(mock_handler_input, first)
-        store = PlaybackHistory.add(mock_handler_input, second)
+        history = PlaybackHistory.add([], first)
+        history = PlaybackHistory.add(history, second)
 
-        assert len(store["playHistory"]) == 1
-        entry = store["playHistory"][0]
+        assert len(history) == 1
+        entry = history[0]
         assert entry["id"] == "publication-1"
         assert entry["subjectType"] == "publication"
         assert entry["subjectId"] == "publication-1"
@@ -272,36 +350,30 @@ class TestPersistence:
         assert "contentId" not in entry
 
     def test_standalone_history_remains_individual_content(self, mock_handler_input):
-        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
-            StateSchema.DEFAULT_STORE
-        )
-        PlaybackHistory.add(
-            mock_handler_input,
+        history = PlaybackHistory.add(
+            [],
             {
                 "contentId": "track-1",
                 "audioUrl": "https://cdn.hear.media/track-1.mp3",
             },
         )
-        store = PlaybackHistory.add(
-            mock_handler_input,
+        history = PlaybackHistory.add(
+            history,
             {
                 "contentId": "track-2",
                 "audioUrl": "https://cdn.hear.media/track-2.mp3",
             },
         )
 
-        assert [entry["subjectId"] for entry in store["playHistory"]] == [
+        assert [entry["subjectId"] for entry in history] == [
             "track-2",
             "track-1",
         ]
-        assert all(entry["subjectType"] == "content" for entry in store["playHistory"])
+        assert all(entry["subjectType"] == "content" for entry in history)
 
     def test_publication_history_sums_track_sessions_and_keeps_track_breakdown(
         self, mock_handler_input
     ):
-        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
-            StateSchema.DEFAULT_STORE
-        )
         first = {
             "contentId": "track-1",
             "publicationId": "publication-1",
@@ -323,9 +395,9 @@ class TestPersistence:
             "timeSpentMs": 900000,
         }
 
-        PlaybackHistory.update(mock_handler_input, first)
-        store = PlaybackHistory.update(mock_handler_input, second)
-        history = store["playHistory"][0]
+        history = PlaybackHistory.update([], first)
+        history = PlaybackHistory.update(history, second)
+        history = history[0]
 
         assert history["subjectId"] == "publication-1"
         assert history["tracks"]["track-1"]["timeSpentMs"] == 1800000
@@ -414,12 +486,12 @@ class TestPersistence:
         assert content["trackIndex"] == 2
         assert content["trackCount"] == 5
 
-    def test_add_followed_creator(self, mock_handler_input):
-        mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
-            StateSchema.DEFAULT_STORE
+    def test_add_followed_creator(self):
+        followed, receipt = FollowingManager.add(
+            [], FollowCommand("creator_1", "Test Creator")
         )
-        store = FollowingManager.add(mock_handler_input, "creator_1", "Test Creator")
-        assert FollowingManager.is_following(store, "creator_1")
+        assert receipt.followed is True
+        assert FollowingManager.is_following({"followedCreators": followed}, "creator_1")
 
     def test_recent_content_ids(self, mock_handler_input):
         store = dict(StateSchema.DEFAULT_STORE)
@@ -428,6 +500,56 @@ class TestPersistence:
         ids = PlaybackQueue.recent_content_ids(store)
         assert "content_001" in ids
         assert "content_002" in ids
+
+    def test_legacy_playback_fields_hydrate_into_canonical_playback_state(self, monkeypatch):
+        monkeypatch.setattr("src.models.user.time.time", lambda: 1_700_000_000)
+        migrated = User.merge_persisted(
+            {
+                "currentContentId": "legacy-track",
+                "currentContentTitle": "Legacy bulletin",
+                "currentCreator": "Legacy reader",
+                "currentAudioUrl": "https://example.test/legacy.mp3",
+                "currentDurationSecs": 90,
+                "lastOffsetMs": 12_000,
+                "upcomingQueue": [
+                    {"contentId": "legacy-track"},
+                    {"contentId": "next-track"},
+                ],
+                "queueIndex": 0,
+            }
+        )
+
+        active = migrated["activePlayback"]
+        assert active["contentId"] == "legacy-track"
+        assert active["audioUrl"] == "https://example.test/legacy.mp3"
+        assert active["durationMs"] == 90_000
+        assert active["offsetMs"] == 12_000
+        assert active["status"] == "paused"
+        assert migrated["playbackQueue"]["orderedContentIds"] == [
+            "legacy-track",
+            "next-track",
+        ]
+        assert "currentAudioUrl" not in migrated
+        assert "upcomingQueue" not in migrated
+
+        assert User.merge_persisted(migrated) == migrated
+
+    def test_canonical_playback_state_wins_over_historical_fields(self):
+        merged = User.merge_persisted(
+            {
+                "activePlayback": {
+                    "contentId": "canonical-track",
+                    "title": "Canonical bulletin",
+                    "audioUrl": "https://example.test/canonical.mp3",
+                    "status": "paused",
+                },
+                "currentContentId": "legacy-track",
+                "currentAudioUrl": "https://example.test/legacy.mp3",
+            }
+        )
+
+        assert merged["activePlayback"]["contentId"] == "canonical-track"
+        assert merged["activePlayback"]["audioUrl"] == "https://example.test/canonical.mp3"
 
     def test_clear_queue(self, mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"] = dict(
@@ -467,7 +589,7 @@ class TestPersistence:
         assert store["playbackQueue"]["orderedContentIds"] == ["track-1", "track-2"]
         assert store["playbackQueue"]["publicationId"] == "publication-1"
         assert store["playbackQueue"]["publicationTitle"] == "Weekly publication"
-        store = Browse(deps=ApplicationContainer()).set_catalog(
+        store = ApplicationContainer().browse.set_catalog(
             mock_handler_input, {"items": tracks}
         )
         cached = store["browseQueueItems"][1]
@@ -489,7 +611,7 @@ class TestPersistence:
             "durationMs": 180000,
             "playbackSpeeds": [],
         }
-        store = Browse(deps=ApplicationContainer()).set_catalog(
+        store = ApplicationContainer().browse.set_catalog(
             mock_handler_input, {"items": [content]}
         )
         cached = store["browseQueueItems"][0]

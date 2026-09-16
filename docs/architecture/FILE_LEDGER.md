@@ -109,7 +109,7 @@ Every tracked baseline file and new deliverable is classified below. Preserved m
 | `src/constants/resolver.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/constants/search.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/constants/state.py` | Modified | Fresh default factory; persisted field/scope registry unchanged. |
-| `src/container.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/container.py` | Modified | Explicit request factories build listener-bound discovery, notification, launch and follow graphs without retaining request state in the application container. |
 | `src/controllers/__init__.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/controllers/availability.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/controllers/browse.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
@@ -143,35 +143,40 @@ Every tracked baseline file and new deliverable is classified below. Preserved m
 | `src/middleware/persistence.py` | Modified | Bound load/commit waits and propagate required-save failures. |
 | `src/middleware/resolver.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/models/__init__.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/affirmative.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/availability.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/affirmative.py` | Adapted | Alexa-bound Yes-intent dialogue orchestration and response presentation; confirmation decisions remain model-owned. |
+| `src/alexa/availability.py` | Adapted | Availability request orchestration lives at the Alexa boundary around typed availability data. |
 | `src/models/availability_data.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/availability_dialog.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/availability_dialog.py` | Adapted | Alexa request-bound availability choice dialogue and response presentation. |
 | `src/models/availability_request.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/browse.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/browse.py` | Adapted | Browse request orchestration and response presentation live at the Alexa boundary. |
 | `src/models/confirmation.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/decline.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/dialog.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/feedback.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/feedback_response.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/intent_dispatch.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/launch_workflow.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/decline.py` | Adapted | Alexa-bound No-intent dialogue orchestration and response presentation; confirmation decisions remain model-owned. |
+| `src/models/dialog_policy.py` | Added | Platform-free candidate normalization, de-duplication, ordinal and dismissal decisions. |
+| `src/alexa/dialog.py` | Adapted | Alexa request-bound dialogue selection, state and continuation adapter; platform-free matching decisions remain in `DialogPolicy`. |
+| `src/models/feedback_contracts.py` | Added | Platform-free validated feedback command and durable receipt contracts. |
+| `src/alexa/feedback_service.py` | Adapted | Request-bound feedback state, eligibility and publication-continuity orchestration; command and receipt contracts remain model-owned. |
+| `src/alexa/feedback_response.py` | Adapted | Feedback response and continuation presentation live at the Alexa boundary. |
+| `src/alexa/intent_dispatch.py` | Adapted | Intent dispatch consumes Alexa request context and delegates to request-bound feature actions. |
+| `src/alexa/launch.py` | Adapted | Launch request orchestration and response presentation sit at the Alexa boundary around `LaunchPolicy`. |
 | `src/models/listener.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/models/notifications.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/onboarding.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/onboarding_state.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/onboarding.py` | Adapted | SDK request parsing, response construction and injected onboarding orchestration; durable onboarding state remains model-owned. |
+| `src/alexa/onboarding_state.py` | Adapted | Alexa request/session onboarding state transitions; durable user records remain behind the request-owned user gateway. |
 | `src/models/permission.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/play.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/playback.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/playback_controls.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/playback_events.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/play.py` | Adapted | Content, creator and organisation playback request adaptation lives at the Alexa boundary. |
+| `src/alexa/playback_workflow.py` | Adapted | Alexa playback response construction, directives and request-state orchestration; queue, state and history data remain model-owned. |
+| `src/alexa/playback_controls.py` | Adapted | Alexa playback-control request adaptation and presentation; speed/seek decisions remain in the platform-free policy and state mutation remains with playback. |
+| `src/alexa/playback_events.py` | Adapted | Alexa request-context playback event adaptation and presentation-free receipt orchestration; playback owns state mutation. |
+| `src/alexa/dialog_request.py` | Added | Shared Alexa intent-slot extraction for request-bound dialogue and resolver adapters. |
 | `src/models/playback_history.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/playback_state.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/playback_state.py` | Adapted | Alexa request-bound playback state, event identity and lazy queue paging; platform-free playback policies remain model-owned. |
 | `src/models/report.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/models/resolver.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/resolver_runner.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/resolver_workflow.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
-| `src/models/search.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
+| `src/alexa/resolver_runner.py` | Adapted | Request-bound resolver execution, slot extraction and dialogue orchestration; validated resolver contracts and interpretation workflow remain model-owned. |
+| `src/models/resolver_inputs.py` | Added | Platform-free normalized resolved/spoken slot contract supplied once by the Alexa runner. |
+| `src/models/resolver_workflow.py` | Modified | Platform-free resolver interpretation and local discovery rules consume normalized `ResolverSlot` values rather than Alexa SDK objects. |
+| `src/models/search_contracts.py` | Added | Platform-free search request and catalogue gateway contracts. |
+| `src/alexa/search.py` | Adapted | Alexa request extraction, response construction and current search orchestration live at the platform boundary; typed search outcomes remain tracked in the status matrix. |
 | `src/models/social.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/models/suggestion.py` | Preserved | Existing behaviour retained; remaining target ownership work is tracked in the status matrix. |
 | `src/models/user.py` | Modified | Own typed commit contracts, protected snapshots and confirmed-save bookkeeping. |

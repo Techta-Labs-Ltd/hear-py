@@ -1,24 +1,23 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
 from typing import Any
 
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
-from src.alexa.discovery_speech import DiscoverySpeech
+from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback import AlexaPlayback, PlayDirective
 from src.alexa.playback_speech import PlaybackSpeech
+from src.alexa.playback_state import PlaybackQueue, PlaybackState
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.clients.alexa import AlexaClient
-from src.clients.hear import HearApiClient
-from src.models.feedback import FeedbackService
 from src.models.playback_history import PlaybackHistory
-from src.models.playback_state import PlaybackQueue, PlaybackState
+from src.models.search_contracts import CatalogueSearchGateway
 from src.models.user import User
 from src.services.events import OutboundEventService
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
@@ -29,7 +28,7 @@ from src.utils.search_payload import SearchPayload
 
 class Playback:
     async def enqueue_next_queued_content(
-        self, handler_input, token: str, hear_client: HearApiClient
+        self, handler_input, token: str, hear_client: CatalogueSearchGateway
     ):
         store = User.snapshot(handler_input)
         state = self.state.current(handler_input)
@@ -91,15 +90,16 @@ class Playback:
             queue_index=next_index,
         )
         self.state.prepare_next(handler_input, content)
-        playback_speeds = content.get("playbackSpeeds") or []
+        raw_playback_speeds = content.get("playbackSpeeds")
+        playback_speeds = raw_playback_speeds if isinstance(raw_playback_speeds, list) else []
         audio_url = PlaybackUtils.resolve_audio_url(
-            content["audioUrl"],
+            content.get("audioUrl"),
             store.get("playbackSpeed", settings.default_speed),
             playback_speeds,
         )
         directive = AlexaPlayback.build_play_directive(
             PlayDirective(
-                url=audio_url,
+                url=audio_url or "",
                 token=content["contentId"],
                 previous_token=token,
                 metadata=AlexaPlayback.build_content_metadata(content),
@@ -122,13 +122,13 @@ class Playback:
     def __init__(
         self,
         alexa: AlexaClient,
-        playback: PlaybackState | None = None,
-        queue: PlaybackQueue | None = None,
-        events: OutboundEventService | None = None,
+        playback: PlaybackState,
+        queue: PlaybackQueue,
+        events: OutboundEventService,
     ) -> None:
         self._alexa = alexa
-        self._playback = playback or PlaybackState(User())
-        self._queue = queue or PlaybackQueue(User())
+        self._playback = playback
+        self._queue = queue
         self._events = events
 
     @property
@@ -182,7 +182,10 @@ class Playback:
             queue_index=queue_index,
             offset_ms=offset_ms,
         )
-        PlaybackHistory.add(handler_input, content)
+        User.update(
+            handler_input,
+            {"playHistory": PlaybackHistory.add(User.snapshot(handler_input).get("playHistory"), content)},
+        )
         return state
 
     async def emit(self, handler_input, event_type: str, state: dict | None = None) -> bool:
@@ -204,6 +207,7 @@ class Playback:
                 )
             )
         return self._events.playback(
+            handler_input=handler_input,
             alexa_user_id=user_id,
             listener_id=User.snapshot(handler_input).get("listenerId"),
             state=active,
@@ -229,7 +233,16 @@ class Playback:
         if not state:
             return None
         self._playback.save_position(handler_input, state["contentId"], state["offsetMs"])
-        PlaybackHistory.update(handler_input, state, completed=completed)
+        User.update(
+            handler_input,
+            {
+                "playHistory": PlaybackHistory.update(
+                    User.snapshot(handler_input).get("playHistory"),
+                    state,
+                    completed=completed,
+                )
+            },
+        )
         FeedbackService.update_publication_progress(
             handler_input,
             state,
@@ -268,7 +281,7 @@ class Playback:
         state = self._playback.current(handler_input)
         if not state or state.get("status") not in {"starting", "playing", "paused"}:
             return None
-        patch = {"status": "paused"}
+        patch: dict[str, object] = {"status": "paused"}
         if override_offset_ms is not None:
             patch["offsetMs"] = max(0, int(override_offset_ms))
         state = self._playback.merge(handler_input, patch)
@@ -299,97 +312,6 @@ class Playback:
         return PlaybackSpeech.QUEUE_FINISHED
 
     @staticmethod
-    async def _find_queue_content(
-        handler_input: HandlerInput, content_id: str, *, deps
-    ) -> dict | None:
-        payload = SearchPayload.with_identity(
-            {
-                "query": "",
-                "filter": SearchFilters.content(content_id),
-                "page": 0,
-                "limit": 1,
-            },
-            alexa_user_id=AlexaRequest.get_user_id(handler_input),
-            listener_id=User.snapshot(handler_input).get("listenerId"),
-        )
-        result = await deps.heara.search(
-            payload,
-            timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
-        )
-        return next(
-            (item for item in result.get("results", []) if item.get("contentId") == content_id),
-            None,
-        )
-
-    @staticmethod
-    async def play_queue_delta(handler_input: HandlerInput, delta: int, speech: str, *, deps=None):
-        if deps is None:
-            raise RuntimeError("Playback requires injected dependencies")
-        content_id = deps.playback.queue.move(handler_input, delta)
-        if not content_id and delta > 0:
-            loaded = await deps.playback.queue.load_next_page(handler_input, deps.heara)
-            if loaded:
-                content_id = deps.playback.queue.move(handler_input, delta)
-        if not content_id:
-            queue = PlaybackQueue.read(deps.user.snapshot(handler_input))
-            if delta > 0 and queue and not PlaybackQueue.has_more_pages(queue):
-                message = Playback.queue_finished_speech(queue)
-            else:
-                message = PlaybackSpeech.NO_PREVIOUS if delta < 0 else Speech.NO_CONTENT_AVAILABLE
-            return Playback.open_queue_response(
-                handler_input,
-                message,
-            )
-        content = PlaybackQueue.cached_content(deps.user.snapshot(handler_input), content_id)
-        if not content:
-            content = await Playback._find_queue_content(handler_input, content_id, deps=deps)
-        if not content:
-            deps.playback.queue.move(handler_input, -delta)
-            return Playback.open_queue_response(handler_input, Speech.NO_CONTENT_AVAILABLE)
-        store = deps.user.snapshot(handler_input)
-        queue = PlaybackQueue.read(store)
-        content = PlaybackQueue.apply_publication_context(
-            store,
-            content,
-            queue_index=int(queue.get("currentIndex") or 0) if queue else None,
-        )
-        return await deps.playback.start(handler_input, content, speech)
-
-    @staticmethod
-    def read_playback_session(store: dict) -> dict | None:
-        return PlaybackState.from_store(store)
-
-    @staticmethod
-    def write_playback_session(handler_input, fields: dict) -> dict | None:
-        return PlaybackState(User()).merge(handler_input, fields)
-
-    @staticmethod
-    def create_playback_session(
-        handler_input,
-        content: dict,
-        *,
-        queue_id: str | None = None,
-        queue_index: int = 0,
-        offset_ms: int = 0,
-    ) -> dict:
-        if Playback._finalize_other_publication_feedback(
-            handler_input, content.get("publicationId")
-        ):
-            Playback._activate_best_feedback_candidate(handler_input)
-        FeedbackService.dismiss(handler_input)
-        return PlaybackState(User()).start(
-            handler_input,
-            content,
-            queue_id=queue_id,
-            queue_index=queue_index,
-            offset_ms=offset_ms,
-        )
-
-    @staticmethod
-    def has_unfinished_playback(store: dict) -> bool:
-        return PlaybackState(User()).has_unfinished(store)
-
-    @staticmethod
     def _play_response(handler_input: HandlerInput, intro_text: str, directive: dict) -> dict:
         """Hand AudioPlayer control to Alexa and close the foreground session."""
         return (
@@ -405,7 +327,7 @@ class Playback:
         content: dict[str, Any],
         offset_ms: int = 0,
         *,
-        playback_repository: PlaybackState | None = None,
+        playback_repository: PlaybackState,
     ) -> dict | None:
         """Validate content and create canonical starting playback state."""
         if not ContentNormalizer.is_playable_content_item(content):
@@ -418,7 +340,7 @@ class Playback:
         queue = PlaybackQueue.read(store)
         queue_id = queue.get("queueId") if queue else None
         queue_index = queue.get("currentIndex", 0) if queue else 0
-        repository = playback_repository or PlaybackState(User())
+        repository = playback_repository
         if Playback._finalize_other_publication_feedback(
             handler_input, content.get("publicationId")
         ):
@@ -434,9 +356,12 @@ class Playback:
         title = ContentUtils.content_title_for_speech(content)
         creator = ContentUtils.pick_content_credit(content)
         repository.save_current_content(
-            handler_input, content, title=title, creator=creator, offset_ms=offset_ms
+            handler_input, content, title=title or "", creator=creator, offset_ms=offset_ms
         )
-        PlaybackHistory.add(handler_input, content)
+        User.update(
+            handler_input,
+            {"playHistory": PlaybackHistory.add(User.snapshot(handler_input).get("playHistory"), content)},
+        )
         audio_url = PlaybackUtils.resolve_audio_url(content["audioUrl"], effective_speed, speeds)
         return {"state": state, "audioUrl": audio_url}
 
@@ -447,11 +372,11 @@ class Playback:
         intro_text: str,
         track_index: int = 0,
         options: dict[str, Any] | None = None,
-        **dependencies,
+        *,
+        playback_repository: PlaybackState,
     ):
         """Return a play response using contentId as the stable Alexa token."""
         del track_index
-        playback_repository: PlaybackState | None = dependencies.get("playback_repository")
         offset_ms = int((options or {}).get("offsetMs") or 0)
         prepared = await Playback.prepare_playback_audio_and_store(
             handler_input, content, offset_ms, playback_repository=playback_repository
@@ -478,7 +403,7 @@ class Playback:
         )
         if not directive:
             ApplicationLog.error(
-                "Hear: could not build play directive contentId=%s", state["contentId"]
+                "Hear: could not build play directive contentIdPresent=true"
             )
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.NO_CONTENT_AVAILABLE))
@@ -486,8 +411,7 @@ class Playback:
                 .set_should_end_session(False)
                 .response
             )
-        repository = playback_repository or PlaybackState(User())
-        repository.save_audio_url(handler_input, prepared["audioUrl"])
+        playback_repository.save_audio_url(handler_input, prepared["audioUrl"])
         return Playback._play_response(handler_input, intro_text, directive)
 
     @staticmethod
@@ -496,7 +420,7 @@ class Playback:
         state: dict[str, Any],
         intro_text: str,
         *,
-        playback_repository: PlaybackState | None = None,
+        playback_repository: PlaybackState,
     ):
         """Resume directly from canonical persisted playback state.
 
@@ -530,24 +454,26 @@ class Playback:
                 .response
             )
         offset_ms = max(0, int(state.get("offsetMs") or 0))
-        speeds = content["playbackSpeeds"]
+        raw_speeds = content.get("playbackSpeeds")
+        speeds = raw_speeds if isinstance(raw_speeds, list) else []
         effective_speed = PlaybackUtils.resolve_effective_speed(
             User.snapshot(handler_input).get("playbackSpeed", settings.default_speed),
             speeds,
         )
         resolved_url = PlaybackUtils.resolve_audio_url(audio_url, effective_speed, speeds)
-        repository = playback_repository or PlaybackState(User())
+        playable_url = resolved_url or audio_url
+        repository = playback_repository
         resumed = repository.merge(handler_input, {"status": "starting", "offsetMs": offset_ms})
         repository.save_resumed_content(
             handler_input,
             content_id=content_id,
-            title=state.get("title"),
+            title=str(state.get("title") or ""),
             audio_url=audio_url,
             offset_ms=offset_ms,
         )
         directive = AlexaPlayback.build_play_directive(
             PlayDirective(
-                url=resolved_url,
+                url=playable_url,
                 token=content_id,
                 offset_ms=offset_ms,
                 metadata=AlexaPlayback.build_content_metadata(content),
@@ -565,12 +491,12 @@ class Playback:
                 .set_should_end_session(False)
                 .response
             )
-        repository.save_audio_url(handler_input, resolved_url)
+        repository.save_audio_url(handler_input, playable_url)
         return Playback._play_response(handler_input, intro_text, directive)
 
     @staticmethod
     async def _resolve_content(
-        handler_input, content_id: str, *, hear_client: HearApiClient
+        handler_input, content_id: str, *, hear_client: CatalogueSearchGateway
     ) -> dict | None:
         store = User.snapshot(handler_input)
         cached = PlaybackQueue.cached_content(store, content_id)
@@ -599,34 +525,3 @@ class Playback:
             if content
             else None
         )
-
-    @staticmethod
-    async def play_next_queued_item(
-        handler_input,
-        *,
-        hear_client: HearApiClient,
-        speak_intro: bool = True,
-        intro_prefix: str | None = None,
-    ):
-        """Advance the canonical queue and resolve its next content through search."""
-        content_id = PlaybackQueue(User()).move(handler_input, 1)
-        if not content_id:
-            return None
-        content = await Playback._resolve_content(
-            handler_input, content_id, hear_client=hear_client
-        )
-        if not content:
-            return None
-        title = ContentUtils.content_title_for_speech(content)
-        queue = PlaybackQueue.read(User.snapshot(handler_input))
-        intro = (
-            DiscoverySpeech.playback_intro(
-                (queue or {}).get("discoveryContext"),
-                title,
-            )
-            if speak_intro
-            else ""
-        )
-        if intro_prefix:
-            intro = f"{intro_prefix} {intro}".strip()
-        return await Playback.start_playback(handler_input, content, intro)

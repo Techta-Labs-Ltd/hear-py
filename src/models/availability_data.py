@@ -1,24 +1,41 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any, Literal
 
 from src.constants.availability import AvailabilityConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
-from src.models.dialog import DialogSelection
+from src.models.dialog_policy import DialogPolicy
 from src.utils.content import ContentIdentity, ContentUtils
 
 
+@dataclass(frozen=True, slots=True)
+class AvailabilityOutcome:
+    kind: Literal["success", "empty", "unavailable"]
+    candidates: tuple[dict, ...] = ()
+
+    @classmethod
+    def classify(cls, response: dict | None, candidates: list[dict] | None = None) -> "AvailabilityOutcome":
+        available = tuple(dict(item) for item in candidates or () if isinstance(item, dict))
+        if isinstance(response, dict) and response.get("failed"):
+            return cls("unavailable")
+        return cls("success", available) if available else cls("empty")
+
 class AvailabilityData:
     @staticmethod
+    def mapping(value: object) -> dict[str, Any]:
+        return dict(value) if isinstance(value, dict) else {}
+    @staticmethod
     def requested_city(resolution: dict, payload: dict) -> str:
-        slots = resolution.get("slots") if isinstance(resolution.get("slots"), dict) else {}
+        slots = AvailabilityData.mapping(resolution.get("slots"))
         city = str(slots.get("city") or slots.get("placeName") or "").strip()
         if city:
             return city
         if not resolution.get("requestedLocation"):
             return ""
-        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        filters = AvailabilityData.mapping(payload.get("filter"))
         return str(filters.get("city") or "").strip()
 
     @staticmethod
@@ -38,7 +55,7 @@ class AvailabilityData:
             for item in ("organization", "creator")
         )
         allowed_keys = source_keys | AvailabilityConstants.LOCATION_FILTER_KEYS
-        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        filters = AvailabilityData.mapping(payload.get("filter"))
         active_keys = {
             key for key, value in filters.items() if AvailabilityData._has_value(value)
         }
@@ -74,10 +91,10 @@ class AvailabilityData:
 
     @staticmethod
     def source_from_resolution(resolution: dict) -> dict | None:
-        payload = resolution.get("searchPayload") or {}
+        payload = AvailabilityData.mapping(resolution.get("searchPayload"))
         if AvailabilityData.request_scope(payload) != AvailabilityConstants.SOURCE_KIND:
             return None
-        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        filters = AvailabilityData.mapping(payload.get("filter"))
         found = []
         for entity_type in ("organization", "creator"):
             key = SearchConstants.SEARCH_SOURCE_FILTERS[entity_type]
@@ -93,7 +110,7 @@ class AvailabilityData:
             (item for item in found if item[0] == "creator"),
             found[0],
         )
-        entity = next(
+        entity: dict[str, Any] = next(
             (
                 item
                 for item in resolution.get("resolvedEntities") or []
@@ -113,8 +130,8 @@ class AvailabilityData:
     def availability_filter(payload: dict, store: dict | None = None) -> dict | None:
         if AvailabilityData.request_scope(payload) is None:
             return None
-        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
-        output = {}
+        filters = AvailabilityData.mapping(payload.get("filter"))
+        output: dict[str, object] = {}
         for source_type, output_key in (
             ("creator", "creatorId"),
             ("organization", "organizationId"),
@@ -143,14 +160,14 @@ class AvailabilityData:
 
     @staticmethod
     def location_from_payload(payload: dict, store: dict) -> dict:
-        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        filters = AvailabilityData.mapping(payload.get("filter"))
         requested_city = str(filters.get("city") or "").strip()
         saved_city = str(store.get("userCity") or store.get("locality") or "").strip()
         city = requested_city or saved_city
         uses_saved_location = not requested_city or (
             saved_city and requested_city.casefold() == saved_city.casefold()
         )
-        location = {}
+        location: dict[str, object] = {}
         if city:
             location["city"] = city
         country_code = filters.get("countryCode")
@@ -166,7 +183,7 @@ class AvailabilityData:
 
     @staticmethod
     def has_location_payload(payload: dict) -> bool:
-        filters = payload.get("filter") if isinstance(payload.get("filter"), dict) else {}
+        filters = AvailabilityData.mapping(payload.get("filter"))
         return bool(
             payload.get("isLocal")
             or filters.get("city")
@@ -186,7 +203,7 @@ class AvailabilityData:
             name = str(candidate.get("name") or "").strip()
             key = (
                 candidate_type,
-                DialogSelection.normalize(name),
+                DialogPolicy.normalize(name),
             )
             if not name or key in names:
                 continue
@@ -236,11 +253,13 @@ class AvailabilityData:
     def publication_candidates(result: dict) -> list[dict]:
         candidates = []
         for item in result.get("publications") or []:
-            candidate = dict(item)
+            candidate = AvailabilityData.mapping(item)
             title = str(candidate.get("name") or "").strip()
+            published_value = candidate.get("publishedAt")
             try:
                 published = datetime.fromtimestamp(
-                    float(candidate.get("publishedAt")), timezone.utc
+                    float(published_value) if isinstance(published_value, (str, int, float)) else 0,
+                    timezone.utc,
                 )
             except (OSError, OverflowError, TypeError, ValueError):
                 published = None
@@ -261,7 +280,7 @@ class AvailabilityData:
             title = ContentUtils.content_title_for_speech(item) or f"recording {index}"
             if content_id and title:
                 candidates.append({"type": "track", "id": content_id, "name": title})
-        return DialogSelection.unique_candidates(candidates)
+        return DialogPolicy.unique_candidates(candidates)
 
     @staticmethod
     def search_total_pages(result: dict) -> int:

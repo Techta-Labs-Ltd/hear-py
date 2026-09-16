@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from src.services.logging_control import ApplicationLog
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ from src.constants.state import StateSchema
 from src.database.dynamo_merge import DynamoConflictMerge
 from src.database.dynamodb import DynamoExpressions, DynamoTable
 from src.models.user import PersistenceReceipt, User
+from src.services.logging_control import ApplicationLog
 
 
 class DynamoUserSupport:
@@ -20,6 +20,8 @@ class DynamoUserSupport:
     _CHANGED_FIELDS = "_persistenceChangedFields"
     _ORIGINAL_FIELDS = "_persistenceOriginal"
     _CANONICAL_COPY_FIELD = "_persistenceNeedsCanonicalCopy"
+    _COUPLED_COMMIT_FIELD = "_persistenceCoupledCommit"
+    _OUTBOX_EVENTS_FIELD = "_persistenceOutboxEvents"
 
     @staticmethod
     def _is_invalid_key(user_id: str) -> bool:
@@ -55,6 +57,14 @@ class InvalidPersistenceKey(ValueError):
 
 
 class PersistenceItemTooLarge(ValueError):
+    pass
+
+
+class UnsupportedPersistenceSchema(ValueError):
+    pass
+
+
+class CorruptPersistenceItem(ValueError):
     pass
 
 
@@ -99,12 +109,48 @@ class DynamoDbPersistenceAdapter:
         consistent = scope in {StateSchema.PLAYBACK_SCOPE, StateSchema.DIALOG_SCOPE}
         return await self._table.get_item(user_id, scope, consistent=consistent)
 
+    def _is_expired(self, scope: str, item: dict) -> bool:
+        raw_expiry = item.get(self.ttl_attribute)
+        if raw_expiry is None:
+            return False
+        if isinstance(raw_expiry, bool):
+            raise CorruptPersistenceItem(f"invalid expiry for {scope}")
+        try:
+            expiry = int(raw_expiry)
+        except (TypeError, ValueError) as exc:
+            raise CorruptPersistenceItem(f"invalid expiry for {scope}") from exc
+        return expiry > 0 and expiry < int(time.time())
+
+    async def _live_scope_item(self, user_id: str, scope: str) -> dict | None:
+        item = await self._scope_item(user_id, scope)
+        if not isinstance(item, dict) or not self._is_expired(scope, item):
+            return item
+        try:
+            raw_version = item.get("stateVersion")
+            version = int(raw_version) if raw_version is not None else 0
+        except (TypeError, ValueError) as exc:
+            raise CorruptPersistenceItem(f"invalid state version for {scope}") from exc
+        try:
+            await self._table.delete_item(
+                user_id,
+                scope,
+                condition=self._condition(max(0, version)),
+            )
+            return None
+        except ClientError as error:
+            if not DynamoUserSupport.is_conditional_failure(error):
+                raise
+        refreshed = await self._scope_item(user_id, scope)
+        if not isinstance(refreshed, dict) or self._is_expired(scope, refreshed):
+            return None
+        return refreshed
+
     async def get_attributes(
         self, request_envelope: dict, *, persistence_key: str | None = None
     ) -> dict:
         user_id = self._user_id(request_envelope, persistence_key)
         items = await asyncio.gather(
-            *(self._scope_item(user_id, scope) for scope in StateSchema.SCOPES)
+            *(self._live_scope_item(user_id, scope) for scope in StateSchema.SCOPES)
         )
         if not any(items):
             return {}
@@ -114,18 +160,37 @@ class DynamoDbPersistenceAdapter:
             if not isinstance(item, dict):
                 versions[scope] = 0
                 continue
-            document = item.get(self.attributes_name) or {}
-            if isinstance(document, dict):
-                attributes.update(document)
-            versions[scope] = max(0, int(item.get("stateVersion") or 0))
+            raw_schema = item.get("schemaVersion")
+            try:
+                schema_version = int(raw_schema) if raw_schema is not None else 0
+            except (TypeError, ValueError) as exc:
+                raise CorruptPersistenceItem(f"invalid schema version for {scope}") from exc
+            if schema_version > StateSchema.SCHEMA_VERSION:
+                raise UnsupportedPersistenceSchema(
+                    f"unsupported schema version {schema_version} for {scope}"
+                )
+            document = item.get(self.attributes_name)
+            if document is None:
+                document = {}
+            if not isinstance(document, dict):
+                raise CorruptPersistenceItem(f"invalid state document for {scope}")
+            try:
+                versions[scope] = max(0, int(item.get("stateVersion") or 0))
+            except (TypeError, ValueError) as exc:
+                raise CorruptPersistenceItem(f"invalid state version for {scope}") from exc
+            attributes.update(document)
         attributes[DynamoUserSupport._VERSIONS_FIELD] = versions
         return attributes
 
     @staticmethod
-    def _payload(attributes: dict) -> tuple[dict, dict, list[str], dict]:
+    def _payload(attributes: dict) -> tuple[dict, dict, list[str], dict, bool, list[dict]]:
         requested = dict(attributes or {})
         versions = requested.pop(DynamoUserSupport._VERSIONS_FIELD, {})
         requested.pop(DynamoUserSupport._CANONICAL_COPY_FIELD, None)
+        coupled = bool(requested.pop(DynamoUserSupport._COUPLED_COMMIT_FIELD, False))
+        raw_outbox = requested.pop(DynamoUserSupport._OUTBOX_EVENTS_FIELD, [])
+        outbox_events = [deepcopy(event) for event in raw_outbox if isinstance(event, dict)] \
+            if isinstance(raw_outbox, list) else []
         changed = requested.pop(DynamoUserSupport._CHANGED_FIELDS, None)
         changed_fields = (
             [field for field in changed if field in StateSchema.PERSISTED_FIELDS]
@@ -138,6 +203,8 @@ class DynamoDbPersistenceAdapter:
             versions if isinstance(versions, dict) else {},
             changed_fields,
             original if isinstance(original, dict) else {},
+            coupled,
+            outbox_events,
         )
 
     def _validate_document(self, scope: str, document: dict) -> None:
@@ -168,7 +235,10 @@ class DynamoDbPersistenceAdapter:
         now = int(time.time())
         if scope == StateSchema.DIALOG_SCOPE:
             active = document.get("activeDialog") or {}
-            active_expiry = int(active.get("expiresAt") or 0) if isinstance(active, dict) else 0
+            try:
+                active_expiry = int(active.get("expiresAt") or 0) if isinstance(active, dict) else 0
+            except (TypeError, ValueError):
+                active_expiry = 0
             return max(active_expiry, now + settings.HEAR_DIALOG_STATE_TTL_SECONDS)
         days = {
             StateSchema.CORE_SCOPE: self.ttl_days,
@@ -233,7 +303,10 @@ class DynamoDbPersistenceAdapter:
             operation["scope"],
             attempt + 1,
         )
-        item = await self._scope_item(operation["userId"], operation["scope"])
+        # A failed conditional write can race a physical TTL deletion.  Reload
+        # through the same expiry gate as ordinary hydration so an expired row
+        # cannot be merged back into a fresh state document.
+        item = await self._live_scope_item(operation["userId"], operation["scope"])
         latest = (item or {}).get(self.attributes_name) or {}
         if not isinstance(latest, dict):
             latest = {}
@@ -263,6 +336,109 @@ class DynamoDbPersistenceAdapter:
                     raise
                 await self._merge_after_conflict(operation, attempt)
 
+    def _transaction_operation(self, operation: dict) -> dict | None:
+        version = operation["version"]
+        document = operation["document"]
+        if version == 0 and not document:
+            return None
+        top_level = {
+            self.ttl_attribute: operation["expiresAt"],
+            "schemaVersion": StateSchema.SCHEMA_VERSION,
+            "stateVersion": version + 1,
+        }
+        condition = self._condition(version)
+        if version == 0:
+            return self._table.transaction_update_item(
+                operation["userId"],
+                operation["scope"],
+                {self.attributes_name: document, **top_level},
+                condition=condition,
+            )
+        changed_values = {
+            field: document[field] for field in operation["changedFields"] if field in document
+        }
+        removed = list(
+            dict.fromkeys(
+                [field for field in operation["changedFields"] if field not in document]
+                + operation.get("legacyRemoves", [])
+            )
+        )
+        return self._table.transaction_map_update(
+            operation["userId"],
+            self.attributes_name,
+            changed_values,
+            sort_value=operation["scope"],
+            removes=removed,
+            updates=top_level,
+            condition=condition,
+        )
+
+    def _outbox_item(self, user_id: str, envelope: dict) -> dict:
+        event_id = str(envelope.get("eventId") or "").strip()
+        if not event_id:
+            raise ValueError("outbox event requires eventId")
+        event_type = str(envelope.get("event") or "").strip()
+        if not event_type or not isinstance(envelope.get("data"), dict):
+            raise ValueError("outbox event requires an envelope and data")
+        now = int(time.time())
+        return {
+            self.partition_key_name: user_id,
+            self.sort_key_name: f"OUTBOX#{event_id}",
+            "recordType": "OUTBOX",
+            "outboxStatus": "PENDING",
+            "outboxKey": "PENDING",
+            "eventId": event_id,
+            "eventType": event_type,
+            "envelope": deepcopy(envelope),
+            "createdAt": now * 1000,
+            self.ttl_attribute: now + max(1, settings.HEAR_OUTBOX_TTL_DAYS) * 86400,
+        }
+
+    async def _save_coupled(self, operations: list[dict], outbox_items: list[dict]) -> None:
+        retries = (
+            max(0, settings.HEAR_PERSISTENCE_CONFLICT_RETRIES) if self.conditional_writes else 0
+        )
+        for attempt in range(retries + 1):
+            for operation in operations:
+                self._validate_document(operation["scope"], operation["document"])
+            transaction = [
+                item
+                for operation in operations
+                if (item := self._transaction_operation(operation)) is not None
+            ]
+            transaction.extend(
+                self._table.transaction_put_item(
+                    item,
+                    condition=[DynamoExpressions.not_exists(self.sort_key_name)],
+                )
+                for item in outbox_items
+            )
+            if not transaction:
+                return
+            try:
+                await self._table.transact_write(transaction)
+                return
+            except ClientError as error:
+                if error.response.get("Error", {}).get("Code") not in {
+                    "TransactionCanceledException",
+                    "ConditionalCheckFailedException",
+                } or attempt >= retries:
+                    raise
+                await asyncio.gather(
+                    *(self._merge_after_conflict(operation, attempt) for operation in operations)
+                )
+                existing = await asyncio.gather(
+                    *(
+                        self._table.get_item(
+                            item[self.partition_key_name], item[self.sort_key_name], consistent=True
+                        )
+                        for item in outbox_items
+                    )
+                )
+                outbox_items[:] = [
+                    item for item, stored in zip(outbox_items, existing) if stored is None
+                ]
+
     async def save_attributes(
         self,
         request_envelope: dict,
@@ -270,9 +446,9 @@ class DynamoDbPersistenceAdapter:
         *,
         persistence_key: str | None = None,
     ) -> PersistenceReceipt:
-        requested, versions, changed_fields, original = self._payload(attributes)
+        requested, versions, changed_fields, original, coupled, outbox_events = self._payload(attributes)
         user_id = self._user_id(request_envelope, persistence_key)
-        operations = []
+        operations: list[dict] = []
         for scope in StateSchema.SCOPES:
             scope_fields = [
                 field for field in changed_fields if StateSchema.scope_for(field) == scope
@@ -314,7 +490,10 @@ class DynamoDbPersistenceAdapter:
                     "original": {},
                 }
             )
-        if operations:
+        outbox_items = [self._outbox_item(user_id, event) for event in outbox_events]
+        if outbox_items or (coupled and len(operations) > 1):
+            await self._save_coupled(operations, outbox_items)
+        elif operations:
             await asyncio.gather(*(self._save_scope(operation) for operation in operations))
         committed = deepcopy(requested)
         saved_versions = dict(versions)

@@ -4,17 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.alexa.dialog import DialogSelection
+from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.alexa.runtime import ResponseBuilder
 from src.alexa.speech import Speech
 from src.clients.resolver import ResolverClient
 from src.container import ApplicationContainer
-from src.middleware.dialog_validation import (
-    DialogValidationInterceptor,
-    DialogValidationPolicy,
-)
-from src.middleware.resolver import ResolverInterceptor
-from src.models.dialog import DialogSelection
-from src.models.resolver_workflow import ResolverWorkflow
+from src.middleware.dialog_validation import DialogValidationInterceptor, DialogValidationPolicy
 from src.models.user import User
 
 
@@ -115,8 +111,8 @@ async def test_candidate_name_bypasses_ambiguity_gate_and_resolves_locally(
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
 
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
@@ -366,9 +362,7 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     mock_handler_input, intent_name
 ):
     from src.controllers.confirmation import NoIntentHandler
-    from src.models.decline import Decline
     from src.controllers.feedback import SkipFeedbackHandler
-    from src.models.feedback_response import SkipFeedback
     from src.models.user import User
 
     pending = {"candidates": [{"name": "Pendle Voice", "id": "one"}]}
@@ -387,9 +381,9 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     _intent(mock_handler_input, intent_name)
     mock_handler_input.response_builder = ResponseBuilder()
     handler = (
-        NoIntentHandler(Decline(deps=ApplicationContainer()))
+        NoIntentHandler(ApplicationContainer().build_request_decline(mock_handler_input))
         if intent_name == "AMAZON.NoIntent"
-        else SkipFeedbackHandler(SkipFeedback(deps=ApplicationContainer()))
+        else SkipFeedbackHandler(ApplicationContainer().build_request_skip_feedback(mock_handler_input))
     )
     response = await handler.handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
@@ -693,8 +687,8 @@ async def test_invalid_onboarding_reply_never_reaches_resolver(monkeypatch, mock
     }
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     resolve.assert_not_awaited()
     assert mock_handler_input.attributes_manager.request_attributes.get("_nlp") is None
 
@@ -710,7 +704,9 @@ def test_latest_content_intent_reconstructs_sort_for_resolver(mock_handler_input
     envelope.request = request
     mock_handler_input.request_envelope = envelope
     assert (
-        ResolverWorkflow._extract_raw_utterance(mock_handler_input, "PlayLatestContentIntent")
+        ResolverWorkflowRunner._extract_raw_utterance(
+            mock_handler_input, "PlayLatestContentIntent"
+        )
         == "play latest news content in Wakefield"
     )
 
@@ -725,4 +721,9 @@ def test_content_intent_preserves_raw_slot_for_internal_state(mock_handler_input
     envelope = MagicMock()
     envelope.request = request
     mock_handler_input.request_envelope = envelope
-    assert ResolverWorkflow._extract_raw_utterance(mock_handler_input, "PlayContentIntent") == "tnf"
+    assert (
+        ResolverWorkflowRunner._extract_raw_utterance(
+            mock_handler_input, "PlayContentIntent"
+        )
+        == "tnf"
+    )

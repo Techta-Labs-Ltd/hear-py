@@ -1,23 +1,22 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from config import settings
+from src.alexa.browse import Browse
+from src.alexa.dialog import DialogStateManager
 from src.alexa.help import HelpSpeech
+from src.alexa.onboarding import Onboarding
 from src.alexa.playback import AlexaPlayback
 from src.alexa.playback_speech import PlaybackSpeech
+from src.alexa.playback_workflow import Playback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.playback import PlaybackConstants
-from src.models.dialog import DialogStateManager
-from src.models.onboarding import Onboarding
-from src.models.browse import Browse
-from src.models.playback import Playback
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class HelpIntentHandler(AbstractRequestHandler):
@@ -126,16 +125,17 @@ class SessionEndedHandler(AbstractRequestHandler):
         ApplicationLog.info("Session ended: %s", reason)
         try:
             await self._playback.flush_previous(
-                AlexaRequest.get_user_id(handler_input), None, handler_input
+                AlexaRequest.get_user_id(handler_input) or "", None, handler_input
             )
         except Exception as err:
-            ApplicationLog.warning("Hear: SessionEnded flush failed %s", err)
+            ApplicationLog.warning("Hear: SessionEnded flush failed error=%s", type(err).__name__)
         return handler_input.response_builder.response
 
 
 class UnknownRequestHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, user: User, onboarding: Onboarding) -> None:
+        self._user = user
+        self._onboarding = onboarding
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return True
@@ -155,7 +155,7 @@ class UnknownRequestHandler(AbstractRequestHandler):
         ApplicationLog.warning("Hear: unmatched request type %s", request_type)
         if request_type == "IntentRequest":
             redirect = Onboarding.onboarding_pending_redirect(
-                handler_input, self._deps.user.snapshot(handler_input), deps=self._deps
+                handler_input, self._user.snapshot(handler_input), self._onboarding
             )
             if redirect is not None:
                 return redirect
@@ -171,10 +171,8 @@ class UnknownRequestHandler(AbstractRequestHandler):
         try:
             request = handler_input.request_envelope.request
             ApplicationLog.error(
-                "Hear: System.ExceptionEncountered token=%s errorType=%s errorMessage=%s",
-                request.token,
+                "Hear: System.ExceptionEncountered errorType=%s",
                 request.error.type,
-                request.error.message,
             )
         except Exception:
             pass

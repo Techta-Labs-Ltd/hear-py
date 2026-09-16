@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from src.services.logging_control import ApplicationLog
-
 from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.alexa.ssml import Ssml
 from src.clients.pool import HttpPool
+from src.services.logging_control import ApplicationLog
 
 
 class ProgressiveResponseClient:
