@@ -192,6 +192,11 @@ Resources:
         - !Ref AWS::NoValue
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref HearListenerStateTable }
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:TransactWriteItems
+            Resource: !GetAtt HearListenerStateTable.Arn
         - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
 
   ProactiveNotificationDeadLetterQueue:

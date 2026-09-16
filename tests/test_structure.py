@@ -561,6 +561,8 @@ def test_template_owns_and_wires_durable_persistence_table():
     assert "HEAR_DDB_TABLE: !Ref HearListenerStateTable" in template
     assert "HEAR_DDB_SORT_KEY: scope" in template
     assert "DynamoDBCrudPolicy: { TableName: !Ref HearListenerStateTable }" in template
+    assert "dynamodb:TransactWriteItems" in template
+    assert "Resource: !GetAtt HearListenerStateTable.Arn" in template
     assert "HearPersistenceTable:" not in template
     assert "HEAR_DDB_LEGACY_TABLE" not in template
     assert "HEAR_DDB_TABLE: hear-service" not in template
