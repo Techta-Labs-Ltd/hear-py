@@ -108,6 +108,7 @@ class RouteRegistry:
         IdentityInterceptor,
         LoadPersistenceInterceptor,
         DialogValidationInterceptor,
+        DirectIntentPhraseInterceptor,
         ResolverInterceptor,
         ConfirmationMiddleware,
     )
