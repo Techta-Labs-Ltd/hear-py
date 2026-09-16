@@ -9,8 +9,8 @@ from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.container import ApplicationContainer
 from src.controllers.intent_dispatch import IntentDispatchGateHandler
-from src.models.user import User
 from src.models.resolver_workflow import ResolverWorkflow
+from src.models.user import User
 
 
 @pytest.fixture
