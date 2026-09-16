@@ -12,7 +12,7 @@ param(
     [string] $EcrRepository = "hear-python",
     [string] $HearApiUrl = "https://alexa.hear.media/api/v1",
     [string] $HearApiPathPrefix = "alexa",
-    [string] $WebhookOutboundUrl = "https://alexa.hear.media/api/v1/alexa/events",
+    [string] $WebhookOutboundUrl = "https://alexa.hear.media/api/v1/webhooks/event",
     [ValidateSet("0", "1")]
     [string] $CanonicalIdentityEnabled = "1",
     [switch] $ConfirmProduction

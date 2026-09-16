@@ -28,7 +28,7 @@ Parameters:
     Default: ""
   WebhookOutboundUrl:
     Type: String
-    Default: https://alexa.hear.media/api/v1/alexa/events
+    Default: https://alexa.hear.media/api/v1/webhooks/event
   WebhookOutboundSecret:
     Type: String
     NoEcho: true

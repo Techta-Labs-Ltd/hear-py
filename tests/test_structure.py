@@ -560,6 +560,8 @@ def test_template_owns_and_wires_durable_persistence_table():
     assert "AttributeName: expiresAt" in template
     assert "HEAR_DDB_TABLE: !Ref HearListenerStateTable" in template
     assert "HEAR_DDB_SORT_KEY: scope" in template
+    assert "Default: https://alexa.hear.media/api/v1/webhooks/event" in template
+    assert "/api/v1/alexa/events" not in template
     assert "DynamoDBCrudPolicy: { TableName: !Ref HearListenerStateTable }" in template
     assert "dynamodb:TransactWriteItems" in template
     assert "Resource: !GetAtt HearListenerStateTable.Arn" in template
