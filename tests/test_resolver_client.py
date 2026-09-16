@@ -101,7 +101,7 @@ async def test_client_sends_documented_request_and_api_key(caplog):
             transport=httpx.MockTransport(handler),
         )
     )
-    with caplog.at_level(logging.INFO, logger="src.clients.resolver"):
+    with caplog.at_level(logging.INFO, logger="hear"):
         result = await client.resolve(
             "latest sport by adeshina",
             alexa_user_id="amzn-user",
@@ -116,7 +116,8 @@ async def test_client_sends_documented_request_and_api_key(caplog):
         == b'{"utterance":"latest sport by adeshina","timezone":"Europe/London","country_code":"gb","alexaUserId":"amzn-user","listenerId":"listener-1"}'
     )
     assert isinstance(result, ResolverResult)
-    assert '"utterance":"latest sport by adeshina"' in caplog.text
+    assert "latest sport by adeshina" not in caplog.text
+    assert '"utteranceChars":24' in caplog.text
     assert '"alexaUserId":"<present>"' in caplog.text
     assert '"listenerId":"<present>"' in caplog.text
     assert "resolver response httpStatus=200" in caplog.text
@@ -147,7 +148,8 @@ async def test_anonymous_resolver_requests_use_the_bounded_warm_cache():
     )
     first = await client.resolve("latest sport")
     second = await client.resolve(" latest sport ")
-    assert first is second
+    assert first == second
+    assert first is not second
     assert calls == 1
 
 
@@ -453,8 +455,7 @@ def test_category_intent_keeps_high_confidence_source_location():
     }
     assert result["slots"]["city"] == "Swindon"
     assert (
-        ConfirmationPolicy.confirmation_speech(result)
-        == "the latest content on sport in Swindon"
+        ConfirmationPolicy.confirmation_speech(result) == "the latest content on sport in Swindon"
     )
     assert [entity["entityType"] for entity in result["entities"]] == [
         "category",
@@ -494,9 +495,7 @@ def test_resolved_fuzzy_publication_is_preserved_as_an_explicit_source():
 
     result = ResolverResult.from_payload(payload).to_alexa_payload()
 
-    assert result["slots"]["publicationIds"] == [
-        "7c5685a7-7ea6-47c3-8cfd-266cc65a43f6"
-    ]
+    assert result["slots"]["publicationIds"] == ["7c5685a7-7ea6-47c3-8cfd-266cc65a43f6"]
     assert result["slots"]["publicationName"] == "Lover Notation"
     assert result["searchPayload"]["filter"] == {
         "publicationIds": ["7c5685a7-7ea6-47c3-8cfd-266cc65a43f6"]
@@ -720,9 +719,7 @@ def test_search_accepts_exact_source_location():
 )
 def test_search_accepts_single_whole_query_unspecified_location(utterance, start, end):
     payload = _response(intent="search")
-    payload["slots"].update(
-        {"residualQuery": "", "latest": False, "sort": None}
-    )
+    payload["slots"].update({"residualQuery": "", "latest": False, "sort": None})
     payload["entities"] = [
         {
             "entityType": "location",
@@ -740,9 +737,7 @@ def test_search_accepts_single_whole_query_unspecified_location(utterance, start
         }
     ]
 
-    result = ResolverResult.from_payload(payload).to_alexa_payload(
-        original_utterance=utterance
-    )
+    result = ResolverResult.from_payload(payload).to_alexa_payload(original_utterance=utterance)
 
     assert result["searchPayload"] == {
         "query": "",
@@ -801,9 +796,7 @@ def test_search_uses_ranked_unspecified_location_and_discards_residual_noise():
 @pytest.mark.parametrize(("confidence", "accepted"), [(75, True), (74, False)])
 def test_standalone_unspecified_location_confidence_boundary(confidence, accepted):
     payload = _response(intent="search")
-    payload["slots"].update(
-        {"residualQuery": "", "latest": False, "sort": None}
-    )
+    payload["slots"].update({"residualQuery": "", "latest": False, "sort": None})
     payload["entities"] = [
         {
             "entityType": "location",
@@ -821,9 +814,7 @@ def test_standalone_unspecified_location_confidence_boundary(confidence, accepte
         }
     ]
 
-    result = ResolverResult.from_payload(payload).to_alexa_payload(
-        original_utterance="play yuck"
-    )
+    result = ResolverResult.from_payload(payload).to_alexa_payload(original_utterance="play yuck")
 
     assert bool(result["searchPayload"]["filter"]) is accepted
     assert result["slots"].get("city") == ("York" if accepted else None)
@@ -831,9 +822,7 @@ def test_standalone_unspecified_location_confidence_boundary(confidence, accepte
 
 def test_search_chooses_highest_ranked_whole_query_unspecified_location():
     payload = _response(intent="search")
-    payload["slots"].update(
-        {"residualQuery": "", "latest": False, "sort": None}
-    )
+    payload["slots"].update({"residualQuery": "", "latest": False, "sort": None})
     payload["entities"] = [
         {
             "entityType": "location",
@@ -855,9 +844,7 @@ def test_search_chooses_highest_ranked_whole_query_unspecified_location():
         )
     ]
 
-    result = ResolverResult.from_payload(payload).to_alexa_payload(
-        original_utterance="play yuck"
-    )
+    result = ResolverResult.from_payload(payload).to_alexa_payload(original_utterance="play yuck")
 
     assert result["searchPayload"] == {
         "query": "",
@@ -1096,9 +1083,7 @@ def test_ranked_unspecified_location_takes_priority_over_original_query():
 def test_latest_multiword_fallback_keeps_sort_out_of_query():
     payload = _response(intent="search")
     payload["entities"] = []
-    payload["slots"].update(
-        {"residualQuery": "", "latest": True, "sort": "latest"}
-    )
+    payload["slots"].update({"residualQuery": "", "latest": True, "sort": "latest"})
 
     result = ResolverResult.from_payload(payload).to_alexa_payload(
         original_utterance="find me content on the latest sport news"
@@ -1142,9 +1127,7 @@ def test_one_hundred_multiword_fallback_combinations_remain_searchable():
         "I want to hear something on {topic}",
     )
     combinations = [
-        (template.format(topic=topic), topic)
-        for topic in topics
-        for template in templates
+        (template.format(topic=topic), topic) for topic in topics for template in templates
     ]
     assert len(combinations) == 100
 
@@ -1153,9 +1136,7 @@ def test_one_hundred_multiword_fallback_combinations_remain_searchable():
         payload["entities"] = []
         payload["slots"].update({"residualQuery": "", "sort": "relevance"})
 
-        result = ResolverResult.from_payload(payload).to_alexa_payload(
-            original_utterance=utterance
-        )
+        result = ResolverResult.from_payload(payload).to_alexa_payload(original_utterance=utterance)
 
         assert result["searchPayload"]["query"].casefold() == expected_query.casefold()
     assert result["entities"] == []

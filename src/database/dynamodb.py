@@ -6,6 +6,7 @@ import threading
 from typing import Any
 
 import boto3
+from botocore.config import Config
 
 
 class DynamoExpressions:
@@ -20,7 +21,13 @@ class DynamoExpressions:
             with DynamoExpressions._lock:
                 client = DynamoExpressions._clients.get(key)
                 if client is None:
-                    client = boto3.client("dynamodb", region_name=region)
+                    client = boto3.client(
+                        "dynamodb",
+                        region_name=region,
+                        config=Config(
+                            connect_timeout=1, read_timeout=2, retries={"max_attempts": 0}
+                        ),
+                    )
                     DynamoExpressions._clients[key] = client
         return client
 
@@ -144,7 +151,17 @@ class DynamoTable:
         self.table_name = table_name
         self.partition_key = partition_key
         self.sort_key = sort_key
-        self._client = DynamoExpressions.get_client(region)
+        self._region = region
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            self._client = DynamoExpressions.get_client(self._region)
+        return self._client
+
+    def _request(self, operation: str, params: dict):
+        return getattr(self.client, operation)(**params)
 
     def _key(self, partition_value: Any, sort_value: Any = None) -> dict:
         key = {self.partition_key: DynamoExpressions.encode_value(partition_value)}
@@ -160,7 +177,7 @@ class DynamoTable:
             "Key": self._key(partition_value, sort_value),
             "ConsistentRead": consistent,
         }
-        response = await asyncio.to_thread(self._client.get_item, **params)
+        response = await asyncio.to_thread(self._request, "get_item", params)
         item = response.get("Item")
         return DynamoExpressions.decode_item(item) if item else None
 
@@ -210,7 +227,7 @@ class DynamoTable:
             params["ConditionExpression"] = condition_expression
             params["ExpressionAttributeNames"].update(condition_names)
             params["ExpressionAttributeValues"].update(condition_values)
-        response = await asyncio.to_thread(self._client.update_item, **params)
+        response = await asyncio.to_thread(self._request, "update_item", params)
         old = response.get("Attributes")
         return DynamoExpressions.decode_item(old) if old else None
 
@@ -265,7 +282,7 @@ class DynamoTable:
             params["ConditionExpression"] = expression
             params["ExpressionAttributeNames"].update(condition_names)
             params["ExpressionAttributeValues"].update(condition_values)
-        await asyncio.to_thread(self._client.update_item, **params)
+        await asyncio.to_thread(self._request, "update_item", params)
 
     async def delete_item(
         self,
@@ -283,7 +300,7 @@ class DynamoTable:
             params["ConditionExpression"] = expression
             params["ExpressionAttributeNames"] = names
             params["ExpressionAttributeValues"] = values
-        await asyncio.to_thread(self._client.delete_item, **params)
+        await asyncio.to_thread(self._request, "delete_item", params)
 
     async def query(
         self,
@@ -320,7 +337,7 @@ class DynamoTable:
             params["ExclusiveStartKey"] = exclusive_start_key
         if ascending is not None:
             params["ScanIndexForward"] = ascending
-        response = await asyncio.to_thread(self._client.query, **params)
+        response = await asyncio.to_thread(self._request, "query", params)
         return {
             "items": [DynamoExpressions.decode_item(item) for item in response.get("Items", [])],
             "last_evaluated_key": response.get("LastEvaluatedKey"),

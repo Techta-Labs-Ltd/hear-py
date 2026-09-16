@@ -8,7 +8,25 @@ from datetime import datetime, timezone
 from src.constants.events import EventConstants
 
 
+class SqsBatch:
+    @staticmethod
+    def message_ids(records: list[dict]) -> list[str]:
+        if not isinstance(records, list):
+            raise ValueError("SQS Records must be a list")
+        identifiers = []
+        for record in records:
+            identifier = record.get("messageId") if isinstance(record, dict) else None
+            if not isinstance(identifier, str) or not identifier.strip():
+                raise ValueError("Every SQS record requires a messageId")
+            identifiers.append(identifier)
+        return identifiers
+
+
 class EventUtils:
+    @staticmethod
+    def reject_non_finite(value: str):
+        raise ValueError("Non-finite JSON values are not supported")
+
     @staticmethod
     def timestamp_ms() -> int:
         return int(time.time() * 1000)
@@ -20,8 +38,7 @@ class EventUtils:
         return {
             "event": str(event_type),
             "schemaVersion": EventConstants.CONTRACT_VERSION,
-            "eventId": payload.get("clientEventId")
-            or f"{event_type}:{EventUtils.timestamp_ms()}",
+            "eventId": payload.get("clientEventId") or f"{event_type}:{EventUtils.timestamp_ms()}",
             "timestamp": created_at,
             "data": payload,
         }

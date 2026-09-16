@@ -6,9 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.models.listener import IdentityContext, Listener, PrincipalType
 from src.models.permission import Permission, PermissionConstants, PermissionPolicy
 from src.models.user import User
-from src.services.listener_sync import ListenerSyncSupport
+from src.services.listener_sync import ListenerSyncPayload
 
 
 def _handler_input(
@@ -59,13 +60,30 @@ def _deps(*, profile=None):
             )
         ),
         listener_sync=SimpleNamespace(sync_for_launch=AsyncMock(return_value=True)),
+        notifications=SimpleNamespace(enable_after_permission=MagicMock()),
+        progressive=SimpleNamespace(send=AsyncMock(return_value=True)),
+        locality=SimpleNamespace(detect_device_location=AsyncMock(return_value=None)),
+        resolver=SimpleNamespace(resolve_utterance=AsyncMock()),
+    )
+
+
+def _permission(deps):
+    return Permission(
+        deps.user,
+        deps.onboarding,
+        deps.listener_profile,
+        deps.listener_sync,
+        deps.notifications,
+        deps.progressive,
+        deps.locality,
+        deps.resolver,
     )
 
 
 def test_location_consent_directive_is_voice_forward_and_explains_value():
     handler_input = _handler_input()
     deps = _deps()
-    response = Permission(deps=deps).start_location(handler_input)
+    response = _permission(deps).start_location(handler_input)
     directive = response["directives"][0]
     assert "nearby news, sport, publications, and talking newspapers" in response[
         "outputSpeech"
@@ -86,7 +104,7 @@ def test_notification_consent_uses_alexa_permission_without_account_linking():
     handler_input = _handler_input()
     deps = _deps()
 
-    response = Permission(deps=deps).start_notifications(handler_input)
+    response = _permission(deps).start_notifications(handler_input)
 
     directive = response["directives"][0]
     assert directive["type"] == "Connections.StartConnection"
@@ -103,7 +121,7 @@ def test_notification_consent_uses_alexa_permission_without_account_linking():
 
 def test_profile_consent_requests_full_name_and_email_only():
     handler_input = _handler_input()
-    response = Permission(deps=_deps()).start_profile(handler_input)
+    response = _permission(_deps()).start_profile(handler_input)
 
     directive = response["directives"][0]
     assert directive["input"]["permissionScopes"] == [
@@ -125,7 +143,7 @@ async def test_denied_location_consent_explains_denial_and_voice_fallback():
         status="DENIED",
     )
     deps = _deps()
-    response = await Permission(deps=deps).resume(handler_input)
+    response = await _permission(deps).resume(handler_input)
     speech = response["outputSpeech"]["ssml"]
     assert "permission is currently turned off" in speech
     assert "say my city is followed by your city" in speech
@@ -146,7 +164,7 @@ async def test_profile_consent_requires_both_name_and_email(profile, expected_ty
         status="ACCEPTED",
     )
     deps = _deps(profile=profile)
-    response = await Permission(deps=deps).resume(handler_input)
+    response = await _permission(deps).resume(handler_input)
     assert deps.user.snapshot(handler_input)["listenerType"] == expected_type
     deps.listener_sync.sync_for_launch.assert_awaited_once_with(handler_input)
     if expected_type == "guest":
@@ -179,7 +197,7 @@ async def test_profile_consent_failure_explains_the_outcome_and_recovery(
     )
     deps = _deps()
 
-    response = await Permission(deps=deps).resume(handler_input)
+    response = await _permission(deps).resume(handler_input)
 
     speech = response["outputSpeech"]["ssml"]
     assert expected in speech
@@ -200,7 +218,7 @@ async def test_profile_consent_uses_pending_state_when_alexa_omits_token():
     deps = _deps()
     deps.user.update(handler_input, {"awaitingProfilePermission": True})
 
-    response = await Permission(deps=deps).resume(handler_input)
+    response = await _permission(deps).resume(handler_input)
 
     speech = response["outputSpeech"]["ssml"]
     assert "permission to share your name and email was not granted" in speech
@@ -221,11 +239,19 @@ def test_guest_sync_contains_only_alexa_identity_fields():
             "longitude": -2.24,
         }
     )
-    payload = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
+    Listener.set_identity(
+        handler_input,
+        IdentityContext(PrincipalType.SKILL_USER, alexa_user_id="user"),
+    )
+    payload = ListenerSyncPayload.build(handler_input, store)
     assert payload == {
         "action": "alexa",
         "alexaUserId": "user",
         "listenerId": None,
+        "listenerName": "Hidden Name",
+        "city": "Manchester",
+        "latitude": 53.48,
+        "longitude": -2.24,
     }
 
 
@@ -249,7 +275,11 @@ def test_listener_sync_uses_publication_history_subject_instead_of_track():
         }
     ]
 
-    payload = ListenerSyncSupport.build_listener_sync_profile(handler_input, store)
+    Listener.set_identity(
+        handler_input,
+        IdentityContext(PrincipalType.SKILL_USER, alexa_user_id="user"),
+    )
+    payload = ListenerSyncPayload.build(handler_input, store)
 
     assert "recentPlayedIds" not in payload
     assert "recentPlays" not in payload

@@ -2,193 +2,41 @@ from __future__ import annotations
 
 import time
 from copy import deepcopy
+from dataclasses import dataclass
+from enum import StrEnum
 
 from config import settings
 from src.constants.state import StateSchema
 from src.utils.content import ContentIdentity
 from src.utils.playback import PlaybackUtils
 from src.utils.playback_history import PlaybackHistoryUtils
-from src.utils.user_state import UserStateCollections
+from src.utils.user_state import UserStateNormalizer
 
 
-class UserStateNormalizer:
-    PLAYBACK_FIELDS = frozenset(
-        {
-            "audioUrl",
-            "category",
-            "contentId",
-            "creatorId",
-            "creatorName",
-            "discoverySource",
-            "discoveryContext",
-            "durationMs",
-            "eventTimestamp",
-            "isPublication",
-            "lastEventRequestId",
-            "lastListeningDeltaMs",
-            "listenedMs",
-            "observationOffsetMs",
-            "observationTimestampMs",
-            "offsetMs",
-            "organizationId",
-            "organizationName",
-            "playbackSpeeds",
-            "publicationId",
-            "publicationTitle",
-            "queueId",
-            "queueIndex",
-            "sessionId",
-            "startedAt",
-            "status",
-            "subjectSessionId",
-            "summary",
-            "timeSpentMs",
-            "title",
-            "trackCount",
-            "trackIndex",
-            "updatedAt",
-        }
-    )
-    CONTENT_CACHE_FIELDS = frozenset(
-        {
-            "audioUrl",
-            "category",
-            "contentId",
-            "creatorId",
-            "creatorName",
-            "durationMs",
-            "isPublication",
-            "organizationId",
-            "organizationName",
-            "playbackSpeeds",
-            "publicationId",
-            "publicationTitle",
-            "spokenTitle",
-            "summary",
-            "title",
-            "trackCount",
-            "trackIndex",
-        }
-    )
+class CommitStatus(StrEnum):
+    SAVED = "saved"
+    UNCHANGED = "unchanged"
+    UNAVAILABLE = "load_unavailable"
+    DEADLINE_EXCEEDED = "deadline_exceeded"
+    FAILED = "failed"
 
-    @staticmethod
-    def value(value, depth: int = 0):
-        return UserStateCollections.value(value, depth)
 
-    @staticmethod
-    def snapshot(store: dict) -> dict:
-        normalized = {
-            key: UserStateNormalizer.value(value)
-            for key, value in store.items()
-            if key in StateSchema.PERSISTED_FIELDS
-            and value != StateSchema.default_for(key)
-        }
-        active = normalized.get("activePlayback")
-        if isinstance(active, dict):
-            normalized["activePlayback"] = UserStateNormalizer.active_playback(active)
-        queue = normalized.get("playbackQueue")
-        if isinstance(queue, dict) and isinstance(queue.get("orderedContentIds"), list):
-            queue["orderedContentIds"] = queue["orderedContentIds"][
-                : max(settings.HEAR_PERSISTED_COLLECTION_LIMIT, 1)
-            ]
-            queue["currentIndex"] = min(
-                max(0, int(queue.get("currentIndex") or 0)),
-                max(len(queue["orderedContentIds"]) - 1, 0),
-            )
-        prepared = normalized.get("preparedNextContent")
-        if isinstance(prepared, dict):
-            normalized["preparedNextContent"] = UserStateNormalizer.content_cache(prepared)
-        normalized["playHistory"] = UserStateNormalizer.play_history(
-            normalized.get("playHistory")
-        )
-        normalized["feedbackCandidates"] = UserStateNormalizer.feedback_candidates(
-            normalized.get("feedbackCandidates")
-        )
-        normalized["publicationFeedbackProgress"] = (
-            UserStateNormalizer.publication_progress(
-                normalized.get("publicationFeedbackProgress")
-            )
-        )
-        for key in tuple(normalized):
-            if normalized[key] == StateSchema.default_for(key):
-                normalized.pop(key, None)
-        return normalized
+@dataclass(frozen=True, slots=True)
+class CommitResult:
+    status: CommitStatus
+    essential: bool = False
 
-    @staticmethod
-    def active_playback(value: dict) -> dict:
-        return {
-            key: UserStateNormalizer.value(item)
-            for key, item in value.items()
-            if key in UserStateNormalizer.PLAYBACK_FIELDS and item is not None
-        }
 
-    @staticmethod
-    def content_cache(value: dict) -> dict:
-        return {
-            key: UserStateNormalizer.value(item)
-            for key, item in value.items()
-            if key in UserStateNormalizer.CONTENT_CACHE_FIELDS and item is not None
-        }
+class EssentialPersistenceError(RuntimeError):
+    def __init__(self, result: CommitResult) -> None:
+        self.result = result
+        super().__init__(f"Essential persistence commit did not succeed: {result.status}")
 
-    @staticmethod
-    def play_history(value) -> list:
-        compact = []
-        for raw in value or []:
-            item = PlaybackHistoryUtils.normalize(raw)
-            if not item:
-                continue
-            compact.append(
-                {
-                    key: item[key]
-                    for key in (
-                        "id",
-                        "subjectType",
-                        "subjectId",
-                        "contentId",
-                        "trackContentId",
-                        "publicationId",
-                        "trackIndex",
-                        "trackCount",
-                        "offsetMs",
-                        "listenedMs",
-                        "timeSpentMs",
-                        "completed",
-                    )
-                    if item.get(key) is not None
-                }
-            )
-        return compact[: min(settings.max_history, 20)]
 
-    @staticmethod
-    def feedback_candidates(value) -> list:
-        return UserStateCollections.feedback_candidates(value)
-
-    @staticmethod
-    def followed_creators(value) -> list:
-        return UserStateCollections.followed_creators(value)
-
-    @staticmethod
-    def publication_progress(value) -> dict:
-        return UserStateCollections.publication_progress(value)
-
-    @staticmethod
-    def history(value) -> list:
-        return UserStateCollections.history(value)
-
-    @staticmethod
-    def feedback(store: dict) -> None:
-        pending = store.get("pendingFeedback")
-        if (
-            not isinstance(pending, dict)
-            or not pending.get("publicationId")
-            or pending.get("subjectType") == "publication"
-        ):
-            return
-        store["pendingFeedback"] = None
-        store["awaitingFeedback"] = False
-        dialog = store.get("activeDialog") or {}
-        if (dialog.get("type") or dialog.get("kind")) == "feedback":
-            store["activeDialog"] = None
+@dataclass(frozen=True, slots=True)
+class PersistenceReceipt:
+    versions: dict[str, int]
+    snapshot: dict
 
 
 class User:
@@ -197,21 +45,19 @@ class User:
     @staticmethod
     def snapshot(handler_input) -> dict:
         attrs = handler_input.attributes_manager.request_attributes
-        return dict(attrs.get("_store") or StateSchema.DEFAULT_STORE)
+        return deepcopy(attrs.get("_store") or StateSchema.DEFAULT_STORE)
 
     @staticmethod
     def update(handler_input, updates: dict) -> dict:
         attrs = handler_input.attributes_manager.request_attributes
-        store = {**(attrs.get("_store") or StateSchema.DEFAULT_STORE), **updates}
+        store = deepcopy({**(attrs.get("_store") or StateSchema.DEFAULT_STORE), **updates})
         changed_fields = set(attrs.get("_changedFields") or ())
-        changed_fields.update(
-            key for key in updates if key in StateSchema.PERSISTED_FIELDS
-        )
+        changed_fields.update(key for key in updates if key in StateSchema.PERSISTED_FIELDS)
         attrs["_store"] = store
         attrs["_dirty"] = True
         attrs["_changedFields"] = tuple(sorted(changed_fields))
         handler_input.attributes_manager.request_attributes = attrs
-        return store
+        return deepcopy(store)
 
     @staticmethod
     def hydrate(handler_input, stored: dict | None, *, persistence_available: bool = True) -> dict:
@@ -219,14 +65,13 @@ class User:
         versions = document.pop("_persistenceVersions", {})
         if not isinstance(versions, dict):
             versions = {}
-        needs_canonical_copy = bool(
-            document.pop("_persistenceNeedsCanonicalCopy", False)
-        )
+        needs_canonical_copy = bool(document.pop("_persistenceNeedsCanonicalCopy", False))
         store = User.merge_persisted(document)
         transient = {
             key: value
             for key, value in handler_input.attributes_manager.request_attributes.items()
-            if key not in {
+            if key
+            not in {
                 "_store",
                 "_dirty",
                 "_changedFields",
@@ -246,8 +91,7 @@ class User:
             "_persistenceAvailable": persistence_available,
             "_persistenceBaseline": deepcopy(User.persisted_snapshot(store)),
             "_persistenceVersions": {
-                scope: max(0, int(versions.get(scope) or 0))
-                for scope in StateSchema.SCOPES
+                scope: max(0, int(versions.get(scope) or 0)) for scope in StateSchema.SCOPES
             },
         }
         return store
@@ -289,7 +133,19 @@ class User:
             },
         }
         handler_input.attributes_manager.persistent_attributes = payload
-        await handler_input.attributes_manager.save_persistent_attributes()
+        receipt = await handler_input.attributes_manager.save_persistent_attributes()
+        committed = receipt.snapshot if isinstance(receipt, PersistenceReceipt) else snapshot
+        current = User.persisted_snapshot(User.snapshot(handler_input))
+        remaining = set(User.changed_fields(handler_input))
+        for field in changed_fields:
+            baseline[field] = deepcopy(committed.get(field))
+            if current.get(field) == snapshot.get(field):
+                remaining.discard(field)
+        if isinstance(receipt, PersistenceReceipt):
+            attrs["_persistenceVersions"] = dict(receipt.versions)
+        attrs["_persistenceBaseline"] = deepcopy(baseline)
+        attrs["_changedFields"] = tuple(sorted(remaining))
+        attrs["_dirty"] = bool(remaining)
 
     @staticmethod
     def normalize_recent_track_listens(value: object) -> list:
@@ -339,24 +195,19 @@ class User:
             active["trackContentId"] = (
                 active.get("contentId") if ContentIdentity.is_publication(active) else None
             )
-            active["subjectSessionId"] = active.get("subjectSessionId") or active.get(
-                "sessionId"
-            )
+            active["subjectSessionId"] = active.get("subjectSessionId") or active.get("sessionId")
             active["timeSpentMs"] = max(
                 0,
                 int(active.get("timeSpentMs") or active.get("listenedMs") or 0),
             )
             active["timeSpentHours"] = PlaybackUtils.hours(active["timeSpentMs"])
-            active["lastListeningDeltaMs"] = max(
-                0, int(active.get("lastListeningDeltaMs") or 0)
-            )
+            active["lastListeningDeltaMs"] = max(0, int(active.get("lastListeningDeltaMs") or 0))
             active["observationOffsetMs"] = max(
                 0,
                 int(
                     active.get("observationOffsetMs")
                     if active.get("observationOffsetMs") is not None
-                    else active.get("offsetMs")
-                    or 0
+                    else active.get("offsetMs") or 0
                 ),
             )
             active["observationTimestampMs"] = max(
@@ -418,9 +269,14 @@ class User:
 
     @staticmethod
     def merge_persisted(stored: dict | None) -> dict:
+        persisted = {
+            key: value
+            for key, value in (stored.items() if isinstance(stored, dict) else ())
+            if key in StateSchema.PERSISTED_FIELDS
+        }
         merged = {
-            **StateSchema.DEFAULT_STORE,
-            **(stored if isinstance(stored, dict) else {}),
+            **StateSchema.defaults(),
+            **deepcopy(persisted),
         }
         merged["recentTrackListens"] = User.normalize_recent_track_listens(
             merged.get("recentTrackListens")
@@ -431,19 +287,11 @@ class User:
         pattern = merged.get("listeningPattern")
         if isinstance(pattern, dict):
             merged["listeningPattern"] = dict(list(pattern.items())[:40])
-        merged["followedCreators"] = UserStateNormalizer.followed_creators(
-            merged.get("followedCreators")
-        )
-        merged["publicationFeedbackProgress"] = UserStateNormalizer.publication_progress(
-            merged.get("publicationFeedbackProgress")
-        )
         merged["playHistory"] = [
             normalized
             for item in merged.get("playHistory") or []
             if (normalized := PlaybackHistoryUtils.normalize(item))
         ][: settings.max_history]
-        for history_key in ("feedbackHistory", "reportHistory"):
-            merged[history_key] = UserStateNormalizer.history(merged.get(history_key))
         UserStateNormalizer.feedback(merged)
         return merged
 
@@ -455,7 +303,10 @@ class User:
 
     @staticmethod
     def requires_reliable_save(handler_input) -> bool:
-        return bool(User.snapshot(handler_input).get("_requiresReliableSave"))
+        return bool(User.snapshot(handler_input).get("_requiresReliableSave")) or any(
+            StateSchema.scope_for(field) in {StateSchema.PLAYBACK_SCOPE, StateSchema.DIALOG_SCOPE}
+            for field in User.changed_fields(handler_input)
+        )
 
     @staticmethod
     def active_dialog(store: dict | None) -> dict | None:

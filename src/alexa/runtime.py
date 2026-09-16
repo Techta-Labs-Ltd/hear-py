@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import logging
 from typing import Any
 from urllib.parse import urlparse
 
@@ -9,6 +8,9 @@ from aws_lambda_powertools import Metrics
 from aws_lambda_powertools.metrics import MetricUnit
 
 from config import settings
+from src.alexa.response import AlexaResponse
+from src.services.logging_control import ApplicationLog
+from src.utils.deadline import RequestDeadline
 
 
 class AlexaMetrics:
@@ -23,7 +25,6 @@ class AlexaMetrics:
 
 
 class AlexaRuntime:
-    logger = logging.getLogger(__name__)
 
     @staticmethod
     def _valid_card_image_url(value: Any) -> bool:
@@ -48,18 +49,6 @@ class AlexaRuntime:
     @staticmethod
     async def _resolve(value: Any) -> Any:
         return await value if inspect.isawaitable(value) else value
-
-    @staticmethod
-    def _process_caller(interceptor: Any):
-        raw = inspect.getattr_static(type(interceptor), "process", None)
-        if isinstance(raw, staticmethod):
-            func = raw.__func__
-            return lambda hi: func(hi)
-        func = getattr(interceptor, "process")
-        params = list(inspect.signature(raw if callable(raw) else func).parameters)
-        if params and params[0] == "self":
-            return lambda hi: raw(interceptor, hi)
-        return lambda hi: func(hi)
 
 
 class AttrDict(dict):
@@ -103,9 +92,7 @@ class AttributesManager:
         if self._persistent_loaded:
             raise RuntimeError("persistence identity must be configured before loading state")
         self._persistence_key = str(primary_key).strip() if primary_key else None
-        self._fallback_persistence_key = (
-            str(fallback_key).strip() if fallback_key else None
-        )
+        self._fallback_persistence_key = str(fallback_key).strip() if fallback_key else None
 
     @property
     def used_alias_persistence(self) -> bool:
@@ -150,19 +137,25 @@ class AttributesManager:
         if self._adapter is None:
             self._persistent = {}
         else:
-            self._persistent = await self._adapter.get_attributes(
-                self._envelope,
-                persistence_key=self._persistence_key,
-            ) or {}
+            self._persistent = (
+                await self._adapter.get_attributes(
+                    self._envelope,
+                    persistence_key=self._persistence_key,
+                )
+                or {}
+            )
             if (
                 not self._persistent
                 and self._fallback_persistence_key
                 and self._fallback_persistence_key != self._persistence_key
             ):
-                self._persistent = await self._adapter.get_attributes(
-                    self._envelope,
-                    persistence_key=self._fallback_persistence_key,
-                ) or {}
+                self._persistent = (
+                    await self._adapter.get_attributes(
+                        self._envelope,
+                        persistence_key=self._fallback_persistence_key,
+                    )
+                    or {}
+                )
                 if self._persistent:
                     self._persistent["_persistenceVersions"] = {}
                     self._persistent["_persistenceNeedsCanonicalCopy"] = True
@@ -170,13 +163,14 @@ class AttributesManager:
         self._persistent_loaded = True
         return self._persistent
 
-    async def save_persistent_attributes(self) -> None:
+    async def save_persistent_attributes(self):
         if self._adapter is not None and self._persistent is not None:
-            await self._adapter.save_attributes(
+            return await self._adapter.save_attributes(
                 self._envelope,
                 self._persistent,
                 persistence_key=self._persistence_key,
             )
+        raise RuntimeError("No persistence adapter is configured")
 
 
 class ResponseBuilder:
@@ -267,12 +261,19 @@ class HandlerInput:
         self.request_envelope = request_envelope
         self.attributes_manager = attributes_manager
         self.context = context
+        self.deadline = RequestDeadline.from_context(
+            context, default_ms=8000 if settings.is_lambda else 30000
+        )
         self.response_builder = response_builder
         self._redispatch = None
+        self._redispatch_count = 0
 
     async def redispatch(self):
         if self._redispatch is None:
             return self.response_builder.response
+        if self._redispatch_count >= 3:
+            raise RuntimeError("Alexa redispatch limit exceeded")
+        self._redispatch_count += 1
         return await self._redispatch(self)
 
 
@@ -291,10 +292,10 @@ class AsyncSkill:
         self.exception_handlers.append(handler)
 
     def add_global_request_interceptor(self, interceptor: Any) -> None:
-        self._request_interceptors.append(AlexaRuntime._process_caller(interceptor))
+        self._request_interceptors.append(interceptor.process)
 
     def add_global_response_interceptor(self, interceptor: Any) -> None:
-        self._response_interceptors.append(AlexaRuntime._process_caller(interceptor))
+        self._response_interceptors.append(interceptor.process)
 
     async def invoke(self, event: dict, context: Any) -> dict:
         envelope = AttrDict(event)
@@ -306,18 +307,12 @@ class AsyncSkill:
             for caller in self._request_interceptors:
                 await AlexaRuntime._resolve(caller(handler_input))
             response = await self._dispatch(handler_input)
-        except Exception as exc:
-            response = await self._dispatch_exception(handler_input, exc)
-        for caller in self._response_interceptors:
-            try:
+            response = self._build_envelope(handler_input, response)
+            for caller in self._response_interceptors:
                 await AlexaRuntime._resolve(caller(handler_input))
-            except Exception as exc:
-                AlexaMetrics.increment("ResponseInterceptorFailure")
-                AlexaRuntime.logger.exception(
-                    "Alexa response interceptor failed interceptor=%s error=%s",
-                    getattr(caller, "__qualname__", type(caller).__name__),
-                    type(exc).__name__,
-                )
+        except Exception as exc:
+            handler_input.response_builder = ResponseBuilder()
+            response = await self._dispatch_exception(handler_input, exc)
         return self._build_envelope(handler_input, response)
 
     async def _dispatch(self, handler_input: HandlerInput) -> Any:
@@ -326,12 +321,12 @@ class AsyncSkill:
                 can = await AlexaRuntime._resolve(handler.can_handle(handler_input))
             except Exception as exc:
                 AlexaMetrics.increment("HandlerMatchFailure")
-                AlexaRuntime.logger.warning(
+                ApplicationLog.warning(
                     "Alexa handler match failed handler=%s error=%s",
                     type(handler).__name__,
                     type(exc).__name__,
                 )
-                can = False
+                raise
             if can:
                 return await AlexaRuntime._resolve(handler.handle(handler_input))
         return handler_input.response_builder.response
@@ -342,7 +337,7 @@ class AsyncSkill:
                 can = await AlexaRuntime._resolve(handler.can_handle(handler_input, exc))
             except Exception as match_error:
                 AlexaMetrics.increment("ExceptionHandlerMatchFailure")
-                AlexaRuntime.logger.warning(
+                ApplicationLog.warning(
                     "Alexa exception handler match failed handler=%s error=%s",
                     type(handler).__name__,
                     type(match_error).__name__,
@@ -354,12 +349,17 @@ class AsyncSkill:
 
     @staticmethod
     def _build_envelope(handler_input: HandlerInput, response: Any) -> dict:
+        request_type = str((handler_input.request_envelope.get("request") or {}).get("type") or "")
         if response is None:
             response = handler_input.response_builder.response
         if isinstance(response, dict) and "version" in response and ("response" in response):
-            return response
-        return {
+            response = response["response"]
+        envelope = {
             "version": "1.0",
-            "sessionAttributes": handler_input.attributes_manager.get_session_attributes() or {},
-            "response": response or {},
+            "response": AlexaResponse.for_request(request_type, response),
         }
+        if AlexaResponse.conversational(request_type):
+            envelope["sessionAttributes"] = (
+                handler_input.attributes_manager.get_session_attributes() or {}
+            )
+        return envelope

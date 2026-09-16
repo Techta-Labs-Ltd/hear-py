@@ -5,6 +5,7 @@ from typing import Any, Dict
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.clients.resolver import ResolverClient
 from src.models.resolver import ResolverUnavailable
 from src.utils.deadline import DeadlineBudget
 
@@ -77,8 +78,8 @@ class CanFulfillPolicy:
 
 
 class CanFulfillIntentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, resolver: ResolverClient) -> None:
+        self._resolver = resolver
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return handler_input.request_envelope.request.type == "CanFulfillIntentRequest"
@@ -99,7 +100,7 @@ class CanFulfillIntentHandler(AbstractRequestHandler):
                 intent,
             )
         try:
-            result = await self._deps.resolver.resolve_utterance(
+            result = await self._resolver.resolve_utterance(
                 utterance, timeout_ms=DeadlineBudget.resolver_timeout_ms(handler_input)
             )
         except ResolverUnavailable:

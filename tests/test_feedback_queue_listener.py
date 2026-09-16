@@ -19,13 +19,30 @@ from src.controllers.feedback import (
 )
 from src.controllers.report import ReportContentHandler
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
+from src.models.decline import Decline
 from src.models.feedback import FeedbackService
-from src.models.feedback_response import FeedbackContinuation
+from src.models.feedback_response import (
+    EnjoyedFeedback,
+    FeedbackContinuation,
+    NotEnjoyedFeedback,
+    SkipFeedback,
+    SomewhatFeedback,
+)
+from src.models.listener import IdentityContext, Listener, PrincipalType
 from src.models.playback import Playback
 from src.models.user import User
 from src.services.listener_sync import ListenerSyncService
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
+
+
+def _feedback_response(deps):
+    return FeedbackResponseHandler(
+        EnjoyedFeedback(deps=deps),
+        SomewhatFeedback(deps=deps),
+        NotEnjoyedFeedback(deps=deps),
+        SkipFeedback(deps=deps),
+    )
 
 
 @pytest.mark.parametrize(
@@ -147,7 +164,7 @@ async def test_return_time_feedback_asks_to_continue_exact_organization(
             },
         }
     )
-    await FeedbackResponseHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await _feedback_response(ApplicationContainer()).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
     assert "continue listening to York Talking News" in spoken
@@ -334,7 +351,7 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
             "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
         }
     )
-    await FeedbackEnjoyedHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await FeedbackEnjoyedHandler(EnjoyedFeedback(deps=ApplicationContainer())).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "feedback on TRACK115 by Tynedale Talking Magazine" in spoken
     assert "WhatsApp Ptt" not in spoken
@@ -465,7 +482,6 @@ def test_starting_new_playback_discards_only_temporary_feedback_state(mock_handl
         ],
         "activeDialog": {"type": "feedback", "context": {"contentId": "completed-old"}},
         "answeredFeedbackKeys": ["already-rated"],
-        "feedbackHistory": [{"feedbackKey": "already-rated", "value": "enjoyed"}],
     }
 
     ApplicationContainer().playback.start_session(
@@ -483,9 +499,6 @@ def test_starting_new_playback_discards_only_temporary_feedback_state(mock_handl
     assert store["feedbackCandidates"] == []
     assert store["activeDialog"] is None
     assert store["answeredFeedbackKeys"] == ["already-rated"]
-    assert store["feedbackHistory"] == [
-        {"feedbackKey": "already-rated", "value": "enjoyed"}
-    ]
 
 
 def test_answered_feedback_requires_reliable_persistence(mock_handler_input):
@@ -629,7 +642,7 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
         }
     )
     monkeypatch.setattr("src.controllers.feedback", AsyncMock())
-    feedback_response = await FeedbackNotEnjoyedHandler(deps=ApplicationContainer()).handle(
+    feedback_response = await FeedbackNotEnjoyedHandler(NotEnjoyedFeedback(deps=ApplicationContainer())).handle(
         mock_handler_input
     )
     assert feedback_response is not None
@@ -649,7 +662,7 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
         is None
     )
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
-    assert store["reportHistory"] == []
+    assert "reportHistory" not in store
     assert store["awaitingReportDecision"] is False
 
 
@@ -709,7 +722,7 @@ async def test_skip_feedback_does_not_restore_rejected_search_confirmation(
         }
     )
     monkeypatch.setattr("src.controllers.feedback", AsyncMock())
-    await SkipFeedbackHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await SkipFeedbackHandler(SkipFeedback(deps=ApplicationContainer())).handle(mock_handler_input)
     mock_handler_input.redispatch.assert_not_awaited()
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"].get("deferredIntent")
@@ -732,7 +745,8 @@ async def test_plain_no_records_not_enjoyed_feedback(monkeypatch, mock_handler_i
     }
     submit = AsyncMock()
     monkeypatch.setattr("src.models.feedback.FeedbackService.submit", submit)
-    await NoIntentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    container = ApplicationContainer()
+    await NoIntentHandler(Decline(deps=container)).handle(mock_handler_input)
     submit.assert_awaited_once_with(mock_handler_input, "not_enjoyed")
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"]["awaitingFeedback"]
@@ -762,12 +776,16 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
     }
     sync = AsyncMock(return_value={"listenerId": "listener-1"})
     service = ListenerSyncService(SimpleNamespace(sync_listener=sync))
+    Listener.set_identity(
+        mock_handler_input,
+        IdentityContext(PrincipalType.SKILL_USER, alexa_user_id="amzn1.ask.account.TEST"),
+    )
     assert await service.sync_for_launch(mock_handler_input)
     profile = sync.await_args.args[0]
     assert profile == {
         "action": "alexa",
-        "alexaUserId": profile["alexaUserId"],
-        "listenerId": "listener-existing",
+        "alexaUserId": "amzn1.ask.account.TEST",
+        "listenerId": None,
         "listenerName": "Alex Hear",
         "email": "alex@example.com",
         "city": "Manchester",

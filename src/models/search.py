@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
 from typing import Any, Dict, Optional
 
@@ -20,6 +19,7 @@ from src.constants.search import SearchConstants
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.playback_state import PlaybackQueue
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.browse import BrowseUtils
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
@@ -29,7 +29,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class Search:
-    logger = logging.getLogger(__name__)
     @staticmethod
     def initial_search_queue_items(
         search_result: dict[str, Any],
@@ -375,7 +374,7 @@ class Search:
             nlp_filter=filters,
         )
         logged_payload = {key: value for key, value in payload.items() if key not in {"alexaUserId", "listenerId"}}
-        Search.logger.info(
+        ApplicationLog.info(
             "Hear: search request intent=%s payload=%s",
             intent,
             json.dumps(logged_payload, sort_keys=True, separators=(",", ":")),
@@ -384,7 +383,7 @@ class Search:
         result = await d.heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
-        Search.logger.info(
+        ApplicationLog.info(
             "Hear: search response intent=%s failed=%s total=%s returned=%s",
             intent,
             bool(result.get("failed")),

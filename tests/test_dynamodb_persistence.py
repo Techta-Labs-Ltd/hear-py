@@ -165,6 +165,26 @@ async def test_existing_scope_save_updates_only_changed_fields():
 
 
 @pytest.mark.asyncio
+async def test_save_removes_legacy_feedback_and_following_cache_fields():
+    adapter = _adapter_with_mocked_table()
+    await adapter.save_attributes(
+        _envelope(),
+        {
+            "playCount": 3,
+            "_persistenceVersions": {"CORE": 4, "CACHE": 7},
+            "_persistenceChangedFields": ["playCount"],
+            "_persistenceOriginal": {"playCount": 2},
+        },
+    )
+
+    calls = adapter._table.update_map_fields.call_args_list
+    cache_call = next(call for call in calls if call.kwargs["sort_value"] == "CACHE")
+    assert cache_call.args == ("alexa-user", "attributes", {})
+    assert set(cache_call.kwargs["removes"]) == StateSchema.LEGACY_DATABASE_FIELDS
+    assert cache_call.kwargs["updates"]["stateVersion"] == 8
+
+
+@pytest.mark.asyncio
 async def test_clearing_a_field_uses_remove_instead_of_null():
     adapter = _adapter_with_mocked_table()
     await adapter.save_attributes(

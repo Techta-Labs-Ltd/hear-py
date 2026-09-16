@@ -51,7 +51,94 @@ def test_runtime_and_utility_modules_have_clear_owners():
     assert (src / "utils" / "filters.py").exists()
 
 
-def test_github_workflows_use_the_current_architecture_audit():
+def test_application_log_has_one_production_owner():
+    src = Path(__file__).resolve().parents[1] / "src"
+    logging_owner = src / "services" / "logging_control.py"
+    for path in src.rglob("*.py"):
+        if path == logging_owner:
+            continue
+        source = path.read_text(encoding="utf-8")
+        assert "logging.getLogger" not in source
+        assert "logger = ApplicationLog" not in source
+
+
+def test_playback_event_handlers_use_explicit_collaborators():
+    root = Path(__file__).resolve().parents[1] / "src"
+    for relative_path in (
+        "controllers/playback_events.py",
+        "models/playback_events.py",
+    ):
+        source = (root / relative_path).read_text(encoding="utf-8")
+        assert "deps:" not in source
+        assert "self._deps" not in source
+
+
+def test_availability_gate_uses_its_explicit_action():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "controllers" / "availability.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+    assert "self._deps" not in source
+
+
+def test_can_fulfill_handler_uses_an_explicit_resolver():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "controllers" / "can_fulfill.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+    assert "self._deps" not in source
+
+
+def test_intent_dispatch_gate_uses_an_explicit_dispatcher():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "controllers"
+        / "intent_dispatch.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+
+
+def test_error_and_basic_system_handlers_use_explicit_collaborators():
+    root = Path(__file__).resolve().parents[1] / "src" / "controllers"
+    assert "self._deps" not in (root / "error.py").read_text(encoding="utf-8")
+    source = (root / "system.py").read_text(encoding="utf-8")
+    for handler_name in (
+        "CancelIntentHandler",
+        "NavigateHomeHandler",
+        "SessionEndedHandler",
+    ):
+        class_source = source.split(f"class {handler_name}", 1)[1].split(
+            "\nclass ", 1
+        )[0]
+        assert "deps:" not in class_source
+        assert "self._deps" not in class_source
+
+
+def test_confirmation_handlers_use_explicit_actions():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "controllers" / "confirmation.py"
+    ).read_text(encoding="utf-8")
+    assert "deps:" not in source
+
+
+def test_permission_model_uses_explicit_collaborators():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "models" / "permission.py"
+    ).read_text(encoding="utf-8")
+    assert "self._deps" not in source
+    assert "def __init__(self, *, deps:" not in source
+
+
+def test_launch_handlers_use_explicit_actions_and_state():
+    source = (
+        Path(__file__).resolve().parents[1] / "src" / "controllers" / "launch.py"
+    ).read_text(encoding="utf-8")
+    assert "def __init__(self, *, deps:" not in source
+    assert "self._deps" not in source
+
+
+def test_github_workflows_do_not_reference_removed_agent_skills():
     root = Path(__file__).resolve().parents[1]
     workflows = [
         root / ".github" / "workflows" / "deploy-develop.yml",
@@ -59,7 +146,8 @@ def test_github_workflows_use_the_current_architecture_audit():
     ]
     for workflow in workflows:
         source = workflow.read_text(encoding="utf-8")
-        assert "hear-architecture-refactor/scripts/audit_architecture.py . --strict" in source
+        assert "hear-architecture-refactor" not in source
+        assert ".agents/" not in source
         assert "hear-alexa-python/scripts/audit_project.py" not in source
 
 
@@ -277,6 +365,13 @@ def test_stateful_services_have_explicit_owners():
         ResolverClient(ResolverOptions(host="https://resolver.test", api_key="test")),
         ResolverClient,
     )
+
+
+def test_container_allows_search_to_be_replaced_explicitly():
+    from src.models.search import Search
+
+    search = Search()
+    assert ApplicationContainer(search=search).search is search
 
 
 @pytest.mark.asyncio

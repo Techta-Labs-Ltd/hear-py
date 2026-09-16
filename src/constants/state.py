@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 
 class StateSchema:
     SCHEMA_VERSION = 2
@@ -25,11 +27,9 @@ class StateSchema:
         "awaitingReportDecision": (False, DIALOG_SCOPE),
         "reportContext": (None, DIALOG_SCOPE),
         "pendingFeedback": (None, DIALOG_SCOPE),
-        "feedbackCandidates": ([], CACHE_SCOPE),
-        "publicationFeedbackProgress": ({}, CACHE_SCOPE),
-        "answeredFeedbackKeys": ([], CACHE_SCOPE),
-        "feedbackHistory": ([], None),
-        "reportHistory": ([], None),
+        "feedbackCandidates": ([], None),
+        "publicationFeedbackProgress": ({}, None),
+        "answeredFeedbackKeys": ([], None),
         "feedbackContentId": (None, None),
         "feedbackCategory": (None, None),
         "feedbackCreator": (None, None),
@@ -45,7 +45,7 @@ class StateSchema:
         "listeningPattern": ({}, CACHE_SCOPE),
         "playCount": (0, CORE_SCOPE),
         "playHistory": ([], CACHE_SCOPE),
-        "followedCreators": ([], CACHE_SCOPE),
+        "followedCreators": ([], None),
         "pendingFollowSource": (None, DIALOG_SCOPE),
         "latitude": (None, CORE_SCOPE),
         "longitude": (None, CORE_SCOPE),
@@ -65,7 +65,6 @@ class StateSchema:
         "devicePostalCode": (None, CORE_SCOPE),
         "deviceCountryCode": (None, CORE_SCOPE),
         "awaitingContinueAfterFlag": (False, DIALOG_SCOPE),
-        "feedbackReminderAlertToken": (None, None),
         "feedbackAskedForToken": (None, None),
         "feedbackAskedTokens": ([], None),
         "feedbackGivenTokens": ([], None),
@@ -106,12 +105,21 @@ class StateSchema:
         "lastLatestSourceOfferContentId": (None, CACHE_SCOPE),
         "deferredIntent": (None, None),
     }
-    DEFAULT_STORE = {
-        name: specification[0] for name, specification in FIELD_SPECS.items()
-    }
+    DEFAULT_STORE = {name: specification[0] for name, specification in FIELD_SPECS.items()}
     PERSISTED_FIELDS = frozenset(
         name for name, specification in FIELD_SPECS.items() if specification[1]
     )
+    LEGACY_DATABASE_FIELDS = frozenset(
+        {
+            "feedbackHistory",
+            "reportHistory",
+            "feedbackCandidates",
+            "publicationFeedbackProgress",
+            "answeredFeedbackKeys",
+            "followedCreators",
+        }
+    )
+
     @classmethod
     def scope_for(cls, field: str) -> str | None:
         specification = cls.FIELD_SPECS.get(field)
@@ -120,12 +128,14 @@ class StateSchema:
     @classmethod
     def default_for(cls, field: str):
         specification = cls.FIELD_SPECS.get(field)
-        return specification[0] if specification else None
+        return deepcopy(specification[0]) if specification else None
+
+    @classmethod
+    def defaults(cls) -> dict:
+        return deepcopy(cls.DEFAULT_STORE)
 
     @classmethod
     def fields_for_scope(cls, scope: str) -> frozenset[str]:
         return frozenset(
-            name
-            for name, specification in cls.FIELD_SPECS.items()
-            if specification[1] == scope
+            name for name, specification in cls.FIELD_SPECS.items() if specification[1] == scope
         )

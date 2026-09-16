@@ -86,6 +86,21 @@ from src.middleware.persistence import (
     SavePersistenceInterceptor,
 )
 from src.middleware.resolver import ResolverInterceptor
+from src.models.affirmative import Affirmative
+from src.models.decline import Decline
+from src.models.feedback_response import (
+    EnjoyedFeedback,
+    NotEnjoyedFeedback,
+    RatingRequest,
+    SkipFeedback,
+    SomewhatFeedback,
+)
+from src.models.intent_dispatch import IntentDispatcher
+from src.models.launch_workflow import LaunchWorkflow
+from src.models.onboarding import TownCapture
+from src.models.play import PlayContent, PlayOrganization
+from src.models.playback_events import PlaybackEvents
+from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
 
 
 class RouteRegistry:
@@ -168,16 +183,88 @@ class RouteRegistry:
 
     @staticmethod
     def register_middleware(builder, container: ApplicationContainer) -> None:
-        for handler_type in RouteRegistry.GATE_HANDLERS:
-            builder.add_request_handler(container.create(handler_type))
-        builder.add_exception_handler(container.create(ErrorHandler))
-        for interceptor_type in RouteRegistry.REQUEST_INTERCEPTORS:
-            builder.add_global_request_interceptor(container.create(interceptor_type))
-        for interceptor_type in RouteRegistry.RESPONSE_INTERCEPTORS:
-            builder.add_global_response_interceptor(container.create(interceptor_type))
+        for handler in (
+            CanFulfillIntentHandler(container.resolver),
+            DialogValidationGateHandler(),
+            AvailabilityDialogHandler(container.availability),
+            FeedbackSkipGateHandler(deps=container),
+            FeedbackGateHandler(deps=container),
+            OnboardingGateHandler(deps=container),
+            TownCaptureHandler(TownCapture(deps=container), container.user),
+            SearchConfirmationGateHandler(),
+            IntentDispatchGateHandler(IntentDispatcher(deps=container)),
+        ):
+            builder.add_request_handler(handler)
+        builder.add_exception_handler(ErrorHandler(container.error_reporter))
+        for interceptor in (
+            LambdaDeadlineInterceptor(),
+            IdentityInterceptor(deps=container),
+            LoadPersistenceInterceptor(),
+            DialogValidationInterceptor(),
+            ResolverInterceptor(deps=container),
+            ConfirmationMiddleware(),
+        ):
+            builder.add_global_request_interceptor(interceptor)
+        builder.add_global_response_interceptor(SavePersistenceInterceptor())
 
     @staticmethod
-    def register_controllers(builder, deps: ApplicationContainer | None = None) -> None:
-        deps = deps or ApplicationContainer()
-        for controller_type in RouteRegistry.REQUEST_CONTROLLERS:
-            builder.add_request_handler(deps.create(controller_type))
+    def register_controllers(builder, container: ApplicationContainer) -> None:
+        for controller in (
+            PermissionResumeHandler(container.permission),
+            LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback),
+            SetUpAccountHandler(container.permission),
+            HearNotificationsHandler(container.notifications),
+            EnableNotificationsHandler(container.notifications),
+            DisableNotificationsHandler(container.notifications),
+            WhatsTrendingHandler(container.browse),
+            BrowseContentHandler(container.browse),
+            PlayByOrganizationHandler(PlayOrganization(deps=container)),
+            PlayContentHandler(PlayContent(deps=container)),
+            BrowseNavigationHandler(container.browse),
+            SetPlaybackSpeedHandler(deps=container),
+            IncreaseSpeedHandler(deps=container),
+            DecreaseSpeedHandler(deps=container),
+            PauseIntentHandler(deps=container),
+            ResumeIntentHandler(deps=container),
+            NextIntentHandler(deps=container),
+            PreviousIntentHandler(deps=container),
+            RepeatIntentHandler(deps=container),
+            RewindIntentHandler(deps=container),
+            FastForwardIntentHandler(deps=container),
+            WhoIsCreatorHandler(CreatorIdentity(deps=container)),
+            FollowCreatorHandler(FollowCreator(deps=container)),
+            UnfollowCreatorHandler(UnfollowCreator(deps=container)),
+            ReportContentHandler(deps=container),
+            ReportCreatorHandler(deps=container),
+            WhatsThisAboutHandler(deps=container),
+            PlaybackStartedHandler(
+                container.playback, container.user, container.notifications
+            ),
+            PlaybackProgressReportHandler(container.playback),
+            PlaybackNearlyFinishedHandler(container.playback, container.heara),
+            PlaybackFinishedHandler(PlaybackEvents(container.playback, container.user)),
+            PlaybackStoppedHandler(container.playback),
+            PlaybackFailedHandler(container.playback, container.notifications),
+            RateContentHandler(RatingRequest(deps=container)),
+            FeedbackEnjoyedHandler(EnjoyedFeedback(deps=container)),
+            FeedbackSomewhatHandler(SomewhatFeedback(deps=container)),
+            FeedbackNotEnjoyedHandler(NotEnjoyedFeedback(deps=container)),
+            FeedbackResponseHandler(
+                EnjoyedFeedback(deps=container),
+                SomewhatFeedback(deps=container),
+                NotEnjoyedFeedback(deps=container),
+                SkipFeedback(deps=container),
+            ),
+            SkipFeedbackHandler(SkipFeedback(deps=container)),
+            YesIntentHandler(Affirmative(deps=container)),
+            NoIntentHandler(Decline(deps=container)),
+            NavigateHomeHandler(container.browse),
+            UnsupportedIntentHandler(),
+            HelpIntentHandler(),
+            CancelIntentHandler(container.user, container.playback),
+            SessionEndedHandler(container.playback),
+            FallbackHandler(deps=container),
+            UnmatchedIntentHandler(deps=container),
+            UnknownRequestHandler(deps=container),
+        ):
+            builder.add_request_handler(controller)

@@ -8,8 +8,8 @@ from src.models.play import PlayContent, PlayOrganization
 
 
 class PlayContentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = PlayContent(deps=deps)
+    def __init__(self, action: PlayContent) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return AlexaRequest.get_request_type(
@@ -25,8 +25,8 @@ class PlayContentHandler(AbstractRequestHandler):
 
 
 class PlayByOrganizationHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = PlayOrganization(deps=deps)
+    def __init__(self, action: PlayOrganization) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (

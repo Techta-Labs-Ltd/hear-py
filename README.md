@@ -2,6 +2,8 @@
 
 Python Alexa skill backend deployed to AWS Lambda as a container image.
 
+The staged architecture refactor is tracked in [Implementation status](docs/architecture/IMPLEMENTATION_STATUS.md), including verified fixes and remaining work.
+
 ## Structure
 
 - `main.py` - Lambda transport adapter
@@ -76,7 +78,6 @@ endpoint. Alexa user ID is not placed in SQS or used as a lookup filter.
 ## Local checks
 
 ```sh
-python .agents/skills/hear-architecture-refactor/scripts/audit_architecture.py . --strict
 python -m ruff check src tests
 python -m compileall -q main.py src config
 python -m pytest -q

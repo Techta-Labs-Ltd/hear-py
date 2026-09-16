@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
 import traceback
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,43 +12,18 @@ import httpx
 from config import settings
 from src.clients.pool import HttpPool
 from src.models.resolver import ResolverResult, ResolverUnavailable
+from src.services.logging_control import ApplicationLog
 
 
 class ResolverClientSupport:
-    logger = logging.getLogger(__name__)
-
-    @staticmethod
-    def _without_coordinates(value: Any) -> Any:
-        if isinstance(value, dict):
-            return {
-                key: ResolverClientSupport._without_coordinates(item)
-                for key, item in value.items()
-                if key not in {"latitude", "longitude"}
-            }
-        if isinstance(value, list):
-            return [ResolverClientSupport._without_coordinates(item) for item in value]
-        return value
 
     @staticmethod
     def _resolver_response_log(payload: dict[str, Any]) -> dict[str, Any]:
-        """Return useful resolver diagnostics without coordinates or account data."""
-        safe_slots = ResolverClientSupport._without_coordinates(payload.get("slots") or {})
-        safe_entities = []
-        for entity in payload.get("entities") or []:
-            if not isinstance(entity, dict):
-                continue
-            safe_entities.append(
-                {
-                    "type": entity.get("entityType") or entity.get("type"),
-                    "id": entity.get("entityId") or entity.get("id"),
-                    "value": entity.get("canonicalValue") or entity.get("name"),
-                }
-            )
         return {
             "status": payload.get("status"),
             "intent": payload.get("intent"),
-            "entities": safe_entities,
-            "slots": safe_slots,
+            "entityCount": len(payload.get("entities") or []),
+            "slotKeys": sorted((payload.get("slots") or {}).keys()),
             "ambiguityCount": len(payload.get("ambiguities") or []),
             "timingMs": payload.get("timingMs"),
         }
@@ -75,7 +50,9 @@ class ResolverClientSupport:
     @staticmethod
     def request_log(body: dict, alexa_user_id: str | None, listener_id: str | None) -> dict:
         return {
-            **body,
+            "utteranceChars": len(str(body.get("utterance") or "")),
+            "timezone": body.get("timezone"),
+            "country_code": body.get("country_code"),
             **({"alexaUserId": "<present>"} if alexa_user_id else {}),
             **({"listenerId": "<present>"} if listener_id else {}),
         }
@@ -97,7 +74,7 @@ class ResolverCache:
         if expires_at <= time.monotonic():
             self._values.pop(key, None)
             return None
-        return result
+        return deepcopy(result)
 
     def put(self, key: tuple[str, str, str], result: ResolverResult) -> None:
         if self._ttl_seconds <= 0:
@@ -105,7 +82,7 @@ class ResolverCache:
         if len(self._values) >= self._max_items:
             oldest = min(self._values, key=lambda item: self._values[item][0])
             self._values.pop(oldest, None)
-        self._values[key] = (time.monotonic() + self._ttl_seconds, result)
+        self._values[key] = (time.monotonic() + self._ttl_seconds, deepcopy(result))
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +119,16 @@ class ResolverClient:
         self._timezone = options.timezone or settings.HEAR_RESOLVER_TIMEZONE
         self._timeout = httpx.Timeout(max(resolved_timeout, 1) / 1000.0)
         self._transport = options.transport
-        self._pool = pool or HttpPool(timeout_ms=resolved_timeout)
+        self._pool = (
+            pool
+            if pool is not None
+            else HttpPool(
+                base_url=self._host,
+                headers={"X-Api-Key": self._api_key},
+                timeout_ms=resolved_timeout,
+            )
+        )
+        self._pool.assert_configuration(base_url=self._host, headers={"X-Api-Key": self._api_key})
         self._cache = ResolverCache()
 
     async def resolve(
@@ -160,7 +146,8 @@ class ResolverClient:
             timezone or self._timezone,
             country_code or self._default_country,
         )
-        if not alexa_user_id:
+        cache_eligible = not (alexa_user_id or listener_id)
+        if cache_eligible:
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return cached
@@ -172,7 +159,7 @@ class ResolverClient:
             listener_id,
         )
         logged_body = ResolverClientSupport.request_log(body, alexa_user_id, listener_id)
-        ResolverClientSupport.logger.info(
+        ApplicationLog.info(
             "Hear: resolver request payload=%s",
             json.dumps(logged_body, sort_keys=True, separators=(",", ":")),
         )
@@ -187,9 +174,8 @@ class ResolverClient:
                     )
             else:
                 response = await self._pool.get().post(
-                    f"{self._host}/resolve",
+                    "/resolve",
                     json=body,
-                    headers={"x-api-key": self._api_key},
                     timeout=timeout,
                 )
             if not 200 <= response.status_code < 300:
@@ -197,7 +183,7 @@ class ResolverClient:
             payload = response.json()
             if not isinstance(payload, dict):
                 raise ResolverUnavailable("resolver response must be an object")
-            ResolverClientSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: resolver response httpStatus=%s payload=%s",
                 response.status_code,
                 json.dumps(
@@ -207,14 +193,14 @@ class ResolverClient:
                 ),
             )
             result = ResolverResult.from_payload(payload)
-            if not alexa_user_id:
+            if cache_eligible and result.status == "resolved":
                 self._cache.put(cache_key, result)
             return result
         except ResolverUnavailable as exc:
-            ResolverClientSupport.logger.warning("Resolver response rejected reason=%s", exc)
+            ApplicationLog.warning("Resolver response rejected reason=%s", exc)
             raise
         except (httpx.HTTPError, ValueError, TypeError) as exc:
-            ResolverClientSupport.logger.warning(
+            ApplicationLog.warning(
                 "Resolver request failed error=%s traceback=%s",
                 type(exc).__name__,
                 traceback.format_exc(),
@@ -240,10 +226,10 @@ class ResolverClient:
             prefer_location=prefer_location,
             original_utterance=utterance,
         )
-        ResolverClientSupport.logger.info(
-            "Hear: resolver normalized response status=%s intent=%s slots=%s",
+        ApplicationLog.info(
+            "Hear: resolver normalized response status=%s intent=%s slotKeys=%s",
             payload.get("status"),
             payload.get("intent"),
-            json.dumps(payload.get("slots") or {}, sort_keys=True, separators=(",", ":")),
+            sorted((payload.get("slots") or {}).keys()),
         )
         return payload

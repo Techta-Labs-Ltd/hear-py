@@ -9,6 +9,11 @@ from src.controllers.play import PlayContentHandler
 from src.controllers.social import FollowCreatorHandler
 from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
+from src.models.affirmative import Affirmative
+from src.models.decline import Decline
+from src.models.launch_workflow import LaunchWorkflow
+from src.models.play import PlayContent
+from src.models.social import FollowCreator
 from src.registry import RouteRegistry
 
 USER_ID = "amzn1.ask.account.TEST"
@@ -81,15 +86,15 @@ persistence._store[USER_ID] = {
 skill = AsyncSkill(persistence_adapter=persistence)
 container = ApplicationContainer()
 RouteRegistry.register_middleware(skill, container)
-skill.add_request_handler(LaunchRequestHandler(deps=container))
-skill.add_request_handler(PlayContentHandler(deps=container))
-skill.add_request_handler(BrowseContentHandler(deps=container))
-skill.add_request_handler(WhatsTrendingHandler(deps=container))
+skill.add_request_handler(LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback))
+skill.add_request_handler(PlayContentHandler(PlayContent(deps=container)))
+skill.add_request_handler(BrowseContentHandler(container.browse))
+skill.add_request_handler(WhatsTrendingHandler(container.browse))
 skill.add_request_handler(HelpIntentHandler())
-skill.add_request_handler(CancelIntentHandler(deps=container))
-skill.add_request_handler(YesIntentHandler(deps=container))
-skill.add_request_handler(NoIntentHandler(deps=container))
-skill.add_request_handler(FollowCreatorHandler(deps=container))
+skill.add_request_handler(CancelIntentHandler(container.user, container.playback))
+skill.add_request_handler(YesIntentHandler(Affirmative(deps=container)))
+skill.add_request_handler(NoIntentHandler(Decline(deps=container)))
+skill.add_request_handler(FollowCreatorHandler(FollowCreator(deps=container)))
 run(
     "play me the latest sport from David",
     make_event(

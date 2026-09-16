@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -15,10 +13,7 @@ from src.models.dialog import DeferredIntentManager, DialogStateManager
 from src.models.feedback_response import FeedbackContinuation
 from src.models.playback_controls import PlaybackControls
 from src.models.report import Report
-
-
-class ReportModule:
-    logger = logging.getLogger(__name__)
+from src.services.logging_control import ApplicationLog
 
 
 class ReportContentHandler(AbstractRequestHandler):
@@ -41,7 +36,7 @@ class ReportContentHandler(AbstractRequestHandler):
         )
         content_id = report.get("contentId")
         if not content_id:
-            ReportModule.logger.warning("Hear: report content blocked contentId=%s", content_id)
+            ApplicationLog.warning("Hear: report content blocked contentId=%s", content_id)
             return handler_input.response_builder.speak(Speech.REPORT_NOTHING_PLAYING).response
         try:
             await self._deps.reports.record_report(
@@ -62,7 +57,7 @@ class ReportContentHandler(AbstractRequestHandler):
                 return await DeferredIntentManager.resume(handler_input)
             return await self._present_continue_question(handler_input, report, store)
         except Exception as err:
-            ReportModule.logger.warning("Report content error: %s", err)
+            ApplicationLog.warning("Report content error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -138,7 +133,7 @@ class ReportCreatorHandler(AbstractRequestHandler):
             )
             return AlexaResponse.present_idle_next(handler_input, confirm)
         except Exception as err:
-            ReportModule.logger.warning("Report creator error: %s", err)
+            ApplicationLog.warning("Report creator error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)

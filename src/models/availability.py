@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.entities import AlexaEntities
@@ -17,6 +15,7 @@ from src.models.availability_request import AvailabilityRequest
 from src.models.dialog import DialogStateManager
 from src.models.search import Search
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
@@ -24,7 +23,6 @@ from src.utils.search_payload import SearchPayload
 
 
 class Availability:
-    logger = logging.getLogger(__name__)
     __slots__ = ("_deps", "_dialog")
 
     def __init__(self, *, deps: object | None = None) -> None:
@@ -372,7 +370,7 @@ class Availability:
         )
         if result.get("failed"):
             if continue_with_search_on_failure:
-                self.logger.warning("Hear: source availability failed; using catalogue search")
+                ApplicationLog.warning("Hear: source availability failed; using catalogue search")
                 return None
             return self._terminal_response(
                 handler_input,

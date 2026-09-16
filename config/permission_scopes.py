@@ -1,6 +1,5 @@
 DEVICE_ADDRESS = "read::alexa:device:all:address"
 DEVICE_ADDRESS_FULL = "alexa::devices:all:address:full:read"
-REMINDERS_READWRITE = "alexa::alerts:reminders:skill:readwrite"
 GEOLOCATION_READ = "alexa::devices:all:geolocation:read"
 PROFILE_NAME_READ = "alexa::profile:name:read"
 PROFILE_FAMILY_NAME_READ = "alexa::profile:family_name:read"

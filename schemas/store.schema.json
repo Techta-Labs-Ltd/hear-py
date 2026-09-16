@@ -31,7 +31,6 @@
     "feedbackCreatorId": { "type": ["string", "null"] },
     "feedbackGivenTokens": { "type": "array", "items": { "type": "string" } },
     "feedbackPromptText": { "type": ["string", "null"] },
-    "feedbackReminderAlertToken": { "type": ["string", "null"] },
     "firstLaunchedAt": { "type": ["number", "null"] },
     "followedCreators": { "type": "array", "items": { "type": "object" } },
     "fullName": { "type": ["string", "null"] },

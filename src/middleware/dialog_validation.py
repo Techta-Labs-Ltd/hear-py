@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from ask_sdk_core.dispatch_components import (
     AbstractRequestHandler,
     AbstractRequestInterceptor,
@@ -18,10 +16,10 @@ from src.constants.dialog import DialogConstants
 from src.constants.notifications import NotificationConstants
 from src.constants.playback import PlaybackConstants
 from src.models.dialog import DialogSelection, DialogStateManager
+from src.services.logging_control import ApplicationLog
 
 
 class DialogValidationPolicy:
-    logger = logging.getLogger(__name__)
     _EXIT_INTENTS = {"AMAZON.CancelIntent", "AMAZON.StopIntent"}
     _BINARY_INTENTS = _EXIT_INTENTS | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
     _AMBIGUITY_INTENTS = _EXIT_INTENTS | {
@@ -267,7 +265,7 @@ class DialogValidationInterceptor(AbstractRequestInterceptor):
         attrs = RequestContext.request(handler_input)
         attrs[DialogConstants.VALIDATION_FAILURE] = failure
         RequestContext.replace_request(handler_input, attrs)
-        DialogValidationPolicy.logger.info(
+        ApplicationLog.info(
             "Hear: dialog input rejected dialog=%s intent=%s",
             failure["dialogType"],
             AlexaRequest.get_intent_name(handler_input),

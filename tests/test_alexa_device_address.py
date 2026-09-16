@@ -55,7 +55,7 @@ async def test_address_api_is_used_only_with_full_address_permission(caplog):
     )
     pool = _Pool(response)
     client = AlexaLocalityService(AlexaSettingsClient(pool=pool))
-    with caplog.at_level(logging.INFO, logger="src.clients.alexa_settings"):
+    with caplog.at_level(logging.INFO, logger="hear"):
         result = await client.detect_device_location(
             _handler_input(
                 scopes={permission_scopes.DEVICE_ADDRESS: {"status": "GRANTED"}}

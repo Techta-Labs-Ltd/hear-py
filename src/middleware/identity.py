@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import logging
-
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
 from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
 from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class IdentityPolicy:
-    logger = logging.getLogger(__name__)
 
     @staticmethod
     def _get_envelope_value(envelope, *path):
@@ -79,7 +77,7 @@ class IdentityInterceptor(AbstractRequestInterceptor):
             try:
                 identity = await self._identity_service.resolve(handler_input, identity)
             except Exception as exc:
-                IdentityPolicy.logger.warning(
+                ApplicationLog.warning(
                     "Hear: canonical listener resolution failed error=%s fallback=alexa_alias",
                     type(exc).__name__,
                 )
@@ -92,6 +90,6 @@ class IdentityInterceptor(AbstractRequestInterceptor):
             alexa_user_id=identity.alexa_user_id,
         )
         if not identity.alexa_user_id:
-            IdentityPolicy.logger.warning(
+            ApplicationLog.warning(
                 "Hear request rejected for backend dispatch: missing Alexa user ID"
             )

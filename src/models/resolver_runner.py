@@ -14,6 +14,7 @@ from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.resolver import ResolverUnavailable
 from src.models.resolver_workflow import ResolverWorkflow
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilterUtils
 
@@ -490,7 +491,7 @@ class ResolverWorkflowRunner:
             alexa_intent in ResolverWorkflow.SEARCH_INTENTS
             and actual in ResolverWorkflow.LOCATION_MUTATION_INTENTS
         ):
-            ResolverWorkflow.logger.warning(
+            ApplicationLog.warning(
                 "Hear: blocked location mutation from discovery intent=%s resolved=%s",
                 alexa_intent,
                 actual,
@@ -618,7 +619,7 @@ class ResolverWorkflowRunner:
         if local:
             local = ResolverWorkflow.apply_alexa_constraints(local, alexa_intent, context["slots"])
             ResolverWorkflow._set_nlp(handler_input, local)
-            ResolverWorkflow.logger.info(
+            ApplicationLog.info(
                 "Hear: discovery request handled locally intent=%s result=%s",
                 alexa_intent,
                 local.get("intent"),
@@ -636,10 +637,10 @@ class ResolverWorkflowRunner:
                 handler_input,
                 {"intent": "resolver_unavailable", "confidence": "low", "slots": {}},
             )
-            ResolverWorkflow.logger.warning("Hear resolver unavailable")
+            ApplicationLog.warning("Hear resolver unavailable")
         except Exception:
             ResolverWorkflow._set_nlp(
                 handler_input,
                 {"intent": "resolver_unavailable", "confidence": "low", "slots": {}},
             )
-            ResolverWorkflow.logger.warning("Hear resolver workflow error", exc_info=True)
+            ApplicationLog.warning("Hear resolver workflow error", exc_info=True)

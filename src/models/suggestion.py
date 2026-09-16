@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import logging
-
 from src.alexa.context import RequestContext
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.feedback_response import EnjoyedFeedback, NotEnjoyedFeedback
 from src.models.play import PlayContent, PlayCreator, PlayOrganization
+from src.services.logging_control import ApplicationLog
 
 
 class SuggestionConfirmation:
-    logger = logging.getLogger(__name__)
 
     def __init__(self, *, deps: object) -> None:
         self._deps = deps
@@ -102,7 +100,7 @@ class SuggestionConfirmation:
         self._deps.user.update(handler_input, {"pendingNlpSuggestion": None})
         intent = str(top.get("intent") or "")
         query = str(top.get("query") or "")
-        self.logger.info("Hear: NLP suggestion confirmed intent=%s query=%s", intent, query)
+        ApplicationLog.info("Hear: NLP suggestion confirmed intent=%s query=%s", intent, query)
         handlers = {
             "creator": self._creator,
             "organization": self._organization,

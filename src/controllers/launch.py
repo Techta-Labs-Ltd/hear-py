@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -13,14 +11,16 @@ from src.constants.onboarding import OnboardingConstants
 from src.models.dialog import DialogStateManager
 from src.models.launch_workflow import LaunchWorkflow
 from src.models.onboarding import TownCapture
+from src.models.playback import Playback
+from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class LaunchRequestHandler(AbstractRequestHandler):
-    logger = logging.getLogger(__name__)
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
-        self._workflow = LaunchWorkflow(deps=deps)
+    def __init__(self, workflow: LaunchWorkflow, playback: Playback) -> None:
+        self._workflow = workflow
+        self._playback = playback
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return AlexaRequest.get_request_type(handler_input) == "LaunchRequest"
@@ -34,15 +34,15 @@ class LaunchRequestHandler(AbstractRequestHandler):
                 .response
             )
         try:
-            await self._deps.playback.flush_previous(
+            await self._playback.flush_previous(
                 AlexaRequest.get_user_id(handler_input), None, handler_input
             )
         except Exception as err:
-            self.logger.warning("Hear: launch flush failed error=%s", type(err).__name__)
+            ApplicationLog.warning("Hear: launch flush failed error=%s", type(err).__name__)
         try:
             return await self._workflow.execute(handler_input)
         except Exception as err:
-            self.logger.error("Hear: launch failed %s", err)
+            ApplicationLog.error("Hear: launch failed %s", err)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_ERROR))
                 .reprompt(Ssml.ssml(Speech.REPROMPT_NO_CITY))
@@ -52,14 +52,14 @@ class LaunchRequestHandler(AbstractRequestHandler):
 
 
 class TownCaptureHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
-        self._action = TownCapture(deps=self._deps)
+    def __init__(self, action: TownCapture, user: User) -> None:
+        self._action = action
+        self._user = user
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         if AlexaRequest.get_request_type(handler_input) != "IntentRequest":
             return False
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         if store.get("onboardingStage") != OnboardingConstants.ONBOARDING_ASK_TOWN:
             return False
         active_dialog = DialogStateManager.get_active(handler_input)

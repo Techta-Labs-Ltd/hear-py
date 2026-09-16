@@ -17,9 +17,7 @@ class HelpSpeech:
         "notifications on or off. To personalise Hear, say change my location or set up my "
         "account. For example, try saying, local news. What would you like to do?"
     )
-    REPROMPT = (
-        "Try saying sport, local news, Swindon, Talking News Federation, or what's trending."
-    )
+    REPROMPT = "Try saying sport, local news, Swindon, Talking News Federation, or what's trending."
     CARD_TITLE = "Hear - complete voice guide"
     CARD_OPENING = (
         "FIND AND BROWSE\n"

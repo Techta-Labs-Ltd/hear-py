@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from enum import StrEnum
@@ -10,6 +9,7 @@ from src.alexa.request import AlexaRequest
 from src.constants.discovery import DiscoveryConstants
 from src.constants.playback import PlaybackConstants
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentIdentity, ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 from src.utils.deadline import DeadlineBudget
@@ -286,7 +286,6 @@ class PlaybackState:
 
 
 class PlaybackQueue:
-    logger = logging.getLogger(__name__)
     __slots__ = ("_user",)
 
     def __init__(self, store: User) -> None:
@@ -598,7 +597,7 @@ class PlaybackQueue:
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
         if result.get("failed"):
-            PlaybackQueue.logger.warning(
+            ApplicationLog.warning(
                 "Hear: lazy queue page failed page=%s totalPages=%s", next_page, total_pages
             )
             return False

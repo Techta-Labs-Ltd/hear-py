@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import json
-import logging
 
 from config import settings
 from src.alexa.context import RequestContext
 from src.clients.pool import HttpPool
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 
 class AlexaSettingsSupport:
-    logger = logging.getLogger(__name__)
 
     @staticmethod
     def _safe_address_log(data: dict) -> dict:
@@ -59,7 +58,7 @@ class AlexaSettingsClient:
         api_access_token = system.apiAccessToken
         device_id = system.device.deviceId
         try:
-            AlexaSettingsSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: device address request method=GET apiEndpoint=%s path=/v1/devices/<redacted>/settings/address requestId=%s tokenPresent=%s deviceIdPresent=true",
                 api_endpoint,
                 RequestContext.get_request_id(handler_input),
@@ -79,7 +78,7 @@ class AlexaSettingsClient:
                 },
                 timeout=timeout,
             )
-            AlexaSettingsSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: device address response status=%s requestId=%s",
                 response.status_code,
                 RequestContext.get_request_id(handler_input),
@@ -94,7 +93,7 @@ class AlexaSettingsClient:
                 return {"_status": "empty"}
             response.raise_for_status()
             data = response.json()
-            AlexaSettingsSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: device address response data=%s requestId=%s",
                 json.dumps(
                     AlexaSettingsSupport._safe_address_log(data),
@@ -113,7 +112,7 @@ class AlexaSettingsClient:
                 "addressLine3": data.get("addressLine3"),
             }
         except Exception as error:
-            AlexaSettingsSupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear: device address API failed error=%s", type(error).__name__
             )
             return {"_status": "temporary_error"}
@@ -125,7 +124,7 @@ class AlexaSettingsClient:
         if not system or not system.apiEndpoint or system.apiAccessToken is None:
             return {"value": None, "status": 0}
         try:
-            AlexaSettingsSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: profile setting request setting=%s requestId=%s tokenPresent=%s",
                 label or setting_path,
                 RequestContext.get_request_id(handler_input),
@@ -146,20 +145,20 @@ class AlexaSettingsClient:
                 timeout=timeout,
             )
             if response.status_code in (401, 403):
-                AlexaSettingsSupport.logger.info(
+                ApplicationLog.info(
                     "Hear: profile setting response setting=%s status=%s valuePresent=false",
                     label or setting_path,
                     response.status_code,
                 )
                 return {"value": None, "status": response.status_code}
             if response.status_code == 204:
-                AlexaSettingsSupport.logger.info(
+                ApplicationLog.info(
                     "Hear: profile setting response setting=%s status=204 valuePresent=false",
                     label or setting_path,
                 )
                 return {"value": None, "status": 204}
             value = AlexaSettingsSupport._parse_profile_setting_value(response.json())
-            AlexaSettingsSupport.logger.info(
+            ApplicationLog.info(
                 "Hear: profile setting response setting=%s status=%s valuePresent=%s",
                 label or setting_path,
                 response.status_code,

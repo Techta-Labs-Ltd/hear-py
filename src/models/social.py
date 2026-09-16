@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.playback_context import PlaybackContext
@@ -10,6 +8,7 @@ from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
 
 
@@ -176,7 +175,7 @@ class FollowCreator:
                 Speech.FOLLOW_CREATOR_REPROMPT,
             )
         except Exception as err:
-            Social.logger.warning("Follow creator error: %s", err)
+            ApplicationLog.warning("Follow creator error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -224,7 +223,7 @@ class UnfollowCreator:
                 .response
             )
         except Exception as err:
-            Social.logger.warning("Unfollow creator error: %s", err)
+            ApplicationLog.warning("Unfollow creator error: %s", err)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -234,7 +233,6 @@ class UnfollowCreator:
 
 
 class Social:
-    logger = logging.getLogger(__name__)
 
     @staticmethod
     def _dependencies(deps: object | None):

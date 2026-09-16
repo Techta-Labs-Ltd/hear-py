@@ -11,6 +11,7 @@ from src.models.dialog import DialogStateManager
 from src.models.resolver import ResolutionBuilder
 from src.models.search import Search
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 from src.utils.filters import SearchFilterUtils
 
 
@@ -97,7 +98,7 @@ class PlayContent:
         if community and not PlayContent._has_location(store):
             return PlayContent._community_setup_response(handler_input)
         result = await self._search(handler_input, query)
-        Search.logger.info(
+        ApplicationLog.info(
             "Hear: PlayContent search done q=%s hitCount=%s",
             query,
             len(result.get("results", [])),
@@ -132,7 +133,7 @@ class PlayContent:
         try:
             return await self._execute(handler_input)
         except Exception:
-            Search.logger.exception("Hear: PlayContent failed")
+            ApplicationLog.exception("Hear: PlayContent failed")
             return PlayContent._error_response(handler_input)
 
 

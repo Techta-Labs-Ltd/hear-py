@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-import logging
-
 from ask_sdk_core.dispatch_components import AbstractExceptionHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
+from src.services.logging_control import ApplicationLog
+from src.services.observability import ErrorReporter
 
 
 class ErrorHandler(AbstractExceptionHandler):
-    logger = logging.getLogger(__name__)
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, error_reporter: ErrorReporter) -> None:
+        self._error_reporter = error_reporter
 
     def can_handle(self, handler_input: HandlerInput, exception: Exception) -> bool:
         return True
@@ -23,7 +22,7 @@ class ErrorHandler(AbstractExceptionHandler):
         try:
             await self._flush_and_report(handler_input, exception)
             request_type = AlexaRequest.get_request_type(handler_input)
-            self.logger.error(
+            ApplicationLog.error(
                 "Unhandled error: requestType=%s intent=%s message=%s",
                 request_type,
                 AlexaRequest.get_intent_name(handler_input),
@@ -41,21 +40,17 @@ class ErrorHandler(AbstractExceptionHandler):
                     .response
                 )
         except Exception as inner:
-            self.logger.error("Hear: ErrorHandler failed %s", inner)
+            ApplicationLog.error("Hear: ErrorHandler failed %s", inner)
         try:
-            return AlexaResponse.last_resort_skill_response()
+            return AlexaResponse.last_resort_skill_response(
+                AlexaRequest.get_request_type(handler_input)
+            )
         except Exception:
             return {}
 
     async def _flush_and_report(self, handler_input: HandlerInput, exception: Exception) -> None:
         try:
-            await self._deps.playback.flush_previous(
-                AlexaRequest.get_user_id(handler_input), None, handler_input
-            )
-        except Exception as flush_err:
-            self.logger.warning("Hear: ErrorHandler flush failed %s", flush_err)
-        try:
-            self._deps.error_reporter.capture(handler_input, exception)
-            await self._deps.error_reporter.flush(2000)
+            self._error_reporter.capture(handler_input, exception)
+            await self._error_reporter.flush(2000)
         except Exception as capture_error:
-            self.logger.warning("Hear: captureSkillException failed %s", capture_error)
+            ApplicationLog.warning("Hear: captureSkillException failed %s", capture_error)

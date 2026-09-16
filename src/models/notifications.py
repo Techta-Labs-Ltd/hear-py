@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 import config.permission_scopes as permission_scopes
 from config import settings
 from src.alexa.context import RequestContext
@@ -11,13 +9,13 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogStateManager
 from src.models.search import Search
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 from src.utils.filters import SearchFilters
 from src.utils.search_payload import SearchPayload
 
 
 class Notification:
-    logger = logging.getLogger(__name__)
     __slots__ = ("_deps",)
 
     def __init__(self, *, deps: object | None = None) -> None:
@@ -59,7 +57,7 @@ class Notification:
             )
             return bool(result.get("updated"))
         except Exception as exc:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification status update failed status=%s error=%s",
                 status,
                 type(exc).__name__,
@@ -99,7 +97,7 @@ class Notification:
                 raise RuntimeError("notification API unavailable")
             items = result.get("items") or []
         except Exception as exc:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification inbox read failed error=%s", type(exc).__name__
             )
             return (
@@ -176,7 +174,7 @@ class Notification:
                 timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
             )
         except Exception as exc:
-            self.logger.warning(
+            ApplicationLog.warning(
                 "Hear: notification content lookup failed error=%s", type(exc).__name__
             )
             result = {"results": [], "failed": True}

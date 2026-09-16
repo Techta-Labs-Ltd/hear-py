@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
@@ -13,10 +11,10 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.dialog import DialogSelection, DialogStateManager
 from src.models.onboarding import Onboarding
+from src.services.logging_control import ApplicationLog
 
 
 class FallbackModule:
-    logger = logging.getLogger(__name__)
 
     @staticmethod
     def fallback_response(handler_input: HandlerInput, deps: object | None):
@@ -100,7 +98,7 @@ class UnmatchedIntentHandler(AbstractRequestHandler):
             dialog_state = handler_input.request_envelope.request.dialogState
         except Exception:
             pass
-        FallbackModule.logger.info(
+        ApplicationLog.info(
             "Hear: unmatched IntentRequest intentName=%s dialogState=%s",
             intent_name,
             dialog_state,

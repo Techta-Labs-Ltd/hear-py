@@ -12,11 +12,12 @@ from src.models.feedback_response import (
     SkipFeedback,
     SomewhatFeedback,
 )
+from src.models.user import User
 
 
 class RateContentHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = RatingRequest(deps=deps)
+    def __init__(self, action: RatingRequest) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -29,8 +30,8 @@ class RateContentHandler(AbstractRequestHandler):
 
 
 class FeedbackEnjoyedHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = EnjoyedFeedback(deps=deps)
+    def __init__(self, action: EnjoyedFeedback) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -43,8 +44,8 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
 
 
 class FeedbackSomewhatHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = SomewhatFeedback(deps=deps)
+    def __init__(self, action: SomewhatFeedback) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -57,8 +58,8 @@ class FeedbackSomewhatHandler(AbstractRequestHandler):
 
 
 class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = NotEnjoyedFeedback(deps=deps)
+    def __init__(self, action: NotEnjoyedFeedback) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -71,14 +72,19 @@ class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
 
 
 class FeedbackResponseHandler(AbstractRequestHandler):
-    ACTIONS = {
-        "enjoyed": EnjoyedFeedback,
-        "somewhat": SomewhatFeedback,
-        "not enjoyed": NotEnjoyedFeedback,
-    }
-
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(
+        self,
+        enjoyed: EnjoyedFeedback,
+        somewhat: SomewhatFeedback,
+        not_enjoyed: NotEnjoyedFeedback,
+        skipped: SkipFeedback,
+    ) -> None:
+        self._actions = {
+            "enjoyed": enjoyed,
+            "somewhat": somewhat,
+            "not enjoyed": not_enjoyed,
+            "skipped": skipped,
+        }
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -90,19 +96,17 @@ class FeedbackResponseHandler(AbstractRequestHandler):
         feedback = AlexaFeedback.normalize_value(
             AlexaRequest.get_slot_value(handler_input, "feedback")
         )
-        action_type = FeedbackResponseHandler.ACTIONS.get(feedback)
-        if action_type:
-            return await action_type(deps=self._deps).execute(handler_input)
-        if feedback == "skipped":
-            return await SkipFeedback(deps=self._deps).execute(handler_input)
+        action = self._actions.get(feedback)
+        if action:
+            return await action.execute(handler_input)
         return AlexaFeedback.present_pending_feedback(
-            handler_input, self._deps.user.snapshot(handler_input)
+            handler_input, User.snapshot(handler_input)
         )
 
 
 class SkipFeedbackHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._action = SkipFeedback(deps=deps)
+    def __init__(self, action: SkipFeedback) -> None:
+        self._action = action
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (

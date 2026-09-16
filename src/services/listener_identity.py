@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import replace
 
@@ -12,11 +11,11 @@ from src.alexa.runtime import AlexaMetrics
 from src.clients.alexa_settings import AlexaSettingsClient
 from src.clients.hear import HearApiClient
 from src.models.listener import IdentityContext
+from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 
 class ListenerIdentitySupport:
-    logger = logging.getLogger(__name__)
 
     @staticmethod
     def normalize_email(value: object) -> str | None:
@@ -95,7 +94,7 @@ class ListenerIdentityService:
                 label="Profile.email",
             )
         except Exception as exc:
-            ListenerIdentitySupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear: identity email lookup failed error=%s",
                 type(exc).__name__,
             )
@@ -109,7 +108,7 @@ class ListenerIdentityService:
     async def resolve(self, handler_input, identity: IdentityContext) -> IdentityContext:
         if (
             not self._enabled
-            or not identity.alexa_user_id
+            or not (identity.listener_id or identity.alexa_user_id)
             or AlexaRequest.get_request_type(handler_input) == "CanFulfillIntentRequest"
         ):
             return identity
@@ -129,13 +128,13 @@ class ListenerIdentityService:
         listener_id = str((result or {}).get("listenerId") or "").strip()
         if not listener_id:
             AlexaMetrics.increment("CanonicalIdentityFallback")
-            ListenerIdentitySupport.logger.warning(
+            ApplicationLog.warning(
                 "Hear: canonical listener resolution unavailable fallback=alexa_alias"
             )
             return identity
         self._remember(identity, listener_id)
         AlexaMetrics.increment("CanonicalIdentityResolved")
-        ListenerIdentitySupport.logger.info(
+        ApplicationLog.info(
             "Hear: canonical listener resolved principalType=%s",
             identity.principal_type.value,
         )

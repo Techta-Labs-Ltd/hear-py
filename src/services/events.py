@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import json
-import logging
 
-from src.clients.events import SqsEventClient, WebhookEventClient
+from src.clients.events import BackendEventEnvelope, SqsEventClient, WebhookEventClient
 from src.constants.events import EventConstants
-from src.utils.events import EventUtils
+from src.services.logging_control import ApplicationLog
+from src.utils.deadline import RequestDeadline
+from src.utils.events import EventUtils, SqsBatch
 from src.utils.playback import PlaybackUtils
 
 
 class OutboundEventService:
-    logger = logging.getLogger(__name__)
     __slots__ = ("_producer", "_webhook")
 
     def __init__(
@@ -169,15 +170,31 @@ class OutboundEventService:
         )
         return self.publish(event_type, payload)
 
-    async def consume(self, records: list[dict]) -> dict:
+    async def consume(
+        self, records: list[dict], *, deadline: RequestDeadline | None = None
+    ) -> dict:
+        message_ids = SqsBatch.message_ids(records)
+        budget = deadline if deadline is not None else RequestDeadline.from_context(None)
         failures = []
-        for record in records:
-            message_id = record.get("messageId")
+        for record, message_id in zip(records, message_ids):
             try:
-                envelope = json.loads(record.get("body") or "{}")
-            except (json.JSONDecodeError, TypeError):
-                continue
-            delivered = bool(self._webhook and await self._webhook.send(envelope))
-            if not delivered and message_id:
+                envelope = json.loads(
+                    record.get("body") or "", parse_constant=EventUtils.reject_non_finite
+                )
+                BackendEventEnvelope.model_validate(envelope)
+                remaining_ms = budget.remaining_ms(300)
+                if remaining_ms <= 0:
+                    delivered = False
+                else:
+                    delivered = bool(
+                        self._webhook
+                        and await asyncio.wait_for(
+                            self._webhook.send(envelope), timeout=remaining_ms / 1000.0
+                        )
+                    )
+            except Exception as exc:
+                ApplicationLog.warning("Hear outbound record failed error=%s", type(exc).__name__)
+                delivered = False
+            if not delivered:
                 failures.append({"itemIdentifier": message_id})
         return {"batchItemFailures": failures}
