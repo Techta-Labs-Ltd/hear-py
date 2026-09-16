@@ -265,7 +265,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
 
     monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
     with caplog.at_level(logging.INFO, logger="hear"):
-        result = await HearApiClient().availability(
+        result = await HearApiClient(HearApiOptions(path_prefix="alexa")).availability(
             {
                 "filter": {
                     "location": {
@@ -283,7 +283,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
 
     assert captured == {
         "method": "POST",
-        "path": "/alexa/availability",
+        "path": "/availability",
         "body": {
             "filter": {
                 "location": {
