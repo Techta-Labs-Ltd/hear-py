@@ -11,9 +11,9 @@ Every tracked baseline file and new deliverable is classified below. Preserved m
 | `.gitignore` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `Dockerfile` | Preserved | Entrypoints, deployment paths and infrastructure retained; no deployment performed. |
 | `README.md` | Modified | Link the evidence-backed staged implementation status. |
-| `alexa-slot-imports/HEAR_LOCATION.csv` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
-| `alexa-slot-imports/HEAR_ORGANIZATION.csv` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
-| `alexa-slot-imports/HEAR_TOPIC.csv` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
+| `alexa-slot-imports/HEAR_LOCATION.csv` | Removed | Generated Alexa location catalogue removed; curated slot values remain in `en-GB.json`. |
+| `alexa-slot-imports/HEAR_ORGANIZATION.csv` | Removed | Generated Alexa organization catalogue removed; curated slot values remain in `en-GB.json`. |
+| `alexa-slot-imports/HEAR_TOPIC.csv` | Removed | Generated Alexa topic catalogue removed; curated slot values remain in `en-GB.json`. |
 | `config/__init__.py` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `config/permission_scopes.py` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `deploy/ecr-lambda-policy.json` | Preserved | Entrypoints, deployment paths and infrastructure retained; no deployment performed. |
@@ -59,7 +59,7 @@ Every tracked baseline file and new deliverable is classified below. Preserved m
 | `scratch/test_turn2_simulation.py` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `scratch/update_tests.py` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `scripts/__init__.py` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
-| `scripts/apply_alexa_slot_lexicon.py` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
+| `scripts/apply_alexa_slot_lexicon.py` | Removed | Bulk Alexa catalogue generation is no longer supported. |
 | `scripts/build_alexa_interaction_model.py` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `scripts/deploy-live.ps1` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
 | `scripts/deploy.sh` | Preserved | No change required for this reliability stage; wider configuration/cleanup work remains tracked. |
