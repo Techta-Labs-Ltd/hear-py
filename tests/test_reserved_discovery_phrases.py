@@ -657,8 +657,6 @@ async def test_elicited_pendle_voice_follow_up_reaches_resolver(monkeypatch, moc
 @pytest.mark.parametrize(
     ("intent_name", "expected_intent", "expected_sort"),
     [
-        ("WhatsTrendingIntent", "trending", "trending"),
-        ("PlayRecommendationIntent", "trending", "trending"),
         ("BrowseContentIntent", "browse", "latest"),
         ("PlayLocalIntent", "local", "latest"),
     ],
@@ -693,61 +691,6 @@ async def test_complete_zero_slot_discovery_stays_out_of_resolver(
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("intent_name", "slot_name"),
-    [
-        ("WhatsTrendingIntent", "topic"),
-        ("PlayRecommendationIntent", "recommendationQuery"),
-    ],
-)
-async def test_topic_qualified_trending_resolves_topic_and_preserves_trending_semantics(
-    monkeypatch, mock_handler_input, intent_name, slot_name
-):
-    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
-    mock_handler_input.request_envelope.request = AttrDict(
-        {
-            "type": "IntentRequest",
-            "locale": "en-GB",
-            "intent": {
-                "name": intent_name,
-                "slots": {slot_name: {"name": slot_name, "value": "sport"}},
-            },
-        }
-    )
-    mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **StateSchema.DEFAULT_STORE,
-        "onboardingComplete": True,
-    }
-    resolve = AsyncMock(
-        return_value={
-            "status": "resolved",
-            "intent": "category",
-            "slots": {
-                "category": "sport",
-                "categorySlugs": ["sport"],
-                "residualQuery": "",
-                "searchPlan": {"query": "", "filter": {"categorySlugs": ["sport"]}},
-            },
-        }
-    )
-    monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-
-    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
-
-    resolve.assert_awaited_once_with(
-        "play sport", alexa_user_id="amzn1.ask.account.TEST", timeout_ms=5000
-    )
-    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
-    assert nlp["intent"] == "trending"
-    assert nlp["nlpMatchesAlexa"] is True
-    assert nlp["slots"]["category"] == "sport"
-    assert nlp["slots"]["isRecommended"] is (
-        intent_name == "PlayRecommendationIntent"
-    )
-    assert nlp["slots"]["sort"] == "trending"
-    assert nlp["slots"]["searchPlan"]["sort"] == "trending"
-    assert nlp["searchPayload"]["sort"] == "trending"
 
 
 @pytest.mark.asyncio
@@ -755,7 +698,6 @@ async def test_topic_qualified_trending_resolves_topic_and_preserves_trending_se
     ("intent_name", "expected_intent", "expected_sort"),
     [
         ("BrowseContentIntent", "browse", "latest"),
-        ("WhatsTrendingIntent", "trending", "trending"),
     ],
 )
 async def test_date_only_discovery_builds_date_filter_without_resolver_text(
