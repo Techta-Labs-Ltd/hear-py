@@ -13,7 +13,7 @@ from src.database.dynamo_user import (
     PersistenceItemTooLarge,
     UnsupportedPersistenceSchema,
 )
-from src.database.dynamodb import DynamoTable
+from src.database.dynamodb import DynamoExpressions, DynamoTable
 
 
 def _adapter_with_mocked_table():
@@ -276,6 +276,19 @@ async def test_dynamo_table_executes_transact_write_items():
     await table.transact_write(transaction)
 
     table._client.transact_write_items.assert_called_once_with(TransactItems=transaction)
+
+def test_transaction_put_omits_empty_expression_values():
+    table = DynamoTable("hear-listener-state", partition_key="id", sort_key="scope")
+
+    transaction = table.transaction_put_item(
+        {"id": "listener-1", "scope": "OUTBOX#event-1"},
+        condition=[DynamoExpressions.not_exists("scope")],
+    )
+
+    put = transaction["Put"]
+    assert put["ConditionExpression"] == "attribute_not_exists(#f0)"
+    assert put["ExpressionAttributeNames"] == {"#f0": "scope"}
+    assert "ExpressionAttributeValues" not in put
 
 
 @pytest.mark.asyncio

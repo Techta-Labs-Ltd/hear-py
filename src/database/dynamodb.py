@@ -380,7 +380,8 @@ class DynamoTable:
             expression, names, values = DynamoExpressions.build_condition(condition)
             params["ConditionExpression"] = expression
             params["ExpressionAttributeNames"] = names
-            params["ExpressionAttributeValues"] = values
+            if values:
+                params["ExpressionAttributeValues"] = values
         return {"Put": params}
 
     async def transact_write(self, operations: list[dict]) -> None:
