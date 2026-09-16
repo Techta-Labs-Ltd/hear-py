@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.alexa.permission import Permission
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.models.listener import IdentityContext, Listener, PrincipalType
-from src.models.permission import Permission, PermissionConstants, PermissionPolicy
+from src.controllers.permission import PermissionResumeRequestAdapter
+from src.models.listener import IdentityContext, PrincipalType
+from src.models.permission_policy import (
+    PermissionConstants,
+    PermissionPolicy,
+    PermissionResumeCommand,
+)
 from src.models.user import User
+from src.services.listener_repository import Listener
 from src.services.listener_sync import ListenerSyncPayload
 
 
@@ -73,10 +81,17 @@ def _permission(deps):
         deps.onboarding,
         deps.listener_profile,
         deps.listener_sync,
-        deps.notifications,
+        deps.notifications.enable_after_permission,
         deps.progressive,
         deps.locality,
         deps.resolver,
+    )
+
+
+async def _resume(deps, handler_input):
+    return await _permission(deps).resume(
+        handler_input,
+        PermissionResumeRequestAdapter.command(handler_input),
     )
 
 
@@ -143,7 +158,7 @@ async def test_denied_location_consent_explains_denial_and_voice_fallback():
         status="DENIED",
     )
     deps = _deps()
-    response = await _permission(deps).resume(handler_input)
+    response = await _resume(deps, handler_input)
     speech = response["outputSpeech"]["ssml"]
     assert "permission is currently turned off" in speech
     assert "say my city is followed by your city" in speech
@@ -164,7 +179,7 @@ async def test_profile_consent_requires_both_name_and_email(profile, expected_ty
         status="ACCEPTED",
     )
     deps = _deps(profile=profile)
-    response = await _permission(deps).resume(handler_input)
+    response = await _resume(deps, handler_input)
     assert deps.user.snapshot(handler_input)["listenerType"] == expected_type
     deps.listener_sync.sync_for_launch.assert_awaited_once_with(handler_input)
     if expected_type == "guest":
@@ -197,7 +212,7 @@ async def test_profile_consent_failure_explains_the_outcome_and_recovery(
     )
     deps = _deps()
 
-    response = await _permission(deps).resume(handler_input)
+    response = await _resume(deps, handler_input)
 
     speech = response["outputSpeech"]["ssml"]
     assert expected in speech
@@ -218,12 +233,37 @@ async def test_profile_consent_uses_pending_state_when_alexa_omits_token():
     deps = _deps()
     deps.user.update(handler_input, {"awaitingProfilePermission": True})
 
-    response = await _permission(deps).resume(handler_input)
-
+    response = await _resume(deps, handler_input)
     speech = response["outputSpeech"]["ssml"]
     assert "permission to share your name and email was not granted" in speech
     assert "say the name of your city" not in speech
     deps.onboarding.decline_permission.assert_not_called()
+
+
+def test_resume_policy_uses_typed_command_without_platform_input():
+    granted = PermissionPolicy.resume_decision(
+        PermissionResumeCommand(
+            purpose=PermissionConstants.NOTIFICATION_PURPOSE,
+            status="accepted",
+            connection_code="200",
+        ),
+        awaiting_profile_permission=False,
+    )
+    inferred_profile = PermissionPolicy.resume_decision(
+        PermissionResumeCommand(status="denied", connection_code="200"),
+        awaiting_profile_permission=True,
+    )
+
+    assert granted.kind == "notifications_granted"
+    assert inferred_profile.kind == "profile_denied"
+
+
+def test_permission_policy_has_no_platform_dependency():
+    source = (Path(__file__).parents[1] / "src/models/permission_policy.py").read_text(
+        encoding="utf-8"
+    )
+    assert "src.alexa" not in source
+    assert "handler_input" not in source
 
 
 def test_guest_sync_contains_only_alexa_identity_fields():
@@ -288,7 +328,7 @@ def test_listener_sync_uses_publication_history_subject_instead_of_track():
 
 
 def test_environment_specific_permission_guidance(monkeypatch):
-    monkeypatch.setattr("src.models.permission.settings.STAGE", "production")
+    monkeypatch.setattr("src.models.permission_policy.settings.STAGE", "production")
     assert "Hear service" in PermissionPolicy.app_guidance()
-    monkeypatch.setattr("src.models.permission.settings.STAGE", "development")
+    monkeypatch.setattr("src.models.permission_policy.settings.STAGE", "development")
     assert "test development" in PermissionPolicy.app_guidance()

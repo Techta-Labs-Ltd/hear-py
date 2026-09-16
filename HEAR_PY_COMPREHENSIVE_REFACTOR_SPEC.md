@@ -65,6 +65,25 @@ Do not label a source mechanism as device-tested or production-verified merely b
 | A11 | Follow/report event IDs are based on listener/action/subject rather than a distinct operation occurrence. | Verify backend deduplication semantics; make each logical action occurrence unique while keeping retries of that occurrence stable. |
 | A12 | DynamoDB scopes are saved through concurrent individual operations. | Keep independent writes where appropriate, but implement an actual transaction for coupled essential changes. A wrapper alone does not create atomicity. |
 
+### Current implementation status
+
+The source table above records the baseline observation. The following is the evidence-backed implementation state in this checkout; detailed file and test evidence is maintained in `docs/architecture/IMPLEMENTATION_STATUS.md`.
+
+| ID | Current status | Verified scope / remaining work |
+|---|---|---|
+| A01 | PARTIAL — IMPLEMENT | Reflective construction and production `deps` paths are removed; playback requires explicit state/queue/event collaborators; immutable route factories now create fresh handlers/actions and the interactive discovery/playback graph creates immutable listener-bound Hear clients, while remaining feature-client construction remains open. |
+| A02 | FIXED — DO NOT MODIFY | Play controllers receive injected actions from `RouteRegistry`. |
+| A03 | PARTIAL — IMPLEMENT | Search, availability, confirmation, launch, the suggestion policy, permission-resume, the notification workflow, playback controls/history transition, the report workflow, feedback, the social workflow and audio-player events have typed framework-independent slices; all model input/output adaptation is not yet migrated. |
+| A04 | PARTIAL — IMPLEMENT | `RequestContext` is bound per invocation and used by feedback/playback-event slices. The launch, suggestion, permission, notification, report and social models now accept only framework-independent inputs and return outcomes/receipts/state transitions; their Alexa adapters own request/state/response and event staging. Feedback response/continuation presentation, intent dispatch and request-bound Yes/No dialogue actions now live in `src.alexa`. The listener identity model is now a pure value object, with its Alexa request/state gateway in `services/listener_repository.py`. Other feature operations remain Alexa-bound. |
+| A05 | PARTIAL — IMPLEMENT | Cached infrastructure is retained; route declarations build fresh handlers/actions per dispatch; interactive discovery/playback/notification/dialogue routes create listener-bound Hear views while remaining feature-client construction remains open. |
+| A06 | FIXED — DO NOT MODIFY | Pools are upstream-bound and reject incompatible reuse. |
+| A07 | FIXED — DO NOT MODIFY | Any listener identity bypasses shared resolver caching. |
+| A08 | FIXED — DO NOT MODIFY | Essential persistence failure replaces prepared success responses. |
+| A09 | FIXED — DO NOT MODIFY | Unsafe or unknown deployed persistence configuration fails closed. |
+| A10 | FIXED — DO NOT MODIFY | Invalid worker records are failed instead of silently acknowledged. |
+| A11 | LOCAL IMPLEMENTATION COMPLETE; CONTRACT VERIFY | Request occurrence IDs are included; backend deduplication still requires verification. |
+| A12 | FIXED — DO NOT MODIFY | Coupled essential DynamoDB changes use conditional transactions. |
+
 These observations concern the implementation at the pinned commit. A07 and A11 describe risk conditions, not proof that an observed production incident has already occurred. [R2–R10]
 
 ## 3. Architectural ownership and dependency direction
@@ -186,12 +205,12 @@ Add cohesive data classes to the existing owning modules rather than separate fi
 | Location | Proposed types or responsibilities |
 |---|---|
 | `models/listener.py` | Reuse `IdentityContext` and `PrincipalType`; distinguish canonical listener, Alexa user, person, device and skill identities |
-| `models/search.py` | `SearchRequest`, `SearchResult`, search gateway protocol and typed discovery context |
+| `models/search_contracts.py`, `alexa/search.py` | `SearchRequest` and the search gateway protocol are pure contracts; the Alexa adapter owns request extraction and response construction while the remaining typed search outcomes are tracked below. |
 | `models/availability_request.py` | Typed availability request instead of a loosely shaped options dictionary |
 | `models/resolver.py` | Resolver result/entity/status contracts and typed failures |
-| `models/playback_state.py` | Playback instance, queue cursor, prepared successor and progress state |
-| `models/dialog.py` | Dialogue type, dialogue ID, expiry, choices and continuation metadata |
-| `models/feedback.py` | Rating target and feedback-origin values |
+| `alexa/playback_state.py` | Alexa request-bound playback instance, queue cursor, prepared successor and progress state |
+| `models/dialog_policy.py`, `alexa/dialog.py` | Platform-free choice normalization, candidate matching and dismissal policy live in `DialogPolicy`; dialogue ID, expiry and request-bound continuation metadata remain in the Alexa dialogue adapter. |
+| `models/feedback_contracts.py`, `alexa/feedback_service.py` | Platform-free feedback command/receipt values; Alexa feedback state, eligibility and origin orchestration. |
 | `models/user.py` | Request-owned state gateway, load status, snapshot/change contracts |
 | `alexa/context.py` | Current request metadata and access to parsed inputs/User; no second persistent state copy |
 
@@ -528,26 +547,27 @@ For each group below, keep the current public behaviour and move only the respon
 
 | Existing model file(s) | Required owner and changes |
 |---|---|
-| `models/play.py` | Keep `PlayContent` and organisation playback orchestration. Inject search/availability/playback/User. Return a play, choice, empty or unavailable outcome; do not format Alexa responses. |
-| `models/search.py` | Own the search workflow and typed results. Move slot parsing and response construction out. Centralise search execution, canonical subject context and lazy-page metadata. |
+| `alexa/play.py` | Adapt `PlayContent` and organisation playback requests. Inject search/availability/playback/User. The remaining pure outcome split is tracked separately. |
+| `models/search_contracts.py`, `alexa/search.py` | Keep request and gateway contracts platform-free. The Alexa adapter owns slot parsing, response construction, search execution, canonical subject context and lazy-page metadata; extract typed search outcomes next. |
 | `models/resolver.py` | Keep validated resolver contracts and interpretation policies. Separate external payload mapping from feature decisions where currently mixed. |
-| `models/resolver_runner.py`, `models/resolver_workflow.py` | Make the runner's dependencies explicit. Split request extraction from pure interpretation and dialogue decisions. Keep one resolver call owner and one canonical result; no runner/service/wrapper chain that repeats the same operation. |
-| `models/availability.py`, `models/availability_data.py`, `models/availability_request.py`, `models/availability_dialog.py` | Separate typed availability input/result, catalogue calls, format-choice policy and dialogue transitions. Reuse the shared filter owner. Preserve selected source and pagination through the choice. |
-| `models/browse.py` | Own browsing/selection and cursor policy. Reuse catalogue/search and queue services rather than reconstructing their payloads and playback rules. |
-| `models/playback.py`, `models/playback_state.py` | One playback state machine and queue mutation path. Remove raw Alexa response building; produce a typed playback instruction for the platform boundary. |
-| `models/playback_controls.py` | Delegate pause/resume/next/previous/repeat/seek/speed changes to the same playback owner; no independent state-copy logic. |
-| `models/playback_events.py` | Apply validated event observations idempotently to the matching playback instance. No conversational response construction. |
+| `alexa/resolver_runner.py`, `models/resolver_inputs.py`, `models/resolver_workflow.py` | The Alexa runner owns request extraction and normalizes SDK slots once into `ResolverSlot` values; the workflow owns platform-free interpretation and dialogue decisions. One resolver call owner and canonical result only. |
+| `alexa/availability.py`, `models/availability_data.py`, `models/availability_request.py`, `alexa/availability_dialog.py` | Separate typed availability input/result, catalogue calls, format-choice policy and dialogue transitions. Reuse the shared filter owner. Preserve selected source and pagination through the choice. |
+| `alexa/browse.py` | Adapt browsing, selection and cursor requests. Reuse catalogue/search and queue services rather than reconstructing their payloads and playback rules. |
+| `alexa/playback_workflow.py`, `alexa/playback_state.py` | Alexa playback workflow owns response construction and request-bound playback state/queue mutation; extract typed playback instructions from the workflow next. |
+| `alexa/playback_controls.py` | Adapt pause/resume/next/previous/repeat/seek/speed Alexa requests and delegate state decisions to the shared playback owner and `PlaybackControlPolicy`; no independent state-copy logic. |
+| `alexa/playback_events.py` | Adapt validated Alexa playback-event observations through `RequestContext`, then apply them idempotently to the matching playback instance. No conversational response construction. |
 | `models/playback_history.py` | Keep bounded continuity information and required state transitions; full history remains backend-owned. |
-| `models/feedback.py`, `models/feedback_response.py` | Own eligibility, rating target, origin, answer and continuation policy. Stage reliable events and state changes; no duplicate feedback store or prompt system. |
-| `models/dialog.py`, `models/confirmation.py`, `models/affirmative.py`, `models/decline.py` | One active-dialogue interpretation path. Refactor yes/no handling into cohesive collaborators by dialogue kind; avoid giant unrelated branching models. Keep one active state owner. |
-| `models/intent_dispatch.py` | Choose a typed feature command from validated interpretation. Alexa handler registration remains in the registry; no recursive routing maze. |
-| `models/launch_workflow.py` | Decide returning-user/onboarding/resume/feedback outcomes from identity and loaded state. No hidden profile API construction or blanket reset on a load failure. |
-| `models/onboarding.py`, `models/onboarding_state.py`, `models/permission.py` | Own onboarding/permission decisions and progression; move SDK requests/cards to the boundary and external profile calls to injected integrations. |
+| `alexa/feedback_service.py`, `alexa/feedback_response.py` | Own eligibility, rating target, origin, answer and continuation orchestration. Stage reliable events and state changes; no duplicate feedback store or prompt system. |
+| `alexa/dialog.py`, `models/confirmation.py`, `alexa/affirmative.py`, `alexa/decline.py` | One active-dialogue interpretation path. Refactor yes/no handling into cohesive collaborators by dialogue kind; avoid giant unrelated branching models. Keep one active state owner. |
+| `alexa/intent_dispatch.py` | Adapt validated interpretation into request-bound feature dispatch. Alexa handler registration remains in the registry; no recursive routing maze. |
+| `models/launch_policy.py`, `alexa/launch.py` | Decide returning-user/onboarding/resume/feedback outcomes from identity and loaded state. No hidden profile API construction or blanket reset on a load failure. |
+| `alexa/onboarding.py`, `alexa/onboarding_state.py`, `models/permission_policy.py`, `alexa/permission.py` | Alexa onboarding orchestration and request/session state own SDK requests/cards; platform-free policies own progression decisions, with external profile calls injected. |
 | `models/listener.py`, `models/user.py` | Reuse identity and sole state gateway. Remove raw HandlerInput access from their feature-facing operations; do not introduce a parallel listener store. |
 | `models/notifications.py` | Own spoken notification selection/playback outcomes while querying an injected backend client. Do not persist a second notification inbox. |
 | `models/social.py` | Follow/unfollow/creator workflows use canonical targets and occurrence-specific operation IDs. Preserve organisation versus creator semantics. |
 | `models/report.py` | Capture/report the intended subject, stage the event and return a typed acknowledgement/continuation. Do not make a new search overwrite the report target. |
-| `models/suggestion.py` | Own suggestion progression/exclusions with bounded state and explicit expiry; reuse catalogue and dialogue policies. |
+| `models/suggestion_policy.py` | Own suggestion progression/exclusions with bounded state and explicit expiry; reuse catalogue and dialogue policies. |
+| `alexa/suggestion.py` | Adapt Alexa confirmation requests and response presentation around the pure suggestion policy. |
 
 The model filenames above were enumerated from the pinned repository tree. The matrix is an implementation ownership map, not a claim that every listed module needs a wholesale rewrite. [R11]
 
@@ -757,18 +777,18 @@ Record the exact command, revision, result and failure details. Distinguish unit
 
 | Package | Scope | Exit gate |
 |---|---|---|
-| W00 | Pin checkout; reconcile existing fixes; inventory files/routes/endpoints; baseline tests | Evidence ledger and regression fixtures exist |
-| W01 | Validate config; map application/worker infrastructure lifetimes | No hidden listener state in application resources; durable driver validation tested |
-| W02 | Explicit constructors and request/record graph factories | No `deps` service-location in migrated paths; all routes construct; isolation tests pass |
-| W03 | Evolve RequestContext/User and typed feature commands/results | No feature-layer HandlerInput dependence in the first complete vertical slice |
-| W04 | Implement request-type-aware lifecycle, errors and commit outcomes | One successful and one failed request of each relevant type traverse the real runtime correctly |
-| W05 | Listener-bound clients, pool isolation, common filters and resolver cache fix | Exact payload/isolation/failure tests pass |
-| W06 | Migrate search→availability→play end to end | Canonical source, counts/choices, speech, queue and persistence work through the new boundaries |
-| W07 | Migrate playback controls/events/feedback/dialogues | Recovery, duplicate/stale events, rating origin and continuation tests pass |
-| W08 | Migrate onboarding, permissions, social, reports, notifications and workers | Every supported feature/entrypoint uses the intended boundaries |
-| W09 | Storage hardening, actual coupled transactions and versioned migrations where needed | Concurrency, expiry, rollback/mixed-version tests pass; no table recreation |
-| W10 | Add/deploy outbox reliability stage for coupled state/event guarantees | Relay, recovery, idempotency and durable acceptance proven; infrastructure and producer rollout coordinated |
-| W11 | Remove obsolete code/config/contracts; strengthen audit; update docs/CI | Full checks pass; all consumers accounted for; no duplicate implementations remain |
+| W00 | COMPLETED | Pin checkout, inventory and baseline evidence are recorded. |
+| W01 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Runtime validation, worker isolation, request-scoped listener-bound feature graphs and lifecycle deadlines are implemented and covered locally. AWS deployment/runtime validation remains external. |
+| W02 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Explicit collaborators, request-factory route construction and request-bound feature clients are implemented and covered locally. Deployed-route validation remains external. |
+| W03 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Typed commands/outcomes and framework-independent model boundaries are implemented; production models are structurally checked for platform/client coupling. Live product-flow validation remains external. |
+| W04 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Commit-failure propagation, response restrictions, async interceptor contracts and explicit local failure outcomes are implemented and covered. Live error-path validation remains external. |
+| W05 | COMPLETED | Pool isolation, resolver cache protection, transient retries, deadline-aware Retry-After handling, interactive listener identity binding and one `SearchFilters` validation owner for search/availability are implemented. |
+| W06 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Typed search/availability/play collaboration and Alexa-bound dialogue adaptation are implemented and covered locally. Live catalogue contract validation remains external. |
+| W07 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Canonical dialogue migration, feedback request context, playback event transitions and duplicate-event guarantees are implemented and covered locally. Device playback validation remains external. |
+| W08 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Worker hardening plus report/social workflow migration are implemented and covered locally. Deployed worker validation remains external. |
+| W09 | LOCAL IMPLEMENTATION COMPLETE; LIVE ACCEPTANCE PENDING | Transactional writes, corruption/expiry safeguards, conflict retries and legacy playback canonicalisation are implemented and covered locally. Live DynamoDB migration/rollback validation remains external. |
+| W10 | LOCAL IMPLEMENTATION COMPLETE; DEPLOYMENT/CONTRACT BLOCKED | Outbox code, tests and infrastructure definition exist; AWS deployment/alarm/backend-deduplication verification requires authorised external access. |
+| W11 | LOCAL IMPLEMENTATION COMPLETE | Obsolete `deps`/reflection paths and concrete Hear/Resolver client imports from models are removed; `ApplicationLog` is a HEAR-only toggle that emits allowlisted structure instead of sensitive request values; architecture tests are strengthened and the evidence-backed API consumer map is present. Ruff, full application-source Mypy, and Vulture at 80% confidence now pass locally and are CI gates. |
 
 Some independent tests/hardening can run earlier, but do not begin a broad feature rewrite before request-scoped identity and state are established. Do not deploy outbox-producing code before its consumer infrastructure works.
 
@@ -807,7 +827,7 @@ Code observations refer to the baseline commit stated at the top. The links belo
 | R3 | `src/container.py`, `src/application.py`, `src/registry.py`: composition, driver selection and ordered registration |
 | R4 | `src/models/user.py`, `src/middleware/persistence.py`, `src/database/dynamo_user.py`: current state gateway, load/save handling and scoped writes |
 | R5 | `src/constants/state.py`: version, scopes, field defaults and non-persisted identity/profile fields |
-| R6 | `src/alexa/runtime.py`, `main.py`, `src/controllers/play.py`, `src/models/search.py`: runtime, cached application, action construction and mixed model/platform responsibilities |
+| R6 | `src/alexa/runtime.py`, `main.py`, `src/controllers/play.py`, `src/alexa/search.py`: runtime, cached application, action construction and mixed model/platform responsibilities |
 | R7 | `src/clients/resolver.py`: per-call identity and cache eligibility/key |
 | R8 | `src/utils/filters.py`, `src/utils/search_payload.py`, `src/clients/hear.py`: existing filter/payload responsibilities |
 | R9 | `src/clients/pool.py`: event-loop-keyed pool and upstream configuration |

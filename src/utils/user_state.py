@@ -136,6 +136,7 @@ class UserStateNormalizer:
             "eventTimestamp",
             "isPublication",
             "lastEventRequestId",
+            "lastEventType",
             "lastListeningDeltaMs",
             "listenedMs",
             "observationOffsetMs",

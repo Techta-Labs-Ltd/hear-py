@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -13,6 +16,7 @@ from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 from src.services.logging_control import ApplicationLog
 from src.utils.content_normalizer import ContentNormalizer
+from src.utils.filters import SearchFilters
 from src.utils.listener_payload import ListenerPayload
 from src.utils.search_payload import SearchPayload
 
@@ -29,20 +33,6 @@ class HearApiSupport:
         "failed": True,
     }
 
-    @staticmethod
-    def _hash_text(text: str) -> str:
-        if not text:
-            return ""
-        return f"{len(text):d}:{HearApiSupport._simple_hash(text)}"
-
-    @staticmethod
-    def _simple_hash(text: str) -> int:
-        value = 0
-        for char in text:
-            value = value * 31 + ord(char) & 2147483647
-        return value
-
-
 @dataclass(frozen=True, slots=True)
 class HearApiOptions:
     api_key: str | None = None
@@ -51,6 +41,61 @@ class HearApiOptions:
     path_prefix: str | None = None
     retry_count: int | None = None
     page_limit: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class HearHttpResponse:
+    status: int
+    data: dict | list | None
+    retry_after_ms: int | None = None
+
+    def __iter__(self):
+        yield self.status
+        yield self.data
+
+
+@dataclass(frozen=True, slots=True)
+class HearRequestIdentity:
+    alexa_user_id: str | None = None
+    listener_id: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "alexa_user_id", str(self.alexa_user_id or "").strip() or None)
+        object.__setattr__(self, "listener_id", str(self.listener_id or "").strip() or None)
+
+
+class ListenerBoundHearClient:
+    """Immutable per-request identity view over reusable Hear infrastructure."""
+
+    __slots__ = ("_client", "_identity")
+
+    def __init__(self, client: "HearApiClient", identity: HearRequestIdentity) -> None:
+        self._client = client
+        self._identity = identity
+
+    @property
+    def identity(self) -> HearRequestIdentity:
+        return self._identity
+
+    def _with_identity(self, payload: dict | None) -> dict:
+        bound = dict(payload or {})
+        if self._identity.alexa_user_id:
+            bound["alexaUserId"] = self._identity.alexa_user_id
+        else:
+            bound.pop("alexaUserId", None)
+        if self._identity.listener_id:
+            bound["listenerId"] = self._identity.listener_id
+        else:
+            bound.pop("listenerId", None)
+        return bound
+
+    async def search(self, payload: dict | None = None, timeout_ms: int | None = None) -> dict:
+        return await self._client.search(self._with_identity(payload), timeout_ms=timeout_ms)
+
+    async def availability(
+        self, payload: dict | None = None, timeout_ms: int | None = None
+    ) -> dict:
+        return await self._client.availability(self._with_identity(payload), timeout_ms=timeout_ms)
 
 
 class HearApiClient:
@@ -101,13 +146,16 @@ class HearApiClient:
             base_url=self._base_url, headers={"X-Api-Key": self._api_key}
         )
 
+    def bind(self, identity: HearRequestIdentity) -> ListenerBoundHearClient:
+        return ListenerBoundHearClient(self, identity)
+
     async def _raw_request(
         self,
         method: str,
         path: str,
         json_data: dict | None = None,
         timeout_ms: int | None = None,
-    ) -> tuple[int, dict | list | None]:
+    ) -> HearHttpResponse:
         resolved_timeout_ms = (
             timeout_ms or self._timeout_ms or settings.HEAR_HTTP_DEFAULT_TIMEOUT_MS
         )
@@ -124,13 +172,17 @@ class HearApiClient:
                     self._build_api_path(path),
                     response.status_code,
                 )
-                return (response.status_code, None)
+                return HearHttpResponse(
+                    response.status_code,
+                    None,
+                    self._parse_retry_after_ms(response.headers.get("Retry-After")),
+                )
             if not response.content:
-                return (response.status_code, None)
+                return HearHttpResponse(response.status_code, None)
             try:
-                return (response.status_code, response.json())
+                return HearHttpResponse(response.status_code, response.json())
             except ValueError:
-                return (response.status_code, None)
+                return HearHttpResponse(response.status_code, None)
         except Exception as exc:
             ApplicationLog.warning(
                 "Hear API request error method=%s path=%s error=%s",
@@ -138,7 +190,7 @@ class HearApiClient:
                 self._build_api_path(path),
                 type(exc).__name__,
             )
-            return (0, None)
+            return HearHttpResponse(0, None)
 
     def _build_api_path(self, relative: str) -> str:
         rel = relative.lstrip("/")
@@ -157,7 +209,50 @@ class HearApiClient:
 
     @staticmethod
     def _is_retryable(status: int) -> bool:
-        return status >= 500
+        return status == 0 or status == 429 or status >= 500
+
+    @staticmethod
+    def _parse_retry_after_ms(value: str | None) -> int | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            seconds = float(text)
+            if math.isfinite(seconds) and seconds >= 0:
+                return math.ceil(seconds * 1000)
+        except ValueError:
+            pass
+        try:
+            retry_at = parsedate_to_datetime(text)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            return max(0, math.ceil((retry_at - datetime.now(timezone.utc)).total_seconds() * 1000))
+        except (TypeError, ValueError, IndexError, OverflowError):
+            return None
+
+    def _retry_deadline(self, timeout_ms: int | None) -> float:
+        budget_ms = timeout_ms or self._timeout_ms or settings.HEAR_HTTP_DEFAULT_TIMEOUT_MS
+        return asyncio.get_running_loop().time() + max(int(budget_ms), 1) / 1000.0
+
+    def _retry_delay_seconds(self, response, attempt: int) -> float:
+        retry_after_ms = getattr(response, "retry_after_ms", None)
+        if isinstance(retry_after_ms, int) and retry_after_ms >= 0:
+            return retry_after_ms / 1000.0
+        return settings.HEAR_API_RETRY_BACKOFF_MS / 1000.0 * 2**attempt
+
+    async def _wait_to_retry(self, response, attempt: int, deadline: float) -> bool:
+        delay_seconds = self._retry_delay_seconds(response, attempt)
+        remaining_seconds = deadline - asyncio.get_running_loop().time()
+        if delay_seconds >= remaining_seconds:
+            ApplicationLog.warning(
+                "Hear API retry skipped attempt=%s retryDelayMs=%s remainingMs=%s",
+                attempt + 1,
+                math.ceil(delay_seconds * 1000),
+                max(0, math.floor(remaining_seconds * 1000)),
+            )
+            return False
+        await asyncio.sleep(delay_seconds)
+        return True
 
     @staticmethod
     def _normalize_search_response(data: dict, search_payload: dict | None = None) -> dict:
@@ -210,20 +305,20 @@ class HearApiClient:
         if payload.get("sort") in HearApiSupport.ALLOWED_SORT_VALUES:
             body["sort"] = payload["sort"]
         path = self._build_alexa_search_path()
-        query_text = body.get("query") or ""
         ApplicationLog.info(
-            "Hear API search request path=%s queryHash=%s queryChars=%s limit=%s page=%s filterKeys=%s alexaUserIdPresent=%s listenerIdPresent=%s",
+            "Hear API search request path=%s queryPresent=%s limit=%s page=%s filterKeys=%s alexaUserIdPresent=%s listenerIdPresent=%s",
             path,
-            HearApiSupport._hash_text(str(query_text)),
-            len(str(query_text)),
+            bool(body.get("query")),
             body["limit"],
             body["page"],
             sorted((body.get("filter") or {}).keys()),
             bool(body.get("alexaUserId")),
             bool(body.get("listenerId")),
         )
+        deadline = self._retry_deadline(timeout_ms)
         for attempt in range(self._retry_count + 1):
-            status, data = await self._raw_request("POST", path, body, timeout_ms)
+            response = await self._raw_request("POST", path, body, timeout_ms)
+            status, data = response
             ApplicationLog.info(
                 "Hear API search response attempt=%s status=%s", attempt + 1, status
             )
@@ -234,7 +329,8 @@ class HearApiClient:
                     "_search_payload": dict(body),
                 }
             if attempt < self._retry_count and self._is_retryable(status):
-                await asyncio.sleep(settings.HEAR_API_RETRY_BACKOFF_MS / 1000.0 * 2**attempt)
+                if not await self._wait_to_retry(response, attempt, deadline):
+                    break
             else:
                 break
         return dict(HearApiSupport._EMPTY_SEARCH_RESULT)
@@ -243,7 +339,7 @@ class HearApiClient:
         self, payload: dict | None = None, timeout_ms: int | None = None
     ) -> dict:
         requested = payload if isinstance(payload, dict) else {}
-        availability_filter = AvailabilityResponse.normalize_filter(requested.get("filter"))
+        availability_filter = SearchFilters.availability(requested.get("filter"))
         alexa_user_id = str(requested.get("alexaUserId") or "").strip()
         listener_id = str(requested.get("listenerId") or "").strip()
         is_recommended = bool(requested.get("isRecommended"))
@@ -275,27 +371,26 @@ class HearApiClient:
             return AvailabilityResponse.failed(body)
         path = self._build_alexa_availability_path()
         ApplicationLog.info(
-            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s query=%s isLocal=%s",
+            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s isLocal=%s",
             path,
             body["page"],
             body["limit"],
-            sorted(body["filter"].keys()),
-            AvailabilityResponse.log_filter(body["filter"]),
+            sorted(filter_body.keys()) if isinstance((filter_body := body.get("filter")), dict) else [],
             body.get("isLocal", "omitted"),
         )
+        deadline = self._retry_deadline(timeout_ms)
         for attempt in range(self._retry_count + 1):
-            status, data = await self._raw_request("POST", path, body, timeout_ms)
+            response = await self._raw_request("POST", path, body, timeout_ms)
+            status, data = response
             ApplicationLog.info(
                 "Hear API availability response attempt=%s status=%s", attempt + 1, status
             )
             if status == 200 and isinstance(data, dict):
-                ApplicationLog.info(
-                    "Hear API availability response data=%s",
-                    AvailabilityResponse.log_response(data),
-                )
+                ApplicationLog.info("Hear API availability response bodyPresent=true")
                 return AvailabilityResponse.normalize(data, body)
             if attempt < self._retry_count and self._is_retryable(status):
-                await asyncio.sleep(settings.HEAR_API_RETRY_BACKOFF_MS / 1000.0 * 2**attempt)
+                if not await self._wait_to_retry(response, attempt, deadline):
+                    break
             else:
                 break
         return AvailabilityResponse.failed(body)

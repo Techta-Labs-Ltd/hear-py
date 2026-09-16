@@ -1,0 +1,345 @@
+from __future__ import annotations
+
+from ask_sdk_core.handler_input import HandlerInput
+
+from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogStateManager
+from src.alexa.feedback_response import FeedbackContinuation
+from src.alexa.feedback_service import FeedbackService
+from src.alexa.playback import AlexaPlayback
+from src.alexa.response import AlexaResponse
+from src.alexa.speech import Speech
+from src.alexa.ssml import Ssml
+
+
+class Decline:
+    def __init__(
+        self,
+        *,
+        user,
+        notifications,
+        onboarding,
+        feedback,
+        listener_sync,
+        playback,
+        playback_controls,
+        skip_feedback,
+        not_enjoyed_feedback,
+    ) -> None:
+        self._user = user
+        self._notifications = notifications
+        self._onboarding = onboarding
+        self._feedback = feedback
+        self._listener_sync = listener_sync
+        self._playback = playback
+        self._playback_controls = playback_controls
+        self._skip_feedback = skip_feedback
+        self._not_enjoyed_feedback = not_enjoyed_feedback
+
+    @staticmethod
+    def _generic_response(handler_input):
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.WELCOME_REPROMPT,
+            Speech.WELCOME_REPROMPT,
+        )
+
+    async def _setup_dialog_response(
+        self,
+        handler_input,
+        store: dict,
+        session: dict,
+        dialog_type: str | None,
+    ):
+        if dialog_type == "ambiguity":
+            DialogStateManager.dismiss_ambiguity(handler_input)
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.CHOICES_DISMISSED,
+                Speech.WELCOME_REPROMPT,
+            )
+        if dialog_type == "asr_repair":
+            DialogStateManager.clear(handler_input, "asr_repair")
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                "Ok. What would you like to listen to?",
+                Speech.WELCOME_REPROMPT,
+            )
+        if dialog_type == "latest_source":
+            self._user.update(handler_input, {"pendingLatestSource": None})
+            DialogStateManager.clear(handler_input, "latest_source")
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.LATEST_SOURCE_DECLINED,
+                Speech.LATEST_SOURCE_DECLINED,
+            )
+        if dialog_type == "notification":
+            return await self._notifications.decline(handler_input)
+        search_pending = bool(
+            dialog_type == "search_confirmation"
+            or not dialog_type
+            and (
+                store.get("awaitingSearchConfirmation") or session.get("awaitingSearchConfirmation")
+            )
+        )
+        if search_pending:
+            return self._handle_search_no(handler_input, store, session)
+        if store.get("awaitingLocationConfirm"):
+            self._onboarding.clear_invalid_confirmation(handler_input)
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_RETRY))
+                .reprompt(Ssml.ssml("Which city should I set?"))
+                .set_should_end_session(False)
+                .response
+            )
+        if store.get("awaitingCommunityPlayback"):
+            self._user.update(handler_input, {"awaitingCommunityPlayback": False})
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                "Ok. What would you like to listen to?",
+                Speech.WELCOME_REPROMPT,
+            )
+        return None
+
+    async def _activity_dialog_response(
+        self,
+        handler_input,
+        store: dict,
+        dialog_type: str | None,
+    ):
+        if (
+            dialog_type == "report_decision"
+            or not dialog_type
+            and store.get("awaitingReportDecision")
+        ):
+            return await self._skip_feedback.execute(RequestContext.bind(handler_input))
+        if dialog_type == "feedback_continuation":
+            return FeedbackContinuation.decline(handler_input, self._user)
+        if dialog_type == "feedback" or not dialog_type and store.get("awaitingFeedback"):
+            return await self._not_enjoyed_feedback.execute(RequestContext.bind(handler_input))
+        if dialog_type == "resume" or not dialog_type and store.get("awaitingResume"):
+            return self._handle_resume_no(handler_input, store)
+        return None
+
+    async def _state_response(self, handler_input, store: dict):
+        if store.get("onboardingStage") == "confirm_town_for_community":
+            self._user.update(
+                handler_input,
+                {"onboardingStage": None, "awaitingCommunityPlayback": False},
+            )
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.COMMUNITY_LOCATION_DECLINED,
+                Speech.WELCOME_REPROMPT,
+            )
+        if store.get("awaitingProfilePermission"):
+            return await self.finalize_profile_skipped(handler_input)
+        if store.get("listModeActive"):
+            return self._handle_list_mode_no(handler_input, store)
+        if store.get("awaitingStillListening"):
+            return self._handle_still_listening_no(handler_input)
+        if store.get("awaitingNotificationChoice"):
+            return await self._notifications.decline(handler_input)
+        if store.get("awaitingFeedbackContinuation"):
+            return FeedbackContinuation.decline(handler_input, self._user)
+        if store.get("awaitingContinueAfterFlag"):
+            self._user.update(handler_input, {"awaitingContinueAfterFlag": False})
+            return await self._playback_controls.play_queue_delta(
+                handler_input, 1, "Playing the next recording."
+            )
+        if store.get("awaitingFeedback"):
+            return await self._not_enjoyed_feedback.execute(RequestContext.bind(handler_input))
+        if store.get("awaitingFollow"):
+            await self._feedback.clear(handler_input)
+            return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_FOLLOW_DECLINED)
+        if store.get("awaitingReportDecision"):
+            return await self._skip_feedback.execute(RequestContext.bind(handler_input))
+        if store.get("pendingNlpSuggestion"):
+            return self._reject_nlp_suggestion(handler_input, store)
+        return None
+
+    async def execute(self, handler_input: HandlerInput):
+        store = self._user.snapshot(handler_input)
+        session = RequestContext.session(handler_input) or {}
+        dialog_type = (DialogStateManager.get_active(handler_input) or {}).get("type")
+        response = await self._setup_dialog_response(handler_input, store, session, dialog_type)
+        response = response or await self._activity_dialog_response(
+            handler_input, store, dialog_type
+        )
+        response = response or await self._state_response(handler_input, store)
+        return response or Decline._generic_response(handler_input)
+
+    async def finalize_profile_skipped(self, handler_input: HandlerInput):
+        self._user.update(
+            handler_input,
+            {"awaitingProfilePermission": False, "listenerType": "guest"},
+        )
+        try:
+            await self._listener_sync.sync_for_launch(handler_input)
+        except Exception:
+            pass
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.PROFILE_PERMISSION_SKIPPED,
+            Speech.WELCOME_REPROMPT,
+        )
+
+    def _handle_search_no(self, handler_input, store, session_attrs):
+        """Cycle through search suggestions or give up."""
+        if store.get("pendingResolution") or session_attrs.get("pendingResolution"):
+            self._user.update(
+                handler_input,
+                {
+                    "awaitingSearchConfirmation": False,
+                    "pendingResolution": None,
+                    "pendingAmbiguity": None,
+                    "awaitingLocationConfirm": False,
+                    "pendingLocationConfirm": None,
+                    "_requiresReliableSave": True,
+                },
+            )
+            DialogStateManager.clear(handler_input, "search_confirmation")
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                f"Ok. {Speech.WELCOME_REPROMPT}",
+                Speech.WELCOME_REPROMPT,
+            )
+        if store.get("pendingOrganizationConfirmation"):
+            self._user.update(
+                handler_input,
+                {
+                    "awaitingSearchConfirmation": False,
+                    "pendingOrganizationConfirmation": False,
+                    "pendingSearchIntent": None,
+                    "pendingSearchQuery": None,
+                    "pendingSearchSlots": {},
+                    "pendingSuggestions": [],
+                    "suggestionIndex": 0,
+                    "awaitingOrganizationName": True,
+                },
+            )
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml("Okay. Which talking newspaper did you mean?")
+                )
+                .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        attrs = RequestContext.request(handler_input)
+        attrs.pop("_pendingConfirmation", None)
+        RequestContext.replace_request(handler_input, attrs)
+        suggestions = (
+            session_attrs.get("pendingSuggestions")
+            if session_attrs.get("pendingSuggestions")
+            else store.get("pendingSuggestions", [])
+        )
+        idx = (session_attrs.get("suggestionIndex") or store.get("suggestionIndex") or 0) + 1
+        if idx < len(suggestions):
+            next_sug = suggestions[idx]
+            RequestContext.replace_session(
+                handler_input,
+                {
+                    "awaitingSearchConfirmation": True,
+                    "pendingSearchIntent": session_attrs.get("pendingSearchIntent"),
+                    "pendingSearchQuery": session_attrs.get("pendingSearchQuery"),
+                    "pendingSuggestions": suggestions,
+                    "suggestionIndex": idx,
+                },
+            )
+            next_name = next_sug.get("display") or next_sug.get("query") or next_sug.get("intent")
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml(f"Maybe {Speech.escape_ssml_lite(str(next_name))}?")
+                )
+                .set_should_end_session(False)
+                .response
+            )
+        self._user.update(
+            handler_input,
+            {
+                "awaitingSearchConfirmation": False,
+                "pendingSearchIntent": None,
+                "pendingSearchQuery": None,
+                "pendingSearchSlots": {},
+                "pendingSuggestions": [],
+                "suggestionIndex": 0,
+                "excludedSuggestions": [],
+            },
+        )
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            "Ok. What would you like to listen to instead?",
+            Speech.WELCOME_REPROMPT,
+        )
+
+    def _handle_list_mode_no(self, handler_input, store):
+        """Decline the offered queue item without creating another queue."""
+        del store
+        self._user.update(handler_input, {"listModeActive": False})
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            "Ok. What would you like to listen to?",
+            Speech.WELCOME_REPROMPT,
+        )
+
+    def _handle_resume_no(self, handler_input, store):
+        state = self._playback.state.current(handler_input)
+        if state:
+            state = self._playback.state.merge(handler_input, {"status": "abandoned"})
+            FeedbackService.update_publication_progress(handler_input, state)
+            if FeedbackService.finalize_publication(handler_input, state.get("publicationId")):
+                FeedbackService.activate_best(handler_input)
+        self._user.update(handler_input, {"awaitingResume": False})
+        DialogStateManager.clear(handler_input, "resume")
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.RESUME_DECLINED_NEXT_OPTIONS,
+            Speech.RESUME_DECLINED_NEXT_OPTIONS_REPROMPT,
+        )
+
+    def _handle_still_listening_no(self, handler_input):
+        """Stop after still-listening prompt declined."""
+        self._user.update(
+            handler_input,
+            {"awaitingStillListening": False, "awaitingContinueAfterFlag": False},
+        )
+        self._playback.queue.clear(handler_input)
+        return (
+            handler_input.response_builder.speak(Speech.GOODBYE)
+            .add_directive(AlexaPlayback.build_stop_directive())
+            .response
+        )
+
+    def _reject_nlp_suggestion(self, handler_input, store):
+        """Reject the current NLP suggestion; offer the next if available."""
+        suggestions = store.get("pendingNlpSuggestion") or []
+        if len(suggestions) > 1:
+            remaining = suggestions[1:]
+            self._user.update(handler_input, {"pendingNlpSuggestion": remaining})
+            next_sug = remaining[0]
+            display_text = (
+                next_sug.get("displayText")
+                or f"{next_sug.get('intent')} {next_sug.get('query', '')}".strip()
+            )
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml(
+                        f"How about {Speech.escape_ssml_lite(display_text)}? Say yes to try that."
+                    )
+                )
+                .reprompt(Ssml.ssml("Say yes to confirm, or no for other options."))
+                .set_should_end_session(False)
+                .response
+            )
+        self._user.update(handler_input, {"pendingNlpSuggestion": None})
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(
+                    f"Ok. {Speech.WELCOME_REPROMPT}"
+                )
+            )
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )

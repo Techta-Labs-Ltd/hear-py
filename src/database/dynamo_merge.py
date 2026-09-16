@@ -102,6 +102,7 @@ class DynamoConflictMerge:
             incoming = deepcopy(requested.get(field, StateSchema.default_for(field)))
             previous = original.get(field, StateSchema.default_for(field))
             current = latest.get(field, StateSchema.default_for(field))
+            value: object
             if (
                 field in DynamoConflictMerge.COUNTER_FIELDS
                 and isinstance(incoming, int)

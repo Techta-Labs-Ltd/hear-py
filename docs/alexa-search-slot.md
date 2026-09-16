@@ -127,53 +127,17 @@ Generate this object. Slot values contain only `name.value` and optional
 }
 ```
 
-Build the uploadable interaction model from the checked-in base model and all
-three generated catalogues before uploading it to Alexa:
+Build the uploadable interaction model directly from the checked-in model:
 
 ```bash
 python scripts/build_alexa_interaction_model.py --output build/en-GB.json
 ```
 
-Upload `build/en-GB.json`, not the seed-only `en-GB.json`. The builder replaces
-the three matching objects in `interactionModel.languageModel.types`, writes a
-compact model that stays within Alexa's size limit, and fails rather than
-silently omitting one of the three domain slots.
-
-For manual Alexa Console imports, the repository produces the three backend
-domain files under `alexa-slot-imports/`:
-
-- `HEAR_LOCATION.csv`
-- `HEAR_ORGANIZATION.csv`
-- `HEAR_TOPIC.csv`
-
-Import each file through that slot type's **Bulk Edit** screen. The files do
-not contain a header row. Each row uses `value,,synonym,...`; the deliberately
-blank second column is the optional Alexa identifier, so these imports retain
-the no-ID contract. Importing a file replaces the values currently displayed
-for that slot type, after which the interaction model must be saved and built.
-
-## What belongs in each slot
-
-| Slot | Backend records |
-| --- | --- |
-| `HEAR_LOCATION` | Active towns, cities, localities, areas, and their observed spoken variants |
-| `HEAR_ORGANIZATION` | Full backend organization names, plus distinctive spoken names and observed ASR variants |
-| `HEAR_TOPIC` | Every active topic, category, subject, and searchable tag, including multi-word values |
-
-Do not copy all records into every slot. Domain separation is what helps Alexa
-prefer `London` as a location instead of a creator name. If the same phrase
-exists in multiple domains, keep it only where users genuinely use it or rely
-on the resolver to clarify the unavoidable ambiguity.
-
-Cross-slot canonical collisions fail validation unless the phrase is listed in
-`allowCrossSlotCollisions`. Synonym overlap is allowed
-because carrier phrases and active dialog establish the domain, but duplicate
-canonical values must be an explicit catalogue decision.
-
-The repeatable cleanup policy is stored in
-`config/alexa_slot_lexicon.json`. Run
-`python scripts/apply_alexa_slot_lexicon.py alexa-slot-imports` after the
-backend generates fresh CSV files and before importing them into Alexa.
+The custom `HEAR_LOCATION`, `HEAR_ORGANIZATION`, `HEAR_TOPIC`, and
+`HEAR_DISCOVERY` types remain so existing intent contracts stay stable. Their
+small, curated values are kept only in `en-GB.json`; backend locations,
+organizations, topics, aliases, and snapshots must never be bulk-imported into
+Alexa.
 
 ## Intent-to-slot mapping
 
@@ -198,7 +162,7 @@ backend generates fresh CSV files and before importing them into Alexa.
 
 Existing bare source and location intents retain their domain-specific slots.
 `CarrierlessDiscoveryIntent` covers a bare topic or other phrase that Alexa
-assigns to the generated bridge. `OpenDiscoveryIntent` captures a recognizable
+assigns to the combined discovery type. `OpenDiscoveryIntent` captures a recognizable
 bare phrase that Alexa does not assign to a typed intent while the general
 prompt is active. Bare values captured while a town or source-name dialog is
 active are interpreted by that active dialog before general discovery. The

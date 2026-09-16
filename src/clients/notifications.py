@@ -102,8 +102,10 @@ class NotificationApiClient:
             ]
             if raw_items and not items:
                 return {"items": [], "failed": True, "retryable": True, "httpStatus": status}
+            limit_value = body.get("limit")
+            limit = int(limit_value) if isinstance(limit_value, int) else len(items)
             return {
-                "items": items[: body["limit"]],
+                "items": items[:limit],
                 "failed": False,
                 "retryable": False,
                 "httpStatus": status,

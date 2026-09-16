@@ -7,8 +7,26 @@ import httpx
 import pytest
 
 
+def _is_loopback(address) -> bool:
+    return isinstance(address, tuple) and bool(address) and address[0] in {
+        "127.0.0.1",
+        "::1",
+    }
+
+
+def _remote_connection_guard(connect, message: str):
+    def guarded(socket_instance, address, *args, **kwargs):
+        if _is_loopback(address):
+            return connect(socket_instance, address, *args, **kwargs)
+        raise AssertionError(message)
+
+    return guarded
+
+
 def pytest_configure(config):
     guard = pytest.MonkeyPatch()
+    connect = socket.socket.connect
+    connect_ex = socket.socket.connect_ex
 
     def reject_network(*args, **kwargs):
         raise AssertionError(
@@ -16,8 +34,16 @@ def pytest_configure(config):
         )
 
     guard.setattr(socket, "getaddrinfo", reject_network)
-    guard.setattr(socket.socket, "connect", reject_network)
-    guard.setattr(socket.socket, "connect_ex", reject_network)
+    guard.setattr(
+        socket.socket,
+        "connect",
+        _remote_connection_guard(connect, "Live network access is forbidden during unit-test collection and execution"),
+    )
+    guard.setattr(
+        socket.socket,
+        "connect_ex",
+        _remote_connection_guard(connect_ex, "Live network access is forbidden during unit-test collection and execution"),
+    )
     config._hear_network_guard = guard
 
 
@@ -30,14 +56,28 @@ def pytest_unconfigure(config):
 @pytest.fixture(autouse=True)
 def prevent_live_network_calls(monkeypatch):
     attempted = []
+    connect = socket.socket.connect
+    connect_ex = socket.socket.connect_ex
 
     def reject_network(*args, **kwargs):
         attempted.append(True)
         raise AssertionError("Unit tests must inject a transport or service stub")
 
     monkeypatch.setattr(socket, "getaddrinfo", reject_network)
-    monkeypatch.setattr(socket.socket, "connect", reject_network)
-    monkeypatch.setattr(socket.socket, "connect_ex", reject_network)
+    monkeypatch.setattr(
+        socket.socket,
+        "connect",
+        _remote_connection_guard(
+            connect, "Unit tests must inject a transport or service stub"
+        ),
+    )
+    monkeypatch.setattr(
+        socket.socket,
+        "connect_ex",
+        _remote_connection_guard(
+            connect_ex, "Unit tests must inject a transport or service stub"
+        ),
+    )
     yield
     assert not attempted, "Unit test attempted live network access; inject a test stub"
 

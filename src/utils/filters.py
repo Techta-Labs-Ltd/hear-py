@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
+from numbers import Real
 
 from src.constants.creator import CreatorConstants
 from src.constants.discovery import DiscoveryConstants
@@ -351,14 +352,126 @@ class SearchFilterUtils:
 
 
 class SearchFilters:
+    _LIST_KEYS = frozenset(
+        {
+            "contentIds",
+            "creatorIds",
+            "organizationIds",
+            "publicationIds",
+            "categorySlugs",
+            "tags",
+        }
+    )
+    _TEXT_KEYS = frozenset({"city", "countryCode"})
+    _DATE_KEYS = frozenset({"publishedFrom", "publishedTo"})
+    _NUMBER_KEYS = frozenset({"latitude", "longitude"})
+    _BOOLEAN_KEYS = frozenset({"isPublication"})
+    _AVAILABILITY_SOURCE_KEYS = ("creatorId", "organizationId")
+    _AVAILABILITY_TAXONOMY_KEYS = ("categorySlugs", "tags")
+    _AVAILABILITY_BOOLEAN_KEYS = ("isCreator",)
+    _AVAILABILITY_LOCATION_KEYS = ("city", "countryCode", "latitude", "longitude")
+
+    @staticmethod
+    def _text_values(value: object) -> list[str]:
+        candidates = value if isinstance(value, (list, tuple, set)) else [value]
+        values: list[str] = []
+        for candidate in candidates:
+            text = str(candidate or "").strip()
+            if text and text not in values:
+                values.append(text)
+        return values
+
     @staticmethod
     def clean(values: dict | None) -> dict:
         source = values if isinstance(values, dict) else {}
-        return {
-            key: list(value) if key == "tags" and isinstance(value, list) else value
-            for key in SearchConstants.SEARCH_FILTER_KEYS
-            if (value := source.get(key)) is not None and value != "" and (value != [])
-        }
+        normalized: dict[str, object] = {}
+        for key in SearchConstants.SEARCH_FILTER_KEYS:
+            value = source.get(key)
+            if value is None:
+                continue
+            if key in SearchFilters._LIST_KEYS:
+                items = SearchFilters._text_values(value)
+                if items:
+                    normalized[key] = items
+            elif key in SearchFilters._TEXT_KEYS:
+                text = str(value).strip()
+                if text:
+                    normalized[key] = text
+            elif key in SearchFilters._DATE_KEYS:
+                if isinstance(value, Real) and not isinstance(value, bool):
+                    normalized[key] = value
+                else:
+                    text = str(value).strip()
+                    if text:
+                        normalized[key] = text
+            elif key in SearchFilters._NUMBER_KEYS:
+                if isinstance(value, Real) and not isinstance(value, bool):
+                    normalized[key] = value
+            elif key in SearchFilters._BOOLEAN_KEYS and isinstance(value, bool):
+                normalized[key] = value
+        return normalized
+
+    @staticmethod
+    def availability(values: object) -> dict | None:
+        """Validate the availability endpoint's distinct filter contract."""
+        if not isinstance(values, dict) or not values:
+            return None
+        allowed = (
+            set(SearchFilters._AVAILABILITY_SOURCE_KEYS)
+            | set(SearchFilters._AVAILABILITY_TAXONOMY_KEYS)
+            | set(SearchFilters._AVAILABILITY_BOOLEAN_KEYS)
+            | {"location"}
+        )
+        if any(key not in allowed for key in values):
+            return None
+        output: dict[str, object] = {}
+        for key in SearchFilters._AVAILABILITY_SOURCE_KEYS:
+            if key not in values:
+                continue
+            value = str(values.get(key) or "").strip()
+            if not value:
+                return None
+            output[key] = value
+        for key in SearchFilters._AVAILABILITY_TAXONOMY_KEYS:
+            if key not in values:
+                continue
+            entries = list(
+                dict.fromkeys(
+                    entry.casefold()
+                    for entry in SearchFilters._text_values(values[key])
+                )
+            )
+            if not entries:
+                return None
+            output[key] = entries
+        for key in SearchFilters._AVAILABILITY_BOOLEAN_KEYS:
+            if key in values:
+                if not isinstance(values[key], bool):
+                    return None
+                output[key] = values[key]
+        if "location" in values:
+            location = values["location"]
+            if not isinstance(location, dict) or not location:
+                return None
+            if any(key not in SearchFilters._AVAILABILITY_LOCATION_KEYS for key in location):
+                return None
+            normalized_location: dict[str, object] = {}
+            for key in SearchFilters._AVAILABILITY_LOCATION_KEYS:
+                location_value: object = location.get(key)
+                if location_value is None:
+                    continue
+                if key in {"latitude", "longitude"}:
+                    if not isinstance(location_value, Real) or isinstance(location_value, bool):
+                        return None
+                    normalized_location[key] = location_value
+                else:
+                    text = str(location_value).strip()
+                    if text:
+                        normalized_location[key] = text
+            if not normalized_location:
+                return None
+            output["location"] = normalized_location
+        return output or None
 
     @staticmethod
     def content(content_id: object) -> dict:
@@ -367,9 +480,10 @@ class SearchFilters:
 
     @staticmethod
     def content_ids(content_ids: object) -> dict:
+        candidates = content_ids if isinstance(content_ids, (list, tuple, set)) else []
         values = [
             str(content_id).strip()
-            for content_id in content_ids or []
+            for content_id in candidates
             if str(content_id or "").strip()
         ]
         return {"contentIds": list(dict.fromkeys(values))} if values else {}

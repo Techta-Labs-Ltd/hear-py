@@ -32,8 +32,10 @@ class AlexaRequest:
     @staticmethod
     def get_request_id(handler_input) -> str | None:
         envelope = getattr(handler_input, "request_envelope", {}) or {}
-        request = envelope.get("request", {})
-        return AlexaRequest._non_empty_string(request.get("requestId"))
+        request = AlexaRequest.read(envelope, "request") or {}
+        return AlexaRequest._non_empty_string(
+            AlexaRequest.read(request, "requestId", "request_id")
+        )
 
     @staticmethod
     def get_request_timestamp_ms(handler_input) -> int | None:

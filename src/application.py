@@ -34,15 +34,16 @@ class Application:
 
     @staticmethod
     def build_skill(
-        persistence_adapter=None, *, deps: ApplicationContainer | None = None
+        persistence_adapter=None, *, container: ApplicationContainer | None = None
     ) -> AsyncSkill:
         """Create a fully configured skill application."""
+        settings.validate_runtime()
         ApplicationLog.configure(settings.HEAR_LOGGING_ENABLED)
         skill = AsyncSkill(
             persistence_adapter=persistence_adapter
             if persistence_adapter is not None
             else Application.build_persistence_adapter()
         )
-        dependencies = deps or ApplicationContainer()
-        RouteRegistry.register(skill, dependencies)
+        application_container = container or ApplicationContainer()
+        RouteRegistry.register(skill, application_container)
         return skill

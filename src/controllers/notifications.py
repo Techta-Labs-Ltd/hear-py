@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 
+from src.alexa.notifications import AlexaNotificationAdapter
 from src.alexa.request import AlexaRequest
-from src.models.notifications import Notification
 
 
 class HearNotificationsHandler(AbstractRequestHandler):
-    def __init__(self, notifications: Notification) -> None:
+    def __init__(self, notifications: AlexaNotificationAdapter) -> None:
         self._notifications = notifications
 
     def can_handle(self, handler_input) -> bool:
@@ -21,7 +21,7 @@ class HearNotificationsHandler(AbstractRequestHandler):
 
 
 class EnableNotificationsHandler(AbstractRequestHandler):
-    def __init__(self, notifications: Notification) -> None:
+    def __init__(self, notifications: AlexaNotificationAdapter) -> None:
         self._notifications = notifications
 
     def can_handle(self, handler_input) -> bool:
@@ -35,7 +35,7 @@ class EnableNotificationsHandler(AbstractRequestHandler):
 
 
 class DisableNotificationsHandler(AbstractRequestHandler):
-    def __init__(self, notifications: Notification) -> None:
+    def __init__(self, notifications: AlexaNotificationAdapter) -> None:
         self._notifications = notifications
 
     def can_handle(self, handler_input) -> bool:

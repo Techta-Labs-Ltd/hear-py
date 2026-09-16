@@ -30,7 +30,10 @@ class AlexaDateRange:
     def _bounds(value: str, zone: ZoneInfo) -> tuple[datetime, datetime] | None:
         exact = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", value)
         if exact:
-            start = datetime(*(int(part) for part in exact.groups()), tzinfo=zone)
+            year_text, month_text, day_text = exact.groups()
+            start = datetime(
+                int(year_text), int(month_text), int(day_text), tzinfo=zone
+            )
             return start, start + timedelta(days=1)
         weekend = re.fullmatch(r"(\d{4})-W(\d{2})-WE", value)
         if weekend:
@@ -44,25 +47,25 @@ class AlexaDateRange:
                 int(week.group(1)), int(week.group(2)), 1
             ).replace(tzinfo=zone)
             return start, start + timedelta(days=7)
-        month = re.fullmatch(r"(\d{4})-(\d{2})", value)
-        if month:
-            year, month_number = (int(part) for part in month.groups())
-            start = datetime(year, month_number, 1, tzinfo=zone)
+        month_match = re.fullmatch(r"(\d{4})-(\d{2})", value)
+        if month_match:
+            year_text, month_text = month_match.groups()
+            year_number, month_number = int(year_text), int(month_text)
+            start = datetime(year_number, month_number, 1, tzinfo=zone)
             end = (
-                datetime(year + 1, 1, 1, tzinfo=zone)
+                datetime(year_number + 1, 1, 1, tzinfo=zone)
                 if month_number == 12
-                else datetime(year, month_number + 1, 1, tzinfo=zone)
+                else datetime(year_number, month_number + 1, 1, tzinfo=zone)
             )
             return start, end
-        year = re.fullmatch(r"(\d{4})", value)
-        if year:
-            year_number = int(year.group(1))
+        year_match = re.fullmatch(r"(\d{4})", value)
+        if year_match:
+            year_number = int(year_match.group(1))
             return (
                 datetime(year_number, 1, 1, tzinfo=zone),
                 datetime(year_number + 1, 1, 1, tzinfo=zone),
             )
         return None
-
     @staticmethod
     def parse(value: object, timezone_name: str) -> dict:
         normalized = str(value or "").strip()

@@ -14,7 +14,6 @@ from src.middleware.confirmation import (
     ConfirmationMiddleware,
     SearchConfirmationGateHandler,
 )
-from src.models.affirmative import Affirmative
 from src.models.availability_data import AvailabilityData
 from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolutionBuilder
@@ -33,7 +32,8 @@ def test_topic_trending_confirmation_uses_clean_spoken_text():
     )
 
 
-def test_full_resolved_search_is_spoken_before_backend_search():
+@pytest.mark.asyncio
+async def test_full_resolved_search_is_spoken_before_backend_search():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -86,8 +86,8 @@ def test_full_resolved_search_is_spoken_before_backend_search():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     question = (
         "Did you want me to play the latest community services from York Talking News? "
         "Please say yes or no."
@@ -101,7 +101,8 @@ def test_full_resolved_search_is_spoken_before_backend_search():
     assert pending["searchPayload"]["filter"]["organizationIds"] == ["org-ytn"]
 
 
-def test_constrained_whats_latest_stops_for_confirmation():
+@pytest.mark.asyncio
+async def test_constrained_whats_latest_stops_for_confirmation():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -140,8 +141,8 @@ def test_constrained_whats_latest_stops_for_confirmation():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     assert "Did you want me to play the latest sport update" in response["outputSpeech"]["ssml"]
     assert User.snapshot(handler_input)["pendingResolution"]["searchPayload"] == payload
 
@@ -199,7 +200,8 @@ def test_structured_publication_name_wins_over_conflicting_raw_source_words():
     )
 
 
-def test_play_york_tn_still_requires_confirmation():
+@pytest.mark.asyncio
+async def test_play_york_tn_still_requires_confirmation():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -236,8 +238,8 @@ def test_play_york_tn_still_requires_confirmation():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     assert (
         "Did you want me to play content from York Talking News?"
         in response["outputSpeech"]["ssml"]
@@ -284,9 +286,9 @@ async def test_yes_uses_session_confirmation_when_persistent_dialog_state_is_mis
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
     expected = {"outputSpeech": {"ssml": "played"}}
     availability = SimpleNamespace(handle_resolution=AsyncMock(return_value=expected))
-    deps = SimpleNamespace(user=User(), availability=availability)
+    action = ApplicationContainer(user=User(), request_availability=availability).build_request_affirmative(handler_input)
 
-    response = await Affirmative(deps=deps).execute(handler_input)
+    response = await action.execute(handler_input)
 
     assert response == expected
     availability.handle_resolution.assert_awaited_once()
@@ -317,7 +319,7 @@ def test_confirmed_search_terminal_response_reopens_bare_discovery(failed):
         "searchPayload": {"query": "", "filter": {"organizationIds": ["org-wtn"]}},
     }
 
-    response = Affirmative(deps=SimpleNamespace())._failed_search_response(
+    response = ApplicationContainer().build_request_affirmative(handler_input)._failed_search_response(
         handler_input,
         resolution,
         {"failed": failed, "results": []},
@@ -343,7 +345,8 @@ def test_confirmed_search_terminal_response_reopens_bare_discovery(failed):
     ]
 
 
-def test_empty_play_request_reports_failed_recognition_and_stays_open():
+@pytest.mark.asyncio
+async def test_empty_play_request_reports_failed_recognition_and_stays_open():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -367,8 +370,8 @@ def test_empty_play_request_reports_failed_recognition_and_stays_open():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     assert "Sorry, I didn't catch that" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
     assert response.get("directives") in (None, [])
@@ -376,7 +379,8 @@ def test_empty_play_request_reports_failed_recognition_and_stays_open():
     assert store["awaitingSearchConfirmation"] is False
 
 
-def test_generic_anything_asks_for_specific_request():
+@pytest.mark.asyncio
+async def test_generic_anything_asks_for_specific_request():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -403,15 +407,16 @@ def test_generic_anything_asks_for_specific_request():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     assert "Sorry, I didn't catch that" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
     assert response.get("directives") in (None, [])
     assert User.snapshot(handler_input)["awaitingSearchConfirmation"] is False
 
 
-def test_bare_trending_request_bypasses_confirmation():
+@pytest.mark.asyncio
+async def test_bare_trending_request_bypasses_confirmation():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -436,13 +441,14 @@ def test_bare_trending_request_bypasses_confirmation():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
     assert handler_input.attributes_manager.request_attributes.get("_pendingConfirmation") is None
     assert SearchConfirmationGateHandler().can_handle(handler_input) is False
     assert User.snapshot(handler_input).get("awaitingSearchConfirmation") is False
 
 
-def test_resolved_search_alias_is_always_confirmed():
+@pytest.mark.asyncio
+async def test_resolved_search_alias_is_always_confirmed():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -470,13 +476,14 @@ def test_resolved_search_alias_is_always_confirmed():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     assert "Did you want me to play content on Wakefield news?" in response["outputSpeech"]["ssml"]
     assert User.snapshot(handler_input)["awaitingSearchConfirmation"] is True
 
 
-def test_category_search_is_described_as_content_on_subject():
+@pytest.mark.asyncio
+async def test_category_search_is_described_as_content_on_subject():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -504,8 +511,8 @@ def test_category_search_is_described_as_content_on_subject():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     assert "Did you want me to play content on history?" in response["outputSpeech"]["ssml"]
     assert User.snapshot(handler_input)["pendingResolution"]["searchPayload"] == {
         "query": "",
@@ -513,7 +520,8 @@ def test_category_search_is_described_as_content_on_subject():
     }
 
 
-def test_location_only_search_is_confirmed_with_city_filter():
+@pytest.mark.asyncio
+async def test_location_only_search_is_confirmed_with_city_filter():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -563,8 +571,8 @@ def test_location_only_search_is_confirmed_with_city_filter():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
-    response = IntentDispatchGateHandler(deps=ApplicationContainer()).handle(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
+    response = IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).handle(handler_input)
     assert "Did you want me to play content in Liverpool?" in response["outputSpeech"]["ssml"]
     attrs = handler_input.attributes_manager.request_attributes
     assert "_resolverClarification" not in attrs
@@ -598,7 +606,8 @@ def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
     assert response["shouldEndSession"] is False
 
 
-def test_search_confirmation_gate_allows_unresolved_reference_handler():
+@pytest.mark.asyncio
+async def test_search_confirmation_gate_allows_unresolved_reference_handler():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -638,13 +647,14 @@ def test_search_confirmation_gate_allows_unresolved_reference_handler():
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
 
-    ConfirmationMiddleware().process(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
 
     assert SearchConfirmationGateHandler().can_handle(handler_input) is False
-    assert IntentDispatchGateHandler(deps=ApplicationContainer()).can_handle(handler_input) is True
+    assert IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(handler_input)).can_handle(handler_input) is True
 
 
-def test_resolved_pendle_ambiguity_bypasses_generic_clarification():
+@pytest.mark.asyncio
+async def test_resolved_pendle_ambiguity_bypasses_generic_clarification():
     envelope = AttrDict(
         {
             "version": "1.0",
@@ -707,7 +717,7 @@ def test_resolved_pendle_ambiguity_bypasses_generic_clarification():
         },
     }
     handler_input = HandlerInput(envelope, attributes, None, ResponseBuilder())
-    ConfirmationMiddleware().process(handler_input)
+    await ConfirmationMiddleware().process(handler_input)
     attrs = handler_input.attributes_manager.request_attributes
     assert "_resolverClarification" not in attrs
     assert "_pendingConfirmation" not in attrs

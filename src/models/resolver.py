@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from src.constants.resolver import ResolverConstants
 from src.utils.filters import SearchFilterUtils
@@ -11,6 +11,19 @@ from src.utils.filters import SearchFilterUtils
 
 class ResolverUnavailable(RuntimeError):
     pass
+
+
+class UtteranceResolver(Protocol):
+    async def resolve_utterance(
+        self,
+        utterance: str,
+        *,
+        alexa_user_id: str | None = None,
+        listener_id: str | None = None,
+        prefer_location: bool = False,
+        timeout_ms: int | None = None,
+    ) -> dict[str, Any]:
+        ...
 
 
 class ResolutionBuilder:
@@ -212,7 +225,7 @@ class ResolverResult:
             "organization": ("organizationIds", "organizationName"),
             "publication": ("publicationIds", "publicationName"),
         }
-        sources = []
+        sources: list[ResolvedEntity] = []
         for entity_type, (ids_key, name_key) in facet_slots.items():
             discovered = self.selected_entities_of_type(entity_type)
             sources.extend(discovered)
@@ -401,7 +414,7 @@ class ResolverResult:
         ):
             slots["isPublication"] = True
             filters["isPublication"] = True
-        defaults = {
+        defaults: dict[str, object] = {
             "residualQuery": "",
             "latest": slots.get("sort") == "latest",
             "isRecommended": False,

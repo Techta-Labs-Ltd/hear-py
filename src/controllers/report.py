@@ -3,24 +3,51 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.context import RequestContext
+from src.alexa.dialog import DeferredIntentManager, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.feedback_response import FeedbackContinuation
+from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback_context import PlaybackContext
+from src.alexa.playback_controls import PlaybackControls
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.dialog import DeferredIntentManager, DialogStateManager
-from src.models.feedback_response import FeedbackContinuation
-from src.models.playback_controls import PlaybackControls
-from src.models.report import Report
+from src.models.report import Report, ReportCommand
+from src.models.user import User
 from src.services.logging_control import ApplicationLog
+
+
+def _stage_report_event(handler_input, events, receipt, store: dict) -> None:
+    """Bridge a framework-free report receipt into the request-bound outbox."""
+    request = RequestContext.bind(handler_input)
+    if not request.alexa_user_id:
+        return
+    events.report(
+        handler_input=handler_input,
+        alexa_user_id=request.alexa_user_id,
+        listener_id=store.get("listenerId"),
+        report=receipt.event_payload(),
+    )
 
 
 class ReportContentHandler(AbstractRequestHandler):
     """Flags the currently playing content for review."""
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(
+        self,
+        user: User,
+        reports: Report,
+        feedback: FeedbackService,
+        playback_controls: PlaybackControls,
+        events,
+    ) -> None:
+        self._user = user
+        self._reports = reports
+        self._feedback = feedback
+        self._playback_controls = playback_controls
+        self._events = events
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -29,27 +56,27 @@ class ReportContentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         audio = PlaybackContext.read_audio_player_context(handler_input)
         report = Report.build_report_context(
             store, audio_token=audio.get("token") if audio else None
         )
         content_id = report.get("contentId")
         if not content_id:
-            ApplicationLog.warning("Hear: report content blocked contentId=%s", content_id)
+            ApplicationLog.warning("Hear: report content blocked contentIdPresent=false")
             return handler_input.response_builder.speak(Speech.REPORT_NOTHING_PLAYING).response
         try:
-            await self._deps.reports.record_report(
-                handler_input,
-                {
-                    "type": "content",
-                    "id": str(content_id),
-                    "name": report.get("title"),
-                    "contentId": str(content_id),
-                    "publicationId": report.get("publicationId"),
-                },
+            receipt = self._reports.record_report(
+                ReportCommand(
+                    subject_type="content",
+                    subject_id=str(content_id),
+                    subject_name=report.get("title"),
+                    content_id=str(content_id),
+                    publication_id=report.get("publicationId"),
+                )
             )
-            self._deps.user.update(
+            _stage_report_event(handler_input, self._events, receipt, store)
+            self._user.update(
                 handler_input, {"awaitingReportDecision": False, "reportContext": None}
             )
             DialogStateManager.clear(handler_input, "report_decision")
@@ -57,7 +84,7 @@ class ReportContentHandler(AbstractRequestHandler):
                 return await DeferredIntentManager.resume(handler_input)
             return await self._present_continue_question(handler_input, report, store)
         except Exception as err:
-            ApplicationLog.warning("Report content error: %s", err)
+            ApplicationLog.warning("Report content error=%s", type(err).__name__)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -72,17 +99,18 @@ class ReportContentHandler(AbstractRequestHandler):
         store: dict,
     ):
         if not report.get("requested") and report.get("discoveryContext"):
-            await self._deps.feedback.clear(handler_input)
+            await self._feedback.clear(handler_input)
             continuation = FeedbackContinuation.present(
                 handler_input,
                 report,
                 store,
                 Speech.REPORT_CONTENT_CONFIRM,
+                self._user,
             )
             if continuation:
                 return continuation
-        self._deps.user.update(handler_input, {"awaitingContinueAfterFlag": True})
-        directive = await PlaybackControls.pause_active(handler_input, deps=self._deps)
+        self._user.update(handler_input, {"awaitingContinueAfterFlag": True})
+        directive = await self._playback_controls.pause_active(handler_input)
         question = AlexaFeedback.keep_listening_question(report, store)
         reprompt = AlexaFeedback.keep_listening_reprompt(report, store)
         return (
@@ -97,8 +125,11 @@ class ReportContentHandler(AbstractRequestHandler):
 
 
 class ReportCreatorHandler(AbstractRequestHandler):
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, user: User, reports: Report, feedback: FeedbackService, events) -> None:
+        self._user = user
+        self._reports = reports
+        self._feedback = feedback
+        self._events = events
 
     "Flags the currently playing content's creator for review."
 
@@ -109,23 +140,23 @@ class ReportCreatorHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         creator_id = store.get("currentCreatorId") or store.get("feedbackCreatorId")
         creator_name = store.get("currentCreator") or store.get("feedbackCreator")
         if not creator_id:
             return handler_input.response_builder.speak(Speech.REPORT_NOTHING_PLAYING).response
         try:
-            await self._deps.reports.record_report(
-                handler_input,
-                {
-                    "type": "creator",
-                    "id": str(creator_id),
-                    "name": creator_name,
-                    "contentId": store.get("currentContentId") or store.get("feedbackContentId"),
-                    "publicationId": store.get("currentPublicationId"),
-                },
+            receipt = self._reports.record_report(
+                ReportCommand(
+                    subject_type="creator",
+                    subject_id=str(creator_id),
+                    subject_name=creator_name,
+                    content_id=store.get("currentContentId") or store.get("feedbackContentId"),
+                    publication_id=store.get("currentPublicationId"),
+                )
             )
-            await self._deps.feedback.clear(handler_input)
+            _stage_report_event(handler_input, self._events, receipt, store)
+            await self._feedback.clear(handler_input)
             confirm = (
                 Speech.REPORT_CREATOR_CONFIRM(creator_name)
                 if creator_name and (not Speech.is_bad_credit(creator_name))
@@ -133,7 +164,7 @@ class ReportCreatorHandler(AbstractRequestHandler):
             )
             return AlexaResponse.present_idle_next(handler_input, confirm)
         except Exception as err:
-            ApplicationLog.warning("Report creator error: %s", err)
+            ApplicationLog.warning("Report creator error=%s", type(err).__name__)
             return (
                 handler_input.response_builder.speak(Speech.ERROR_GENERIC)
                 .reprompt(Speech.WELCOME_REPROMPT)
@@ -145,8 +176,8 @@ class ReportCreatorHandler(AbstractRequestHandler):
 class WhatsThisAboutHandler(AbstractRequestHandler):
     """Describes what the currently playing content is about."""
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(self, user: User) -> None:
+        self._user = user
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -155,7 +186,7 @@ class WhatsThisAboutHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         summary = store.get("currentSummary")
         title = store.get("currentContentTitle") or store.get("feedbackContentTitle")
         creator = store.get("currentCreator") or store.get("feedbackCreator")

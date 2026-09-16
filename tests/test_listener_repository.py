@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.models.listener import Listener
 from src.models.user import User
+from src.services.listener_repository import Listener
 
 
 def _handler_input() -> HandlerInput:
@@ -15,6 +17,15 @@ def _handler_input() -> HandlerInput:
         "_dirty": False,
     }
     return HandlerInput(envelope, attributes, None, ResponseBuilder())
+
+
+def test_listener_identity_model_has_no_request_or_state_gateway_dependency():
+    source = (Path(__file__).parents[1] / "src/models/listener.py").read_text(
+        encoding="utf-8"
+    )
+    assert "src.alexa" not in source
+    assert "handler_input" not in source
+    assert "src.models.user" not in source
 
 
 def test_listener_repository_owns_profile_updates():

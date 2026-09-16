@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 import pytest
 
+from src.alexa.context import RequestContext
+from src.alexa.feedback_service import FeedbackService
+from src.alexa.playback_state import PlaybackQueue, PlaybackState
+from src.alexa.playback_workflow import Playback
 from src.clients.alexa import AlexaClient
 from src.clients.events import SqsEventClient, WebhookEventClient
 from src.clients.pool import HttpCircuitOpen
 from src.container import ApplicationContainer
-from src.models.feedback import FeedbackService
-from src.models.playback import Playback
-from src.models.report import Report
-from src.models.social import FollowCreator
+from src.controllers.report import _stage_report_event
+from src.models.feedback_contracts import FeedbackCommand
+from src.models.report import Report, ReportCommand
 from src.models.user import User
 from src.services.events import OutboundEventService
 from src.utils.events import EventUtils
@@ -25,6 +29,20 @@ class SqsStub:
     def send_message(self, **message):
         self.messages.append(message)
         return {"MessageId": "message-1"}
+
+
+def test_feedback_command_rejects_unrecognised_answers():
+    with pytest.raises(ValueError, match="supported answer"):
+        FeedbackCommand("maybe")
+
+
+def test_report_model_has_no_alexa_or_request_object_dependency():
+    source = (Path(__file__).parents[1] / "src/models/report.py").read_text(
+        encoding="utf-8"
+    )
+    assert "src.alexa" not in source
+    assert "RequestContext" not in source
+    assert "handler_input" not in source
 
 
 class EventProducerStub:
@@ -104,6 +122,8 @@ async def test_publication_playback_event_reaches_sqs_as_publication(mock_handle
     )
     playback = Playback(
         AlexaClient(),
+        PlaybackState(User()),
+        PlaybackQueue(User()),
         events=OutboundEventService(producer=producer),
     )
     state = {
@@ -229,7 +249,7 @@ async def test_publication_feedback_event_reaches_sqs_as_publication(mock_handle
         },
     )
 
-    await service.submit(mock_handler_input, "enjoyed")
+    await service.submit(RequestContext.bind(mock_handler_input), FeedbackCommand("enjoyed"))
 
     message = sqs.messages[0]
     data = json.loads(message["MessageBody"])["data"]
@@ -250,7 +270,7 @@ async def test_publication_feedback_event_reaches_sqs_as_publication(mock_handle
     assert message["MessageAttributes"]["publicationId"]["StringValue"] == "publication-1"
 
 
-def test_follow_notification_event_reaches_sqs_with_publication_unit():
+def test_follow_notification_event_reaches_sqs_with_publication_unit(mock_handler_input):
     sqs = SqsStub()
     producer = SqsEventClient(
         queue_url="https://sqs.eu-west-1.amazonaws.com/123/hear-events",
@@ -258,8 +278,10 @@ def test_follow_notification_event_reaches_sqs_with_publication_unit():
         client=sqs,
     )
     service = OutboundEventService(producer=producer)
+    mock_handler_input.request_envelope["request"]["requestId"] = "request-1"
 
     assert service.following(
+        handler_input=mock_handler_input,
         followed=True,
         alexa_user_id="alexa-user-1",
         listener_id="listener-1",
@@ -284,6 +306,29 @@ def test_follow_notification_event_reaches_sqs_with_publication_unit():
         "DataType": "String",
         "StringValue": "listener-1",
     }
+
+
+def test_follow_and_report_event_ids_include_the_request_occurrence(mock_handler_input):
+    producer = EventProducerStub()
+    service = OutboundEventService(producer=producer)
+    mock_handler_input.request_envelope["request"]["requestId"] = "request-2"
+
+    assert service.following(
+        handler_input=mock_handler_input,
+        followed=True,
+        alexa_user_id="alexa-user-1",
+        listener_id="listener-1",
+        source={"type": "creator", "id": "creator-1", "name": "A creator"},
+    )
+    assert service.report(
+        handler_input=mock_handler_input,
+        alexa_user_id="alexa-user-1",
+        listener_id="listener-1",
+        report={"subjectType": "creator", "subjectId": "creator-1"},
+    )
+
+    assert producer.envelopes[0]["eventId"].endswith(":request-2")
+    assert producer.envelopes[1]["eventId"].endswith(":request-2")
 
 
 def test_notification_preference_event_is_backend_owned_and_repeatable():
@@ -324,7 +369,7 @@ async def test_content_feedback_event_owns_one_complete_track(mock_handler_input
         },
     )
 
-    await service.submit(mock_handler_input, "enjoyed")
+    await service.submit(RequestContext.bind(mock_handler_input), FeedbackCommand("enjoyed"))
 
     envelope = producer.envelopes[0]
     assert envelope["event"] == "feedback.given"
@@ -353,6 +398,37 @@ async def test_content_feedback_event_owns_one_complete_track(mock_handler_input
 
 
 @pytest.mark.asyncio
+async def test_feature_event_is_staged_for_the_request_outbox_when_configured(mock_handler_input):
+    producer = EventProducerStub()
+    service = FeedbackService(
+        events=OutboundEventService(
+            producer=producer,
+            stage_event=User.stage_outbox_event,
+        )
+    )
+    User.update(
+        mock_handler_input,
+        {
+            "listenerId": "listener-1",
+            "awaitingFeedback": True,
+            "pendingFeedback": {
+                "feedbackKey": "track-1",
+                "subjectType": "content",
+                "contentId": "track-1",
+            },
+        },
+    )
+
+    await service.submit(RequestContext.bind(mock_handler_input), FeedbackCommand("enjoyed"))
+
+    assert producer.envelopes == []
+    staged = User.staged_outbox_events(mock_handler_input)
+    assert len(staged) == 1
+    assert staged[0]["event"] == "feedback.given"
+    assert staged[0]["eventId"] == staged[0]["data"]["clientEventId"]
+
+
+@pytest.mark.asyncio
 async def test_publication_feedback_event_owns_the_whole_publication(
     mock_handler_input,
 ):
@@ -378,7 +454,7 @@ async def test_publication_feedback_event_owns_the_whole_publication(
         },
     )
 
-    await service.submit(mock_handler_input, "enjoyed")
+    await service.submit(RequestContext.bind(mock_handler_input), FeedbackCommand("enjoyed"))
 
     data = producer.envelopes[0]["data"]
     assert data["subjectType"] == "publication"
@@ -444,6 +520,8 @@ async def test_playback_event_uses_publication_as_subject_and_track_as_cursor(
     producer = EventProducerStub()
     playback = Playback(
         AlexaClient(),
+        PlaybackState(User()),
+        PlaybackQueue(User()),
         events=OutboundEventService(producer=producer),
     )
     state = {
@@ -472,6 +550,8 @@ async def test_playback_event_keeps_standalone_content_as_subject(mock_handler_i
     producer = EventProducerStub()
     playback = Playback(
         AlexaClient(),
+        PlaybackState(User()),
+        PlaybackQueue(User()),
         events=OutboundEventService(producer=producer),
     )
     state = {
@@ -508,7 +588,7 @@ async def test_follow_action_sends_source_event_after_local_update(mock_handler_
         },
     )
 
-    await FollowCreator(deps=deps).execute(mock_handler_input)
+    await deps.build_request_follow_creator(mock_handler_input).execute(RequestContext.bind(mock_handler_input))
 
     envelope = producer.envelopes[0]
     assert envelope["event"] == "user.followed_organization"
@@ -524,19 +604,25 @@ async def test_follow_action_sends_source_event_after_local_update(mock_handler_
 
 
 @pytest.mark.asyncio
-async def test_report_model_sends_the_recorded_backend_event(mock_handler_input):
+async def test_report_receipt_is_staged_at_the_alexa_boundary(mock_handler_input):
     producer = EventProducerStub()
-    report = Report(OutboundEventService(producer=producer))
+    events = OutboundEventService(producer=producer)
+    report = Report()
 
-    await report.record_report(
+    receipt = report.record_report(
+        ReportCommand(
+            subject_type="content",
+            subject_id="track-1",
+            subject_name="Track one",
+            content_id="track-1",
+            publication_id="publication-1",
+        ),
+    )
+    _stage_report_event(
         mock_handler_input,
-        {
-            "type": "content",
-            "id": "track-1",
-            "name": "Track one",
-            "contentId": "track-1",
-            "publicationId": "publication-1",
-        },
+        events,
+        receipt,
+        {"listenerId": "listener-1"},
     )
 
     envelope = producer.envelopes[0]

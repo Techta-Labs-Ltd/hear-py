@@ -1,0 +1,664 @@
+from __future__ import annotations
+
+import time
+from dataclasses import replace
+from typing import Any, Dict, Optional
+
+from ask_sdk_core.handler_input import HandlerInput
+
+from config import settings
+from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogSelection, DialogStateManager
+from src.alexa.entities import AlexaEntities
+from src.alexa.playback_state import PlaybackQueue
+from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
+from src.alexa.search_speech import SearchSpeech
+from src.alexa.speech import Speech
+from src.alexa.ssml import Ssml
+from src.constants.discovery import DiscoveryConstants
+from src.constants.search import SearchConstants
+from src.models.search_contracts import SearchOutcome, SearchRequest
+from src.models.user import User
+from src.services.logging_control import ApplicationLog
+from src.utils.browse import BrowseUtils
+from src.utils.content import ContentUtils
+from src.utils.content_normalizer import ContentNormalizer
+from src.utils.deadline import DeadlineBudget
+from src.utils.filters import SearchFilters, SearchFilterUtils
+from src.utils.search_payload import SearchPayload
+
+
+class Search:
+    @staticmethod
+    def initial_search_queue_items(
+        search_result: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Return only the API page already loaded for immediate playback."""
+        return [dict(item) for item in SearchOutcome.classify(search_result).results]
+
+    @staticmethod
+    def search_queue_pagination(search_result: dict[str, Any]) -> dict[str, Any]:
+        """Build persisted lazy-pagination arguments for ``init_queue``."""
+        payload = search_result.get("_search_payload")
+        return {
+            "search_payload": dict(payload) if isinstance(payload, dict) else None,
+            "current_page": int(search_result.get("page") or 0),
+            "total_pages": search_result.get("total_pages"),
+            "page_limit": payload.get("limit") if isinstance(payload, dict) else None,
+        }
+
+    @staticmethod
+    def _summarize_intent_slots(handler_input: HandlerInput) -> Dict[str, Any]:
+        """Extract slot values from the Alexa intent."""
+        slots = None
+        try:
+            slots = handler_input.request_envelope.request.intent.get("slots")
+        except Exception:
+            pass
+        if not slots or not isinstance(slots, dict):
+            return {}
+        out = {}
+        for name, slot in slots.items():
+            if not slot:
+                continue
+            val = getattr(slot, "value", None)
+            if val:
+                out[name] = val
+            elif hasattr(slot, "resolutions"):
+                try:
+                    out[name] = slot.resolutions.resolutionsPerAuthority[0].values[0].value.name
+                except Exception:
+                    out[name] = None
+        return out
+
+    @staticmethod
+    def _extract_slot_value(handler_input: HandlerInput, slot_name: str) -> Optional[str]:
+        return AlexaRequest.get_slot_value(handler_input, slot_name)
+
+    @staticmethod
+    def _raw_search_phrase(handler_input: HandlerInput) -> Optional[str]:
+        """Get the raw query slot value from the intent."""
+        try:
+            return (
+                handler_input.request_envelope.request.intent.get("slots", {})
+                .get("query", None)
+                .value
+            )
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _resolve_content_for_playback(
+        item: Dict[str, Any], handler_input: HandlerInput
+    ) -> Optional[Dict[str, Any]]:
+        """Check whether an item has playable audio, return it if so."""
+        del handler_input
+        return item if ContentNormalizer.is_playable_content_item(item) else None
+
+    @staticmethod
+    def _build_no_content_response(handler_input: HandlerInput):
+        """Return a standard no-content-available response."""
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            Speech.NO_CONTENT_AVAILABLE,
+            Speech.WELCOME_REPROMPT,
+        )
+
+    @staticmethod
+    def _build_search_outcome_response(
+        handler_input: HandlerInput, search_result: Optional[Dict[str, Any]]
+    ):
+        """Build an error response from a failed or empty search result."""
+        if search_result and search_result.get("failed"):
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                Speech.SEARCH_UNAVAILABLE,
+                Speech.WELCOME_REPROMPT,
+            )
+        if search_result and search_result.get("client_message"):
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml(Speech.escape_ssml_lite(str(search_result["client_message"])))
+                )
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        search_payload = (search_result or {}).get("_search_payload") or {}
+        if search_payload.get("query") or search_payload.get("q") or search_payload.get("filter"):
+            requested = (
+                (search_result or {}).get("_request_label")
+                or search_payload.get("query")
+                or search_payload.get("q")
+                or "that request"
+            )
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                SearchSpeech.search_no_match(requested),
+                Speech.WELCOME_REPROMPT,
+            )
+        return Search._build_no_content_response(handler_input)
+
+    @staticmethod
+    def _ambiguity_response(
+        handler_input: HandlerInput,
+        store: dict,
+        nlp: dict,
+        slots: dict,
+    ) -> dict | None:
+        ambiguous = slots.get("ambiguousReferences") or []
+        if not ambiguous:
+            return None
+        reference = ambiguous[0]
+        existing = store.get("pendingAmbiguity") or {}
+        candidates = list(existing.get("candidates") or reference.get("candidates") or [])
+        choices = DialogSelection.unique_candidates(candidates)
+        displayed = (
+            DialogSelection.displayed_choices(existing)
+            if existing.get("displayedCandidates")
+            else choices[: DiscoveryConstants.CHOICE_PAGE_SIZE]
+        )
+        ambiguity_context = nlp.get("ambiguityContext")
+        ambiguity_context = ambiguity_context if isinstance(ambiguity_context, dict) else {}
+        pending = {
+            **existing,
+            **ambiguity_context,
+            "requestId": nlp.get("requestId") or existing.get("requestId"),
+            "intent": nlp.get("intent") or "general",
+            "originalUtterance": nlp.get("originalUtterance")
+            or existing.get("originalUtterance")
+            or "",
+            "searchPayload": dict(
+                nlp.get("searchPayload")
+                or slots.get("searchPlan")
+                or existing.get("searchPayload")
+                or {}
+            ),
+            "slots": {**dict(existing.get("slots") or {}), **dict(slots)},
+            "candidates": candidates,
+            "choiceCandidates": choices,
+            "displayedCandidates": displayed,
+            "spokenCandidateOffset": existing.get("spokenCandidateOffset")
+            or min(DiscoveryConstants.CHOICE_PAGE_SIZE, len(choices)),
+            "createdAt": existing.get("createdAt") or int(time.time()),
+            "expiresAt": int(time.time()) + 300,
+        }
+        User.update(
+            handler_input,
+            {
+                "pendingAmbiguity": pending,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "_requiresReliableSave": True,
+            },
+        )
+        DialogStateManager.activate(handler_input, "ambiguity", context=pending)
+        message_candidates = DialogSelection.displayed_choices(pending)
+        has_more = DialogSelection.displayed_has_more(pending)
+        directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(message_candidates)
+        if directive:
+            handler_input.response_builder.add_directive(directive)
+        message = (
+            SearchSpeech.ambiguity_retry_message(message_candidates, has_more=has_more)
+            if nlp.get("ambiguityRetry")
+            else SearchSpeech.ambiguous_reference_message(
+                str(reference.get("phrase") or ""),
+                message_candidates,
+                has_more=has_more,
+            )
+        )
+        return {"results": [], "total_hits": 0, "failed": False, "client_message": message}
+
+    @staticmethod
+    def apply_publication_result_ambiguity(
+        handler_input: HandlerInput,
+        search_result: dict,
+        *,
+        intent: str,
+        request_label: str | None = None,
+    ) -> dict:
+        choices = DialogSelection.unique_candidates(
+            list(search_result.get("_publication_choices") or [])
+        )
+        payload = dict(search_result.get("_search_payload") or {})
+        filter_candidate = payload.get("filter")
+        filters: dict = filter_candidate if isinstance(filter_candidate, dict) else {}
+        query = str(payload.get("query") or "").strip()
+        should_ask = bool(
+            len(choices) > 1
+            and (
+                filters.get("isPublication")
+                or intent == "publication"
+                or (intent == "organization" and not query)
+            )
+        )
+        if not should_ask:
+            return search_result
+        store = User.snapshot(handler_input)
+        nlp = dict(RequestContext.request(handler_input).get("_nlp") or {})
+        slots = dict(nlp.get("slots") or {})
+        phrase = (
+            request_label
+            or SearchPayload.request_label(slots, query)
+            or nlp.get("originalUtterance")
+            or "that source"
+        )
+        limit = DiscoveryConstants.CHOICE_PAGE_SIZE
+        total_hits = max(0, int(search_result.get("total_hits") or len(choices)))
+        total_pages = BrowseUtils.resolve_total_pages(
+            total_hits,
+            limit,
+            search_result.get("total_pages"),
+            len(choices),
+        )
+        candidate_pagination = {
+            "kind": "publication",
+            "currentPage": max(0, int(search_result.get("page") or payload.get("page") or 0)),
+            "totalPages": total_pages,
+            "totalHits": total_hits,
+            "limit": limit,
+        }
+        slots["ambiguousReferences"] = [{"phrase": phrase, "candidates": choices}]
+        special = Search._ambiguity_response(
+            handler_input,
+            store,
+            {
+                **nlp,
+                "intent": intent,
+                "searchPayload": payload,
+                "slots": slots,
+                "ambiguityContext": {"candidatePagination": candidate_pagination},
+            },
+            slots,
+        )
+        if not special:
+            return search_result
+        special.update(
+            {
+                "_search_payload": payload,
+                "_request_label": phrase,
+                "client_message": SearchSpeech.publication_ambiguity_message(
+                    choices[: DiscoveryConstants.CHOICE_PAGE_SIZE],
+                    has_more=DialogSelection.has_more_choices(
+                        {"candidatePagination": candidate_pagination},
+                        choices,
+                        DiscoveryConstants.CHOICE_PAGE_SIZE,
+                    ),
+                ),
+            }
+        )
+        return special
+
+    @staticmethod
+    def _unresolved_response(slots: dict) -> dict | None:
+        unresolved = slots.get("unresolvedReferences") or []
+        if not unresolved:
+            return None
+        reference = unresolved[0]
+        message = SearchSpeech.unresolved_reference_message(
+            str(reference.get("phrase") or ""),
+            list(reference.get("expectedTypes") or []),
+        )
+        return {"results": [], "total_hits": 0, "failed": False, "client_message": message}
+
+    @staticmethod
+    def _search_sort(handler_input, slots: dict, filters: dict) -> str | None:
+        search_plan = slots.get("searchPlan") or {}
+        requested_sort = slots.get("sort") or search_plan.get("sort")
+        if requested_sort in SearchConstants.ALLOWED_SEARCH_SORTS:
+            return requested_sort
+        latest = bool(slots.get("latest"))
+        if not latest:
+            try:
+                latest = SearchFilterUtils.wants_latest_playback(
+                    Search._raw_search_phrase(handler_input) or ""
+                )
+            except Exception:
+                latest = False
+        if latest:
+            return "latest"
+        if AlexaRequest.get_intent_name(handler_input) == "WhatsTrendingIntent":
+            return "trending"
+        return "trending" if filters.get("isPublication") else None
+
+    @staticmethod
+    async def discover_content_via_search(
+        handler_input: HandlerInput,
+        request: SearchRequest | None = None,
+        *,
+        heara,
+        progressive,
+        user: User,
+    ) -> Dict[str, Any]:
+        user_id = AlexaRequest.get_user_id(handler_input)
+        if not user_id:
+            return {"results": [], "total_hits": 0, "failed": True}
+        search_request = request or SearchRequest()
+        store = user.snapshot(handler_input)
+        nlp = RequestContext.request(handler_input).get("_nlp", {})
+        slots = nlp.get("slots") or {}
+        special = Search._ambiguity_response(handler_input, store, nlp, slots)
+        special = special or Search._unresolved_response(slots)
+        if special:
+            return special
+        resolved_payload = SearchPayload.selected_resolution(nlp)
+        query = SearchFilterUtils.normalize_search_query(
+            resolved_payload.get("query") if resolved_payload else search_request.query
+        )
+        residual = slots.get("residualQuery")
+        if not resolved_payload and isinstance(residual, str) and (
+            not query or query == Search._raw_search_phrase(handler_input)
+        ):
+            query = residual
+        filters = (
+            SearchFilters.clean(resolved_payload.get("filter"))
+            if resolved_payload
+            else SearchPayload.resolution_filter(
+                slots,
+                search_request.filters,
+                AlexaRequest.get_intent_name(handler_input) == "PlayPublicationIntent",
+            )
+        )
+        intent = search_request.intent or nlp.get("intent") or "general"
+        payload = SearchPayload.build(
+            user_id,
+            store,
+            q=query,
+            limit=search_request.limit or DiscoveryConstants.CHOICE_PAGE_SIZE,
+            page=resolved_payload.get("page", search_request.page),
+            sort=resolved_payload.get("sort")
+            or Search._search_sort(handler_input, slots, filters),
+            nlp_filter=filters,
+        )
+        ApplicationLog.info(
+            "Hear: search request intent=%s filterKeys=%s limit=%s page=%s queryPresent=%s",
+            intent,
+            sorted((payload.get("filter") or {}).keys()),
+            payload.get("limit"),
+            payload.get("page"),
+            bool(payload.get("query")),
+        )
+        await progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        result = await heara.search(
+            payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
+        )
+        ApplicationLog.info(
+            "Hear: search response intent=%s failed=%s total=%s returned=%s",
+            intent,
+            bool(result.get("failed")),
+            result.get("total_hits", 0),
+            len(result.get("results") or []),
+        )
+        result.setdefault("_search_payload", dict(payload))
+        label = SearchPayload.request_label(slots, query)
+        if label:
+            result["_request_label"] = label
+        result = Search.apply_publication_result_ambiguity(
+            handler_input,
+            result,
+            intent=str(intent),
+            request_label=label,
+        )
+        if isinstance(result.get("results"), list):
+            result["results"] = ContentNormalizer.normalize_content_items(result["results"])
+        return result
+
+    @staticmethod
+    async def _discover_content_avoiding_recent(
+        handler_input: HandlerInput,
+        request: SearchRequest | None = None,
+        *,
+        heara,
+        progressive,
+        user: User,
+    ) -> Dict[str, Any]:
+        """Search across multiple pages, skipping empty pages, to find fresh content."""
+        search_request = request or SearchRequest()
+        start_page = search_request.page
+        remaining = DeadlineBudget.get_lambda_remaining_ms(handler_input)
+        max_pages = search_request.max_pages or (
+            1 if isinstance(remaining, (int, float)) and remaining < 5500 else 3
+        )
+        last_result = None
+        for page in range(start_page, start_page + max_pages):
+            result = await Search.discover_content_via_search(
+                handler_input,
+                replace(search_request, page=page),
+                heara=heara,
+                progressive=progressive,
+                user=user,
+            )
+            last_result = result
+            if result.get("failed"):
+                return result
+            if result.get("results"):
+                return result
+            total_pages = result.get("total_pages", 0)
+            if total_pages > 0 and page + 1 >= total_pages:
+                break
+        return last_result or {"results": [], "total_hits": 0, "failed": False}
+
+    @staticmethod
+    async def auto_play_first_from_search(
+        handler_input: HandlerInput,
+        search_result: Dict[str, Any],
+        options: Optional[Dict[str, Any]] = None,
+        *,
+        user: User,
+        browse,
+        playback,
+    ):
+        """Take a search result, cache it as a browse catalog, and start playback of the first item."""
+        opts = options or {}
+        if not search_result.get("results"):
+            return Search._build_search_outcome_response(handler_input, search_result)
+        store = user.snapshot(handler_input)
+        intent = opts.get("discoveryIntent", "PlayContentIntent")
+        q = opts.get("q", "")
+        intro_override = opts.get("introOverride")
+        catalog = BrowseUtils.build_catalog_from_search_result(
+            search_result,
+            intent=intent,
+            q=q,
+            search_payload=search_result.get("_search_payload"),
+            page=0,
+            limit=settings.search_page_limit,
+            exclude_recent=PlaybackQueue.recent_exclude_filters(store),
+        )
+        browse.set_catalog(handler_input, catalog, intent=intent)
+        first = search_result["results"][0]
+        content = Search._resolve_content_for_playback(first, handler_input)
+        if not content:
+            return await Search._build_next_playable_response(
+                handler_input,
+                store,
+                search_result,
+                opts,
+                intent,
+                playback=playback,
+            )
+        title = ContentUtils.content_title_for_speech(content)
+        credit = ContentUtils.pick_content_credit(content)
+        total = search_result.get("total_hits") or len(search_result["results"])
+        if intro_override:
+            intro = intro_override
+        else:
+            intro = SearchSpeech.search_results_intro(
+                total, search_result.get("_search_payload"),
+                search_result.get("_request_label") or q, title, credit,
+            )
+        queue_items = Search.initial_search_queue_items(search_result)
+        playback.queue.initialize(
+            handler_input,
+            queue_items,
+            source=intent or "search",
+            discovery_label=search_result.get("_request_label") or q,
+            start_index=0,
+            **Search.search_queue_pagination(search_result),
+        )
+        return await playback.start(
+            handler_input, content, intro, 0, {"preserveSessionQueue": True}
+        )
+
+    @staticmethod
+    async def _build_next_playable_response(
+        handler_input: HandlerInput, store: Dict[str, Any], search_result: Dict[str, Any],
+        options: Dict[str, Any], discovery_intent: str, *, playback,
+    ):
+        """Fallback: try subsequent items in the result set until a playable one is found."""
+        items = list(search_result.get("results") or [])
+        for i in range(1, len(items)):
+            item = items[i]
+            if not ContentNormalizer.is_playable_content_item(item):
+                continue
+            content = items[i]
+            title = ContentUtils.content_title_for_speech(content)
+            credit = ContentUtils.pick_content_credit(content)
+            intro = options.get("introOverride") or SearchSpeech.search_results_intro(
+                search_result.get("total_hits") or len(items), search_result.get("_search_payload"),
+                search_result.get("_request_label") or options.get("q"), title, credit,
+            )
+            playback.queue.initialize(
+                handler_input,
+                items,
+                source=discovery_intent or "search",
+                discovery_label=search_result.get("_request_label") or options.get("q"),
+                start_index=i,
+            )
+            return await playback.start(
+                handler_input, content, intro, 0, {"preserveSessionQueue": True}
+            )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(Speech.CONTENT_NOT_READY))
+            .reprompt(Ssml.ssml(Speech.REPROMPT_NO_CITY))
+            .set_should_end_session(False)
+            .response
+        )
+
+    @staticmethod
+    async def play_from_followed_creators(
+        handler_input: HandlerInput,
+        *,
+        user: User,
+        heara,
+        progressive,
+        browse,
+        playback,
+    ):
+        """Play content from creators the user is following."""
+        store = user.snapshot(handler_input)
+        if store.get("awaitingFollow"):
+            user.update(handler_input, {"awaitingFollow": False})
+        followed = store.get("followedCreators") or []
+        if not followed:
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.NO_FOLLOWED_CREATORS_TO_PLAY))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        creator_ids = [
+            str(item["id"])
+            for item in followed
+            if isinstance(item, dict)
+            and item.get("id")
+            and (item.get("type", "creator") == "creator")
+        ]
+        organization_ids = [
+            str(item["id"])
+            for item in followed
+            if isinstance(item, dict) and item.get("id") and (item.get("type") == "organization")
+        ]
+        follow_filter = {}
+        if creator_ids:
+            follow_filter["creatorIds"] = list(dict.fromkeys(creator_ids))
+        if organization_ids:
+            follow_filter["organizationIds"] = list(dict.fromkeys(organization_ids))
+        search_result = await Search._discover_content_avoiding_recent(
+            handler_input,
+            SearchRequest(intent="following", filters=follow_filter),
+            heara=heara,
+            progressive=progressive,
+            user=user,
+        )
+        if not search_result.get("results"):
+            return Search._build_search_outcome_response(handler_input, search_result)
+        response = await Search.auto_play_first_from_search(
+            handler_input,
+            search_result,
+            {
+                "discoveryIntent": "PlayContentIntent",
+                "q": "",
+                "introOverride": "Here is something from a source you follow.",
+            },
+            user=user,
+            browse=browse,
+            playback=playback,
+        )
+        return response or Search._build_no_content_response(handler_input)
+
+    @staticmethod
+    async def _play_first_search_result(
+        handler_input: HandlerInput,
+        search_result: Dict[str, Any],
+        label: Optional[str] = None,
+        *,
+        user: User,
+        browse,
+        playback,
+    ):
+        """Play the first result while retaining every server page for navigation."""
+        items = list(search_result.get("results") or [])
+        if not items:
+            return Search._build_no_content_response(handler_input)
+        content = Search._resolve_content_for_playback(items[0], handler_input)
+        if not content:
+            return Search._build_no_content_response(handler_input)
+        if not ContentNormalizer.is_playable_content_item(content):
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.CONTENT_NOT_READY))
+                .reprompt(Ssml.ssml(Speech.REPROMPT_NO_CITY))
+                .set_should_end_session(False)
+                .response
+            )
+        store = user.snapshot(handler_input)
+        title = ContentUtils.content_title_for_speech(content)
+        credit = ContentUtils.pick_content_credit(content) or label
+        payload = search_result.get("_search_payload") or {}
+        intro = SearchSpeech.search_results_intro(
+            search_result.get("total_hits") or len(items), payload,
+            search_result.get("_request_label") or label, title, credit,
+        )
+        intent = AlexaRequest.get_intent_name(handler_input) or "search"
+        catalog = BrowseUtils.build_catalog_from_search_result(
+            search_result,
+            intent=intent,
+            q=payload.get("query") or "",
+            search_payload=payload,
+            page=search_result.get("page", 0),
+            limit=payload.get("limit") or settings.search_page_limit,
+            exclude_recent=PlaybackQueue.recent_exclude_filters(store),
+        )
+        browse.set_catalog(handler_input, catalog, intent=intent)
+        queue_items = Search.initial_search_queue_items(search_result)
+        playback.queue.initialize(
+            handler_input,
+            queue_items,
+            source=intent,
+            discovery_label=search_result.get("_request_label") or label,
+            start_index=0,
+            **Search.search_queue_pagination(search_result),
+        )
+        return await playback.start(
+            handler_input, content, intro, 0, {"preserveSessionQueue": True}
+        )
+
+    @staticmethod
+    def _has_active_browse_catalog(store: dict) -> bool:
+        return BrowseUtils.has_active_browse_catalog(store)
+
+    @staticmethod
+    def _is_misrouted_browse_pagination(query: str) -> bool:
+        return BrowseUtils.is_browse_pagination_query(query)

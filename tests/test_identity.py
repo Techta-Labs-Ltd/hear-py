@@ -12,10 +12,11 @@ from src.constants.state import StateSchema
 from src.database.persistence import MemoryPersistenceAdapter
 from src.middleware.identity import IdentityInterceptor
 from src.middleware.persistence import LoadPersistenceInterceptor, SavePersistenceInterceptor
-from src.models.listener import IdentityContext, Listener, PrincipalType
+from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
 from src.services.alexa_profile import ListenerProfileService
 from src.services.listener_identity import ListenerIdentityService
+from src.services.listener_repository import Listener
 
 
 @pytest.mark.asyncio
@@ -120,7 +121,7 @@ async def test_identity_interceptor_keeps_identity_out_of_persisted_store(
             "request": {"type": "IntentRequest"},
         }
     )
-    await IdentityInterceptor().process(mock_handler_input)
+    await IdentityInterceptor(None, User()).process(mock_handler_input)
     attrs = mock_handler_input.attributes_manager.request_attributes
     identity = attrs["_identity"]
     assert identity.alexa_user_id == "amzn1.ask.account.REAL"
@@ -147,7 +148,7 @@ async def test_identity_classifies_a_recognized_person(
         }
     )
 
-    await IdentityInterceptor().process(mock_handler_input)
+    await IdentityInterceptor(None, User()).process(mock_handler_input)
 
     identity = mock_handler_input.attributes_manager.request_attributes["_identity"]
     assert identity.principal_type == PrincipalType.RECOGNIZED_PERSON
@@ -237,7 +238,7 @@ async def test_identity_interceptor_fails_open_to_current_alexa_alias(mock_handl
     )
     deps = SimpleNamespace(listener_identity=identity_service, user=User())
 
-    await IdentityInterceptor(deps=deps).process(mock_handler_input)
+    await IdentityInterceptor(deps.listener_identity, deps.user).process(mock_handler_input)
 
     identity = mock_handler_input.attributes_manager.request_attributes["_identity"]
     assert identity.alexa_user_id == "amzn1.ask.account.TEST"
@@ -271,7 +272,7 @@ async def test_canonical_persistence_reads_current_alias_once_and_copies_forward
     )
     deps = SimpleNamespace(listener_identity=identity_service, user=User())
 
-    await IdentityInterceptor(deps=deps).process(handler_input)
+    await IdentityInterceptor(deps.listener_identity, deps.user).process(handler_input)
     await LoadPersistenceInterceptor().process(handler_input)
     await SavePersistenceInterceptor().process(handler_input)
 

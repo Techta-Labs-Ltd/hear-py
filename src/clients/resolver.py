@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import time
-import traceback
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -16,17 +14,6 @@ from src.services.logging_control import ApplicationLog
 
 
 class ResolverClientSupport:
-
-    @staticmethod
-    def _resolver_response_log(payload: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "status": payload.get("status"),
-            "intent": payload.get("intent"),
-            "entityCount": len(payload.get("entities") or []),
-            "slotKeys": sorted((payload.get("slots") or {}).keys()),
-            "ambiguityCount": len(payload.get("ambiguities") or []),
-            "timingMs": payload.get("timingMs"),
-        }
 
     @staticmethod
     def request_body(
@@ -46,17 +33,6 @@ class ResolverClientSupport:
         if listener_id:
             body["listenerId"] = listener_id
         return body
-
-    @staticmethod
-    def request_log(body: dict, alexa_user_id: str | None, listener_id: str | None) -> dict:
-        return {
-            "utteranceChars": len(str(body.get("utterance") or "")),
-            "timezone": body.get("timezone"),
-            "country_code": body.get("country_code"),
-            **({"alexaUserId": "<present>"} if alexa_user_id else {}),
-            **({"listenerId": "<present>"} if listener_id else {}),
-        }
-
 
 class ResolverCache:
     __slots__ = ("_values", "_ttl_seconds", "_max_items")
@@ -158,10 +134,11 @@ class ResolverClient:
             alexa_user_id,
             listener_id,
         )
-        logged_body = ResolverClientSupport.request_log(body, alexa_user_id, listener_id)
         ApplicationLog.info(
-            "Hear: resolver request payload=%s",
-            json.dumps(logged_body, sort_keys=True, separators=(",", ":")),
+            "Hear: resolver request utteranceChars=%s alexaUserIdPresent=%s listenerIdPresent=%s",
+            len(utterance),
+            bool(alexa_user_id),
+            bool(listener_id),
         )
         try:
             timeout = httpx.Timeout(max(timeout_ms or int(self._timeout.read * 1000), 1) / 1000.0)
@@ -184,26 +161,21 @@ class ResolverClient:
             if not isinstance(payload, dict):
                 raise ResolverUnavailable("resolver response must be an object")
             ApplicationLog.info(
-                "Hear: resolver response httpStatus=%s payload=%s",
+                "Hear: resolver response httpStatus=%s bodyPresent=%s",
                 response.status_code,
-                json.dumps(
-                    ResolverClientSupport._resolver_response_log(payload),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
+                bool(payload),
             )
             result = ResolverResult.from_payload(payload)
             if cache_eligible and result.status == "resolved":
                 self._cache.put(cache_key, result)
             return result
         except ResolverUnavailable as exc:
-            ApplicationLog.warning("Resolver response rejected reason=%s", exc)
+            ApplicationLog.warning("Resolver response rejected error=%s", type(exc).__name__)
             raise
         except (httpx.HTTPError, ValueError, TypeError) as exc:
             ApplicationLog.warning(
-                "Resolver request failed error=%s traceback=%s",
+                "Resolver request failed error=%s",
                 type(exc).__name__,
-                traceback.format_exc(),
             )
             raise ResolverUnavailable("resolver request failed") from exc
 

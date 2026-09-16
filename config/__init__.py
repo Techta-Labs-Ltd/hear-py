@@ -1,4 +1,5 @@
 from functools import cached_property
+from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings
 
@@ -59,7 +60,7 @@ class Settings(BaseSettings):
     DEBUG_HEAR: bool = False
     HEAR_LOGGING_ENABLED: bool = True
     POWERTOOLS_SERVICE_NAME: str = "hear-alexa-skill"
-    POWERTOOLS_LOG_LEVEL: str = "INFO"
+
     HEAR_METRICS_NAMESPACE: str = "HearAlexa"
     AWS_EXECUTION_ENV: str = ""
 
@@ -77,6 +78,9 @@ class Settings(BaseSettings):
     HEAR_DDB_REGION: str = "eu-west-1"
     AWS_REGION: str = "eu-west-1"
     SQS_OUT_QUEUE_URL: str = ""
+    HEAR_OUTBOX_ENABLED: bool = False
+    HEAR_OUTBOX_TTL_DAYS: int = 14
+    HEAR_OUTBOX_RECOVERY_LIMIT: int = 25
     WEBHOOK_OUTBOUND_URL: str = ""
     WEBHOOK_OUTBOUND_SECRET: str = ""
     HEAR_NOTIFICATION_LIMIT: int = 5
@@ -161,6 +165,44 @@ class Settings(BaseSettings):
     @cached_property
     def identity_timeout_ms(self) -> int:
         return max(self.HEAR_IDENTITY_TIMEOUT_MS, 100)
+
+    @staticmethod
+    def _valid_https_url(value: str) -> bool:
+        parsed = urlsplit(str(value or "").strip())
+        return parsed.scheme == "https" and bool(parsed.netloc)
+
+    def validate_runtime(self) -> None:
+        """Reject unsafe deployed configuration before a request is handled."""
+        errors: list[str] = []
+        deployed = self.is_lambda or self.STAGE.strip().lower() in {"staging", "production"}
+        numeric_minimums = {
+            "HEAR_EVENT_WEBHOOK_TIMEOUT_MS": self.HEAR_EVENT_WEBHOOK_TIMEOUT_MS,
+            "HEAR_PROGRESSIVE_TIMEOUT_MS": self.HEAR_PROGRESSIVE_TIMEOUT_MS,
+            "HEAR_OUTBOX_TTL_DAYS": self.HEAR_OUTBOX_TTL_DAYS,
+            "HEAR_OUTBOX_RECOVERY_LIMIT": self.HEAR_OUTBOX_RECOVERY_LIMIT,
+        }
+        errors.extend(name for name, value in numeric_minimums.items() if int(value) <= 0)
+        for name, value in {
+            "HEAR_API_URL": self.HEAR_API_URL,
+            "WEBHOOK_OUTBOUND_URL": self.WEBHOOK_OUTBOUND_URL,
+        }.items():
+            if value and not self._valid_https_url(value):
+                errors.append(f"{name} must be an HTTPS URL")
+        if deployed:
+            if not self._valid_https_url(self.HEAR_API_URL):
+                errors.append("HEAR_API_URL is required in deployed environments")
+            if not self.HEAR_API_KEY.strip():
+                errors.append("HEAR_API_KEY is required in deployed environments")
+            if not self.HEAR_DDB_TABLE.strip():
+                errors.append("HEAR_DDB_TABLE is required in deployed environments")
+            if not self._valid_https_url(self.WEBHOOK_OUTBOUND_URL):
+                errors.append("WEBHOOK_OUTBOUND_URL is required in deployed environments")
+            if not self.WEBHOOK_OUTBOUND_SECRET.strip():
+                errors.append("WEBHOOK_OUTBOUND_SECRET is required in deployed environments")
+            if self.HEAR_OUTBOX_ENABLED and not self.SQS_OUT_QUEUE_URL.strip():
+                errors.append("SQS_OUT_QUEUE_URL is required when the outbox is enabled")
+        if errors:
+            raise ValueError("Invalid runtime configuration: " + "; ".join(errors))
 
 
 settings = Settings()

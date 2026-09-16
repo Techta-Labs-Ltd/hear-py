@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.dialog import DialogStateManager
 from src.alexa.runtime import AttrDict, ResponseBuilder
-from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.clients.hear import HearApiClient
 from src.clients.resolver import ResolverClient, ResolverUnavailable
@@ -15,18 +15,13 @@ from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.controllers.browse import BrowseNavigationHandler
 from src.controllers.launch import TownCaptureHandler
-from src.middleware.resolver import ResolverInterceptor
-from src.models.affirmative import Affirmative
-from src.models.decline import Decline
-from src.models.dialog import DialogStateManager
-from src.models.onboarding import TownCapture
-from src.models.play import PlayOrganization
 from src.models.user import User
 from src.registry import RouteRegistry
+from src.utils.search_payload import SearchPayload
 
 
 def _town_capture_handler(container: ApplicationContainer) -> TownCaptureHandler:
-    return TownCaptureHandler(TownCapture(deps=container), container.user)
+    return TownCaptureHandler(container.build_town_capture(), container.user)
 
 
 @pytest.mark.asyncio
@@ -56,7 +51,7 @@ async def test_something_else_leaves_ambiguity_and_returns_to_search(
     mock_handler_input.response_builder = ResponseBuilder()
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     handler = BrowseNavigationHandler(ApplicationContainer().browse)
 
     resolve.assert_not_awaited()
@@ -132,8 +127,8 @@ async def test_bare_reply_during_search_confirmation_keeps_pending_resolution(
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
 
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     response = DialogValidationGateHandler().handle(mock_handler_input)
 
     resolve.assert_not_awaited()
@@ -203,8 +198,8 @@ async def test_typed_slot_reply_cannot_replace_pending_search_confirmation(
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
 
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     response = DialogValidationGateHandler().handle(mock_handler_input)
 
     resolve.assert_not_awaited()
@@ -245,9 +240,7 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(
-        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
-    ).process(mock_handler_input)
+    await ApplicationContainer(resolver=resolver, progressive=progressive).build_resolver_interceptor().process(mock_handler_input)
 
     progressive.send.assert_awaited_once_with(
         mock_handler_input,
@@ -352,9 +345,7 @@ async def test_generated_slot_match_or_raw_value_always_reaches_backend_resolver
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(
-        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
-    ).process(mock_handler_input)
+    await ApplicationContainer(resolver=resolver, progressive=progressive).build_resolver_interceptor().process(mock_handler_input)
 
     resolver.resolve_utterance.assert_awaited_once()
     assert resolver.resolve_utterance.await_args.args == (expected_utterance,)
@@ -392,9 +383,7 @@ async def test_organization_follow_up_beats_incorrect_town_intent(mock_handler_i
         "awaitingOrganizationName": True,
     }
 
-    await ResolverInterceptor(
-        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
-    ).process(mock_handler_input)
+    await ApplicationContainer(resolver=resolver, progressive=progressive).build_resolver_interceptor().process(mock_handler_input)
 
     resolver.resolve_utterance.assert_awaited_once()
     assert resolver.resolve_utterance.await_args.args == ("play from tyndale",)
@@ -425,7 +414,7 @@ def test_name_only_organization_selection_uses_domain_handler(mock_handler_input
             },
         }
     )
-    assert PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).can_handle(mock_handler_input)
+    assert PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).can_handle(mock_handler_input)
 
 @pytest.mark.asyncio
 async def test_local_resolver_result_does_not_send_interpretation_progressive(
@@ -446,9 +435,7 @@ async def test_local_resolver_result_does_not_send_interpretation_progressive(
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(
-        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
-    ).process(mock_handler_input)
+    await ApplicationContainer(resolver=resolver, progressive=progressive).build_resolver_interceptor().process(mock_handler_input)
 
     progressive.send.assert_not_awaited()
     resolver.resolve_utterance.assert_not_awaited()
@@ -508,7 +495,7 @@ async def test_playback_location_is_search_filter_not_saved_location(
             }
         ),
     )
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "general"
     assert nlp["searchPayload"]["filter"]["city"] == "Manchester"
@@ -559,7 +546,7 @@ async def test_idle_bare_city_misclassification_routes_to_discovery_without_savi
         "locality": "York",
     }
 
-    await ResolverInterceptor(deps=container).process(handler_input)
+    await container.build_resolver_interceptor().process(handler_input)
 
     resolver.resolve_utterance.assert_awaited_once_with(
         "play Swindon",
@@ -611,7 +598,7 @@ async def test_idle_unresolved_location_slot_still_reaches_resolver(mock_handler
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(deps=container).process(handler_input)
+    await container.build_resolver_interceptor().process(handler_input)
 
     resolver.resolve_utterance.assert_awaited_once_with(
         "play swidon",
@@ -664,7 +651,7 @@ async def test_idle_typed_source_match_sends_spoken_words_to_general_resolver(
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(deps=container).process(handler_input)
+    await container.build_resolver_interceptor().process(handler_input)
 
     resolver.resolve_utterance.assert_awaited_once_with(
         "play Liverpool",
@@ -726,7 +713,7 @@ async def test_carrierless_discovery_uses_canonical_or_captured_resolver_input(
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(deps=container).process(handler_input)
+    await container.build_resolver_interceptor().process(handler_input)
 
     resolver.resolve_utterance.assert_awaited_once_with(
         expected,
@@ -752,7 +739,7 @@ async def test_active_location_change_owns_city_misclassified_as_local_search(
         "onboardingStage": "ask_town",
     }
 
-    await ResolverInterceptor(deps=container).process(handler_input)
+    await container.build_resolver_interceptor().process(handler_input)
 
     resolver.resolve_utterance.assert_not_awaited()
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
@@ -770,7 +757,7 @@ async def test_explicit_location_change_command_opens_location_capture(mock_hand
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(deps=ApplicationContainer(resolver=resolver)).process(handler_input)
+    await ApplicationContainer(resolver=resolver).build_resolver_interceptor().process(handler_input)
 
     resolver.resolve_utterance.assert_not_awaited()
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
@@ -791,7 +778,7 @@ async def test_explicit_one_turn_location_change_keeps_mutation_route(mock_handl
         "onboardingComplete": True,
     }
 
-    await ResolverInterceptor(deps=ApplicationContainer(resolver=resolver)).process(handler_input)
+    await ApplicationContainer(resolver=resolver).build_resolver_interceptor().process(handler_input)
 
     resolver.resolve_utterance.assert_not_awaited()
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
@@ -812,7 +799,7 @@ async def test_misspelled_bare_town_is_owned_by_onboarding(monkeypatch, mock_han
         ),
     )
     handler_input = _town_request(mock_handler_input, "swidon")
-    await ResolverInterceptor(deps=ApplicationContainer()).process(handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(handler_input)
     assert _town_capture_handler(ApplicationContainer()).can_handle(handler_input)
     await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     store = User.snapshot(handler_input)
@@ -849,7 +836,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
             }
         ]
     }
-    await ResolverInterceptor(deps=ApplicationContainer()).process(handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(handler_input)
     await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"] == {
         "townName": "Herne Bay",
@@ -895,7 +882,7 @@ async def test_unknown_city_search_query_reaches_the_location_resolver(mock_hand
         "onboardingStage": "ask_town",
     }
 
-    await ResolverInterceptor(deps=container).process(handler_input)
+    await container.build_resolver_interceptor().process(handler_input)
 
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
@@ -921,7 +908,6 @@ async def test_unknown_city_search_query_reaches_the_location_resolver(mock_hand
     ["ask_permission", "ask_town", "await_location_confirm"],
 )
 async def test_next_intent_skips_every_location_onboarding_stage(mock_handler_input, stage):
-    from src.middleware.onboarding_gate import OnboardingGateHandler
 
     resolver = SimpleNamespace(resolve_utterance=AsyncMock())
     container = ApplicationContainer(resolver=resolver)
@@ -934,7 +920,7 @@ async def test_next_intent_skips_every_location_onboarding_stage(mock_handler_in
             {"city": "Dorking"} if stage == "await_location_confirm" else None
         ),
     }
-    gate = OnboardingGateHandler(deps=container)
+    gate = container.build_onboarding_gate(handler_input)
 
     assert gate.can_handle(handler_input) is True
     await gate.handle(handler_input)
@@ -950,7 +936,6 @@ async def test_next_intent_skips_every_location_onboarding_stage(mock_handler_in
 
 @pytest.mark.asyncio
 async def test_next_intent_skips_optional_profile_setup(mock_handler_input):
-    from src.middleware.onboarding_gate import OnboardingGateHandler
 
     listener_sync = SimpleNamespace(sync_for_launch=AsyncMock(return_value=None))
     container = ApplicationContainer(listener_sync=listener_sync)
@@ -960,7 +945,7 @@ async def test_next_intent_skips_optional_profile_setup(mock_handler_input):
         "onboardingComplete": True,
         "awaitingProfilePermission": True,
     }
-    gate = OnboardingGateHandler(deps=container)
+    gate = container.build_onboarding_gate(handler_input)
 
     assert gate.can_handle(handler_input) is True
     await gate.handle(handler_input)
@@ -1005,7 +990,7 @@ async def test_onboarding_treats_creator_misclassification_as_town(monkeypatch, 
         **StateSchema.DEFAULT_STORE,
         "onboardingStage": "ask_town",
     }
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
     assert nlp["slots"]["townName"] == "Gloucester"
@@ -1032,7 +1017,6 @@ def test_manual_town_reprompt_exposes_skip_command():
 async def test_onboarding_gate_preserves_city_phrase_misclassified_as_search(
     mock_handler_input,
 ):
-    from src.middleware.onboarding_gate import OnboardingGateHandler
 
     handler_input = _town_request(mock_handler_input, "ammm ba")
     handler_input.request_envelope.request.intent.name = "PlayContentIntent"
@@ -1052,7 +1036,7 @@ async def test_onboarding_gate_preserves_city_phrase_misclassified_as_search(
             "sort": "relevance",
         },
     }
-    gate = OnboardingGateHandler(deps=ApplicationContainer())
+    gate = ApplicationContainer().build_onboarding_gate(handler_input)
     assert gate.can_handle(handler_input) is True
     await gate.handle(handler_input)
     speech = handler_input.response_builder.speak.call_args.args[0]
@@ -1191,7 +1175,7 @@ def test_search_confirmation_runs_after_local_nlp_resolution():
 
 def test_resolved_confirmation_repeats_full_search_request():
     assert (
-        SearchSpeech.resolved_search_request_label(
+        SearchPayload.resolved_request_label(
             {
                 "latest": True,
                 "tags": ["community-services"],
@@ -1206,7 +1190,7 @@ def test_resolved_confirmation_repeats_full_search_request():
 
 def test_confirmation_never_uses_from_without_source_filter():
     assert (
-        SearchSpeech.resolved_search_request_label(
+        SearchPayload.resolved_request_label(
             {"category": "sport", "residualQuery": "adeshina"}, "sport from adeshina"
         )
         == "sport adeshina"
@@ -1215,7 +1199,7 @@ def test_confirmation_never_uses_from_without_source_filter():
 
 def test_publication_filter_uses_natural_source_wording():
     assert (
-        SearchSpeech.resolved_search_request_label(
+        SearchPayload.resolved_request_label(
             {
                 "latest": True,
                 "category": "sport",
@@ -1231,7 +1215,7 @@ def test_publication_filter_uses_natural_source_wording():
 
 def test_bare_publication_confirmation_speaks_its_name_directly():
     assert (
-        SearchSpeech.resolved_search_request_label(
+        SearchPayload.resolved_request_label(
             {
                 "publicationIds": ["publication-1"],
                 "publicationName": "Weekend product podcast",
@@ -1245,7 +1229,7 @@ def test_bare_publication_confirmation_speaks_its_name_directly():
 
 def test_publication_format_is_spoken_with_creator_source():
     assert (
-        SearchSpeech.resolved_search_request_label(
+        SearchPayload.resolved_request_label(
             {
                 "isPublication": True,
                 "latest": True,
@@ -1259,7 +1243,7 @@ def test_publication_format_is_spoken_with_creator_source():
 
 def test_epoch_month_filter_is_spoken_in_readable_calendar_format():
     assert (
-        SearchSpeech.resolved_search_request_label(
+        SearchPayload.resolved_request_label(
             {
                 "latest": True,
                 "searchPlan": {
@@ -1313,7 +1297,7 @@ async def test_publication_intent_reconstructs_sort_and_source_for_resolver(
         }
     )
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     assert resolve.await_args.args == ("play latest publication from tnf",)
 
 
@@ -1347,7 +1331,7 @@ async def test_publication_intent_keeps_alexa_date_out_of_resolver_text(
         }
     )
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     assert resolve.await_args.args == ("play publication from wtn",)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     date_filter = nlp["slots"]["searchPlan"]["filter"]
@@ -1391,7 +1375,7 @@ async def test_publication_intent_rejects_out_of_catalog_sort_text(monkeypatch, 
     )
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
 
     assert resolve.await_args.args == ("play publication from wtn",)
 
@@ -1436,7 +1420,7 @@ async def test_content_date_is_a_filter_not_resolver_query_text(
     )
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
 
     assert resolve.await_args.args == ("play sport",)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
@@ -1450,7 +1434,7 @@ async def test_content_date_is_a_filter_not_resolver_query_text(
 async def test_publication_discovery_sends_format_and_creator_filters(
     monkeypatch, mock_handler_input
 ):
-    from src.models.search import Search
+    from src.alexa.search import Search
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
@@ -1479,7 +1463,13 @@ async def test_publication_discovery_sends_format_and_creator_filters(
     )
     search = AsyncMock(return_value={"failed": False, "results": [], "total_hits": 0})
     monkeypatch.setattr(HearApiClient, "search", search)
-    await Search.discover_content_via_search(mock_handler_input, deps=ApplicationContainer())
+    container = ApplicationContainer()
+    await Search.discover_content_via_search(
+        mock_handler_input,
+        heara=container.heara,
+        progressive=container.progressive,
+        user=container.user,
+    )
     payload = search.await_args.args[0]
     assert payload["query"] == ""
     assert payload["filter"] == {"creatorIds": ["creator-1"], "isPublication": True}
@@ -1490,7 +1480,8 @@ async def test_publication_discovery_sends_format_and_creator_filters(
 async def test_multiple_publications_from_source_start_ambiguity_selection(
     monkeypatch, mock_handler_input
 ):
-    from src.models.search import Search
+    from src.alexa.search import Search
+    from src.models.search_contracts import SearchRequest
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
@@ -1551,8 +1542,13 @@ async def test_multiple_publications_from_source_start_ambiguity_selection(
     )
     monkeypatch.setattr(HearApiClient, "search", search)
 
+    container = ApplicationContainer()
     result = await Search.discover_content_via_search(
-        mock_handler_input, {"q": "", "intent": "organization"}, deps=ApplicationContainer()
+        mock_handler_input,
+        SearchRequest(intent="organization"),
+        heara=container.heara,
+        progressive=container.progressive,
+        user=container.user,
     )
 
     payload = search.await_args.args[0]
@@ -1581,7 +1577,7 @@ async def test_multiple_publications_from_source_start_ambiguity_selection(
 
 @pytest.mark.asyncio
 async def test_discovery_preserves_all_resolved_category_filters(monkeypatch, mock_handler_input):
-    from src.models.search import Search
+    from src.alexa.search import Search
 
     mock_handler_input.attributes_manager.request_attributes.update(
         {
@@ -1602,7 +1598,13 @@ async def test_discovery_preserves_all_resolved_category_filters(monkeypatch, mo
     )
     search = AsyncMock(return_value={"failed": False, "results": [], "total_hits": 0})
     monkeypatch.setattr(HearApiClient, "search", search)
-    await Search.discover_content_via_search(mock_handler_input, deps=ApplicationContainer())
+    container = ApplicationContainer()
+    await Search.discover_content_via_search(
+        mock_handler_input,
+        heara=container.heara,
+        progressive=container.progressive,
+        user=container.user,
+    )
     assert search.await_args.args[0]["filter"]["categorySlugs"] == [
         "history",
         "politics",
@@ -1611,7 +1613,8 @@ async def test_discovery_preserves_all_resolved_category_filters(monkeypatch, mo
 
 @pytest.mark.asyncio
 async def test_unresolved_source_is_not_sent_as_a_search_query(monkeypatch, mock_handler_input):
-    from src.models.search import Search
+    from src.alexa.search import Search
+    from src.models.search_contracts import SearchRequest
 
     handler_input = _town_request(mock_handler_input, "swidon")
     handler_input.attributes_manager.request_attributes["_nlp"] = {
@@ -1631,8 +1634,13 @@ async def test_unresolved_source_is_not_sent_as_a_search_query(monkeypatch, mock
     }
     search = AsyncMock(return_value={"failed": False, "results": [], "total_hits": 0})
     monkeypatch.setattr(HearApiClient, "search", search)
+    container = ApplicationContainer()
     result = await Search.discover_content_via_search(
-        handler_input, {"q": "", "intent": "category"}, deps=ApplicationContainer()
+        handler_input,
+        SearchRequest(intent="category"),
+        heara=container.heara,
+        progressive=container.progressive,
+        user=container.user,
     )
     search.assert_not_awaited()
     assert "creator, organisation or publication named david" in result["client_message"]
@@ -1681,9 +1689,9 @@ async def test_organization_slot_is_resolved_and_confirmed_before_search(
         },
     }
     monkeypatch.setattr(ResolverClient, "resolve_utterance", AsyncMock(return_value=resolution))
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    IntentDispatchGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["awaitingSearchConfirmation"] is True
     assert store["pendingResolution"]["searchPayload"]["filter"]["organizationIds"] == ["org-tnf"]
@@ -1726,8 +1734,8 @@ async def test_resolved_organization_requires_confirmation_before_search(
         }
     )
     discover = AsyncMock(return_value={"failed": False, "results": [], "total_hits": 0})
-    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
+    monkeypatch.setattr("src.alexa.search.Search.discover_content_via_search", discover)
+    await PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["awaitingSearchConfirmation"] is True
     assert store["pendingResolution"]["intent"] == "organization"
@@ -1778,7 +1786,7 @@ async def test_ambiguous_organization_prompts_and_preserves_all_candidates(
             },
         }
     )
-    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
+    await PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["activeDialog"]["type"] == "ambiguity"
     assert store["pendingAmbiguity"]["candidates"] == candidates
@@ -1841,8 +1849,8 @@ async def test_ambiguity_response_without_original_slot_reprompts_candidates(
             "client_message": "I found more than one match for that name. Did you mean Wakefield Talking Newspaper, Walsall Talking Newspaper, or Warrington Talking Newspaper?",
         }
     )
-    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
+    monkeypatch.setattr("src.alexa.search.Search.discover_content_via_search", discover)
+    await PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "more than one match" in spoken
     assert "Which talking newspaper" not in spoken
@@ -1851,7 +1859,6 @@ async def test_ambiguity_response_without_original_slot_reprompts_candidates(
 
 @pytest.mark.asyncio
 async def test_unresolved_creator_does_not_play_unrelated_fallback(monkeypatch, mock_handler_input):
-    from src.models.play import PlayCreator
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
@@ -1889,10 +1896,10 @@ async def test_unresolved_creator_does_not_play_unrelated_fallback(monkeypatch, 
     )
     discover = AsyncMock()
     fallback = AsyncMock()
-    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    monkeypatch.setattr("src.models.search.Search._discover_content_avoiding_recent", fallback)
+    monkeypatch.setattr("src.alexa.search.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.alexa.search.Search._discover_content_avoiding_recent", fallback)
 
-    await PlayCreator(deps=ApplicationContainer()).execute(mock_handler_input)
+    await ApplicationContainer().build_request_play_creator(mock_handler_input).execute(mock_handler_input)
 
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "Which city would you like me to find creators in" in spoken
@@ -1906,7 +1913,8 @@ async def test_resolver_recognized_creator_keeps_existing_playback_flow(
     monkeypatch,
     mock_handler_input,
 ):
-    from src.models.play import PlayCreator
+    from src.alexa.play import PlayCreator
+    from src.models.search_contracts import SearchRequest
 
     mock_handler_input.attributes_manager.request_attributes.update(
         {
@@ -1930,18 +1938,32 @@ async def test_resolver_recognized_creator_keeps_existing_playback_flow(
     discover = AsyncMock(return_value=search_result)
     play = AsyncMock(return_value={"shouldEndSession": True})
     ask_creator_city = AsyncMock()
-    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    monkeypatch.setattr("src.models.search.Search.auto_play_first_from_search", play)
+    monkeypatch.setattr("src.alexa.search.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.alexa.search.Search.auto_play_first_from_search", play)
     deps = SimpleNamespace(
         availability=SimpleNamespace(ask_creator_city=ask_creator_city),
+        heara=SimpleNamespace(),
+        progressive=SimpleNamespace(),
+        user=User(),
+        browse=SimpleNamespace(),
+        playback=SimpleNamespace(),
     )
 
-    response = await PlayCreator(deps=deps).execute(mock_handler_input)
+    response = await PlayCreator(
+        deps.user,
+        deps.heara,
+        deps.progressive,
+        deps.browse,
+        deps.playback,
+        deps.availability.ask_creator_city,
+    ).execute(mock_handler_input)
 
     discover.assert_awaited_once_with(
         mock_handler_input,
-        {"q": "latest news", "intent": "creator"},
-        deps=deps,
+        SearchRequest(query="latest news", intent="creator"),
+        heara=deps.heara,
+        progressive=deps.progressive,
+        user=deps.user,
     )
     play.assert_awaited_once()
     ask_creator_city.assert_not_awaited()
@@ -1950,7 +1972,6 @@ async def test_resolver_recognized_creator_keeps_existing_playback_flow(
 
 @pytest.mark.asyncio
 async def test_creator_ambiguity_without_a_concrete_id_asks_for_city(mock_handler_input):
-    from src.models.play import PlayCreator
 
     candidates = [
         {
@@ -1991,7 +2012,7 @@ async def test_creator_ambiguity_without_a_concrete_id_asks_for_city(mock_handle
     )
     mock_handler_input.response_builder = ResponseBuilder()
 
-    response = await PlayCreator(deps=ApplicationContainer()).execute(mock_handler_input)
+    response = await ApplicationContainer().build_request_play_creator(mock_handler_input).execute(mock_handler_input)
 
     store = User.snapshot(mock_handler_input)
     spoken = response["outputSpeech"]["ssml"]
@@ -2035,7 +2056,8 @@ def test_fallback_during_ambiguity_repeats_candidates_not_welcome(mock_handler_i
             "candidates": candidates,
         },
     }
-    FallbackHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    container = ApplicationContainer()
+    FallbackHandler(container.user, container.onboarding).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "Wakefield Talking Newspaper" in spoken
     assert "Walsall Talking Newspaper" in spoken
@@ -2068,7 +2090,7 @@ async def test_fallback_without_raw_speech_is_not_reclassified_as_search(
             ],
         },
     }
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     assert "_nlp" not in mock_handler_input.attributes_manager.request_attributes
 
 
@@ -2158,7 +2180,7 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
             }
         ),
     )
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "organization"
     assert nlp["searchPayload"]["filter"] == {"organizationIds": ["org-walsall"]}
@@ -2168,8 +2190,8 @@ async def test_organization_ambiguity_reply_wins_over_stale_town_capture(
     from src.controllers.intent_dispatch import IntentDispatchGateHandler
     from src.middleware.confirmation import ConfirmationMiddleware
 
-    ConfirmationMiddleware().process(mock_handler_input)
-    IntentDispatchGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "Did you mean Walsall Talking Newspaper?" in spoken
     store = User.snapshot(mock_handler_input)
@@ -2208,7 +2230,7 @@ async def test_no_declines_ambiguity_confirmation_before_stale_location(
         },
     }
     container = ApplicationContainer()
-    await NoIntentHandler(Decline(deps=container)).handle(mock_handler_input)
+    await NoIntentHandler(container.build_request_decline(mock_handler_input)).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
     assert Speech.WELCOME_REPROMPT in spoken
@@ -2255,9 +2277,9 @@ async def test_yes_executes_ambiguity_resolution_before_stale_location(
     search = AsyncMock(return_value={"results": [{"contentId": "content-1"}]})
     play = AsyncMock(return_value={"shouldEndSession": True})
     monkeypatch.setattr(HearApiClient, "search", search)
-    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
+    monkeypatch.setattr("src.alexa.affirmative.Search.auto_play_first_from_search", play)
     container = ApplicationContainer()
-    response = await YesIntentHandler(Affirmative(deps=container)).handle(mock_handler_input)
+    response = await YesIntentHandler(container.build_request_affirmative(mock_handler_input)).handle(mock_handler_input)
     search.assert_awaited_once_with(
         {
             "query": "",
@@ -2332,10 +2354,10 @@ async def test_yes_searches_selected_publication_with_minimal_filter(
     play = AsyncMock(return_value={"shouldEndSession": True})
     progressive = AsyncMock(return_value=True)
     monkeypatch.setattr(HearApiClient, "search", search)
-    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
+    monkeypatch.setattr("src.alexa.affirmative.Search.auto_play_first_from_search", play)
 
     container = ApplicationContainer(progressive=SimpleNamespace(send=progressive))
-    response = await YesIntentHandler(Affirmative(deps=container)).handle(
+    response = await YesIntentHandler(container.build_request_affirmative(mock_handler_input)).handle(
         mock_handler_input
     )
 
@@ -2412,10 +2434,10 @@ async def test_confirmed_source_with_multiple_publications_asks_for_publication(
     play = AsyncMock(return_value={"shouldEndSession": True})
     monkeypatch.setattr(HearApiClient, "availability", availability)
     monkeypatch.setattr(HearApiClient, "search", search)
-    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
+    monkeypatch.setattr("src.alexa.affirmative.Search.auto_play_first_from_search", play)
 
     container = ApplicationContainer()
-    response = await YesIntentHandler(Affirmative(deps=container)).handle(mock_handler_input)
+    response = await YesIntentHandler(container.build_request_affirmative(mock_handler_input)).handle(mock_handler_input)
 
     sent = availability.await_args.args[0]
     assert sent["filter"] == {"organizationId": "org-tnf"}
@@ -2494,7 +2516,7 @@ async def test_explicit_search_replaces_pending_ambiguity(monkeypatch, mock_hand
 
     resolve = AsyncMock(side_effect=resolve)
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     assert [call.args for call in resolve.await_args_list] == [("play tnf",)]
     store = User.snapshot(mock_handler_input)
     assert store["pendingAmbiguity"] is None
@@ -2571,7 +2593,7 @@ async def test_candidate_in_topic_slot_resolves_before_new_search(monkeypatch, m
         }
     )
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["ambiguityResolution"] is True
@@ -2620,7 +2642,7 @@ async def test_unmatched_clarification_keeps_ambiguity_active_without_resolver(
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
 
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
@@ -2675,8 +2697,8 @@ async def test_show_more_without_slots_pages_pending_ambiguity_locally(
     mock_handler_input.response_builder = ResponseBuilder()
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
     resolve.assert_not_awaited()
@@ -2762,8 +2784,8 @@ async def test_show_more_fetches_next_publication_page_and_selection_uses_page_z
     monkeypatch.setattr(HearApiClient, "search", search)
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
 
@@ -2802,7 +2824,7 @@ async def test_show_more_fetches_next_publication_page_and_selection_uses_page_z
         }
     )
     mock_handler_input.response_builder = ResponseBuilder()
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["searchPayload"]["filter"] == {"publicationIds": ["publication-5"]}
     assert nlp["searchPayload"]["page"] == 0
@@ -2972,7 +2994,7 @@ async def test_dynamic_entity_id_selects_pending_candidate_without_resolver(
     }
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["ambiguityResolution"] is True
@@ -2985,7 +3007,6 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
     monkeypatch, mock_handler_input
 ):
     from src.middleware.confirmation import ConfirmationMiddleware
-    from src.models.play import PlayContent
 
     pending = {
         "intent": "organization",
@@ -3046,9 +3067,9 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
     play = AsyncMock(return_value={"shouldEndSession": True})
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     monkeypatch.setattr(HearApiClient, "search", search)
-    monkeypatch.setattr("src.models.search.Search.auto_play_first_from_search", play)
+    monkeypatch.setattr("src.alexa.search.Search.auto_play_first_from_search", play)
 
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
 
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
@@ -3061,12 +3082,12 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
     }
     assert nlp["slots"]["publicationIds"] == ["publication-buxton"]
     assert "organizationIds" not in nlp["slots"]
-    ConfirmationMiddleware().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
     assert (
         mock_handler_input.attributes_manager.request_attributes.get("_pendingConfirmation") is None
     )
 
-    response = await PlayContent(deps=ApplicationContainer()).execute(mock_handler_input)
+    response = await ApplicationContainer().build_request_play_content(mock_handler_input).execute(mock_handler_input)
 
     search.assert_awaited_once_with(
         {
@@ -3124,7 +3145,7 @@ async def test_ordinal_selects_currently_displayed_ambiguity_without_resolver(
     }
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["searchPayload"]["filter"] == {"creatorIds": ["creator-1"]}
@@ -3200,7 +3221,7 @@ async def test_wakefield_reply_uses_legacy_ambiguity_before_onboarding(
             }
         ),
     )
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     store = User.snapshot(mock_handler_input)
     assert nlp["intent"] == "organization"
@@ -3250,7 +3271,7 @@ async def test_misrouted_unresolved_source_is_not_called_talking_newspaper(
             },
         }
     )
-    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
+    await PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "creator, organisation or publication named paul" in spoken
     assert "talking newspaper" not in spoken
@@ -3289,8 +3310,8 @@ async def test_generic_talking_newspaper_request_prompts_and_persists_context(
         }
     )
     discover = AsyncMock()
-    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
+    monkeypatch.setattr("src.alexa.search.Search.discover_content_via_search", discover)
+    await PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).handle(mock_handler_input)
     assert User.snapshot(mock_handler_input)["awaitingOrganizationName"] is True
     assert DialogStateManager.get_active(mock_handler_input)["type"] == "organization_name"
     chained_builder = mock_handler_input.response_builder.speak.return_value.reprompt.return_value
@@ -3331,9 +3352,9 @@ async def test_generic_talking_newspaper_pipeline_prompts_when_slot_has_no_value
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
     assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
@@ -3375,9 +3396,9 @@ async def test_generic_talking_newspaper_slot_value_still_prompts_for_name(
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
     assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
@@ -3401,10 +3422,7 @@ async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
     monkeypatch, mock_handler_input, generic_phrase
 ):
     from src.controllers.intent_dispatch import IntentDispatchGateHandler
-    from src.middleware.confirmation import (
-        ConfirmationMiddleware,
-        SearchConfirmationGateHandler,
-    )
+    from src.middleware.confirmation import ConfirmationMiddleware, SearchConfirmationGateHandler
 
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict(
@@ -3424,10 +3442,10 @@ async def test_misrouted_talking_newspaper_play_content_prompts_for_name(
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
     assert SearchConfirmationGateHandler().can_handle(mock_handler_input) is False
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
     assert "Which talking newspaper would you like" in response["outputSpeech"]["ssml"]
@@ -3467,9 +3485,9 @@ async def test_generic_creator_pipeline_asks_for_city(monkeypatch, mock_handler_
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
     assert "Which city would you like me to find creators in" in response["outputSpeech"]["ssml"]
@@ -3530,9 +3548,9 @@ async def test_live_generic_creator_fallback_asks_for_city(
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
 
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
 
@@ -3591,9 +3609,9 @@ async def test_live_generic_talking_newspaper_fallback_asks_for_name(
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
 
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
 
@@ -3670,9 +3688,7 @@ async def test_creator_city_reply_uses_location_resolver_without_saving_profile(
         },
     }
 
-    await ResolverInterceptor(
-        deps=ApplicationContainer(resolver=resolver, progressive=progressive)
-    ).process(mock_handler_input)
+    await ApplicationContainer(resolver=resolver, progressive=progressive).build_resolver_interceptor().process(mock_handler_input)
 
     resolver.resolve_utterance.assert_awaited_once()
     resolver_call = resolver.resolve_utterance.await_args
@@ -3767,8 +3783,8 @@ async def test_creator_city_dialog_uses_location_canonical_or_raw_resolver_input
         },
     }
 
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=container).process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await container.build_resolver_interceptor().process(mock_handler_input)
 
     resolver.resolve_utterance.assert_awaited_once()
     assert resolver.resolve_utterance.await_args.args == (resolver_input,)
@@ -3806,6 +3822,7 @@ async def test_creator_city_rejects_non_location_even_when_alexa_matches_a_city(
         )
     )
     heara = SimpleNamespace(availability=AsyncMock())
+    heara.bind = lambda _identity: heara
     container = ApplicationContainer(
         resolver=resolver,
         progressive=SimpleNamespace(send=AsyncMock(return_value=True)),
@@ -3845,9 +3862,9 @@ async def test_creator_city_rejects_non_location_even_when_alexa_matches_a_city(
         },
     }
 
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=container).process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=container).handle(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await container.build_resolver_interceptor().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(container.build_request_intent_dispatcher(mock_handler_input)).handle(mock_handler_input)
 
     assert resolver.resolve_utterance.await_args.args == ("York",)
     assert Speech.CREATOR_CITY_NOT_RECOGNISED in response["outputSpeech"]["ssml"]
@@ -3890,8 +3907,8 @@ async def test_creator_city_resolver_failure_reasks_without_entering_onboarding(
         },
     }
 
-    await ResolverInterceptor(deps=container).process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=container).handle(mock_handler_input)
+    await container.build_resolver_interceptor().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(container.build_request_intent_dispatcher(mock_handler_input)).handle(mock_handler_input)
 
     assert Speech.CREATOR_CITY_NOT_RECOGNISED in response["outputSpeech"]["ssml"]
     assert response["directives"] == [
@@ -3938,7 +3955,7 @@ async def test_empty_delegated_source_reply_gives_name_recovery(
             "expiresAt": 4102444800,
         },
     }
-    response = await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(
+    response = await PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).handle(
         mock_handler_input
     )
 
@@ -3957,7 +3974,8 @@ async def test_empty_delegated_source_reply_gives_name_recovery(
         ),
     ],
 )
-def test_source_name_collision_rechains_the_active_capture_dialog(
+@pytest.mark.asyncio
+async def test_source_name_collision_rechains_the_active_capture_dialog(
     mock_handler_input, dialog_type, flag, slot_name
 ):
     from src.middleware.dialog_validation import (
@@ -3985,7 +4003,7 @@ def test_source_name_collision_rechains_the_active_capture_dialog(
         },
     }
 
-    DialogValidationInterceptor().process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
     gate = DialogValidationGateHandler()
     assert gate.can_handle(mock_handler_input)
     response = gate.handle(mock_handler_input)
@@ -4005,7 +4023,8 @@ def test_source_name_collision_rechains_the_active_capture_dialog(
         ),
     ],
 )
-def test_unknown_bare_source_reply_exits_capture_with_name_guidance(
+@pytest.mark.asyncio
+async def test_unknown_bare_source_reply_exits_capture_with_name_guidance(
     mock_handler_input, dialog_type, flag, expected_speech
 ):
     from src.middleware.dialog_validation import (
@@ -4033,7 +4052,7 @@ def test_unknown_bare_source_reply_exits_capture_with_name_guidance(
         },
     }
 
-    DialogValidationInterceptor().process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
     response = DialogValidationGateHandler().handle(mock_handler_input)
 
     assert expected_speech in response["outputSpeech"]["ssml"]
@@ -4073,9 +4092,9 @@ async def test_generic_publication_pipeline_prompts_when_slot_has_no_value(
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
     mock_handler_input.response_builder = ResponseBuilder()
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
-    response = await IntentDispatchGateHandler(deps=ApplicationContainer()).handle(
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
+    response = await IntentDispatchGateHandler(ApplicationContainer().build_request_intent_dispatcher(mock_handler_input)).handle(
         mock_handler_input
     )
     assert "Which publication would you like?" in response["outputSpeech"]["ssml"]
@@ -4116,7 +4135,7 @@ async def test_talking_newspaper_follow_up_forces_organization_resolution(
         "resolve_utterance",
         AsyncMock(return_value={"version": 1, "status": "resolved", **resolved}),
     )
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "organization"
     assert nlp["slots"]["organizationIds"] == ["org-ytn"]
@@ -4159,8 +4178,8 @@ async def test_resolved_talking_newspaper_follow_up_requires_confirmation(
         }
     )
     discover = AsyncMock()
-    monkeypatch.setattr("src.models.search.Search.discover_content_via_search", discover)
-    await PlayByOrganizationHandler(PlayOrganization(deps=ApplicationContainer())).handle(mock_handler_input)
+    monkeypatch.setattr("src.alexa.search.Search.discover_content_via_search", discover)
+    await PlayByOrganizationHandler(ApplicationContainer().build_request_play_organization(mock_handler_input)).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["awaitingOrganizationName"] is False
     assert store["awaitingSearchConfirmation"] is True
@@ -4173,7 +4192,6 @@ async def test_resolved_talking_newspaper_follow_up_requires_confirmation(
 async def test_location_follow_up_yes_checks_community_availability(
     monkeypatch, mock_handler_input
 ):
-    from src.models.affirmative import Affirmative
 
     handler_input = _town_request(mock_handler_input, "Manchester")
     handler_input.response_builder = ResponseBuilder()
@@ -4215,9 +4233,9 @@ async def test_location_follow_up_yes_checks_community_availability(
         }
     )
     monkeypatch.setattr(HearApiClient, "availability", availability)
-    monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
-    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
-    response = await Affirmative(deps=ApplicationContainer())._handle_community_play_yes(
+    monkeypatch.setattr("src.alexa.affirmative.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.alexa.affirmative.Search.auto_play_first_from_search", play)
+    response = await ApplicationContainer().build_request_affirmative(handler_input)._handle_community_play_yes(
         handler_input, store
     )
     assert "I found Manchester Talking News" in response["outputSpeech"]["ssml"]
@@ -4232,7 +4250,6 @@ async def test_location_follow_up_yes_checks_community_availability(
 
 @pytest.mark.asyncio
 async def test_local_setup_yes_retries_voice_location_permission(mock_handler_input):
-    from src.models.affirmative import Affirmative
 
     handler_input = _town_request(mock_handler_input, "yes")
     handler_input.request_envelope.request.intent.name = "AMAZON.YesIntent"
@@ -4243,7 +4260,7 @@ async def test_local_setup_yes_retries_voice_location_permission(mock_handler_in
         "onboardingComplete": True,
         "onboardingStage": "confirm_town_for_community",
     }
-    response = await Affirmative(deps=ApplicationContainer()).execute(handler_input)
+    response = await ApplicationContainer().build_request_affirmative(handler_input).execute(handler_input)
     store = User.snapshot(handler_input)
     assert store["onboardingStage"] is None
     assert store["awaitingCommunityPlayback"] is True
@@ -4254,7 +4271,6 @@ async def test_local_setup_yes_retries_voice_location_permission(mock_handler_in
 
 @pytest.mark.asyncio
 async def test_local_setup_no_keeps_guest_out_of_permission_flow(mock_handler_input):
-    from src.models.decline import Decline
 
     handler_input = _town_request(mock_handler_input, "no")
     handler_input.request_envelope.request.intent.name = "AMAZON.NoIntent"
@@ -4264,7 +4280,7 @@ async def test_local_setup_no_keeps_guest_out_of_permission_flow(mock_handler_in
         "onboardingComplete": True,
         "onboardingStage": "confirm_town_for_community",
     }
-    await Decline(deps=ApplicationContainer()).execute(handler_input)
+    await ApplicationContainer().build_request_decline(handler_input).execute(handler_input)
     store = User.snapshot(handler_input)
     assert store["onboardingStage"] is None
     assert store["awaitingCommunityPlayback"] is False
@@ -4275,7 +4291,6 @@ async def test_local_setup_no_keeps_guest_out_of_permission_flow(mock_handler_in
 async def test_local_location_confirmation_resumes_original_playback(
     monkeypatch, mock_handler_input
 ):
-    from src.models.affirmative import Affirmative
 
     handler_input = _town_request(mock_handler_input, "yes")
     handler_input.response_builder = ResponseBuilder()
@@ -4319,9 +4334,9 @@ async def test_local_location_confirmation_resumes_original_playback(
         }
     )
     monkeypatch.setattr(HearApiClient, "availability", availability)
-    monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
-    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
-    result = await Affirmative(deps=ApplicationContainer())._confirm_location(handler_input, store)
+    monkeypatch.setattr("src.alexa.affirmative.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.alexa.affirmative.Search.auto_play_first_from_search", play)
+    result = await ApplicationContainer().build_request_affirmative(handler_input)._confirm_location(handler_input, store)
     assert "I found York Talking News" in result["outputSpeech"]["ssml"]
     updated = User.snapshot(handler_input)
     assert updated["userCity"] == "York"
@@ -4336,7 +4351,6 @@ async def test_local_location_confirmation_resumes_original_playback(
 async def test_location_confirmation_finishes_onboarding_without_forcing_empty_search(
     monkeypatch, mock_handler_input
 ):
-    from src.models.affirmative import Affirmative
 
     handler_input = _town_request(mock_handler_input, "swidon")
     store = User.snapshot(handler_input)
@@ -4356,7 +4370,7 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     handler_input.attributes_manager.request_attributes["_store"] = store
     sync = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(HearApiClient, "sync_listener", sync)
-    await Affirmative(deps=ApplicationContainer())._confirm_location(handler_input, store)
+    await ApplicationContainer().build_request_affirmative(handler_input)._confirm_location(handler_input, store)
     updated = User.snapshot(handler_input)
     assert updated["onboardingComplete"] is True
     assert updated["userCity"] == "Swindon"
@@ -4381,7 +4395,6 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
     monkeypatch, mock_handler_input
 ):
     from src.controllers.confirmation import YesIntentHandler
-    from src.middleware.onboarding_gate import OnboardingGateHandler
 
     handler_input = _town_request(mock_handler_input, "yes")
     handler_input.response_builder = ResponseBuilder()
@@ -4421,11 +4434,11 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
         }
     )
     monkeypatch.setattr(HearApiClient, "availability", availability)
-    monkeypatch.setattr("src.models.affirmative.Search.discover_content_via_search", discover)
-    monkeypatch.setattr("src.models.affirmative.Search.auto_play_first_from_search", play)
-    assert OnboardingGateHandler(deps=ApplicationContainer()).can_handle(handler_input) is False
+    monkeypatch.setattr("src.alexa.affirmative.Search.discover_content_via_search", discover)
+    monkeypatch.setattr("src.alexa.affirmative.Search.auto_play_first_from_search", play)
+    assert ApplicationContainer().build_onboarding_gate(handler_input).can_handle(handler_input) is False
     container = ApplicationContainer()
-    response = await YesIntentHandler(Affirmative(deps=container)).handle(handler_input)
+    response = await YesIntentHandler(container.build_request_affirmative(mock_handler_input)).handle(handler_input)
     assert "I found York Talking News" in response["outputSpeech"]["ssml"]
     assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"]["city"] == "York"
     assert session["awaitingCommunityPlayback"] is False
