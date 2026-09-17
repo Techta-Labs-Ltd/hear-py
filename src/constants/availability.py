@@ -11,4 +11,14 @@ class AvailabilityConstants:
     MORE_INTENTS = frozenset({"ShowMoreBrowseIntent", "AMAZON.NextIntent"})
     PREVIOUS_INTENTS = frozenset({"ShowPreviousBrowseIntent", "AMAZON.PreviousIntent"})
     EXIT_INTENTS = frozenset({"AMAZON.CancelIntent", "AMAZON.StopIntent"})
+    PASSTHROUGH_INTENTS = frozenset(
+        {
+            "RateContentIntent",
+            "ReportContentIntent",
+            "ReportCreatorIntent",
+            "SetPlaybackSpeedIntent",
+            "IncreaseSpeedIntent",
+            "DecreaseSpeedIntent",
+        }
+    )
     LOCATION_FILTER_KEYS = frozenset({"city", "countryCode", "latitude", "longitude"})

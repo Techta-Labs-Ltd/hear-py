@@ -23,6 +23,14 @@ from src.services.logging_control import ApplicationLog
 
 class DialogValidationPolicy:
     _PLAYBACK_DETAIL_INTENTS = {"WhatsThisAboutIntent", "WhoIsCreatorIntent"}
+    _INTERRUPT_CONTROL_INTENTS = {
+        "RateContentIntent",
+        "ReportContentIntent",
+        "ReportCreatorIntent",
+        "SetPlaybackSpeedIntent",
+        "IncreaseSpeedIntent",
+        "DecreaseSpeedIntent",
+    }
     _EXIT_INTENTS = {"AMAZON.CancelIntent", "AMAZON.StopIntent"}
     _BINARY_INTENTS = _EXIT_INTENTS | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
     _AMBIGUITY_INTENTS = _EXIT_INTENTS | {
@@ -34,7 +42,7 @@ class DialogValidationPolicy:
         "ShowPreviousBrowseIntent",
         "SkipFeedbackIntent",
         "AMAZON.NoIntent",
-    }
+    } | _INTERRUPT_CONTROL_INTENTS
     _FEEDBACK_INTENTS = _EXIT_INTENTS | NotificationConstants.INTENTS | {
         "FeedbackEnjoyedIntent",
         "FeedbackSomewhatIntent",

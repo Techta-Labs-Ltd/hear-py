@@ -108,8 +108,8 @@ class RouteRegistry:
         LambdaDeadlineInterceptor,
         IdentityInterceptor,
         LoadPersistenceInterceptor,
-        DialogValidationInterceptor,
         DirectIntentPhraseInterceptor,
+        DialogValidationInterceptor,
         ResolverInterceptor,
         ConfirmationMiddleware,
     )
@@ -199,8 +199,8 @@ class RouteRegistry:
             LambdaDeadlineInterceptor(),
             IdentityInterceptor(container.listener_identity, container.user),
             LoadPersistenceInterceptor(),
-            DialogValidationInterceptor(),
             DirectIntentPhraseInterceptor(),
+            DialogValidationInterceptor(),
             container.build_resolver_interceptor(),
             ConfirmationMiddleware(),
         ):

@@ -40,6 +40,27 @@ def test_phrase_router_classifies_normalized_command_families(phrase, intent_nam
 
 
 @pytest.mark.parametrize(
+    ("phrase", "intent_name"),
+    [
+        ("increament spede", "IncreaseSpeedIntent"),
+        ("decreese spede", "DecreaseSpeedIntent"),
+        ("leave feedbak", "RateContentIntent"),
+        ("repot this contant", "ReportContentIntent"),
+    ],
+)
+def test_phrase_router_fuzzily_routes_confident_control_typos(phrase, intent_name):
+    route = PhraseRouter.classify(phrase)
+
+    assert route is not None
+    assert route.intent_name == intent_name
+
+
+@pytest.mark.parametrize("phrase", ["mumu", "speed", "reporting"])
+def test_phrase_router_does_not_guess_low_confidence_control_phrases(phrase):
+    assert PhraseRouter.classify(phrase) is None
+
+
+@pytest.mark.parametrize(
     "phrase",
     ("content on climate change", "content from Dorking News", "play history by David Beard"),
 )

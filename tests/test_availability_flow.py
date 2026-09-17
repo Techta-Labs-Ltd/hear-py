@@ -1665,6 +1665,43 @@ async def test_availability_publication_choice_retry_on_fallback_intent(mock_han
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
 
 
+def test_fallback_retries_active_source_choices_instead_of_returning_to_search(
+    mock_handler_input,
+):
+    from unittest.mock import MagicMock
+
+    from src.alexa.runtime import ResponseBuilder
+    from src.controllers.fallback import FallbackModule
+
+    candidates = [
+        {"type": "organization", "id": "org-1", "name": "Talking News Federation"},
+        {"type": "creator", "id": "creator-1", "name": "Adeshina Ayomide"},
+    ]
+    DialogStateManager.activate(
+        mock_handler_input,
+        "availability",
+        context={
+            "kind": "source",
+            "candidates": candidates,
+            "choiceCandidates": candidates,
+            "displayedCandidates": candidates,
+            "offset": 0,
+        },
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    response = FallbackModule.fallback_response(
+        mock_handler_input, User(), MagicMock()
+    )
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "I didn't match that to one of the source choices." in speech
+    assert "Talking News Federation" in speech
+    assert "Adeshina Ayomide" in speech
+    assert "Sorry, I didn't catch that" not in speech
+    assert DialogStateManager.get_active(mock_handler_input)["type"] == "availability"
+
+
 @pytest.mark.asyncio
 async def test_availability_format_choice_retry_on_fallback_intent(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.FallbackIntent")

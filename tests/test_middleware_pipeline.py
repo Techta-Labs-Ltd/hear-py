@@ -12,8 +12,8 @@ def test_pipeline_declarations_preserve_behavioral_order():
         "LambdaDeadlineInterceptor",
         "IdentityInterceptor",
         "LoadPersistenceInterceptor",
-        "DialogValidationInterceptor",
         "DirectIntentPhraseInterceptor",
+        "DialogValidationInterceptor",
         "ResolverInterceptor",
         "ConfirmationMiddleware",
     ]

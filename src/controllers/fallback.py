@@ -5,12 +5,14 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.dialog import DialogSelection, DialogStateManager
+from src.alexa.entities import AlexaEntities
 from src.alexa.onboarding import Onboarding
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.models.availability_data import AvailabilityData
 from src.models.user import User
 from src.services.logging_control import ApplicationLog
 
@@ -22,9 +24,43 @@ class FallbackModule:
         handler_input: HandlerInput, user: User, onboarding: Onboarding
     ):
         store = user.snapshot(handler_input)
+        active = DialogStateManager.get_active(handler_input) or {}
+        if active.get("type") == "availability":
+            context = dict(active.get("context") or {})
+            displayed = AvailabilityData.displayed(context)
+            if displayed:
+                kind = str(context.get("kind") or "choice")
+                has_more = AvailabilityData.has_more(context)
+                has_previous = max(0, int(context.get("offset") or 0)) > 0
+                DialogStateManager.activate(handler_input, "availability", context=context)
+                builder = (
+                    handler_input.response_builder.speak(
+                        Ssml.ssml(
+                            AvailabilitySpeech.choice_retry(
+                                kind,
+                                displayed,
+                                has_more=has_more,
+                                has_previous=has_previous,
+                            )
+                        )
+                    )
+                    .reprompt(
+                        Ssml.ssml(
+                            AvailabilitySpeech.choice_reprompt(
+                                kind, len(displayed), has_more, has_previous
+                            )
+                        )
+                    )
+                    .set_should_end_session(False)
+                )
+                directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(
+                    displayed
+                )
+                if directive:
+                    builder.add_directive(directive)
+                return builder.response
         pending = store.get("pendingAmbiguity")
         if not pending:
-            active = DialogStateManager.get_active(handler_input) or {}
             if active.get("type") == "ambiguity":
                 pending = active.get("context")
         if isinstance(pending, dict) and pending.get("candidates"):

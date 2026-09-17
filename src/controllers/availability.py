@@ -21,6 +21,7 @@ class AvailabilityDialogHandler(AbstractRequestHandler):
             and active.get("type") == AvailabilityConstants.DIALOG_TYPE
             and AlexaRequest.get_intent_name(handler_input)
             not in AvailabilityConstants.EXIT_INTENTS
+            | AvailabilityConstants.PASSTHROUGH_INTENTS
         )
 
     async def handle(self, handler_input: HandlerInput) -> Response:

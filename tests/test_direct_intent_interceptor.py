@@ -18,6 +18,7 @@ from src.controllers.playback_controls import (
     RewindIntentHandler,
 )
 from src.controllers.system import HelpIntentHandler, HelpMoreIntentHandler
+from src.middleware.dialog_validation import DialogValidationPolicy
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
 from src.registry import RouteRegistry
 
@@ -109,6 +110,26 @@ async def test_global_interceptor_does_not_steal_an_active_dialog_answer(mock_in
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
     assert intent["name"] == "SearchContentIntent"
+
+
+@pytest.mark.asyncio
+async def test_global_interceptor_routes_confident_control_typo_inside_active_dialog(
+    mock_intent_request,
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {
+        "searchQuery": {"name": "searchQuery", "value": "increament spede"}
+    }
+    DialogStateManager.activate(mock_intent_request, "ambiguity", context={"candidates": []})
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "IncreaseSpeedIntent"
+    assert DialogValidationPolicy.dialog_validation_failure(mock_intent_request) is None
 
 
 @pytest.mark.asyncio

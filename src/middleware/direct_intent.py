@@ -49,6 +49,16 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
             self._set(intent, PhraseRoute("AMAZON.NextIntent"))
             return
         if active_dialog or store.get("pendingAmbiguity"):
+            route = PhraseRouter.control_route(
+                phrase, allowed=PhraseRouter.INTERRUPT_CONTROL_INTENTS
+            )
+            if route:
+                self._set(intent, route)
+                ApplicationLog.info(
+                    "Hear: active-dialog phrase route sourceIntent=%s targetIntent=%s",
+                    source_intent,
+                    route.intent_name,
+                )
             return
         route = PhraseRouter.classify(phrase)
         if not route:

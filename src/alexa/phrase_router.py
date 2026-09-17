@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 from src.constants.discovery import DiscoveryConstants
 from src.utils.filters import SearchFilterUtils
@@ -75,6 +76,52 @@ class PhraseRouter:
         "half speed": "half",
         "double speed": "double",
     }
+    _FUZZY_CONTROL_LEXICON = (
+        (
+            "IncreaseSpeedIntent",
+            (
+                ("increase", "speed"),
+                ("increment", "speed"),
+                ("speed", "up"),
+                ("faster",),
+            ),
+        ),
+        (
+            "DecreaseSpeedIntent",
+            (
+                ("decrease", "speed"),
+                ("reduce", "speed"),
+                ("slow", "down"),
+                ("slower",),
+            ),
+        ),
+        (
+            "RateContentIntent",
+            (
+                ("feedback",),
+                ("rate", "content"),
+                ("rate", "recording"),
+                ("give", "feedback"),
+            ),
+        ),
+        (
+            "ReportContentIntent",
+            (
+                ("report", "content"),
+                ("report", "recording"),
+                ("report", "this"),
+                ("flag", "content"),
+            ),
+        ),
+    )
+    INTERRUPT_CONTROL_INTENTS = frozenset(
+        {
+            "IncreaseSpeedIntent",
+            "DecreaseSpeedIntent",
+            "RateContentIntent",
+            "ReportContentIntent",
+        }
+    )
 
     @classmethod
     def normalize(cls, phrase: object) -> str:
@@ -105,6 +152,61 @@ class PhraseRouter:
     def is_help_more(cls, phrase: object) -> bool:
         return bool(cls._HELP_MORE.fullmatch(cls.normalize(phrase)))
 
+    @staticmethod
+    def _alias_score(tokens: list[str], alias: tuple[str, ...]) -> float:
+        if len(tokens) < len(alias):
+            return 0.0
+        available = set(range(len(tokens)))
+        scores: list[float] = []
+        for expected in alias:
+            index, score = max(
+                (
+                    (index, SequenceMatcher(None, tokens[index], expected).ratio())
+                    for index in available
+                ),
+                key=lambda item: item[1],
+            )
+            available.remove(index)
+            scores.append(score)
+        if min(scores) < 0.72:
+            return 0.0
+        return sum(scores) / len(scores)
+
+    @classmethod
+    def _fuzzy_control_route(
+        cls, normalized: str, allowed: frozenset[str] | None = None
+    ) -> PhraseRoute | None:
+        tokens = normalized.split()
+        if not tokens:
+            return None
+        scores: list[tuple[float, str]] = []
+        for intent_name, aliases in cls._FUZZY_CONTROL_LEXICON:
+            if allowed is not None and intent_name not in allowed:
+                continue
+            score = max(cls._alias_score(tokens, alias) for alias in aliases)
+            if score:
+                scores.append((score, intent_name))
+        if not scores:
+            return None
+        scores.sort(reverse=True)
+        best_score, intent_name = scores[0]
+        next_score = scores[1][0] if len(scores) > 1 else 0.0
+        if best_score >= 0.78 and best_score - next_score >= 0.10:
+            return PhraseRoute(intent_name)
+        return None
+
+    @classmethod
+    def control_route(
+        cls, phrase: object, *, allowed: frozenset[str] | None = None
+    ) -> PhraseRoute | None:
+        normalized = cls.normalize(phrase)
+        if not normalized:
+            return None
+        for pattern, intent_name in cls._CONTROL_RULES:
+            if (allowed is None or intent_name in allowed) and pattern.fullmatch(normalized):
+                return PhraseRoute(intent_name)
+        return cls._fuzzy_control_route(normalized, allowed)
+
     @classmethod
     def classify(cls, phrase: object) -> PhraseRoute | None:
         normalized = cls.normalize(phrase)
@@ -134,7 +236,4 @@ class PhraseRouter:
             )
         if SearchFilterUtils.is_generic_creator_request(normalized):
             return PhraseRoute("ChooseSourceKindIntent", (("sourceKind", "creator"),))
-        for pattern, intent_name in cls._CONTROL_RULES:
-            if pattern.fullmatch(normalized):
-                return PhraseRoute(intent_name)
-        return None
+        return cls.control_route(normalized)
