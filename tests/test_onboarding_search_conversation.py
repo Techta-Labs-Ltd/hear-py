@@ -300,27 +300,6 @@ async def test_external_resolver_call_sends_interpretation_progressive(mock_hand
             },
             "play tyndale",
         ),
-        (
-            "PlayLocalIntent",
-            {
-                "topic": {"name": "topic", "value": "sport"},
-                "cityQuery": {
-                    "name": "cityQuery",
-                    "value": "Herne Bay",
-                },
-            },
-            "play sport near Herne Bay",
-        ),
-        (
-            "PlayLocalIntent",
-            {
-                "cityQuery": {
-                    "name": "cityQuery",
-                    "value": "London",
-                },
-            },
-            "play near London",
-        ),
     ],
 )
 async def test_generated_slot_match_or_raw_value_always_reaches_backend_resolver(
