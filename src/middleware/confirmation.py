@@ -3,6 +3,7 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractRequestInterceptor
 
 from src.alexa.context import RequestContext
+from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.request import AlexaRequest
 from src.alexa.ssml import Ssml
 from src.constants.dialog import DialogConstants
@@ -64,6 +65,7 @@ class SearchConfirmationGateHandler(AbstractRequestHandler):
         if (
             AlexaRequest.get_request_type(handler_input) != "IntentRequest"
             or intent not in ConfirmationPolicy.ALEXA_INTENTS
+            or intent in DirectIntentPolicy.BYPASS_RESOLVER_INTENTS
         ):
             return False
         attrs = RequestContext.request(handler_input)
