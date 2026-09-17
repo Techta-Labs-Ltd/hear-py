@@ -88,7 +88,7 @@ def test_ambiguity_response_activates_dialog_and_injects_dynamic_entities(mock_h
 
 
 @pytest.mark.asyncio
-async def test_resolver_log_records_the_carried_alexa_utterance(
+async def test_resolver_log_does_not_record_the_carried_alexa_utterance(
     mock_handler_input, caplog
 ):
     resolver = SimpleNamespace(resolve_utterance=AsyncMock(return_value={"status": "resolved"}))
@@ -103,10 +103,11 @@ async def test_resolver_log_records_the_carried_alexa_utterance(
             mock_handler_input,
             "York Talking News",
             "PlayByOrganizationIntent",
-        )
+    )
 
     assert "resolver input alexaIntent=PlayByOrganizationIntent" in caplog.text
-    assert "utterance='play from York Talking News'" in caplog.text
+    assert "utterancePresent=True" in caplog.text
+    assert "York Talking News" not in caplog.text
     assert "test-listener-456" not in caplog.text
 
 
