@@ -1303,10 +1303,7 @@ async def test_source_without_publications_silently_searches_tracks(mock_handler
     )
 
     search_payload = deps.heara.search.await_args.args[0]
-    assert search_payload["filter"] == {
-        "organizationIds": ["org-1"],
-        "isPublication": False,
-    }
+    assert search_payload["filter"] == {"organizationIds": ["org-1"]}
     assert deps.heara.search.await_count == 1
     assert response == {"shouldEndSession": True}
     intro = deps.playback.start.await_args.args[2]

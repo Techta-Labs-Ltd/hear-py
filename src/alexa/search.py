@@ -134,6 +134,14 @@ class Search:
                 or search_payload.get("q")
                 or "that request"
             )
+            # The resolver puts a named location in the filter, while the
+            # query remains the requested subject (for example, "sport").
+            # Rebuild the spoken context so an empty result does not lose the
+            # location that was searched.
+            _, contextual_request = SearchSpeech._broad_result_context(
+                search_payload, requested
+            )
+            requested = contextual_request or requested
             nlp = RequestContext.request(handler_input).get("_nlp") or {}
             source_name = SearchSpeech.source_no_match_name(
                 search_payload,

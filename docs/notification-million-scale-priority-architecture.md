@@ -300,6 +300,97 @@ for notification state. If a scheduler invocation is delayed or repeated, the
 outbox event and conditional recipient writes make the operation resumable and
 idempotent.
 
+## EventBridge Trigger Decision
+
+Use EventBridge as the trigger and event transport for the notification
+workflow, but do not use it as the proactive sender. EventBridge must never
+call the Alexa Proactive Events API directly and must never broadcast a generic
+notification to all listeners.
+
+Use both EventBridge mechanisms:
+
+```text
+admin publishes content
+    -> backend commits content and durable outbox event
+    -> EventBridge Event Bus receives content.published
+    -> backend Notification Planner is triggered
+    -> planner resolves exact eligible listener IDs
+    -> planner calculates priority and deduplicates
+    -> planner creates recipient state
+    -> planner sends one SQS message per recipient
+    -> existing Alexa notification worker sends proactive event
+```
+
+Use EventBridge Scheduler as a recovery and due-work sweep:
+
+```text
+every minute
+    -> EventBridge Scheduler
+    -> planner scans unfinished/outbox work by shard
+    -> expired leases and retryable records are reclaimed
+    -> missing SQS messages are re-enqueued idempotently
+```
+
+The Event Bus gives fast reaction to a newly published item. The Scheduler
+ensures that a temporary EventBridge, planner, database, or queue failure does
+not permanently lose the notification. Both paths must use the same
+idempotency keys and conditional backend state transitions.
+
+EventBridge targets the planner only:
+
+```json
+{
+  "Source": "hear.content",
+  "DetailType": "content.published",
+  "Detail": {
+    "eventId": "publish-event-123",
+    "contentId": "track-42",
+    "publicationId": "publication-9",
+    "organizationId": "organization-7",
+    "creatorId": "creator-3",
+    "publishedAt": "2026-09-17T12:00:00Z"
+  }
+}
+```
+
+The planner then emits only an exact per-listener SQS message:
+
+```json
+{
+  "schemaVersion": 2,
+  "notificationId": "publication-update-publication-9-20260917",
+  "listenerId": "listener-55",
+  "priority": 950
+}
+```
+
+The existing repository's `ProactiveNotificationQueue` and
+`main.notification_handler` are the final delivery stage. The backend still
+needs to provision the EventBridge Event Bus rule, Scheduler, planner target,
+recipient database, and SQS producer. The planner must not be placed inside
+the existing Alexa delivery worker because recipient fan-out and Alexa API
+delivery have different scaling, retry, and authorization responsibilities.
+
+Required EventBridge rules:
+
+1. `content.published` targets the planner for fast notification planning.
+2. `plan_due_notifications` Scheduler targets the planner for shard-based
+   recovery and retry sweeps.
+3. `notification.sent`, `notification.offered`, and
+   `notification.started` are published to the Event Bus from backend
+   transactional outbox records for analytics and downstream workflows.
+
+Required guarantees:
+
+- EventBridge delivery is treated as at least once.
+- `eventId` is unique and deduplicated by the planner.
+- `notificationId + listenerId` is a unique recipient key.
+- SQS delivery is safe to repeat because the backend fetch and status update
+  are conditional and idempotent.
+- A listener is selected before any proactive message is sent.
+- Permission, expiry, mute, subscription, and current Alexa target checks run
+  again immediately before the Alexa API call.
+
 EventBridge does not know which user a notification belongs to. It must never
 be given a broad event and trusted to discover recipients during delivery. The
 planner resolves the exact listener relationship first, then emits one message

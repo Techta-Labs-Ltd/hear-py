@@ -4,6 +4,7 @@ from typing import Literal
 
 from src.alexa.context import RequestContext
 from src.alexa.playback_context import PlaybackContext
+from src.alexa.playback_details import PlaybackDetails
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
@@ -15,21 +16,11 @@ from src.services.logging_control import ApplicationLog
 class CreatorIdentity:
     """Alexa presentation adapter for creator identity."""
 
-    def __init__(self, user) -> None:
-        self._user = user
+    def __init__(self, details: PlaybackDetails) -> None:
+        self._details = details
 
-    def execute(self, request: RequestContext):
-        handler_input = request.handler_input
-        store = self._user.snapshot(handler_input)
-        title = store.get("currentContentTitle") or store.get("feedbackContentTitle")
-        creator = store.get("currentCreator") or store.get("feedbackCreator")
-        if not title:
-            return handler_input.response_builder.speak(Speech.CREATOR_CREDIT_UNKNOWN).response
-        if creator:
-            return handler_input.response_builder.speak(
-                Speech.CREATOR_CREDIT(title, creator)
-            ).response
-        return handler_input.response_builder.speak(Speech.CREATOR_CREDIT_UNKNOWN).response
+    async def execute(self, request: RequestContext):
+        return await self._details.creator(request.handler_input)
 
 
 class FollowCreator:

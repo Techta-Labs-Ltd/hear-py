@@ -296,12 +296,20 @@ class HearApiClient:
         for key in SearchConstants.SEARCH_API_FIELDS:
             if payload.get(key) is not None:
                 body[key] = payload[key]
-        filters = dict(body.get("filter") or {})
+        filters = {
+            key: value
+            for key, value in dict(body.get("filter") or {}).items()
+            # Search booleans are opt-in.  Keep this at the wire boundary as a
+            # safeguard for callers which build a payload without SearchPayload.
+            if not (key in {"isPublication", "isLocal"} and value is False)
+        }
         for key in SearchConstants.SEARCH_DATE_FILTER_KEYS:
             if key not in filters and payload.get(key) is not None:
                 filters[key] = payload[key]
         if filters:
             body["filter"] = filters
+        else:
+            body.pop("filter", None)
         if payload.get("sort") in HearApiSupport.ALLOWED_SORT_VALUES:
             body["sort"] = payload["sort"]
         path = self._build_alexa_search_path()

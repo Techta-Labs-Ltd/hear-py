@@ -248,7 +248,7 @@ class RouteRegistry:
             lambda request: RepeatIntentHandler(container.build_playback_controls(request)),
             lambda request: RewindIntentHandler(container.build_playback_controls(request)),
             lambda request: FastForwardIntentHandler(container.build_playback_controls(request)),
-            lambda _request: WhoIsCreatorHandler(container.build_creator_identity()),
+            lambda request: WhoIsCreatorHandler(container.build_creator_identity(request)),
             lambda request: FollowCreatorHandler(container.build_request_follow_creator(request)),
             lambda _request: UnfollowCreatorHandler(container.build_unfollow_creator()),
             lambda request: ReportContentHandler(
@@ -261,7 +261,7 @@ class RouteRegistry:
             lambda _request: ReportCreatorHandler(
                 container.user, container.reports, container.feedback, container.events
             ),
-            lambda _request: WhatsThisAboutHandler(container.user),
+            lambda request: WhatsThisAboutHandler(container.build_playback_details(request)),
             lambda _request: PlaybackStartedHandler(
                 PlaybackEvents(container.playback, container.user),
                 container.build_request_notifications(_request),

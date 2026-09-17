@@ -22,6 +22,7 @@ from src.alexa.onboarding import Onboarding, SetLocation, TownCapture
 from src.alexa.permission import Permission
 from src.alexa.play import PlayContent, PlayCreator, PlayOrganization
 from src.alexa.playback_controls import PlaybackControls
+from src.alexa.playback_details import PlaybackDetails
 from src.alexa.playback_state import PlaybackQueue, PlaybackState
 from src.alexa.playback_workflow import Playback
 from src.alexa.search import Search
@@ -406,8 +407,11 @@ class ApplicationContainer:
             discovery.browse.more,
         )
 
-    def build_creator_identity(self):
-        return CreatorIdentity(self.user)
+    def build_playback_details(self, handler_input) -> PlaybackDetails:
+        return PlaybackDetails(self.user, self.build_playback_controls(handler_input))
+
+    def build_creator_identity(self, handler_input):
+        return CreatorIdentity(self.build_playback_details(handler_input))
 
     def build_unfollow_creator(self):
         return UnfollowCreator(self.user, self.events)

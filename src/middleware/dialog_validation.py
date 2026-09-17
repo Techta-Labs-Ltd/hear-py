@@ -9,6 +9,7 @@ from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.playback_state import PlaybackState
 from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
@@ -16,10 +17,12 @@ from src.alexa.ssml import Ssml
 from src.constants.dialog import DialogConstants
 from src.constants.notifications import NotificationConstants
 from src.constants.playback import PlaybackConstants
+from src.models.user import User
 from src.services.logging_control import ApplicationLog
 
 
 class DialogValidationPolicy:
+    _PLAYBACK_DETAIL_INTENTS = {"WhatsThisAboutIntent", "WhoIsCreatorIntent"}
     _EXIT_INTENTS = {"AMAZON.CancelIntent", "AMAZON.StopIntent"}
     _BINARY_INTENTS = _EXIT_INTENTS | {"AMAZON.YesIntent", "AMAZON.NoIntent"}
     _AMBIGUITY_INTENTS = _EXIT_INTENTS | {
@@ -177,6 +180,12 @@ class DialogValidationPolicy:
         intent_name = AlexaRequest.get_intent_name(handler_input)
         dialog_type = active.get("type")
         context = active.get("context") or {}
+        store = User.snapshot(handler_input)
+        if (
+            intent_name in DialogValidationPolicy._PLAYBACK_DETAIL_INTENTS
+            and PlaybackState(User()).has_unfinished(store)
+        ):
+            return None
         onboarding_stage = str(context.get("stage") or "")
         if (
             dialog_type in DialogValidationPolicy._SLOT_CAPTURE_PROMPTS

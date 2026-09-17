@@ -10,6 +10,7 @@ from src.alexa.feedback_response import FeedbackContinuation
 from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback_context import PlaybackContext
 from src.alexa.playback_controls import PlaybackControls
+from src.alexa.playback_details import PlaybackDetails
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
@@ -176,8 +177,8 @@ class ReportCreatorHandler(AbstractRequestHandler):
 class WhatsThisAboutHandler(AbstractRequestHandler):
     """Describes what the currently playing content is about."""
 
-    def __init__(self, user: User) -> None:
-        self._user = user
+    def __init__(self, details: PlaybackDetails) -> None:
+        self._details = details
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         return (
@@ -186,20 +187,4 @@ class WhatsThisAboutHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        store = self._user.snapshot(handler_input)
-        summary = store.get("currentSummary")
-        title = store.get("currentContentTitle") or store.get("feedbackContentTitle")
-        creator = store.get("currentCreator") or store.get("feedbackCreator")
-        if creator and Speech.is_bad_credit(creator):
-            creator = None
-        phrase = Speech.CONTENT_ABOUT_PHRASE(title, summary, None, creator)
-        card_title = str(title or "Current recording")
-        card_lines = []
-        if creator:
-            card_lines.append(f"By {creator}")
-        if summary:
-            card_lines.append(str(summary))
-        builder = handler_input.response_builder.speak(Ssml.ssml(phrase))
-        if card_lines:
-            builder = builder.with_simple_card(card_title, "\n\n".join(card_lines))
-        return builder.response
+        return await self._details.about(handler_input)

@@ -540,6 +540,29 @@ async def test_search_does_not_forward_legacy_discovery_flags(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_omits_false_boolean_filters(monkeypatch):
+    sent = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        sent.update(body)
+        return (200, {"results": [], "total": 0})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    await HearApiClient().search(
+        {
+            "query": "news",
+            "filter": {
+                "organizationIds": ["organization-1"],
+                "isPublication": False,
+                "isLocal": False,
+            },
+        }
+    )
+
+    assert sent["filter"] == {"organizationIds": ["organization-1"]}
+
+
+@pytest.mark.asyncio
 async def test_identity_resolution_uses_dedicated_endpoint(monkeypatch):
     captured = {}
 

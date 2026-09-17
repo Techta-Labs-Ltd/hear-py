@@ -18,8 +18,8 @@ class WhoIsCreatorHandler(AbstractRequestHandler):
             and AlexaRequest.get_intent_name(handler_input) == "WhoIsCreatorIntent"
         )
 
-    def handle(self, handler_input: HandlerInput):
-        return self._action.execute(RequestContext.bind(handler_input))
+    async def handle(self, handler_input: HandlerInput):
+        return await self._action.execute(RequestContext.bind(handler_input))
 
 
 class FollowCreatorHandler(AbstractRequestHandler):

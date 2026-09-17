@@ -255,7 +255,8 @@ class SearchPayload:
         filters.update(
             {key: slots[key] for key in ("latitude", "longitude") if slots.get(key) is not None}
         )
-        filters["isLocal"] = bool(slots.get("isLocal"))
+        if slots.get("isLocal"):
+            filters["isLocal"] = True
         search_plan = slots.get("searchPlan") or {}
         search_plan_filter = search_plan.get("filter") or {}
         if slots.get("isPublication") or search_plan_filter.get("isPublication") or is_publication:
@@ -290,7 +291,13 @@ class SearchPayload:
 
     @staticmethod
     def _filter_object(nlp_filter: dict | None) -> dict:
-        return SearchFilters.clean(nlp_filter)
+        return {
+            key: value
+            for key, value in SearchFilters.clean(nlp_filter).items()
+            # These flags are opt-in search constraints.  Sending ``false`` is
+            # not equivalent to leaving the constraint out on /search.
+            if not (key in {"isPublication", "isLocal"} and value is False)
+        }
 
     @classmethod
     def to_dict(cls, alexa_user_id: str | None, store: dict | None, options: dict) -> dict:

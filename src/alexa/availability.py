@@ -560,10 +560,9 @@ class Availability:
             "longitude",
             "publicationIds",
         )
-        if standalone_tracks:
-            filters["isPublication"] = False
-        else:
-            filters.pop("isPublication", None)
+        # /search treats these filters as opt-in constraints.  Omit the
+        # default false value instead of serialising it as a filter.
+        filters.pop("isPublication", None)
         payload.update(
             {
                 "query": str(payload.get("query") or ""),

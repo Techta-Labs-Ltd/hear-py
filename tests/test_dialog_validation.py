@@ -512,6 +512,51 @@ def test_feedback_allows_ratings_and_transport_but_rejects_search(mock_handler_i
     )
 
 
+@pytest.mark.parametrize("intent_name", ["WhatsThisAboutIntent", "WhoIsCreatorIntent"])
+def test_playback_details_are_allowed_through_feedback_for_unfinished_audio(
+    mock_handler_input, intent_name
+):
+    active = {
+        "contentId": "track-1",
+        "audioUrl": "https://audio.example.test/track-1.mp3",
+        "status": "paused",
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "activePlayback": active,
+            "awaitingFeedback": True,
+            "pendingFeedback": {"contentId": "track-1"},
+            "activeDialog": {"type": "feedback", "context": {"contentId": "track-1"}},
+        },
+    )
+    _intent(mock_handler_input, intent_name)
+
+    assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
+
+
+def test_playback_details_stay_gated_when_feedback_audio_is_finished(mock_handler_input):
+    User.update(
+        mock_handler_input,
+        {
+            "activePlayback": {
+                "contentId": "track-1",
+                "audioUrl": "https://audio.example.test/track-1.mp3",
+                "status": "completed",
+            },
+            "awaitingFeedback": True,
+            "pendingFeedback": {"contentId": "track-1"},
+            "activeDialog": {"type": "feedback", "context": {"contentId": "track-1"}},
+        },
+    )
+    _intent(mock_handler_input, "WhatsThisAboutIntent")
+
+    assert (
+        DialogValidationPolicy.dialog_validation_failure(mock_handler_input)["dialogType"]
+        == "feedback"
+    )
+
+
 def test_notification_dialog_allows_playback_controls_but_rejects_search(
     mock_handler_input,
 ):
