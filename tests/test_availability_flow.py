@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -353,6 +354,108 @@ async def test_location_and_one_organization_preserves_both_availability_filters
         "page": 0,
         "limit": 3,
     }
+
+
+@pytest.mark.asyncio
+async def test_publication_from_one_organization_uses_availability_and_autoplays(
+    mock_handler_input, caplog
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    payload = {
+        "query": "",
+        "filter": {"organizationIds": ["org-1"], "isPublication": True},
+    }
+    publication = {"type": "publication", "id": "pub-1", "name": "April News"}
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "publication_count": 1,
+            "standalone_track_count": 4,
+            "publications": [publication],
+        },
+        {
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-1",
+                    "title": "April News track one",
+                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                }
+            ],
+            "total_hits": 1,
+        },
+    )
+
+    with caplog.at_level(logging.INFO, logger="hear"):
+        response = await AvailabilityTestSupport.action(deps).handle_resolution(
+            handler_input,
+            {
+                "intent": "publication",
+                "searchPayload": payload,
+                "resolvedEntities": [
+                    {
+                        "type": "organization",
+                        "id": "org-1",
+                        "canonicalValue": "York Talking News",
+                    }
+                ],
+            },
+            payload,
+            "publication from York Talking News",
+        )
+
+    assert response == {"shouldEndSession": True}
+    assert deps.heara.availability.await_args.args[0]["filter"] == {
+        "organizationId": "org-1"
+    }
+    assert deps.heara.search.await_args.args[0]["filter"] == {"publicationIds": ["pub-1"]}
+    assert DialogStateManager.get_active(handler_input) is None
+    assert "availability request filter={'organizationId': 'org-1'}" in caplog.text
+    assert "availability catalogue search filter={'publicationIds': ['pub-1']}" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_publication_from_one_organization_only_lists_multiple_publications(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    payload = {
+        "query": "",
+        "filter": {"organizationIds": ["org-1"], "isPublication": True},
+    }
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "publication_count": 2,
+            "standalone_track_count": 0,
+            "publications": [
+                {"type": "publication", "id": "pub-1", "name": "April News"},
+                {"type": "publication", "id": "pub-2", "name": "May News"},
+            ],
+        }
+    )
+
+    response = await AvailabilityTestSupport.action(deps).handle_resolution(
+        handler_input,
+        {
+            "intent": "publication",
+            "searchPayload": payload,
+            "resolvedEntities": [
+                {
+                    "type": "organization",
+                    "id": "org-1",
+                    "canonicalValue": "York Talking News",
+                }
+            ],
+        },
+        payload,
+        "publication from York Talking News",
+    )
+
+    assert "April News" in AvailabilityTestSupport.speech(response)
+    assert "May News" in AvailabilityTestSupport.speech(response)
+    assert deps.heara.search.await_count == 0
+    assert DialogStateManager.get_active(handler_input)["context"]["kind"] == "publication"
 
 
 @pytest.mark.asyncio
@@ -1094,7 +1197,8 @@ async def test_source_with_only_publications_lists_three_at_a_time(mock_handler_
     assert "Here are the first three publications" in speech
     assert "First, Redcar News 1" in speech
     assert "Fourth" not in speech
-    assert "first, second, third, show more, or next" in speech
+    assert "You can say first, second, or third." in speech
+    assert "To hear more choices, say show more or next." in speech
     assert "something else to return to search" in speech
     assert DialogStateManager.get_active(handler_input)["context"]["kind"] == "publication"
 

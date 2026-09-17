@@ -317,6 +317,7 @@ def test_confirmed_search_terminal_response_reopens_bare_discovery(failed):
     resolution = {
         "intent": "organization",
         "searchPayload": {"query": "", "filter": {"organizationIds": ["org-wtn"]}},
+        "slots": {"organizationName": "Wakefield Talking Newspaper"},
     }
 
     response = ApplicationContainer().build_request_affirmative(handler_input)._failed_search_response(
@@ -343,6 +344,10 @@ def test_confirmed_search_terminal_response_reopens_bare_discovery(failed):
             },
         }
     ]
+    if not failed:
+        assert "couldn't find anything from Wakefield Talking Newspaper" in response[
+            "outputSpeech"
+        ]["ssml"]
 
 
 @pytest.mark.asyncio

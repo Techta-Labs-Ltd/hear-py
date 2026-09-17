@@ -11,6 +11,26 @@ def test_no_match_names_request_and_explains_how_to_retry():
     assert "Please say the name of a talking newspaper, creator, publication, or city" in message
 
 
+@pytest.mark.parametrize(
+    ("source_type", "source_name"),
+    (
+        ("organization", "York Talking News"),
+        ("creator", "David Beard"),
+    ),
+)
+def test_source_only_no_match_uses_from_wording(source_type, source_name):
+    source = SearchSpeech.source_no_match_name(
+        {"query": "", "filter": {f"{source_type}Ids": ["source-1"]}},
+        f"content from {source_name}",
+        {f"{source_type}Name": source_name},
+    )
+
+    message = SearchSpeech.search_no_match("content", source_name=source)
+
+    assert f"couldn't find anything from {source_name}" in message
+    assert "matching" not in message
+
+
 def test_unresolved_organization_uses_correct_article():
     message = SearchSpeech.unresolved_reference_message(
         "Unknown Voice Network", ["organization"]

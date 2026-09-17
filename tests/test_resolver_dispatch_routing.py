@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -83,6 +85,29 @@ def test_ambiguity_response_activates_dialog_and_injects_dynamic_entities(mock_h
     directives = response.get("directives") or []
     assert len(directives) == 1
     assert directives[0]["type"] == "Dialog.UpdateDynamicEntities"
+
+
+@pytest.mark.asyncio
+async def test_resolver_log_records_the_carried_alexa_utterance(
+    mock_handler_input, caplog
+):
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock(return_value={"status": "resolved"}))
+    runner = ResolverWorkflowRunner(
+        progressive=SimpleNamespace(send=AsyncMock()),
+        resolver=resolver,
+        user=User(),
+    )
+
+    with caplog.at_level(logging.INFO, logger="hear"):
+        await runner._resolver_result(
+            mock_handler_input,
+            "York Talking News",
+            "PlayByOrganizationIntent",
+        )
+
+    assert "resolver input alexaIntent=PlayByOrganizationIntent" in caplog.text
+    assert "utterance='play from York Talking News'" in caplog.text
+    assert "test-listener-456" not in caplog.text
 
 
 @pytest.mark.asyncio

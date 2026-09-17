@@ -17,10 +17,42 @@ class SearchSpeech:
         return f"{message}{navigation} {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod
-    def search_no_match(query) -> str:
+    def search_no_match(query, *, source_name: str | None = None) -> str:
+        if source_name:
+            return (
+                f"I couldn't find anything from {Speech.escape_ssml_lite(source_name)}. "
+                f"{Speech.WELCOME_REPROMPT}"
+            )
         safe = Speech.escape_ssml_lite(query)
         subject = safe or "that"
         return f"I couldn't find anything matching {subject}. {Speech.WELCOME_REPROMPT}"
+
+    @staticmethod
+    def source_no_match_name(
+        search_payload: dict | None,
+        request_label: object = None,
+        slots: dict | None = None,
+    ) -> str | None:
+        """Return a source name only when the request has no other constraint."""
+        payload = search_payload if isinstance(search_payload, dict) else {}
+        filters = SearchSpeech._search_filter(payload)
+        source_keys = ("creatorIds", "organizationIds")
+        source_count = sum(
+            len(value if isinstance(value, (list, tuple, set)) else [value])
+            for key in source_keys
+            if (value := filters.get(key))
+        )
+        if source_count != 1 or str(payload.get("query") or payload.get("q") or "").strip():
+            return None
+        if set(filters) - {"creatorIds", "organizationIds", "isPublication"}:
+            return None
+        source_type = "creator" if filters.get("creatorIds") else "organization"
+        values = slots if isinstance(slots, dict) else {}
+        name = str(values.get(f"{source_type}Name") or "").strip()
+        if name:
+            return name
+        relation, subject = SearchSpeech.clean_result_subject(request_label)
+        return subject if relation == "from" and subject else None
 
     @staticmethod
     def unresolved_reference_message(phrase: str, expected_types: list[str]) -> str:
@@ -308,6 +340,8 @@ class SearchSpeech:
             "recordings from ",
             "the latest content by ",
             "content by ",
+            "the latest publication from ",
+            "publication from ",
         ):
             if lowered.startswith(prefix):
                 return "from", subject[len(prefix) :].strip()

@@ -98,13 +98,11 @@ class AvailabilitySpeech:
     ) -> str:
         ordinals = ("first", "first or second", "first, second, or third")
         choice = ordinals[max(0, min(count, DiscoveryConstants.CHOICE_PAGE_SIZE) - 1)]
-        if has_more:
-            choice = choice.replace(", or ", ", ")
-            navigation = f"You can say {choice}, show more, or next."
-        else:
-            navigation = f"You can say {choice}."
+        navigation = f"You can say {choice}."
         if has_previous:
             navigation += " You can also say previous."
+        if has_more:
+            navigation += " To hear more choices, say show more or next."
         return f"{navigation} {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod
@@ -121,11 +119,11 @@ class AvailabilitySpeech:
         singular, plural = nouns.get(kind, ("choice", "choices"))
         ordinals = ("first", "first or second", "first, second, or third")
         choices = ordinals[max(0, min(count, DiscoveryConstants.CHOICE_PAGE_SIZE) - 1)]
-        if has_more:
-            choices = choices.replace(", or ", ", ") + ", show more, or next"
         prompt = f"Say the {singular} name, or say {choices}."
         if has_previous:
             prompt += " You can also say previous."
+        if has_more:
+            prompt += " To hear more choices, say show more or next."
         return f"{prompt} {Speech.CHOICE_EXIT_INSTRUCTION}"
 
     @staticmethod

@@ -134,9 +134,15 @@ class Search:
                 or search_payload.get("q")
                 or "that request"
             )
+            nlp = RequestContext.request(handler_input).get("_nlp") or {}
+            source_name = SearchSpeech.source_no_match_name(
+                search_payload,
+                requested,
+                nlp.get("slots"),
+            )
             return AlexaResponse.present_idle_next(
                 handler_input,
-                SearchSpeech.search_no_match(requested),
+                SearchSpeech.search_no_match(requested, source_name=source_name),
                 Speech.WELCOME_REPROMPT,
             )
         return Search._build_no_content_response(handler_input)
@@ -376,9 +382,9 @@ class Search:
         if resolution_id:
             payload["resolutionId"] = resolution_id
         ApplicationLog.info(
-            "Hear: search request intent=%s filterKeys=%s limit=%s page=%s queryPresent=%s",
+            "Hear: search request intent=%s filter=%s limit=%s page=%s queryPresent=%s",
             intent,
-            sorted((payload.get("filter") or {}).keys()),
+            payload.get("filter") or {},
             payload.get("limit"),
             payload.get("page"),
             bool(payload.get("query")),
