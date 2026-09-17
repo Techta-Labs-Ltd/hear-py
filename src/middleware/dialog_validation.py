@@ -189,6 +189,11 @@ class DialogValidationPolicy:
         dialog_type = active.get("type")
         context = active.get("context") or {}
         store = User.snapshot(handler_input)
+        if dialog_type == "feedback_continuation" and intent_name in {
+            "AMAZON.NextIntent",
+            "AMAZON.SkipIntent",
+        }:
+            return None
         if (
             intent_name in DialogValidationPolicy._PLAYBACK_DETAIL_INTENTS
             and PlaybackState(User()).has_unfinished(store)
