@@ -3,7 +3,6 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
 from src.alexa.dialog import DialogStateManager
-from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.phrase_router import PhraseRoute, PhraseRouter
 from src.alexa.request import AlexaRequest
 from src.models.user import User
@@ -82,8 +81,6 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
                 source_intent,
                 "FeedbackResponseIntent",
             )
-            return
-        if source_intent not in DirectIntentPolicy.PHRASE_ROUTABLE_SEARCH_INTENTS:
             return
         phrases = self._phrases(intent)
         if active_dialog.get("type") == "help" and any(

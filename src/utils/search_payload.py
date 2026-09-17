@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
+from config import settings
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
 from src.utils.filters import SearchFilters, SearchFilterUtils
@@ -55,8 +57,9 @@ class SearchPayload:
         if not isinstance(start_value, (int, float)) or not isinstance(end_value, (int, float)):
             return ""
         try:
-            start = datetime.fromtimestamp(start_value, timezone.utc)
-            end = datetime.fromtimestamp(end_value, timezone.utc)
+            zone = ZoneInfo(settings.HEAR_RESOLVER_TIMEZONE)
+            start = datetime.fromtimestamp(start_value, zone)
+            end = datetime.fromtimestamp(end_value, zone)
         except (OSError, OverflowError, ValueError):
             return ""
         return SearchPayload._published_range(start, end)
@@ -204,6 +207,9 @@ class SearchPayload:
         }
         if normalized.get("resolutionId"):
             selected["resolutionId"] = normalized["resolutionId"]
+        for key in ("alexaUserId", "listenerId"):
+            if normalized.get(key):
+                selected[key] = normalized[key]
         return selected
 
     @classmethod
@@ -331,8 +337,6 @@ class SearchPayload:
         sort = options.get("sort")
         if sort in SearchConstants.ALLOWED_SEARCH_SORTS:
             payload["sort"] = sort
-        elif is_local:
-            payload["sort"] = "nearest"
         if filter_obj:
             payload["filter"] = filter_obj
         return payload

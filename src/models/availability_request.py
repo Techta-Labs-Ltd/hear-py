@@ -17,7 +17,7 @@ class AvailabilityRequest:
     listener_id: str | None
     page: int = 0
     limit: int = DiscoveryConstants.CHOICE_PAGE_SIZE
-    sort: str | None = "nearest"
+    sort: str | None = None
     is_local: bool = True
     wire_fields: Mapping[str, object] = field(default_factory=dict)
 
@@ -64,7 +64,7 @@ class AvailabilityRequest:
                 listener_id=store.get("listenerId"),
                 page=payload.get("page") or 0,
                 limit=DiscoveryConstants.CHOICE_PAGE_SIZE,
-                sort=payload.get("sort") or "nearest",
+                sort=payload.get("sort"),
                 wire_fields={
                     key: value
                     for key, value in payload.items()
@@ -91,7 +91,6 @@ class AvailabilityRequest:
             q=str(slots.get("residualQuery") or ""),
             limit=DiscoveryConstants.CHOICE_PAGE_SIZE,
             page=0,
-            sort="nearest",
             nlp_filter=filters,
         )
         return cls(
@@ -101,7 +100,7 @@ class AvailabilityRequest:
             listener_id=store.get("listenerId"),
             page=payload.get("page") or 0,
             limit=DiscoveryConstants.CHOICE_PAGE_SIZE,
-            sort=payload.get("sort") or "nearest",
+            sort=payload.get("sort"),
         )
 
     def to_search_payload(self) -> dict:

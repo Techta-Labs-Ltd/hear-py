@@ -43,22 +43,3 @@ class DirectIntentPolicy:
             "AMAZON.StartOverIntent",
         }
     )
-
-    PHRASE_ROUTABLE_SEARCH_INTENTS = frozenset(
-        {
-            "OpenDiscoveryIntent",
-            "CarrierlessDiscoveryIntent",
-            "PlayContentIntent",
-            "PlayLatestContentIntent",
-            "SearchContentIntent",
-            "SearchCreatorIntent",
-            "SearchOrganizationIntent",
-            "SearchPublicationIntent",
-            "PlayByOrganizationIntent",
-            "PlayPublicationIntent",
-            "SelectOrganizationIntent",
-            "SelectPublicationSourceIntent",
-            "BrowseContentIntent",
-            "BrowseByCategoryIntent",
-        }
-    )

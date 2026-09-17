@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from src.alexa.dialog import DialogStateManager
 from src.alexa.direct_intents import DirectIntentPolicy
+from src.alexa.phrase_router import PhraseRouter
 from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.constants.state import StateSchema
 from src.controllers.browse import BrowseNavigationHandler
@@ -22,6 +26,42 @@ from src.controllers.system import HelpIntentHandler, HelpMoreIntentHandler
 from src.middleware.dialog_validation import DialogValidationPolicy
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
 from src.registry import RouteRegistry
+
+
+class InteractionModelSamples:
+    ROOT = Path(__file__).parents[1]
+
+    @classmethod
+    def locked_samples(cls) -> tuple[tuple[str, str], ...]:
+        model = json.loads((cls.ROOT / "en-GB.json").read_text(encoding="utf-8"))
+        intents = model["interactionModel"]["languageModel"]["intents"]
+        routes = []
+        seen = set()
+        replacements = {
+            "dateQuery": "today",
+            "topic": "sport",
+            "recommendationQuery": "sport",
+            "speed": "normal",
+            "time": "thirty seconds",
+            "number": "thirty",
+            "cityQuery": "London",
+            "localQuery": "London",
+        }
+        for intent in intents:
+            intent_name = intent["name"]
+            if intent_name not in PhraseRouter.DECLARED_LOCKED_INTENTS:
+                continue
+            for sample in intent.get("samples") or ():
+                phrase = re.sub(
+                    r"\{([A-Za-z][A-Za-z0-9_]*)\}",
+                    lambda match: replacements.get(match.group(1), "example"),
+                    sample,
+                )
+                normalized = PhraseRouter.normalize(phrase)
+                if phrase != "example" and normalized not in seen:
+                    routes.append((phrase, intent_name))
+                    seen.add(normalized)
+        return tuple(routes)
 
 
 @pytest.mark.parametrize(
@@ -61,6 +101,27 @@ async def test_global_interceptor_routes_direct_phrases_before_resolver(
     if speed:
         assert intent["slots"] == {"speed": {"name": "speed", "value": speed}}
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
+
+
+@pytest.mark.parametrize(
+    ("phrase", "target"), InteractionModelSamples.locked_samples()
+)
+@pytest.mark.asyncio
+async def test_global_interceptor_routes_every_declared_locked_phrase(
+    mock_intent_request, phrase, target
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchLocationIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == target
+    if target in DirectIntentPolicy.BYPASS_RESOLVER_INTENTS:
+        assert ResolverWorkflowRunner._request(mock_intent_request) is None
 
 
 @pytest.mark.asyncio

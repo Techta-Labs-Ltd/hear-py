@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
+from config import settings
 from src.constants.availability import AvailabilityConstants
 from src.constants.discovery import DiscoveryConstants
 from src.constants.search import SearchConstants
@@ -259,7 +261,7 @@ class AvailabilityData:
             try:
                 published = datetime.fromtimestamp(
                     float(published_value) if isinstance(published_value, (str, int, float)) else 0,
-                    timezone.utc,
+                    ZoneInfo(settings.HEAR_RESOLVER_TIMEZONE),
                 )
             except (OSError, OverflowError, TypeError, ValueError):
                 published = None

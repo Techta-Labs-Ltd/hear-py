@@ -1,3 +1,6 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from src.utils.search_payload import SearchPayload
 
 
@@ -14,7 +17,7 @@ def test_saved_city_uses_registered_listener_radius(mock_handler_input):
         nlp_filter={"city": "York", "isLocal": True},
     )
     assert payload["isLocal"] is True
-    assert payload["sort"] == "nearest"
+    assert "sort" not in payload
     assert payload["filter"] == {
         "city": "York",
         "latitude": 53.959,
@@ -37,7 +40,7 @@ def test_my_city_without_named_facet_uses_registered_listener_radius(
         nlp_filter={"isLocal": True},
     )
     assert payload["isLocal"] is True
-    assert payload["sort"] == "nearest"
+    assert "sort" not in payload
     assert payload["filter"] == {
         "city": "Swindon",
         "latitude": 51.5558,
@@ -53,10 +56,10 @@ def test_coordinate_only_location_is_used_for_local_search(mock_handler_input):
         nlp_filter={"isLocal": True},
     )
     assert payload["filter"] == {"latitude": 53.789, "longitude": -2.248}
-    assert payload["sort"] == "nearest"
+    assert "sort" not in payload
 
 
-def test_different_named_city_uses_city_coordinates_and_nearest_sort(
+def test_different_named_city_uses_city_coordinates_without_a_default_sort(
     mock_handler_input,
 ):
     payload = SearchPayload.build(
@@ -76,7 +79,7 @@ def test_different_named_city_uses_city_coordinates_and_nearest_sort(
         "latitude": 53.4808,
         "longitude": -2.2426,
     }
-    assert payload["sort"] == "nearest"
+    assert "sort" not in payload
 
 
 def test_absent_query_is_serialized_as_an_empty_string(mock_handler_input):
@@ -124,3 +127,13 @@ def test_publication_dates_are_nested_in_search_filter(mock_handler_input):
         nlp_filter={"publishedFrom": 1780272000, "publishedTo": 1782864000},
     )
     assert payload["filter"] == {"publishedFrom": 1780272000, "publishedTo": 1782864000}
+
+
+def test_search_date_labels_keep_the_local_uk_calendar_day():
+    zone = ZoneInfo("Europe/London")
+    start = int(datetime(2026, 9, 17, tzinfo=zone).timestamp())
+    end = int(datetime(2026, 9, 18, tzinfo=zone).timestamp())
+
+    assert SearchPayload.resolved_request_label(
+        {"searchPlan": {"filter": {"publishedFrom": start, "publishedTo": end}}}
+    ) == "content published on 17 September 2026"

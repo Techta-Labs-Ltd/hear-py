@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -940,6 +942,20 @@ def test_source_candidates_keep_same_name_in_distinct_domains():
         ("organization", "org-1"),
         ("creator", "creator-1"),
     ]
+
+
+def test_publication_candidates_keep_the_local_uk_calendar_day():
+    published_at = int(datetime(2026, 9, 17, tzinfo=ZoneInfo("Europe/London")).timestamp())
+
+    candidates = AvailabilityData.publication_candidates(
+        {
+            "publications": [
+                {"id": "publication-1", "name": "Daily News", "publishedAt": published_at}
+            ]
+        }
+    )
+
+    assert candidates[0]["name"] == "Daily News for the seventeenth of September"
 
 
 @pytest.mark.asyncio

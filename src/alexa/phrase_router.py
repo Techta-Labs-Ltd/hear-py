@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from functools import cache
+from pathlib import Path
 
+from src.alexa.direct_intents import DirectIntentPolicy
 from src.constants.discovery import DiscoveryConstants
 from src.utils.filters import SearchFilterUtils
 
@@ -43,10 +47,12 @@ class PhraseRouter:
     _RECOMMENDATION_TOPIC = re.compile(
         r"\b(?:recommend|discover|curate)\s+(?:me\s+)?(.+)$"
     )
-    _HELP = re.compile(
-        r"(?:help|what\s+can\s+(?:i\s+say|you\s+do)|how\s+does\s+this\s+work|instructions|guide\s+me)"
-    )
     _HELP_MORE = re.compile(r"(?:more|tell\s+me\s+more|more\s+help|the\s+full\s+guide)")
+    _SLOT_MARKER = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)\}")
+    _MODEL_PATH = Path(__file__).resolve().parents[2] / "en-GB.json"
+    DECLARED_LOCKED_INTENTS = DirectIntentPolicy.BYPASS_RESOLVER_INTENTS | {
+        "PlayLocalIntent"
+    }
     _CONTROL_RULES = (
         (re.compile(r"\b(?:speed\s+(?:it\s+)?up|increase(?:\s+(?:the\s+)?)?speed|play\s+faster|faster)\b"), "IncreaseSpeedIntent"),
         (re.compile(r"\b(?:slow\s+(?:it\s+)?down|decrease(?:\s+(?:the\s+)?)?speed|play\s+slower|slower)\b"), "DecreaseSpeedIntent"),
@@ -153,6 +159,71 @@ class PhraseRouter:
     def is_help_more(cls, phrase: object) -> bool:
         return bool(cls._HELP_MORE.fullmatch(cls.normalize(phrase)))
 
+    @classmethod
+    def _declared_pattern(
+        cls, sample: str
+    ) -> tuple[re.Pattern[str], tuple[tuple[str, str], ...]] | None:
+        parts: list[str] = []
+        captures: list[tuple[str, str]] = []
+        literal_seen = False
+        position = 0
+        slot_counts: dict[str, int] = {}
+        for match in cls._SLOT_MARKER.finditer(sample):
+            literal = cls.normalize(sample[position : match.start()])
+            if literal:
+                parts.append(re.escape(literal).replace(r"\ ", r"\s+"))
+                literal_seen = True
+            slot_name = match.group(1)
+            slot_counts[slot_name] = slot_counts.get(slot_name, 0) + 1
+            capture_name = f"{slot_name}_{slot_counts[slot_name]}"
+            parts.append(f"(?P<{capture_name}>.+?)")
+            captures.append((slot_name, capture_name))
+            position = match.end()
+        literal = cls.normalize(sample[position:])
+        if literal:
+            parts.append(re.escape(literal).replace(r"\ ", r"\s+"))
+            literal_seen = True
+        if not literal_seen:
+            return None
+        return re.compile(r"^" + r"\s+".join(parts) + r"$"), tuple(captures)
+
+    @classmethod
+    @cache
+    def _declared_locked_routes(
+        cls,
+    ) -> tuple[tuple[str, re.Pattern[str], tuple[tuple[str, str], ...], bool], ...]:
+        model = json.loads(cls._MODEL_PATH.read_text(encoding="utf-8"))
+        intents = model["interactionModel"]["languageModel"]["intents"]
+        routes = []
+        for intent in intents:
+            intent_name = str(intent.get("name") or "")
+            if intent_name not in cls.DECLARED_LOCKED_INTENTS:
+                continue
+            for sample in intent.get("samples") or ():
+                pattern = cls._declared_pattern(str(sample))
+                if pattern:
+                    expression, captures = pattern
+                    routes.append((intent_name, expression, captures, bool(captures)))
+        return tuple(routes)
+
+    @classmethod
+    def _declared_locked_route(
+        cls, normalized: str, *, templates: bool
+    ) -> PhraseRoute | None:
+        for intent_name, expression, captures, is_template in cls._declared_locked_routes():
+            if is_template != templates:
+                continue
+            match = expression.fullmatch(normalized)
+            if not match:
+                continue
+            slots = tuple(
+                (slot_name, value.strip())
+                for slot_name, capture_name in captures
+                if (value := match.group(capture_name)) and value.strip()
+            )
+            return PhraseRoute(intent_name, slots)
+        return None
+
     @staticmethod
     def _alias_score(tokens: list[str], alias: tuple[str, ...]) -> float:
         if len(tokens) < len(alias):
@@ -203,10 +274,19 @@ class PhraseRouter:
         normalized = cls.normalize(phrase)
         if not normalized:
             return None
+        route = cls._control_rule_route(normalized, allowed)
+        if route:
+            return route
+        return cls._fuzzy_control_route(normalized, allowed)
+
+    @classmethod
+    def _control_rule_route(
+        cls, normalized: str, allowed: frozenset[str] | None = None
+    ) -> PhraseRoute | None:
         for pattern, intent_name in cls._CONTROL_RULES:
             if (allowed is None or intent_name in allowed) and pattern.fullmatch(normalized):
                 return PhraseRoute(intent_name)
-        return cls._fuzzy_control_route(normalized, allowed)
+        return None
 
     @classmethod
     def route_phrases(
@@ -220,11 +300,11 @@ class PhraseRouter:
                 phrase for value in phrases if (phrase := cls.normalize(value))
             )
         )
-        for phrase in normalized:
-            route = cls.control_route(phrase, allowed=allowed_controls)
-            if route:
-                return route
         if allowed_controls is not None:
+            for phrase in normalized:
+                route = cls.control_route(phrase, allowed=allowed_controls)
+                if route:
+                    return route
             return None
         for phrase in normalized:
             route = cls.classify(phrase)
@@ -240,8 +320,32 @@ class PhraseRouter:
         speed = cls._SPEED_VALUES.get(normalized)
         if speed:
             return PhraseRoute("SetPlaybackSpeedIntent", (("speed", speed),))
-        if cls._HELP.fullmatch(normalized):
-            return PhraseRoute("AMAZON.HelpIntent")
+        semantic_route = cls._semantic_route(normalized)
+        if semantic_route and semantic_route.intent_name == "ChooseSourceKindIntent":
+            return semantic_route
+        declared_route = cls._declared_locked_route(normalized, templates=False)
+        if declared_route:
+            return (
+                semantic_route
+                if semantic_route and semantic_route.intent_name == declared_route.intent_name
+                else declared_route
+            )
+        route = cls._control_rule_route(normalized)
+        if route:
+            return route
+        declared_route = cls._declared_locked_route(normalized, templates=True)
+        if declared_route:
+            return (
+                semantic_route
+                if semantic_route and semantic_route.intent_name == declared_route.intent_name
+                else declared_route
+            )
+        if semantic_route:
+            return semantic_route
+        return cls._fuzzy_control_route(normalized)
+
+    @classmethod
+    def _semantic_route(cls, normalized: str) -> PhraseRoute | None:
         if cls._LOCAL_COMMUNITY.search(normalized):
             return PhraseRoute("PlayLocalIntent", (("localQuery", normalized),))
         if normalized in DiscoveryConstants.TRENDING_HINTS or cls._TRENDING.search(normalized):
@@ -261,4 +365,4 @@ class PhraseRouter:
             )
         if SearchFilterUtils.is_generic_creator_request(normalized):
             return PhraseRoute("ChooseSourceKindIntent", (("sourceKind", "creator"),))
-        return cls.control_route(normalized)
+        return None

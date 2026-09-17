@@ -6,6 +6,7 @@ from src.models.availability_data import AvailabilityOutcome
 from src.models.availability_request import AvailabilityRequest
 from src.models.search_contracts import SearchOutcome, SearchRequest
 from src.utils.filters import SearchFilters
+from src.utils.search_payload import SearchPayload
 
 
 def test_search_request_normalizes_boundary_values():
@@ -33,6 +34,22 @@ def test_search_request_does_not_share_filter_input():
     filters["organizationIds"].append("organization-2")
 
     assert request.filters == {"organizationIds": ["organization-1"]}
+
+
+def test_publication_payload_preserves_request_identity():
+    payload = SearchPayload.for_publication(
+        {
+            "query": "news",
+            "filter": {"publicationIds": ["publication-1"]},
+            "alexaUserId": "alexa-user",
+            "listenerId": "listener-1",
+        },
+        ["publication-1"],
+        3,
+    )
+
+    assert payload["alexaUserId"] == "alexa-user"
+    assert payload["listenerId"] == "listener-1"
 
 
 def test_search_filter_owner_deduplicates_lists_and_preserves_false_and_zero():
@@ -92,7 +109,6 @@ def test_availability_request_is_immutable_and_has_an_explicit_wire_mapping():
         "page": 0,
         "limit": 3,
         "isLocal": True,
-        "sort": "nearest",
         "alexaUserId": "alexa-user",
         "listenerId": "listener-1",
     }
