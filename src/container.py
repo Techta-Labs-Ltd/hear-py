@@ -48,6 +48,7 @@ from src.services.listener_identity import ListenerIdentityService
 from src.services.listener_repository import Listener
 from src.services.listener_sync import ListenerSyncService
 from src.services.notification_delivery import NotificationDeliveryService
+from src.services.notification_recipient import AlexaNotificationRecipientDirectory
 from src.services.observability import ErrorReporter
 
 
@@ -168,6 +169,7 @@ class ApplicationContainer:
         self.notification_delivery = notification_delivery or NotificationDeliveryService(
             self.notification_api,
             self.proactive_events,
+            AlexaNotificationRecipientDirectory(),
         )
         self.listener_sync = listener_sync or ListenerSyncService(
             self.heara,

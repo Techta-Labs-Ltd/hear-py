@@ -178,6 +178,80 @@ async def test_notification_update_posts_delivery_result_to_same_endpoint(monkey
 
 
 @pytest.mark.asyncio
+async def test_notification_batch_methods_use_the_existing_notification_endpoint(monkeypatch):
+    captured = []
+
+    async def fake_post(self, body, timeout_ms):
+        del self, timeout_ms
+        captured.append(body)
+        if body["operation"] == "fetch_batch":
+            return 200, {
+                "items": [
+                    {
+                        "listenerId": "listener-1",
+                        "deliverable": True,
+                        "notification": {
+                            "schemaVersion": 1,
+                            "notificationId": "notification-1",
+                            "notificationType": "creator_update",
+                            "sourceType": "creator",
+                            "sourceId": "creator-1",
+                            "sourceName": "News Reader",
+                            "lastDate": "2026-09-11T10:00:00Z",
+                        },
+                        "deliveryTarget": {"locale": "en-GB"},
+                    }
+                ]
+            }
+        return 200, {
+            "items": [
+                {
+                    "listenerId": "listener-1",
+                    "notificationId": "notification-1",
+                    "updated": True,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(NotificationApiClient, "_post", fake_post)
+    client = NotificationApiClient()
+    fetched = await client.pending_batch(
+        [{"listenerId": "listener-1", "notificationId": "notification-1"}]
+    )
+    updated = await client.update_batch(
+        [
+            {
+                "listenerId": "listener-1",
+                "notificationId": "notification-1",
+                "deliveryStatus": "sent",
+                "deliveryHttpStatus": 202,
+            }
+        ]
+    )
+
+    assert fetched["items"][0]["deliverable"] is True
+    assert updated["items"][0]["updated"] is True
+    assert captured == [
+        {
+            "operation": "fetch_batch",
+            "purpose": "delivery",
+            "items": [{"listenerId": "listener-1", "notificationId": "notification-1"}],
+        },
+        {
+            "operation": "update_batch",
+            "items": [
+                {
+                    "listenerId": "listener-1",
+                    "notificationId": "notification-1",
+                    "deliveryStatus": "sent",
+                    "deliveryHttpStatus": 202,
+                }
+            ],
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_notification_fetch_rejects_a_mismatched_listener(monkeypatch):
     async def fake_post(self, body, timeout_ms):
         return 200, {
@@ -942,6 +1016,7 @@ async def test_register_listener_sends_post_to_alexa_relative_path(monkeypatch):
         "action": "alexa",
         "alexaUserId": "amzn1.ask.account.TEST",
         "listenerId": None,
+        "deviceId": "amzn1.ask.device.TEST",
     }
     result = await client.register_listener(profile)
     assert result == {"status": "registered", "listenerId": "l-123"}

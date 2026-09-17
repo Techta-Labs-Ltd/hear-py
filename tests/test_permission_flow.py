@@ -281,13 +281,18 @@ def test_guest_sync_contains_only_alexa_identity_fields():
     )
     Listener.set_identity(
         handler_input,
-        IdentityContext(PrincipalType.SKILL_USER, alexa_user_id="user"),
+        IdentityContext(
+            PrincipalType.SKILL_USER,
+            alexa_user_id="user",
+            device_id="amzn1.ask.device.TEST",
+        ),
     )
     payload = ListenerSyncPayload.build(handler_input, store)
     assert payload == {
         "action": "alexa",
         "alexaUserId": "user",
         "listenerId": None,
+        "deviceId": "amzn1.ask.device.TEST",
         "listenerName": "Hidden Name",
         "city": "Manchester",
         "latitude": 53.48,

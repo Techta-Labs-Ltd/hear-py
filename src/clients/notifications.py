@@ -149,3 +149,125 @@ class NotificationApiClient:
             "retryable": (response_status == 0 or response_status == 429 or response_status >= 500),
             "httpStatus": response_status,
         }
+
+    async def pending_batch(
+        self,
+        requests: list[dict],
+        *,
+        timeout_ms: int | None = None,
+    ) -> dict:
+        items = self._batch_items(requests, delivery=True)
+        if not items:
+            return {"items": [], "failed": True, "retryable": False, "httpStatus": 0}
+        status, data = await self._post(
+            {"operation": "fetch_batch", "purpose": "delivery", "items": items},
+            timeout_ms,
+        )
+        if status == 200 and isinstance(data, dict):
+            raw_items = NotificationItem.response_items(data)
+            requested = {
+                (item["listenerId"], item["notificationId"])
+                for item in items
+            }
+            results: dict[tuple[str, str], dict] = {}
+            for raw in raw_items:
+                listener_id = str(raw.get("listenerId") or "").strip()
+                notification_candidate = raw.get("notification")
+                notification: dict = (
+                    notification_candidate
+                    if isinstance(notification_candidate, dict)
+                    else raw
+                )
+                notification_id = str(notification.get("notificationId") or "").strip()
+                key = listener_id, notification_id
+                if key not in requested or key in results:
+                    return self._failed_batch(status, retryable=True)
+                if raw.get("deliverable") is False:
+                    results[key] = {"listenerId": listener_id, "notificationId": notification_id, "deliverable": False}
+                    continue
+                normalized = NotificationItem.normalize(raw)
+                if normalized is None:
+                    return self._failed_batch(status, retryable=True)
+                results[key] = {"deliverable": True, **normalized}
+            if set(results) != requested:
+                return self._failed_batch(status, retryable=True)
+            return {
+                "items": [results[(item["listenerId"], item["notificationId"])] for item in items],
+                "failed": False,
+                "retryable": False,
+                "httpStatus": status,
+            }
+        return self._failed_batch(status)
+
+    async def update_batch(
+        self,
+        requests: list[dict],
+        *,
+        timeout_ms: int | None = None,
+    ) -> dict:
+        items = self._batch_items(requests, delivery=False)
+        if not items:
+            return {"items": [], "failed": True, "retryable": False, "httpStatus": 0}
+        status, data = await self._post({"operation": "update_batch", "items": items}, timeout_ms)
+        if status == 200 and isinstance(data, dict):
+            raw_items = data.get("items")
+            if not isinstance(raw_items, list):
+                return self._failed_batch(status, retryable=True)
+            requested = {(item["listenerId"], item["notificationId"]) for item in items}
+            results: dict[tuple[str, str], bool] = {}
+            for raw in raw_items:
+                if not isinstance(raw, dict):
+                    return self._failed_batch(status, retryable=True)
+                key = str(raw.get("listenerId") or "").strip(), str(raw.get("notificationId") or "").strip()
+                if key not in requested or key in results:
+                    return self._failed_batch(status, retryable=True)
+                results[key] = bool(raw.get("updated"))
+            if set(results) != requested:
+                return self._failed_batch(status, retryable=True)
+            return {
+                "items": [
+                    {"listenerId": item["listenerId"], "notificationId": item["notificationId"], "updated": results[(item["listenerId"], item["notificationId"])]}
+                    for item in items
+                ],
+                "failed": False,
+                "retryable": False,
+                "httpStatus": status,
+            }
+        return self._failed_batch(status)
+
+    @staticmethod
+    def _failed_batch(status: int, *, retryable: bool | None = None) -> dict:
+        return {
+            "items": [],
+            "failed": True,
+            "retryable": (
+                status == 0 or status == 429 or status >= 500
+                if retryable is None
+                else retryable
+            ),
+            "httpStatus": status,
+        }
+
+    @staticmethod
+    def _batch_items(requests: list[dict], *, delivery: bool) -> list[dict]:
+        items: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        for request in requests or []:
+            if not isinstance(request, dict):
+                continue
+            listener_id = str(request.get("listenerId") or "").strip()
+            notification_id = str(request.get("notificationId") or "").strip()
+            key = listener_id, notification_id
+            if not listener_id or not notification_id or key in seen:
+                continue
+            seen.add(key)
+            item = {"listenerId": listener_id, "notificationId": notification_id}
+            if not delivery:
+                for name in ("status", "deliveryStatus", "deliveryHttpStatus", "deliveryErrorCode"):
+                    value = request.get(name)
+                    if value is not None:
+                        item[name] = value
+            items.append(item)
+            if len(items) == 100:
+                break
+        return items

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock
 
@@ -62,6 +63,48 @@ class FakeHearApi:
             )
         return {"updated": True, "retryable": False, "httpStatus": 200}
 
+    async def pending_batch(self, requests, timeout_ms=None):
+        del timeout_ms
+        self.notification_request = {"operation": "fetch_batch", "items": list(requests)}
+        results = []
+        for request in requests:
+            item = next(
+                (
+                    item
+                    for item in self.items
+                    if item["listenerId"] == request["listenerId"]
+                    and item["notificationId"] == request["notificationId"]
+                ),
+                None,
+            )
+            if item is None:
+                results.append({**request, "deliverable": False, "reason": "missing"})
+            else:
+                results.append({**item, "deliverable": True})
+        return {"items": results, "failed": False, "retryable": False, "httpStatus": 200}
+
+    async def update_batch(self, requests, timeout_ms=None):
+        del timeout_ms
+        updates = []
+        for request in requests:
+            self.deliveries.append(
+                (
+                    request["listenerId"],
+                    request["notificationId"],
+                    request["deliveryStatus"],
+                    request.get("deliveryHttpStatus"),
+                    request.get("deliveryErrorCode"),
+                )
+            )
+            updates.append(
+                {
+                    "listenerId": request["listenerId"],
+                    "notificationId": request["notificationId"],
+                    "updated": True,
+                }
+            )
+        return {"items": updates, "failed": False, "retryable": False, "httpStatus": 200}
+
 
 class FakeProgressive:
     async def send(self, handler_input, speech):
@@ -77,6 +120,27 @@ class FakeProactive:
     async def deliver(self, item):
         self.items.append(item)
         return dict(self.result)
+
+
+class FakeRecipients:
+    def __init__(self, alexa_user_id="amzn1.ask.account.CURRENT"):
+        self.alexa_user_id = alexa_user_id
+        self.listener_ids = []
+
+    async def resolve(self, listener_id):
+        self.listener_ids.append(listener_id)
+        return self.alexa_user_id
+
+    async def get_many(self, listener_ids):
+        self.listener_ids.extend(listener_ids)
+        return (
+            {
+                listener_id: {"alexaUserId": self.alexa_user_id}
+                for listener_id in listener_ids
+            }
+            if self.alexa_user_id
+            else {}
+        )
 
 
 class FakeHttpResponse:
@@ -432,7 +496,8 @@ async def test_sqs_consumer_reports_only_retryable_records():
             "errorCode": "unavailable",
         }
     )
-    service = NotificationDeliveryService(hear, proactive)
+    recipients = FakeRecipients()
+    service = NotificationDeliveryService(hear, proactive, recipients)
 
     result = await service.consume(
         [
@@ -460,6 +525,8 @@ async def test_sqs_consumer_reports_only_retryable_records():
     )
 
     assert result == {"batchItemFailures": [{"itemIdentifier": "123"}]}
+    assert recipients.listener_ids == ["listener-1"]
+    assert proactive.items[0]["alexaUserId"] == "amzn1.ask.account.CURRENT"
     assert hear.deliveries == [
         ("listener-1", "notification-1", "retrying", 503, "unavailable")
     ]
@@ -471,7 +538,8 @@ async def test_sqs_consumer_marks_successful_delivery_and_acknowledges_message()
     proactive = FakeProactive(
         {"sent": True, "retryable": False, "httpStatus": 202}
     )
-    service = NotificationDeliveryService(hear, proactive)
+    recipients = FakeRecipients()
+    service = NotificationDeliveryService(hear, proactive, recipients)
 
     result = await service.consume(
         [
@@ -490,18 +558,17 @@ async def test_sqs_consumer_marks_successful_delivery_and_acknowledges_message()
 
     assert result == {"batchItemFailures": []}
     assert proactive.items[0]["notificationId"] == "notification-1"
+    assert proactive.items[0]["alexaUserId"] == "amzn1.ask.account.CURRENT"
     assert hear.deliveries == [
         ("listener-1", "notification-1", "sent", 202, None)
     ]
 
 
 @pytest.mark.asyncio
-async def test_sqs_consumer_acknowledges_an_already_completed_notification():
-    hear = FakeHearApi(items=[])
-    proactive = FakeProactive(
-        {"sent": True, "retryable": False, "httpStatus": 202}
-    )
-    service = NotificationDeliveryService(hear, proactive)
+async def test_sqs_consumer_never_uses_a_stale_backend_recipient():
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    proactive = FakeProactive({"sent": True, "retryable": False, "httpStatus": 202})
+    service = NotificationDeliveryService(hear, proactive, FakeRecipients(None))
 
     result = await service.consume(
         [
@@ -520,3 +587,89 @@ async def test_sqs_consumer_acknowledges_an_already_completed_notification():
 
     assert result == {"batchItemFailures": []}
     assert proactive.items == []
+    assert hear.deliveries == [
+        (
+            "listener-1",
+            "notification-1",
+            "failed",
+            None,
+            "recipient_not_currently_mapped",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sqs_consumer_acknowledges_an_already_completed_notification():
+    hear = FakeHearApi(items=[])
+    proactive = FakeProactive(
+        {"sent": True, "retryable": False, "httpStatus": 202}
+    )
+    service = NotificationDeliveryService(hear, proactive, FakeRecipients())
+
+    result = await service.consume(
+        [
+            {
+                "messageId": "message-1",
+                "body": json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "listenerId": "listener-1",
+                        "notificationId": "notification-1",
+                    }
+                ),
+            }
+        ]
+    )
+
+    assert result == {"batchItemFailures": []}
+    assert proactive.items == []
+
+
+@pytest.mark.asyncio
+async def test_sqs_consumer_batches_and_bounds_proactive_sends():
+    class SlowProactive:
+        def __init__(self):
+            self.active = 0
+            self.maximum = 0
+
+        async def deliver(self, item):
+            del item
+            self.active += 1
+            self.maximum = max(self.maximum, self.active)
+            await asyncio.sleep(0)
+            self.active -= 1
+            return {"sent": True, "retryable": False, "httpStatus": 202}
+
+    first = NotificationExamples.creator()
+    second = NotificationExamples.organization()
+    second["listenerId"] = "listener-2"
+    hear = FakeHearApi(items=[first, second])
+    proactive = SlowProactive()
+    recipients = FakeRecipients()
+    service = NotificationDeliveryService(hear, proactive, recipients, send_concurrency=1)
+    records = [
+        {
+            "messageId": f"message-{index}",
+            "body": json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "listenerId": item["listenerId"],
+                    "notificationId": item["notificationId"],
+                }
+            ),
+        }
+        for index, item in enumerate((first, second), start=1)
+    ]
+
+    result = await service.consume(records)
+
+    assert result == {"batchItemFailures": []}
+    assert hear.notification_request == {
+        "operation": "fetch_batch",
+        "items": [
+            {"listenerId": "listener-1", "notificationId": "notification-1"},
+            {"listenerId": "listener-2", "notificationId": "organization-update-1"},
+        ],
+    }
+    assert len(hear.deliveries) == 2
+    assert proactive.maximum == 1

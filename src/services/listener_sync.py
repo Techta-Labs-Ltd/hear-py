@@ -17,6 +17,8 @@ class ListenerSyncPayload:
             "alexaUserId": identity.alexa_user_id,
             "listenerId": identity.listener_id,
         }
+        if identity.device_id:
+            profile["deviceId"] = identity.device_id
         values = {
             "listenerName": ListenerPayload.text(
                 store.get("userName") or store.get("fullName"), ListenerPayload.MAX_TEXT_LENGTH

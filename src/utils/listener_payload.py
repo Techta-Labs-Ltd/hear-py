@@ -12,6 +12,7 @@ class ListenerPayload:
             "action",
             "alexaUserId",
             "listenerId",
+            "deviceId",
             "listenerName",
             "email",
             "city",
@@ -73,6 +74,9 @@ class ListenerPayload:
             "listenerId": listener_id,
         }
         optional = {
+            "deviceId": ListenerPayload.text(
+                profile.get("deviceId"), ListenerPayload.MAX_ALEXA_USER_ID_LENGTH
+            ),
             "listenerName": ListenerPayload.text(
                 profile.get("listenerName"), ListenerPayload.MAX_TEXT_LENGTH
             ),

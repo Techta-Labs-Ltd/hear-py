@@ -181,6 +181,44 @@ class DynamoTable:
         item = response.get("Item")
         return DynamoExpressions.decode_item(item) if item else None
 
+    async def batch_get_items(
+        self,
+        keys: list[tuple[Any, Any]],
+        *,
+        consistent: bool = True,
+    ) -> list[dict]:
+        """Read up to 100 keyed items at a time, retrying DynamoDB throttling hints."""
+        if not keys:
+            return []
+        items: list[dict] = []
+        for start in range(0, len(keys), 100):
+            request_keys = [self._key(partition, sort) for partition, sort in keys[start : start + 100]]
+            pending = request_keys
+            for attempt in range(4):
+                response = await asyncio.to_thread(
+                    self._request,
+                    "batch_get_item",
+                    {
+                        "RequestItems": {
+                            self.table_name: {
+                                "Keys": pending,
+                                "ConsistentRead": consistent,
+                            }
+                        }
+                    },
+                )
+                items.extend(
+                    DynamoExpressions.decode_item(item)
+                    for item in response.get("Responses", {}).get(self.table_name, [])
+                )
+                pending = response.get("UnprocessedKeys", {}).get(self.table_name, {}).get("Keys", [])
+                if not pending:
+                    break
+                await asyncio.sleep(0.05 * (2**attempt))
+            if pending:
+                raise RuntimeError("DynamoDB batch recipient lookup remained unprocessed")
+        return items
+
     async def update_item(
         self,
         partition_value: Any,
