@@ -42,6 +42,10 @@ class PhraseRouter:
     _RECOMMENDATION_TOPIC = re.compile(
         r"\b(?:recommend|discover|curate)\s+(?:me\s+)?(.+)$"
     )
+    _HELP = re.compile(
+        r"(?:help|what\s+can\s+(?:i\s+say|you\s+do)|how\s+does\s+this\s+work|instructions|guide\s+me)"
+    )
+    _HELP_MORE = re.compile(r"(?:more|tell\s+me\s+more|more\s+help|the\s+full\s+guide)")
     _CONTROL_RULES = (
         (re.compile(r"\b(?:speed\s+(?:it\s+)?up|increase(?:\s+(?:the\s+)?)?speed|play\s+faster|faster)\b"), "IncreaseSpeedIntent"),
         (re.compile(r"\b(?:slow\s+(?:it\s+)?down|decrease(?:\s+(?:the\s+)?)?speed|play\s+slower|slower)\b"), "DecreaseSpeedIntent"),
@@ -98,6 +102,10 @@ class PhraseRouter:
         return "" if candidate in {"something", "me something", "something good"} else candidate
 
     @classmethod
+    def is_help_more(cls, phrase: object) -> bool:
+        return bool(cls._HELP_MORE.fullmatch(cls.normalize(phrase)))
+
+    @classmethod
     def classify(cls, phrase: object) -> PhraseRoute | None:
         normalized = cls.normalize(phrase)
         if not normalized:
@@ -105,6 +113,8 @@ class PhraseRouter:
         speed = cls._SPEED_VALUES.get(normalized)
         if speed:
             return PhraseRoute("SetPlaybackSpeedIntent", (("speed", speed),))
+        if cls._HELP.fullmatch(normalized):
+            return PhraseRoute("AMAZON.HelpIntent")
         if cls._LOCAL_COMMUNITY.search(normalized):
             return PhraseRoute("PlayLocalIntent", (("localQuery", normalized),))
         if normalized in DiscoveryConstants.TRENDING_HINTS or cls._TRENDING.search(normalized):

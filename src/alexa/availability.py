@@ -71,6 +71,13 @@ class Availability:
         payload.update(discovery or {})
         if "location" not in availability_filter:
             payload["isLocal"] = False
+        ApplicationLog.info(
+            "Hear: availability request filter=%s page=%s limit=%s resolutionIdPresent=%s",
+            availability_filter,
+            payload["page"],
+            payload["limit"],
+            bool(resolution_id),
+        )
         return await self._heara.availability(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
@@ -360,6 +367,17 @@ class Availability:
                 handler_input, source, payload, availability_filter,
                 continue_with_search_on_failure=True,
             )
+        publication_source = self._publication_source(resolution, payload)
+        if publication_source:
+            await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+            return await self._begin_source(
+                handler_input,
+                publication_source,
+                payload,
+                self._source_availability_filter(publication_source),
+                continue_with_search_on_failure=True,
+                prefer_publications=True,
+            )
         if scope == AvailabilityConstants.LOCATION_KIND and (
             resolution.get("intent") == "local" or AvailabilityData.has_location_payload(payload)
         ):
@@ -379,6 +397,32 @@ class Availability:
         return None
 
     @staticmethod
+    def _publication_source(resolution: dict, payload: dict) -> dict | None:
+        """Return the resolved organisation for an unconstrained publication request."""
+        if resolution.get("intent") != "publication" or str(payload.get("query") or "").strip():
+            return None
+        filters = payload.get("filter")
+        if not isinstance(filters, dict):
+            return None
+        organization_ids = filters.get("organizationIds")
+        if not isinstance(organization_ids, list) or len(organization_ids) != 1:
+            return None
+        if filters.get("publicationIds") or not filters.get("isPublication"):
+            return None
+        allowed_filter_keys = {"organizationIds", "isPublication"}
+        if any(key not in allowed_filter_keys for key in filters):
+            return None
+        source_resolution = {
+            **resolution,
+            "searchPayload": {
+                "query": "",
+                "filter": {"organizationIds": organization_ids},
+            },
+        }
+        source = AvailabilityData.source_from_resolution(source_resolution)
+        return source if source and source.get("type") == "organization" else None
+
+    @staticmethod
     def _source_availability_filter(source: dict) -> dict:
         key = "organizationId" if source.get("type") == "organization" else "creatorId"
         return {key: source.get("id")}
@@ -387,6 +431,7 @@ class Availability:
         self, handler_input, source: dict, base_payload: dict,
         availability_filter: dict | None = None, *,
         continue_with_search_on_failure: bool = False,
+        prefer_publications: bool = False,
     ):
         requested_filter = availability_filter or self._source_availability_filter(source)
         result = await self._availability(
@@ -407,6 +452,32 @@ class Availability:
         publication_count = int(result.get("publication_count") or 0)
         track_count = int(result.get("standalone_track_count") or 0)
         publications = AvailabilityData.publication_candidates(result)
+        if prefer_publications:
+            if publication_count <= 0:
+                return self._terminal_response(handler_input, source_name=source.get("name"))
+            if publication_count == 1 and publications:
+                return await self._play_selected(
+                    handler_input,
+                    publications[0],
+                    source,
+                    base_payload,
+                )
+            if publications:
+                publication_context = {
+                    "kind": AvailabilityConstants.PUBLICATION_KIND,
+                    "source": source,
+                    "candidates": publications,
+                    "offset": 0,
+                    "apiPage": int(result.get("page") or 0),
+                    "totalPages": int(result.get("total_pages") or 0),
+                    "hasMore": bool(result.get("has_more")),
+                    "availabilityFilter": requested_filter,
+                    "baseSearchPayload": base_payload,
+                    "publicationCount": publication_count,
+                    "trackCount": track_count,
+                }
+                return self._choice_response(handler_input, publication_context)
+            return self._terminal_response(handler_input, source_name=source.get("name"))
         if publication_count <= 0:
             if track_count > 0:
                 return await self._play_source_directly(handler_input, source, base_payload)
@@ -524,6 +595,12 @@ class Availability:
             page,
             standalone_tracks=standalone_tracks,
         )
+        ApplicationLog.info(
+            "Hear: availability catalogue search filter=%s page=%s limit=%s",
+            payload.get("filter"),
+            payload.get("page"),
+            payload.get("limit"),
+        )
         result = await self._heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
@@ -635,6 +712,12 @@ class Availability:
             }
         payload = SearchPayload.with_identity(
             payload, alexa_user_id=AlexaRequest.get_user_id(handler_input), listener_id=store.get("listenerId")
+        )
+        ApplicationLog.info(
+            "Hear: availability catalogue search filter=%s page=%s limit=%s",
+            payload.get("filter"),
+            payload.get("page"),
+            payload.get("limit"),
         )
         await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await self._heara.search(

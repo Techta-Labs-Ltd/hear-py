@@ -72,6 +72,7 @@ class DialogConstants:
             "organization_name",
             "creator_location",
             "publication_source",
+            "help",
         }
     )
     DEFERRED_DISCOVERY_INTENTS = frozenset(

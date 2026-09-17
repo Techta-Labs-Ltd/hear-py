@@ -66,6 +66,7 @@ from src.controllers.social import (
 from src.controllers.system import (
     CancelIntentHandler,
     HelpIntentHandler,
+    HelpMoreIntentHandler,
     NavigateHomeHandler,
     SessionEndedHandler,
     UnknownRequestHandler,
@@ -124,6 +125,7 @@ class RouteRegistry:
         BrowseContentHandler,
         PlayByOrganizationHandler,
         PlayContentHandler,
+        HelpMoreIntentHandler,
         BrowseNavigationHandler,
         SetPlaybackSpeedHandler,
         IncreaseSpeedHandler,
@@ -232,6 +234,7 @@ class RouteRegistry:
                 container.build_request_play_organization(request)
             ),
             lambda request: PlayContentHandler(container.build_request_play_content(request)),
+            lambda _request: HelpMoreIntentHandler(),
             lambda request: BrowseNavigationHandler(
                 container.build_request_components(request).browse
             ),

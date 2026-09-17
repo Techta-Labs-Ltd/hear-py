@@ -310,6 +310,14 @@ class ResolverWorkflowRunner:
         resolved_listener_id = str(listener_id).strip() if listener_id else None
         await self._progressive.send(handler_input, Speech.RESOLVER_PROGRESSIVE)
         timeout_ms = DeadlineBudget.resolver_timeout_ms(handler_input)
+        ApplicationLog.info(
+            "Hear: resolver input alexaIntent=%s utterance=%r preferLocation=%s timeoutMs=%s listenerIdPresent=%s",
+            alexa_intent or "unknown",
+            utterance,
+            prefer_location,
+            timeout_ms,
+            bool(resolved_listener_id),
+        )
         if resolved_listener_id and prefer_location:
             return await self._resolver.resolve_utterance(
                 utterance,

@@ -43,9 +43,13 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
         if not intent or source_intent not in DirectIntentPolicy.PHRASE_ROUTABLE_SEARCH_INTENTS:
             return
         store = User.snapshot(handler_input)
-        if DialogStateManager.active_from_store(store) or store.get("pendingAmbiguity"):
-            return
+        active_dialog = DialogStateManager.active_from_store(store) or {}
         phrase = self._phrase(intent)
+        if active_dialog.get("type") == "help" and PhraseRouter.is_help_more(phrase):
+            self._set(intent, PhraseRoute("AMAZON.NextIntent"))
+            return
+        if active_dialog or store.get("pendingAmbiguity"):
+            return
         route = PhraseRouter.classify(phrase)
         if not route:
             return

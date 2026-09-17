@@ -451,10 +451,21 @@ class Affirmative:
         relaxed = self._relaxed_search_response(handler_input, resolution, label)
         if relaxed:
             return relaxed
-        speech = (
-            f"I couldn't find anything for {Speech.escape_ssml_lite(label)} right now. "
-            "What would you like to try instead?"
+        source_name = SearchSpeech.source_no_match_name(
+            resolution.get("searchPayload"),
+            label,
+            resolution.get("slots"),
         )
+        if source_name:
+            speech = (
+                f"I couldn't find anything from {Speech.escape_ssml_lite(source_name)} right now. "
+                "What would you like to try instead?"
+            )
+        else:
+            speech = (
+                f"I couldn't find anything for {Speech.escape_ssml_lite(label)} right now. "
+                "What would you like to try instead?"
+            )
         return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
 
     def _missing_resolution_response(self, handler_input):

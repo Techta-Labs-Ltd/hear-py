@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from src.alexa.dialog import DialogStateManager
 from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.resolver_runner import ResolverWorkflowRunner
+from src.controllers.browse import BrowseNavigationHandler
+from src.controllers.playback_controls import (
+    FastForwardIntentHandler,
+    NextIntentHandler,
+    PauseIntentHandler,
+    PreviousIntentHandler,
+    RepeatIntentHandler,
+    ResumeIntentHandler,
+    RewindIntentHandler,
+)
+from src.controllers.system import HelpIntentHandler, HelpMoreIntentHandler
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
+from src.registry import RouteRegistry
 
 
 @pytest.mark.parametrize(
@@ -19,6 +33,11 @@ from src.middleware.direct_intent import DirectIntentPhraseInterceptor
         ("feedback check", "RateContentIntent", None),
         ("check my updates", "HearNotificationsIntent", None),
         ("pause", "AMAZON.PauseIntent", None),
+        ("help", "AMAZON.HelpIntent", None),
+        ("next", "AMAZON.NextIntent", None),
+        ("repeat", "AMAZON.RepeatIntent", None),
+        ("restart", "AMAZON.StartOverIntent", None),
+        ("start over", "AMAZON.StartOverIntent", None),
         ("follow this creator", "FollowCreatorIntent", None),
     ),
 )
@@ -41,6 +60,42 @@ async def test_global_interceptor_routes_direct_phrases_before_resolver(
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
 
 
+@pytest.mark.parametrize(
+    ("phrase", "expected_handler"),
+    (
+        ("help", HelpIntentHandler),
+        ("pause", PauseIntentHandler),
+        ("resume", ResumeIntentHandler),
+        ("next", NextIntentHandler),
+        ("previous recording", PreviousIntentHandler),
+        ("repeat", RepeatIntentHandler),
+        ("restart", RepeatIntentHandler),
+        ("start over", RepeatIntentHandler),
+        ("rewind", RewindIntentHandler),
+        ("fast forward", FastForwardIntentHandler),
+    ),
+)
+@pytest.mark.asyncio
+async def test_gated_control_phrase_is_forwarded_to_its_handler(
+    mock_intent_request, phrase, expected_handler
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    handler = (
+        expected_handler()
+        if expected_handler is HelpIntentHandler
+        else expected_handler(SimpleNamespace())
+    )
+    assert handler.can_handle(mock_intent_request)
+
+
 @pytest.mark.asyncio
 async def test_global_interceptor_does_not_steal_an_active_dialog_answer(mock_intent_request):
     mock_intent_request.attributes_manager.request_attributes["_store"] = {
@@ -54,6 +109,26 @@ async def test_global_interceptor_does_not_steal_an_active_dialog_answer(mock_in
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
     assert intent["name"] == "SearchContentIntent"
+
+
+@pytest.mark.asyncio
+async def test_help_dialog_routes_more_to_next_without_resolver(mock_intent_request):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    DialogStateManager.activate(mock_intent_request, "help")
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": "more"}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "AMAZON.NextIntent"
+    assert ResolverWorkflowRunner._request(mock_intent_request) is None
+    assert HelpMoreIntentHandler().can_handle(mock_intent_request)
+    assert RouteRegistry.REQUEST_CONTROLLERS.index(HelpMoreIntentHandler) < (
+        RouteRegistry.REQUEST_CONTROLLERS.index(BrowseNavigationHandler)
+    )
 
 
 @pytest.mark.parametrize("intent_name", sorted(DirectIntentPolicy.BYPASS_RESOLVER_INTENTS))
