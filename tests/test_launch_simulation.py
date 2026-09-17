@@ -463,7 +463,6 @@ class TestLaunchSimulation:
                 "onboardingStage": "confirm_town_for_community",
             }
         )
-
         await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
 
         store = User.snapshot(hi)
