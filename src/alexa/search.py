@@ -389,7 +389,7 @@ class Search:
         resolution_id = resolved_payload.get("resolutionId") or nlp.get("resolutionId")
         if resolution_id:
             payload["resolutionId"] = resolution_id
-        search_request = {
+        request_log = {
             key: payload.get(key)
             for key in ("query", "filter", "sort", "limit", "page", "resolutionId")
             if payload.get(key) is not None
@@ -397,7 +397,7 @@ class Search:
         ApplicationLog.info(
             "Hear: search request prepared intent=%s searchRequest=%s",
             intent,
-            search_request,
+            request_log,
         )
         await progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await heara.search(

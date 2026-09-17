@@ -116,8 +116,7 @@ async def test_client_sends_documented_request_and_api_key(caplog):
         == b'{"utterance":"latest sport by adeshina","timezone":"Europe/London","country_code":"gb","alexaUserId":"amzn-user","listenerId":"listener-1"}'
     )
     assert isinstance(result, ResolverResult)
-    assert "latest sport by adeshina" not in caplog.text
-    assert "utteranceChars=24" in caplog.text
+    assert '"utterance":"latest sport by adeshina"' in caplog.text
     assert "alexaUserIdPresent=True" in caplog.text
     assert "listenerIdPresent=True" in caplog.text
     assert "resolver response httpStatus=200" in caplog.text

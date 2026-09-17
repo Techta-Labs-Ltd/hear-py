@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -134,9 +135,14 @@ class ResolverClient:
             alexa_user_id,
             listener_id,
         )
+        log_body = {
+            key: value
+            for key, value in body.items()
+            if key not in {"alexaUserId", "listenerId"}
+        }
         ApplicationLog.info(
-            "Hear: resolver request utteranceChars=%s alexaUserIdPresent=%s listenerIdPresent=%s",
-            len(utterance),
+            "Hear: resolver request resolverRequest=%s alexaUserIdPresent=%s listenerIdPresent=%s",
+            json.dumps(log_body, sort_keys=True, separators=(",", ":"), default=str),
             bool(alexa_user_id),
             bool(listener_id),
         )

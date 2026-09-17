@@ -305,12 +305,9 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
         {"type": "organization", "id": "org-1", "name": "Redcar Talking Newspaper"}
     ]
     assert result["publications"][0]["id"] == "publication-1"
-    assert "filterKeys=['location']" in caplog.text
+    assert '"city":"Swindon"' in caplog.text
     assert "availability response bodyPresent=true" in caplog.text
     for sensitive_value in (
-        "Swindon",
-        "51.56",
-        "-1.78",
         "Redcar Talking Newspaper",
         "A Reader",
         "Redcar News",

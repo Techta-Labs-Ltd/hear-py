@@ -381,13 +381,17 @@ class HearApiClient:
             )
             return AvailabilityResponse.failed(body)
         path = self._build_alexa_availability_path()
+        log_payload = {
+            key: value
+            for key, value in body.items()
+            if key not in {"alexaUserId", "listenerId"}
+        }
         ApplicationLog.info(
-            "Hear API availability request path=%s page=%s limit=%s filterKeys=%s isLocal=%s",
+            "Hear API availability request path=%s availabilityRequest=%s alexaUserIdPresent=%s listenerIdPresent=%s",
             path,
-            body["page"],
-            body["limit"],
-            sorted(filter_body.keys()) if isinstance((filter_body := body.get("filter")), dict) else [],
-            body.get("isLocal", "omitted"),
+            json.dumps(log_payload, sort_keys=True, separators=(",", ":"), default=str),
+            bool(alexa_user_id),
+            bool(listener_id),
         )
         deadline = self._retry_deadline(timeout_ms)
         for attempt in range(self._retry_count + 1):
