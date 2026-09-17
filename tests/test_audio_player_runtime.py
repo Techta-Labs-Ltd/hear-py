@@ -256,6 +256,56 @@ async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_resume_yes_rebuilds_the_next_queue_enqueue(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "awaitingResume": True,
+        "activePlayback": {
+            **_playback_state(),
+            "discoverySource": "WhatsTrendingIntent",
+            "discoveryContext": {"kind": "trending", "name": "what's trending"},
+        },
+        "playbackQueue": {
+            "queueId": "queue-trending",
+            "source": "WhatsTrendingIntent",
+            "orderedContentIds": [CONTENT_ID, SECOND_CONTENT_ID],
+            "currentIndex": 0,
+            "discoveryContext": {"kind": "trending", "name": "what's trending"},
+        },
+        "preparedNextContent": _queued_content(SECOND_CONTENT_ID, "Second bulletin"),
+        "browseCatalog": {"items": [_queued_content(SECOND_CONTENT_ID, "Second bulletin")]},
+    }
+    search = _fake_search([_queued_content(SECOND_CONTENT_ID, "Second bulletin")])
+    monkeypatch.setattr(HearApiClient, "search", search)
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
+
+    resumed = await skill.invoke(
+        _event({"type": "IntentRequest", "intent": {"name": "AMAZON.YesIntent", "slots": {}}}),
+        None,
+    )
+
+    assert resumed["response"]["directives"][0]["audioItem"]["stream"]["token"] == CONTENT_ID
+    assert _stored_state(persistence)["preparedNextContent"] is None
+
+    nearly_finished = await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackNearlyFinished",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 170000,
+            }
+        ),
+        None,
+    )
+
+    directive = nearly_finished["response"]["directives"][0]
+    assert directive["playBehavior"] == "ENQUEUE"
+    assert directive["audioItem"]["stream"]["token"] == SECOND_CONTENT_ID
+    search.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypatch):
     publication_id = "c9a03c82-394f-4e4c-822d-598169639395"
     track_id = SECOND_CONTENT_ID

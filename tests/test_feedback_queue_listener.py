@@ -495,6 +495,24 @@ def test_feedback_subject_uses_discovery_context_when_track_title_is_missing():
     assert AlexaFeedback.subject_title(subject, {}) == "York Talking News"
 
 
+def test_feedback_subject_uses_track_title_for_trending_content():
+    subject = {
+        "title": "Community news roundup",
+        "discoveryContext": {"kind": "trending", "name": "what's trending"},
+    }
+
+    assert AlexaFeedback.subject_title(subject, {}) == "Community news roundup"
+
+
+def test_feedback_subject_names_trending_when_the_track_title_is_missing():
+    subject = {
+        "title": None,
+        "discoveryContext": {"kind": "trending", "name": "what's trending"},
+    }
+
+    assert AlexaFeedback.subject_title(subject, {}) == "this trending recording"
+
+
 def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_input):
     mock_handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,

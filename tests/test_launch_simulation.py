@@ -373,7 +373,7 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        assert "You were listening to a recording." in speech
+        assert "You were listening to what's trending." in speech
         assert "Would you like to continue?" in speech
 
     def test_resume_prompt_uses_creator_for_creator_search(self):

@@ -74,6 +74,20 @@ def test_search_queue_retains_location_as_location_context(mock_handler_input):
     assert context["name"] == "York"
 
 
+def test_search_queue_labels_trending_without_a_query(mock_handler_input):
+    PlaybackQueue(User()).initialize(
+        mock_handler_input,
+        [{"contentId": "content-1", "title": "Community update"}],
+        source="WhatsTrendingIntent",
+        search_payload={"query": "", "sort": "trending"},
+    )
+
+    context = PlaybackQueue.read(User.snapshot(mock_handler_input))["discoveryContext"]
+
+    assert context["kind"] == "trending"
+    assert context["name"] == "what's trending"
+
+
 @pytest.mark.asyncio
 async def test_next_page_is_loaded_only_when_requested(mock_handler_input):
     first_page = [{"contentId": f"content-{index}"} for index in range(1, 4)]

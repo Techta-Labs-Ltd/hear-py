@@ -12,6 +12,10 @@ class DiscoverySpeech:
         relation, subject = SearchSpeech.clean_result_subject(context.get("name"))
         if not subject:
             return None
+        if kind == "trending":
+            return "what's trending"
+        if kind == "recommendation":
+            return "your recommendations"
         if kind in {"organization", "creator", "publication"}:
             return subject
         if kind == "location" or relation == "from":
