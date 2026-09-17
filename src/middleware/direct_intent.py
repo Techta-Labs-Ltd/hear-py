@@ -40,10 +40,27 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
         request = AlexaRequest.read(handler_input.request_envelope, "request")
         intent = AlexaRequest.read(request, "intent")
         source_intent = AlexaRequest.read(intent, "name")
-        if not intent or source_intent not in DirectIntentPolicy.PHRASE_ROUTABLE_SEARCH_INTENTS:
+        if not intent:
             return
         store = User.snapshot(handler_input)
         active_dialog = DialogStateManager.active_from_store(store) or {}
+        if (
+            active_dialog.get("type") == "feedback"
+            and store.get("awaitingFeedback")
+            and source_intent == "ReportContentIntent"
+        ):
+            # Alexa supplies neither transcript nor confidence for this no-slot
+            # intent. Keep a possible NLU mistake in the feedback dialog instead
+            # of creating a false report.
+            self._set(intent, PhraseRoute("FeedbackResponseIntent"))
+            ApplicationLog.warning(
+                "Hear: feedback dialog rerouted sourceIntent=%s targetIntent=%s",
+                source_intent,
+                "FeedbackResponseIntent",
+            )
+            return
+        if source_intent not in DirectIntentPolicy.PHRASE_ROUTABLE_SEARCH_INTENTS:
+            return
         phrase = self._phrase(intent)
         if active_dialog.get("type") == "help" and PhraseRouter.is_help_more(phrase):
             self._set(intent, PhraseRoute("AMAZON.NextIntent"))

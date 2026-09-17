@@ -7,6 +7,7 @@ import pytest
 from src.alexa.dialog import DialogStateManager
 from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.resolver_runner import ResolverWorkflowRunner
+from src.constants.state import StateSchema
 from src.controllers.browse import BrowseNavigationHandler
 from src.controllers.playback_controls import (
     FastForwardIntentHandler,
@@ -150,6 +151,31 @@ async def test_help_dialog_routes_more_to_next_without_resolver(mock_intent_requ
     assert RouteRegistry.REQUEST_CONTROLLERS.index(HelpMoreIntentHandler) < (
         RouteRegistry.REQUEST_CONTROLLERS.index(BrowseNavigationHandler)
     )
+
+
+@pytest.mark.asyncio
+async def test_feedback_dialog_reroutes_report_content_to_an_unanswered_feedback_response(
+    mock_intent_request,
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "awaitingFeedback": True,
+        "pendingFeedback": {"contentId": "content-1", "title": "Morning update"},
+    }
+    DialogStateManager.activate(
+        mock_intent_request,
+        "feedback",
+        context={"contentId": "content-1", "title": "Morning update"},
+    )
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "ReportContentIntent"
+    intent["slots"] = {}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent == {"name": "FeedbackResponseIntent", "slots": {}}
+    assert DialogValidationPolicy.dialog_validation_failure(mock_intent_request) is None
 
 
 @pytest.mark.parametrize("intent_name", sorted(DirectIntentPolicy.BYPASS_RESOLVER_INTENTS))

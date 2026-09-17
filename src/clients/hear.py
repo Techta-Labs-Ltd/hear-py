@@ -320,7 +320,7 @@ class HearApiClient:
             if key not in {"alexaUserId", "listenerId"}
         }
         ApplicationLog.info(
-            "Hear API search request path=%s payload=%s alexaUserIdPresent=%s listenerIdPresent=%s",
+            "Hear API search request path=%s searchRequest=%s alexaUserIdPresent=%s listenerIdPresent=%s",
             path,
             json.dumps(log_payload, sort_keys=True, separators=(",", ":"), default=str),
             bool(body.get("alexaUserId")),
