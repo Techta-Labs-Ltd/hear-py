@@ -2,9 +2,16 @@ __pycache__/
 .venv/
 *.pyc
 *.pyo
+*.txt
 .env
-.en-GB.json
+*.pytest_cache
+*.pytest_tmp
+*.ruff_cache
+en-GB.json
+stop.intent.txt
 *.zip
+*.md
+docs/
 coverage/
 .pytest_cache/
 dist/
