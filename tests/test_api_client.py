@@ -516,6 +516,38 @@ async def test_search_forwards_canonical_listener_id(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_log_includes_the_full_wire_query_and_filter_but_not_identity(
+    monkeypatch, caplog
+):
+    async def fake_request(self, method, path, body, timeout_ms):
+        return (200, {"results": [], "total": 0})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    with caplog.at_level(logging.INFO, logger="hear"):
+        await HearApiClient().search(
+            {
+                "query": "local sports update",
+                "filter": {
+                    "organizationIds": ["org-talking-news-federation"],
+                    "categorySlugs": ["sport"],
+                },
+                "sort": "latest",
+                "page": 2,
+                "limit": 3,
+                "alexaUserId": "amzn1.ask.account.TEST",
+                "listenerId": "listener-1",
+            }
+        )
+
+    assert '"query":"local sports update"' in caplog.text
+    assert '"organizationIds":["org-talking-news-federation"]' in caplog.text
+    assert '"categorySlugs":["sport"]' in caplog.text
+    assert '"sort":"latest"' in caplog.text
+    assert "amzn1.ask.account.TEST" not in caplog.text
+    assert "listener-1" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_search_does_not_forward_legacy_discovery_flags(monkeypatch):
     sent = {}
 

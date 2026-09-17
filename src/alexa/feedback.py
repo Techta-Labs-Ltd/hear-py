@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 from src.alexa.discovery_speech import DiscoverySpeech
+from src.alexa.entities import AlexaEntities
+from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.utils.content import ContentUtils
 
 
 class AlexaFeedback:
+    _DYNAMIC_FEEDBACK_IDS = {
+        "enjoyed": "enjoyed",
+        "somewhat": "somewhat",
+        "not-enjoyed": "not enjoyed",
+    }
+
+    @staticmethod
+    def normalize_slot(slot) -> str | None:
+        """Use one resolved feedback entity before interpreting Alexa's spoken text."""
+        resolved = {
+            AlexaFeedback._DYNAMIC_FEEDBACK_IDS[entity_id]
+            for entity_id in AlexaRequest.get_resolved_slot_ids(slot)
+            if entity_id in AlexaFeedback._DYNAMIC_FEEDBACK_IDS
+        }
+        if len(resolved) == 1:
+            return resolved.pop()
+        if resolved:
+            return None
+        return AlexaFeedback.normalize_value(AlexaRequest.get_spoken_slot_value(slot))
+
     @staticmethod
     def normalize_value(value: object) -> str | None:
         text = " ".join(str(value or "").casefold().replace("’", "'").split())
@@ -239,6 +261,7 @@ class AlexaFeedback:
             handler_input.response_builder.speak(Ssml.ssml(prompt))
             .reprompt(Ssml.ssml(prompt))
             .add_directive(stop_directive)
+            .add_directive(AlexaEntities.build_feedback_dynamic_entities_directive())
             .with_should_end_session(False)
             .get_response()
         )
@@ -261,6 +284,7 @@ class AlexaFeedback:
         return (
             handler_input.response_builder.speak(Ssml.ssml(speech))
             .reprompt(Ssml.ssml(AlexaFeedback.feedback_question(title)))
+            .add_directive(AlexaEntities.build_feedback_dynamic_entities_directive())
             .with_should_end_session(False)
             .get_response()
         )

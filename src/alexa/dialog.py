@@ -46,15 +46,15 @@ class DialogSelection:
 
     @staticmethod
     def _resolved_candidate(handler_input, candidates: list[dict]) -> dict | None:
-        resolved_id = AlexaRequest.get_resolved_slot_id(
+        resolved_ids = AlexaRequest.get_resolved_slot_ids(
             DialogSelection._selection_slot(handler_input)
         )
-        if not resolved_id:
+        matches = [
+            candidate for candidate in candidates if candidate.get("id") in resolved_ids
+        ]
+        if len(matches) != 1:
             return None
-        return next(
-            (candidate for candidate in candidates if candidate.get("id") == resolved_id),
-            None,
-        )
+        return matches[0]
 
     @staticmethod
     def choices(pending: dict) -> list[dict]:

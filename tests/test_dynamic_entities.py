@@ -37,3 +37,19 @@ def test_ambiguity_dynamic_entities_include_unique_names_and_suffixes():
         "Dalesman",
         *DiscoveryConstants.CHOICE_ORDINAL_SYNONYMS[1],
     ]
+
+
+def test_feedback_dynamic_entities_cover_each_feedback_outcome():
+    directive = AlexaEntities.build_feedback_dynamic_entities_directive()
+
+    assert directive["type"] == "Dialog.UpdateDynamicEntities"
+    assert directive["updateBehavior"] == "REPLACE"
+    assert directive["types"][0]["name"] == "HEAR_FEEDBACK"
+    values = directive["types"][0]["values"]
+    assert [value["id"] for value in values] == [
+        "enjoyed",
+        "somewhat",
+        "not-enjoyed",
+    ]
+    assert "I enjoyed it" in values[0]["name"]["synonyms"]
+    assert "not for me" in values[2]["name"]["synonyms"]

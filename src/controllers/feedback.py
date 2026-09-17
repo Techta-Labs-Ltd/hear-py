@@ -95,8 +95,8 @@ class FeedbackResponseHandler(AbstractRequestHandler):
 
     async def handle(self, handler_input: HandlerInput):
         request = RequestContext.bind(handler_input)
-        feedback = AlexaFeedback.normalize_value(
-            AlexaRequest.get_slot_value(handler_input, "feedback")
+        feedback = AlexaFeedback.normalize_slot(
+            AlexaRequest.get_slot(handler_input, "feedback")
         )
         action = self._actions.get(feedback) if feedback else None
         if action and hasattr(action, "execute"):

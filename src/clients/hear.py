@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -313,13 +314,15 @@ class HearApiClient:
         if payload.get("sort") in HearApiSupport.ALLOWED_SORT_VALUES:
             body["sort"] = payload["sort"]
         path = self._build_alexa_search_path()
+        log_payload = {
+            key: value
+            for key, value in body.items()
+            if key not in {"alexaUserId", "listenerId"}
+        }
         ApplicationLog.info(
-            "Hear API search request path=%s queryPresent=%s limit=%s page=%s filterKeys=%s alexaUserIdPresent=%s listenerIdPresent=%s",
+            "Hear API search request path=%s payload=%s alexaUserIdPresent=%s listenerIdPresent=%s",
             path,
-            bool(body.get("query")),
-            body["limit"],
-            body["page"],
-            sorted((body.get("filter") or {}).keys()),
+            json.dumps(log_payload, sort_keys=True, separators=(",", ":"), default=str),
             bool(body.get("alexaUserId")),
             bool(body.get("listenerId")),
         )

@@ -126,6 +126,22 @@ def test_feedback_raw_phrases_are_normalized(raw, expected):
     assert AlexaFeedback.normalize_value(raw) == expected
 
 
+def test_feedback_slot_prefers_one_resolved_dynamic_entity():
+    slot = {
+        "value": "something Alexa heard poorly",
+        "resolutions": {
+            "resolutionsPerAuthority": [
+                {
+                    "status": {"code": "ER_SUCCESS_MATCH"},
+                    "values": [{"value": {"id": "enjoyed", "name": "enjoyed"}}],
+                }
+            ]
+        },
+    }
+
+    assert AlexaFeedback.normalize_slot(slot) == "enjoyed"
+
+
 @pytest.mark.asyncio
 async def test_return_time_feedback_asks_to_continue_exact_organization(
     mock_handler_input,

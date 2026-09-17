@@ -263,6 +263,49 @@ def test_ambiguity_name_matching_is_limited_to_the_current_page(mock_handler_inp
     )
 
 
+def test_ambiguity_uses_one_resolved_dynamic_entity_but_not_multiple(
+    mock_handler_input,
+):
+    pending = {
+        "displayedCandidates": [
+            {"type": "creator", "id": "creator-1", "name": "Creator One"},
+            {"type": "creator", "id": "creator-2", "name": "Creator Two"},
+        ]
+    }
+    selection = mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": "ClarifySelectionIntent",
+            "slots": {
+                "selection": {
+                    "name": "selection",
+                    "value": "first",
+                    "resolutions": {
+                        "resolutionsPerAuthority": [
+                            {
+                                "status": {"code": "ER_SUCCESS_MATCH"},
+                                "values": [{"value": {"id": "creator-1"}}],
+                            }
+                        ]
+                    },
+                }
+            },
+        },
+    }["intent"]["slots"]["selection"]
+
+    assert DialogSelection.match_pending_candidate(mock_handler_input, pending, "first")[
+        "id"
+    ] == "creator-1"
+
+    selection["value"] = "unrelated words"
+    selection["resolutions"]["resolutionsPerAuthority"][0]["values"].append(
+        {"value": {"id": "creator-2"}}
+    )
+    assert DialogSelection.match_pending_candidate(
+        mock_handler_input, pending, "unrelated words"
+    ) is None
+
+
 @pytest.mark.parametrize(
     "spoken, expected_id",
     [

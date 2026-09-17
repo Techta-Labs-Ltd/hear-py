@@ -606,7 +606,10 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
     state = persistence._store[USER_ID]
     assert "Did you enjoy Sheffield monthly bulletin?" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
-    assert response["directives"] == [{"type": "AudioPlayer.Stop"}]
+    assert response["directives"][0] == {"type": "AudioPlayer.Stop"}
+    dynamic_feedback = response["directives"][1]
+    assert dynamic_feedback["type"] == "Dialog.UpdateDynamicEntities"
+    assert dynamic_feedback["types"][0]["name"] == "HEAR_FEEDBACK"
     assert state["awaitingFeedback"] is True
     assert state["pendingFeedback"]["contentId"] == CONTENT_ID
     assert state["pendingFeedback"]["requested"] is True

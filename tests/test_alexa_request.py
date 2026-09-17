@@ -61,3 +61,28 @@ class TestAlexaDiscoverySlotSelection:
         )
 
         assert selection["effective"] == "New Voice"
+
+
+class TestAlexaResolvedEntityIds:
+    @staticmethod
+    def _slot(*entity_ids: str) -> dict:
+        return {
+            "value": "first",
+            "resolutions": {
+                "resolutionsPerAuthority": [
+                    {
+                        "status": {"code": "ER_SUCCESS_MATCH"},
+                        "values": [
+                            {"value": {"id": entity_id, "name": entity_id}}
+                            for entity_id in entity_ids
+                        ],
+                    }
+                ]
+            },
+        }
+
+    def test_resolved_entity_ids_preserve_all_successful_candidates(self):
+        slot = self._slot("creator-1", "creator-2", "creator-1")
+
+        assert AlexaRequest.get_resolved_slot_ids(slot) == ["creator-1", "creator-2"]
+        assert AlexaRequest.get_resolved_slot_id(slot) == "creator-1"

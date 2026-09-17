@@ -390,12 +390,14 @@ class Search:
         if resolution_id:
             payload["resolutionId"] = resolution_id
         ApplicationLog.info(
-            "Hear: search request intent=%s filter=%s limit=%s page=%s queryPresent=%s",
+            "Hear: search request prepared intent=%s query=%s filter=%s sort=%s limit=%s page=%s resolutionId=%s",
             intent,
+            payload.get("query", ""),
             payload.get("filter") or {},
+            payload.get("sort"),
             payload.get("limit"),
             payload.get("page"),
-            bool(payload.get("query")),
+            resolution_id or "omitted",
         )
         await progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
         result = await heara.search(
