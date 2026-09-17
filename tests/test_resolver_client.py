@@ -161,7 +161,8 @@ def test_canonical_entities_drive_all_discovered_facets_without_fake_ambiguity()
     assert result["slots"]["category"] == "sport"
     assert result["slots"]["categoryName"] == "Sport"
     assert result["slots"]["categorySlugs"] == ["sport"]
-    assert "tags" not in result["slots"]
+    assert result["slots"]["tags"] == ["sport"]
+    assert result["slots"]["tagNames"] == ["#sport"]
     assert result["slots"]["ambiguousReferences"] == []
     assert result["ambiguities"] == []
 
@@ -941,7 +942,7 @@ def test_search_rejects_low_confidence_source_location():
     assert result["entities"] == []
 
 
-def test_search_does_not_choose_between_two_equally_credible_source_locations():
+def test_search_uses_the_highest_ranked_source_location():
     payload = _response(intent="search")
     payload["slots"].update({"residualQuery": "", "sort": "relevance"})
     payload["entities"] = [
@@ -970,10 +971,15 @@ def test_search_does_not_choose_between_two_equally_credible_source_locations():
     )
 
     assert result["searchPayload"] == {
-        "query": "news from arn bay or card if",
-        "filter": {},
+        "query": "",
+        "filter": {
+            "city": "Herne Bay",
+            "countryCode": "gb",
+            "latitude": 51.37,
+            "longitude": 1.13,
+        },
     }
-    assert result["entities"] == []
+    assert [entity["canonicalValue"] for entity in result["entities"]] == ["Herne Bay"]
 
 
 def test_search_uses_ranked_unspecified_location_instead_of_residual_words():
@@ -1309,19 +1315,14 @@ def test_resolver_ambiguities_are_normalized_and_exposed_to_alexa():
             "phrase": "pendle voice",
             "candidates": [
                 {
-                    "type": "creator",
-                    "id": "creator-leader",
+                    "type": "organization",
+                    "id": "org-leader",
                     "name": "Pendle Voice Leader and Times",
                 },
                 {
                     "type": "creator",
                     "id": "creator-dalesman",
                     "name": "Pendle Voice Dalesman",
-                },
-                {
-                    "type": "organization",
-                    "id": "org-leader",
-                    "name": "Pendle Voice Leader and Times",
                 },
             ],
         }
@@ -1367,13 +1368,13 @@ def test_flat_creator_ambiguities_are_grouped_and_marked_ambiguous():
             "phrase": "pendle voice",
             "candidates": [
                 {
-                    "type": "creator",
-                    "id": "creator-dalesman",
+                    "type": "organization",
+                    "id": "org-dalesman",
                     "name": "Pendle Voice Dalesman",
                 },
                 {
-                    "type": "creator",
-                    "id": "creator-lancashire",
+                    "type": "organization",
+                    "id": "org-lancashire",
                     "name": "Pendle Voice Lancashire Life",
                 },
             ],
@@ -1404,6 +1405,15 @@ def test_multiple_entities_of_one_type_remain_distinct_discoveries():
     result = ResolverResult.from_payload(payload).to_alexa_payload()
     assert result["slots"]["creatorIds"] == ["creator-1", "creator-2"]
     assert result["slots"]["ambiguousReferences"] == []
+
+
+def test_resolution_id_is_retained_in_the_normalized_search_payload():
+    result = ResolverResult.from_payload(
+        _response(resolutionId="resolution-123")
+    ).to_alexa_payload()
+
+    assert result["resolutionId"] == "resolution-123"
+    assert result["searchPayload"]["resolutionId"] == "resolution-123"
 
 
 def test_entity_model_rejects_missing_canonical_value():

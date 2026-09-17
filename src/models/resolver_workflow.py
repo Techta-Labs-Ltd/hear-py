@@ -274,7 +274,11 @@ class ResolverWorkflow:
         )
         if alexa_intent not in {"WhatsTrendingIntent", "PlayRecommendationIntent"}:
             return constrained
-        constrained = {**constrained, "intent": "trending"}
+        constrained = {
+            **constrained,
+            "intent": "trending",
+            "semanticIntent": "trending",
+        }
         slots = dict(constrained.get("slots") or {})
         search_plan = dict(slots.get("searchPlan") or {})
         search_plan["sort"] = "trending"

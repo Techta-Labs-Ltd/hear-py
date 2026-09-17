@@ -1909,12 +1909,11 @@ async def test_unresolved_creator_does_not_play_unrelated_fallback(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_resolver_recognized_creator_keeps_existing_playback_flow(
+async def test_resolver_recognized_creator_awaits_source_inventory(
     monkeypatch,
     mock_handler_input,
 ):
     from src.alexa.play import PlayCreator
-    from src.models.search_contracts import SearchRequest
 
     mock_handler_input.attributes_manager.request_attributes.update(
         {
@@ -1949,7 +1948,7 @@ async def test_resolver_recognized_creator_keeps_existing_playback_flow(
         playback=SimpleNamespace(),
     )
 
-    response = await PlayCreator(
+    await PlayCreator(
         deps.user,
         deps.heara,
         deps.progressive,
@@ -1958,16 +1957,12 @@ async def test_resolver_recognized_creator_keeps_existing_playback_flow(
         deps.availability.ask_creator_city,
     ).execute(mock_handler_input)
 
-    discover.assert_awaited_once_with(
-        mock_handler_input,
-        SearchRequest(query="latest news", intent="creator"),
-        heara=deps.heara,
-        progressive=deps.progressive,
-        user=deps.user,
-    )
-    play.assert_awaited_once()
+    discover.assert_not_awaited()
+    play.assert_not_awaited()
     ask_creator_city.assert_not_awaited()
-    assert response == {"shouldEndSession": True}
+    pending = User.snapshot(mock_handler_input)["pendingResolution"]
+    assert pending["searchPayload"]["filter"] == {"creatorIds": ["creator-1"]}
+    mock_handler_input.response_builder.speak.assert_called_once()
 
 
 @pytest.mark.asyncio

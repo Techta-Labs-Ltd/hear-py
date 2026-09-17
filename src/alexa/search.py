@@ -372,6 +372,9 @@ class Search:
             or Search._search_sort(handler_input, slots, filters),
             nlp_filter=filters,
         )
+        resolution_id = resolved_payload.get("resolutionId") or nlp.get("resolutionId")
+        if resolution_id:
+            payload["resolutionId"] = resolution_id
         ApplicationLog.info(
             "Hear: search request intent=%s filterKeys=%s limit=%s page=%s queryPresent=%s",
             intent,

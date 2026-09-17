@@ -56,7 +56,10 @@ class AvailabilityDialog:
         }
         if len(publications) == 1 and int(context.get("publicationCount") or 0) == 1:
             return await self._availability._play_selected(
-                handler_input, publications[0], dict(context.get("source") or {})
+                handler_input,
+                publications[0],
+                dict(context.get("source") or {}),
+                dict(context.get("baseSearchPayload") or {}),
             )
         return self._availability._choice_response(handler_input, publication_context)
 
@@ -67,7 +70,10 @@ class AvailabilityDialog:
         if kind == AvailabilityConstants.FORMAT_KIND:
             return await self._select_format(handler_input, context, candidate)
         return await self._availability._play_selected(
-            handler_input, candidate, dict(context.get("source") or {})
+            handler_input,
+            candidate,
+            dict(context.get("source") or {}),
+            dict(context.get("baseSearchPayload") or {}),
         )
 
     async def _load_remote_page(
@@ -99,6 +105,7 @@ class AvailabilityDialog:
                 dict(context.get("availabilityFilter") or {}),
                 next_page,
                 dict(context.get("availabilityDiscovery") or {}),
+                resolution_id=(context.get("baseSearchPayload") or {}).get("resolutionId"),
             )
             incoming = (
                 AvailabilityData.source_candidates(result, context.get("sourceType"))
@@ -251,7 +258,10 @@ class AvailabilityDialog:
             )
             if single_publication_yes:
                 return await self._availability._play_selected(
-                    handler_input, publications[0], dict(context.get("source") or {})
+                    handler_input,
+                    publications[0],
+                    dict(context.get("source") or {}),
+                    dict(context.get("baseSearchPayload") or {}),
                 )
             if intent_name == "AMAZON.NoIntent" and int(
                 context.get("publicationCount") or 0

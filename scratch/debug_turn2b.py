@@ -1,11 +1,14 @@
 import sys
+from unittest.mock import AsyncMock
+
+from src.alexa.runtime import (AttrDict, AttributesManager, HandlerInput,
+                               ResponseBuilder)
+from src.constants.state import StateSchema
+from src.container import ApplicationContainer
+from src.models.resolver_runner import ResolverWorkflowRunner
+
 sys.path.insert(0, "c:/Users/USER/Downloads/hear-py")
 
-from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.container import ApplicationContainer
-from src.constants.state import StateSchema
-from src.models.resolver_runner import ResolverWorkflowRunner
-from unittest.mock import AsyncMock
 
 async def debug_turn2b():
     pending = {
@@ -73,7 +76,8 @@ async def debug_turn2b():
     nlp = handler_input.attributes_manager.request_attributes.get("_nlp")
     print("_nlp:", nlp)
     
-    from src.middleware.confirmation import ConfirmationMiddleware, SearchConfirmationGateHandler
+    from src.middleware.confirmation import (ConfirmationMiddleware,
+                                             SearchConfirmationGateHandler)
     ConfirmationMiddleware().process(handler_input)
     attrs = handler_input.attributes_manager.request_attributes
     print("_pendingConfirmation:", attrs.get("_pendingConfirmation"))

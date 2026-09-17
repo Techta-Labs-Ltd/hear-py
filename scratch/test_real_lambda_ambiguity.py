@@ -20,7 +20,7 @@ def make_context():
         get_remaining_time_in_millis=lambda: 30000,
     )
 
-def test_ambiguity_flow():
+def test_ambiguity_flow(monkeypatch):
     persistence_adapter = MemoryPersistenceAdapter()
     user_id = "amzn1.ask.account.test-user"
     
@@ -72,10 +72,14 @@ def test_ambiguity_flow():
         progressive=mock_progressive,
     )
 
-    main._application._dependencies = mock_container
-    main._application._skill = Application.build_skill(
-        persistence_adapter=persistence_adapter,
-        deps=mock_container,
+    monkeypatch.setattr(main._application, "_dependencies", mock_container)
+    monkeypatch.setattr(
+        main._application,
+        "_skill",
+        Application.build_skill(
+            persistence_adapter=persistence_adapter,
+            deps=mock_container,
+        ),
     )
     
     ctx = make_context()

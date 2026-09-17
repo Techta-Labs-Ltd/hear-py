@@ -54,6 +54,8 @@ class Availability:
         availability_filter: dict,
         page: int,
         discovery: dict | None = None,
+        *,
+        resolution_id: str | None = None,
     ) -> dict:
         store = self._user.snapshot(handler_input)
         payload = {
@@ -64,6 +66,8 @@ class Availability:
         }
         if store.get("listenerId"):
             payload["listenerId"] = store["listenerId"]
+        if resolution_id:
+            payload["resolutionId"] = resolution_id
         payload.update(discovery or {})
         if "location" not in availability_filter:
             payload["isLocal"] = False
@@ -113,7 +117,12 @@ class Availability:
             return self.ask_creator_city(handler_input)
         availability_filter["isCreator"] = True
         await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
-        result = await self._availability(handler_input, availability_filter, 0)
+        result = await self._availability(
+            handler_input,
+            availability_filter,
+            0,
+            resolution_id=payload.get("resolutionId"),
+        )
         candidates = AvailabilityData.source_candidates(result, "creator")[
             : DiscoveryConstants.CHOICE_PAGE_SIZE
         ]
@@ -175,16 +184,15 @@ class Availability:
         )
         filter_candidate = search_payload.get("filter")
         search_filter: dict = filter_candidate if isinstance(filter_candidate, dict) else {}
-        availability_filter = {
-            key: search_filter[key]
-            for key in ("categorySlugs", "tags")
-            if search_filter.get(key)
-        }
+        # Availability discovers sources; content taxonomy remains in the
+        # base search payload and is applied only after a source is selected.
+        availability_filter: dict = {}
         result = await self._availability(
             handler_input,
             availability_filter,
             0,
             discovery,
+            resolution_id=search_payload.get("resolutionId"),
         )
         candidates = AvailabilityData.source_candidates(result)
         if result.get("failed"):
@@ -295,7 +303,12 @@ class Availability:
                 Speech.REPROMPT_ASK_TOWN,
             )
         await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
-        result = await self._availability(handler_input, availability_filter, 0)
+        result = await self._availability(
+            handler_input,
+            availability_filter,
+            0,
+            resolution_id=payload.get("resolutionId"),
+        )
         outcome = AvailabilityOutcome.classify(
             result, AvailabilityData.source_candidates(result)
         )
@@ -380,6 +393,7 @@ class Availability:
             handler_input,
             requested_filter,
             0,
+            resolution_id=base_payload.get("resolutionId"),
         )
         if result.get("failed"):
             if continue_with_search_on_failure:
@@ -396,9 +410,11 @@ class Availability:
         if publication_count <= 0:
             if track_count > 0:
                 return await self._play_source_directly(handler_input, source, base_payload)
-            return self._terminal_response(
+            return await self._play_source_directly(
                 handler_input,
-                source_name=source.get("name"),
+                source,
+                base_payload,
+                standalone_tracks=False,
             )
         publication_context = {
             "kind": AvailabilityConstants.PUBLICATION_KIND,
@@ -453,7 +469,15 @@ class Availability:
             format_candidates,
         )
 
-    def _source_search_payload(self, handler_input, source: dict, base_payload: dict, page: int = 0):
+    def _source_search_payload(
+        self,
+        handler_input,
+        source: dict,
+        base_payload: dict,
+        page: int = 0,
+        *,
+        standalone_tracks: bool = True,
+    ):
         store = self._user.snapshot(handler_input)
         payload = SearchPayload.with_pagination(base_payload, DiscoveryConstants.CHOICE_PAGE_SIZE)
         filters = SearchFilters.replace_source(payload.get("filter"), source["type"], source["id"])
@@ -465,7 +489,10 @@ class Availability:
             "longitude",
             "publicationIds",
         )
-        filters["isPublication"] = False
+        if standalone_tracks:
+            filters["isPublication"] = False
+        else:
+            filters.pop("isPublication", None)
         payload.update(
             {
                 "query": str(payload.get("query") or ""),
@@ -481,8 +508,22 @@ class Availability:
             listener_id=store.get("listenerId"),
         )
 
-    async def _search_source(self, handler_input, source: dict, base_payload: dict, page: int = 0):
-        payload = self._source_search_payload(handler_input, source, base_payload, page)
+    async def _search_source(
+        self,
+        handler_input,
+        source: dict,
+        base_payload: dict,
+        page: int = 0,
+        *,
+        standalone_tracks: bool = True,
+    ):
+        payload = self._source_search_payload(
+            handler_input,
+            source,
+            base_payload,
+            page,
+            standalone_tracks=standalone_tracks,
+        )
         result = await self._heara.search(
             payload,
             timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
@@ -491,8 +532,20 @@ class Availability:
         result.setdefault("_request_label", source.get("name"))
         return result
 
-    async def _play_source_directly(self, handler_input, source: dict, base_payload: dict):
-        result = await self._search_source(handler_input, source, base_payload)
+    async def _play_source_directly(
+        self,
+        handler_input,
+        source: dict,
+        base_payload: dict,
+        *,
+        standalone_tracks: bool = True,
+    ):
+        result = await self._search_source(
+            handler_input,
+            source,
+            base_payload,
+            standalone_tracks=standalone_tracks,
+        )
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
         first = result["results"][0]
@@ -559,11 +612,19 @@ class Availability:
             playback=self._playback,
         )
 
-    async def _play_selected(self, handler_input, candidate: dict, source: dict):
+    async def _play_selected(
+        self,
+        handler_input,
+        candidate: dict,
+        source: dict,
+        base_payload: dict | None = None,
+    ):
         store = self._user.snapshot(handler_input)
         if candidate.get("type") == "publication":
             payload = SearchPayload.for_publication(
-                {}, [candidate.get("id")], DiscoveryConstants.CHOICE_PAGE_SIZE
+                base_payload or {},
+                [candidate.get("id")],
+                DiscoveryConstants.CHOICE_PAGE_SIZE,
             )
         else:
             payload = {
