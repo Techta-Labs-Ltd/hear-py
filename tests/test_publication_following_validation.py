@@ -1,20 +1,19 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.dialog import DialogStateManager
 from src.alexa.runtime import AttrDict
+from src.alexa.search import Search
 from src.clients.resolver import ResolverClient
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.middleware.confirmation import ConfirmationMiddleware
-from src.middleware.resolver import ResolverInterceptor
-from src.models.dialog import DialogStateManager
-from src.models.play import PlayContent
 from src.models.resolver_workflow import ResolverWorkflow
-from src.models.search import Search
-from src.models.social import FollowingManager
+from src.models.social import FollowCommand, FollowingManager
 from src.models.user import User
 
 
@@ -42,14 +41,14 @@ async def test_incomplete_publication_source_skips_resolver_and_elicits_name(
     _publication_request(mock_handler_input, source, date="2026-08-02", sort="latest")
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
-    ConfirmationMiddleware().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
+    await ConfirmationMiddleware().process(mock_handler_input)
     resolve.assert_not_awaited()
     attrs = mock_handler_input.attributes_manager.request_attributes
     assert attrs["_nlp"]["slots"]["genericPublicationRequest"] is True
     assert attrs["_nlp"]["slots"]["dateQuery"] == "2026-08-02"
     assert attrs["_nlp"]["slots"]["publicationSort"] == "latest"
-    response = await PlayContent(deps=ApplicationContainer()).execute(mock_handler_input)
+    response = await ApplicationContainer().build_request_play_content(mock_handler_input).execute(mock_handler_input)
     assert response is not None
     store = User.snapshot(mock_handler_input)
     assert store["awaitingPublicationSource"] is True
@@ -74,17 +73,30 @@ def test_followed_source_history_is_not_loaded_from_persistence():
     assert not FollowingManager.is_following(store, "org-1", "organization")
 
 
-def test_followed_creator_and_organization_with_same_id_are_distinct(
-    mock_handler_input,
-):
-    mock_handler_input.attributes_manager.request_attributes["_store"] = {
-        **StateSchema.DEFAULT_STORE
-    }
-    FollowingManager.add(mock_handler_input, "source-1", "Creator", "creator")
-    FollowingManager.add(mock_handler_input, "source-1", "Organization", "organization")
-    followed = mock_handler_input.attributes_manager.request_attributes["_store"][
-        "followedCreators"
-    ]
+def test_follow_command_rejects_missing_source_or_unsupported_type():
+    with pytest.raises(ValueError, match="source id and name"):
+        FollowCommand("", "Creator")
+    with pytest.raises(ValueError, match="supported source type"):
+        FollowCommand("creator-1", "Creator", "publisher")
+
+
+def test_social_model_has_no_alexa_or_request_state_dependency():
+    source = (Path(__file__).parents[1] / "src/models/social.py").read_text(
+        encoding="utf-8"
+    )
+    assert "src.alexa" not in source
+    assert "RequestContext" not in source
+    assert "handler_input" not in source
+    assert "src.models.user" not in source
+
+
+def test_followed_creator_and_organization_with_same_id_are_distinct():
+    followed, _ = FollowingManager.add(
+        [], FollowCommand("source-1", "Creator", "creator")
+    )
+    followed, _ = FollowingManager.add(
+        followed, FollowCommand("source-1", "Organization", "organization")
+    )
     assert {(item["type"], item["id"]) for item in followed} == {
         ("creator", "source-1"),
         ("organization", "source-1"),
@@ -133,8 +145,14 @@ async def test_followed_content_search_uses_creator_and_organization_filters(
         "total_pages": 1,
         "page": 0,
     }
+    container = ApplicationContainer(heara=hear)
     await Search.play_from_followed_creators(
-        mock_handler_input, deps=ApplicationContainer(heara=hear)
+        mock_handler_input,
+        user=container.user,
+        heara=container.heara,
+        progressive=container.progressive,
+        browse=container.browse,
+        playback=container.playback,
     )
     payload = hear.search.await_args.args[0]
     assert payload["filter"]["creatorIds"] == ["creator-1"]

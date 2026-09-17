@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.playback_events import PlaybackEventCommand
 from src.alexa.speech import Speech
 from src.application import Application
 from src.clients.hear import HearApiClient
@@ -16,6 +17,15 @@ APPLICATION_ID = "amzn1.ask.skill.test"
 CONTENT_ID = "11111111-1111-1111-1111-111111111111"
 SECOND_CONTENT_ID = "22222222-2222-2222-2222-222222222222"
 THIRD_CONTENT_ID = "33333333-3333-3333-3333-333333333333"
+
+
+def test_playback_event_command_rejects_invalid_platform_adaptation():
+    with pytest.raises(ValueError, match="requires a token"):
+        PlaybackEventCommand("started", "")
+    with pytest.raises(ValueError, match="requires a token"):
+        PlaybackEventCommand("started", None)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="cannot be negative"):
+        PlaybackEventCommand("progress", CONTENT_ID, -1)
 
 
 def _event(request: dict, *, new: bool = False) -> dict:
@@ -119,7 +129,7 @@ async def test_returning_user_latest_source_offer_searches_only_after_yes(monkey
         }
     )
     monkeypatch.setattr(HearApiClient, "search", search)
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
     search.assert_not_awaited()
     assert "latest from York Talking News" in launch["response"]["outputSpeech"]["ssml"]
@@ -159,7 +169,7 @@ async def test_latest_source_offer_is_once_per_completed_item_and_no_clears_it(
     }
     search = AsyncMock()
     monkeypatch.setattr(HearApiClient, "search", search)
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
     declined = await skill.invoke(
         _event(
@@ -200,7 +210,7 @@ async def test_independent_creator_latest_offer_uses_creator_name_and_id(monkeyp
         }
     )
     monkeypatch.setattr(HearApiClient, "search", search)
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     launch = await skill.invoke(_event({"type": "LaunchRequest"}, new=True), None)
     assert "latest from David Beard" in launch["response"]["outputSpeech"]["ssml"]
     assert "Independent Creator" not in launch["response"]["outputSpeech"]["ssml"]
@@ -226,7 +236,7 @@ async def test_resume_yes_uses_persisted_playable_state_without_search(monkeypat
     }
     search = AsyncMock()
     monkeypatch.setattr(HearApiClient, "search", search)
-    result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "IntentRequest",
@@ -280,8 +290,8 @@ async def test_paused_publication_track_resumes_exact_track_and_offset(monkeypat
     }
     search = _fake_search([_queued_content(THIRD_CONTENT_ID, "Next publication track")])
     monkeypatch.setattr(HearApiClient, "search", search)
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
 
     await skill.invoke(
         _event(
@@ -372,7 +382,7 @@ async def test_resume_no_abandons_playback_and_offers_next_listening_options():
         "awaitingResume": True,
         "activePlayback": _playback_state(),
     }
-    result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "IntentRequest",
@@ -409,7 +419,7 @@ async def test_resume_no_does_not_activate_incomplete_feedback_candidate():
             }
         ],
     }
-    await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "IntentRequest",
@@ -442,7 +452,7 @@ async def test_increase_speed_after_resume_decline_does_not_restart_abandoned_tr
             "currentIndex": 0,
         },
     }
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     await skill.invoke(
         _event(
             {
@@ -483,7 +493,7 @@ async def test_increase_speed_restarts_paused_track_at_saved_offset():
         ],
         "activePlayback": _playback_state(status="paused", offset_ms=42000),
     }
-    result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "IntentRequest",
@@ -546,7 +556,7 @@ async def test_speed_control_bypasses_pending_feedback(
 
     result = await Application.build_skill(
         persistence,
-        deps=ApplicationContainer(),
+        container=ApplicationContainer(),
     ).invoke(
         _event(
             {
@@ -586,7 +596,7 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
     }
     result = await Application.build_skill(
         persistence,
-        deps=ApplicationContainer(),
+        container=ApplicationContainer(),
     ).invoke(
         rate_event,
         None,
@@ -596,7 +606,10 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
     state = persistence._store[USER_ID]
     assert "Did you enjoy Sheffield monthly bulletin?" in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
-    assert response["directives"] == [{"type": "AudioPlayer.Stop"}]
+    assert response["directives"][0] == {"type": "AudioPlayer.Stop"}
+    dynamic_feedback = response["directives"][1]
+    assert dynamic_feedback["type"] == "Dialog.UpdateDynamicEntities"
+    assert dynamic_feedback["types"][0]["name"] == "HEAR_FEEDBACK"
     assert state["awaitingFeedback"] is True
     assert state["pendingFeedback"]["contentId"] == CONTENT_ID
     assert state["pendingFeedback"]["requested"] is True
@@ -605,7 +618,7 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
 
     follow_up = await Application.build_skill(
         persistence,
-        deps=ApplicationContainer(),
+        container=ApplicationContainer(),
     ).invoke(
         _event(
             {
@@ -644,7 +657,7 @@ async def test_publication_rating_names_publication_when_prompting_and_resuming(
             "subjectTitle": "The Weekly Edition",
         },
     }
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
 
     prompted = await skill.invoke(
         _event(
@@ -666,7 +679,7 @@ async def test_publication_rating_names_publication_when_prompting_and_resuming(
 
     answered = await Application.build_skill(
         persistence,
-        deps=ApplicationContainer(),
+        container=ApplicationContainer(),
     ).invoke(
         _event(
             {
@@ -691,7 +704,7 @@ async def test_skipping_requested_rating_resumes_active_audio(intent_name):
         "onboardingComplete": True,
         "activePlayback": _playback_state(status="playing", offset_ms=42000),
     }
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     await skill.invoke(
         _event(
             {
@@ -731,7 +744,7 @@ async def test_requested_not_enjoyed_then_skip_resumes_active_audio(intent_name)
         "onboardingComplete": True,
         "activePlayback": _playback_state(status="playing", offset_ms=42000),
     }
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     await skill.invoke(
         _event(
             {
@@ -774,7 +787,7 @@ async def test_report_command_pauses_audio_and_yes_resumes_from_current_offset()
         "onboardingComplete": True,
         "activePlayback": _playback_state(status="playing", offset_ms=42000),
     }
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     report_event = _event(
         {
             "type": "IntentRequest",
@@ -838,7 +851,7 @@ async def test_report_publication_names_publication_when_asking_and_continuing()
 
     reported = await Application.build_skill(
         persistence,
-        deps=ApplicationContainer(),
+        container=ApplicationContainer(),
     ).invoke(report_event, None)
 
     assert "keep listening to The Weekly Edition" in reported["response"]["outputSpeech"]["ssml"]
@@ -846,7 +859,7 @@ async def test_report_publication_names_publication_when_asking_and_continuing()
 
     continued = await Application.build_skill(
         persistence,
-        deps=ApplicationContainer(),
+        container=ApplicationContainer(),
     ).invoke(
         _event(
             {
@@ -873,7 +886,7 @@ async def test_bare_normal_speed_resets_to_base_audio_without_speed_slot():
             "playbackSpeeds": [{"speed": 1.5, "audioUrl": "https://cdn.hear.media/faster.mp3"}],
         },
     }
-    result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "IntentRequest",
@@ -897,8 +910,8 @@ async def test_playback_started_accepts_raw_camel_case_offset(monkeypatch):
         "onboardingComplete": True,
         "activePlayback": _playback_state(status="starting", offset_ms=0),
     }
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackStarted",
@@ -929,8 +942,8 @@ async def test_playback_progress_events_persist_and_sync(monkeypatch, event_type
         "activePlayback": _playback_state(status="playing", offset_ms=12345),
     }
     emit = AsyncMock()
-    monkeypatch.setattr("src.models.playback.Playback.emit", emit)
-    await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", emit)
+    await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event({"type": event_type, "token": CONTENT_ID, "offsetInMilliseconds": 91000}),
         None,
     )
@@ -948,8 +961,8 @@ async def test_playback_stopped_never_creates_feedback_candidate(monkeypatch):
         "onboardingComplete": True,
         "activePlayback": _playback_state(status="playing", offset_ms=120000),
     }
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackStopped",
@@ -972,8 +985,8 @@ async def test_playback_nearly_finished_syncs_without_a_queue(monkeypatch):
         "activePlayback": _playback_state(status="playing", offset_ms=170000),
     }
     emit = AsyncMock()
-    monkeypatch.setattr("src.models.playback.Playback.emit", emit)
-    await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", emit)
+    await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackNearlyFinished",
@@ -1003,9 +1016,9 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
         },
     }
     monkeypatch.setattr(HearApiClient, "search", _fake_search([second, third]))
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    first_result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    first_result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackNearlyFinished",
@@ -1021,7 +1034,7 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
     assert first_stream["expectedPreviousToken"] == CONTENT_ID
     assert "progressReportDelayInMilliseconds" in first_stream
     assert "progressReportIntervalInMilliseconds" in first_stream
-    second_started = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    second_started = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackStarted",
@@ -1033,7 +1046,7 @@ async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch
     )
     assert persistence._store[USER_ID]["playbackQueue"]["currentIndex"] == 1
     assert second_started["response"].get("directives") is None
-    second_result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    second_result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackNearlyFinished",
@@ -1062,8 +1075,8 @@ async def test_playback_started_does_not_return_prohibited_play_directive(monkey
             "currentIndex": 0,
         },
     }
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackStarted",
@@ -1095,8 +1108,8 @@ async def test_queue_prefetch_falls_back_to_backend_search_when_no_cache_persist
     }
     search = _fake_search([second])
     monkeypatch.setattr(HearApiClient, "search", search)
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackNearlyFinished",
@@ -1133,8 +1146,8 @@ async def test_queue_enqueue_uses_listener_playback_speed(monkeypatch):
         },
     }
     monkeypatch.setattr(HearApiClient, "search", _fake_search([second]))
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackNearlyFinished",
@@ -1160,7 +1173,7 @@ async def test_older_playback_event_cannot_regress_newer_state(monkeypatch):
         },
         "lastOffsetMs": 90000,
     }
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
     event = _event(
         {
             "type": "AudioPlayer.PlaybackStopped",
@@ -1170,7 +1183,7 @@ async def test_older_playback_event_cannot_regress_newer_state(monkeypatch):
             "offsetInMilliseconds": 10000,
         }
     )
-    await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(event, None)
+    await Application.build_skill(persistence, container=ApplicationContainer()).invoke(event, None)
     state = persistence._store[USER_ID]
     assert state["activePlayback"]["status"] == "playing"
     assert state["activePlayback"]["offsetMs"] == 90000
@@ -1186,7 +1199,7 @@ async def test_duplicate_playback_event_is_idempotent(monkeypatch):
         "lastOffsetMs": 10000,
     }
     emit = AsyncMock()
-    monkeypatch.setattr("src.models.playback.Playback.emit", emit)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", emit)
     event = _event(
         {
             "type": "AudioPlayer.PlaybackProgressReportIntervalPassed",
@@ -1195,9 +1208,44 @@ async def test_duplicate_playback_event_is_idempotent(monkeypatch):
             "offsetInMilliseconds": 20000,
         }
     )
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     await skill.invoke(event, None)
     await skill.invoke(event, None)
+    assert persistence._store[USER_ID]["activePlayback"]["offsetMs"] == 20000
+    assert emit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_same_timestamp_same_type_event_is_suppressed_even_with_a_new_request_id(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activePlayback": _playback_state(status="playing", offset_ms=10000),
+        "lastOffsetMs": 10000,
+    }
+    emit = AsyncMock()
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", emit)
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
+    first = _event(
+        {
+            "type": "AudioPlayer.PlaybackProgressReportIntervalPassed",
+            "requestId": "same-time-first",
+            "timestamp": "2026-07-29T12:00:00Z",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 20000,
+        }
+    )
+    second = _event(
+        {
+            "type": "AudioPlayer.PlaybackProgressReportIntervalPassed",
+            "requestId": "same-time-retry",
+            "timestamp": "2026-07-29T12:00:00Z",
+            "token": CONTENT_ID,
+            "offsetInMilliseconds": 30000,
+        }
+    )
+    await skill.invoke(first, None)
+    await skill.invoke(second, None)
     assert persistence._store[USER_ID]["activePlayback"]["offsetMs"] == 20000
     assert emit.await_count == 1
 
@@ -1216,8 +1264,8 @@ async def test_listening_time_uses_event_elapsed_time_and_does_not_count_seeks(
             "observationTimestampMs": 0,
         },
     }
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
 
     events = [
         ("AudioPlayer.PlaybackStarted", "2026-07-29T12:00:00Z", 0),
@@ -1263,9 +1311,9 @@ async def test_playback_finished_does_not_return_prohibited_play_directive(monke
         },
         "preparedNextContent": None,
     }
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
     with caplog.at_level("WARNING", logger="src.controllers.playback_events"):
-        result = await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+        result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
             _event(
                 {
                     "type": "AudioPlayer.PlaybackFinished",
@@ -1289,8 +1337,8 @@ async def test_playback_finished_accepts_raw_camel_case_offset(monkeypatch):
         "onboardingComplete": True,
         "activePlayback": _playback_state(status="playing", offset_ms=12345),
     }
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    await Application.build_skill(persistence, deps=ApplicationContainer()).invoke(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
         _event(
             {
                 "type": "AudioPlayer.PlaybackFinished",
@@ -1343,7 +1391,7 @@ async def test_new_completion_replaces_old_feedback_before_relaunch():
             "updatedAt": 31,
         },
     }
-    skill = Application.build_skill(persistence, deps=ApplicationContainer())
+    skill = Application.build_skill(persistence, container=ApplicationContainer())
     await skill.invoke(
         _event(
             {

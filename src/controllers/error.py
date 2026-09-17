@@ -23,10 +23,10 @@ class ErrorHandler(AbstractExceptionHandler):
             await self._flush_and_report(handler_input, exception)
             request_type = AlexaRequest.get_request_type(handler_input)
             ApplicationLog.error(
-                "Unhandled error: requestType=%s intent=%s message=%s",
+                "Unhandled error: requestType=%s intent=%s error=%s",
                 request_type,
                 AlexaRequest.get_intent_name(handler_input),
-                exception,
+                type(exception).__name__,
             )
             if request_type == "SessionEndedRequest":
                 return {}
@@ -40,7 +40,7 @@ class ErrorHandler(AbstractExceptionHandler):
                     .response
                 )
         except Exception as inner:
-            ApplicationLog.error("Hear: ErrorHandler failed %s", inner)
+            ApplicationLog.error("Hear: ErrorHandler failed error=%s", type(inner).__name__)
         try:
             return AlexaResponse.last_resort_skill_response(
                 AlexaRequest.get_request_type(handler_input)
@@ -53,4 +53,6 @@ class ErrorHandler(AbstractExceptionHandler):
             self._error_reporter.capture(handler_input, exception)
             await self._error_reporter.flush(2000)
         except Exception as capture_error:
-            ApplicationLog.warning("Hear: captureSkillException failed %s", capture_error)
+            ApplicationLog.warning(
+                "Hear: captureSkillException failed error=%s", type(capture_error).__name__
+            )

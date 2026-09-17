@@ -102,6 +102,20 @@ def test_publication_filter_is_nested_in_search_filter(mock_handler_input):
     assert payload["sort"] == "trending"
 
 
+def test_false_boolean_filters_are_omitted_from_search(mock_handler_input):
+    payload = SearchPayload.build(
+        "user-1",
+        q="",
+        nlp_filter={
+            "organizationIds": ["organization-1"],
+            "isPublication": False,
+            "isLocal": False,
+        },
+    )
+
+    assert payload["filter"] == {"organizationIds": ["organization-1"]}
+
+
 def test_publication_dates_are_nested_in_search_filter(mock_handler_input):
     payload = SearchPayload.build(
         "user-1",

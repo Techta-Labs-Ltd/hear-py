@@ -37,7 +37,7 @@ class ErrorReporter:
             )
             return
 
-    def _before_send(self, event: dict, hint: dict) -> dict | None:
+    def _before_send(self, event: dict, _hint: dict) -> dict | None:
         request = event.get("request")
         if request and isinstance(request, dict):
             data = request.get("data")

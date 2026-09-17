@@ -115,7 +115,6 @@ stages:
 | Variable | `HEAR_API_URL_DEV` | development API URL | `HEAR_API_URL_PROD` | production API URL |
 | Variable | `HEAR_API_PATH_PREFIX_DEV` | `alexa` | `HEAR_API_PATH_PREFIX_PROD` | `alexa` |
 | Variable | `WEBHOOK_OUTBOUND_URL_DEV` | development event endpoint | `WEBHOOK_OUTBOUND_URL_PROD` | production event endpoint |
-| Variable | `POWERTOOLS_LOG_LEVEL_DEV` | `DEBUG` | `POWERTOOLS_LOG_LEVEL_PROD` | `INFO` |
 | Variable | `HEAR_LOGGING_ENABLED_DEV` | `true` or `false` | `HEAR_LOGGING_ENABLED_PROD` | `true` or `false` |
 | Variable | `CANONICAL_IDENTITY_ENABLED_DEV` | `0` until the backend resolve endpoint is live, then `1` | `CANONICAL_IDENTITY_ENABLED_PROD` | `0` until the backend resolve endpoint is live, then `1` |
 | Variable | `PROVISIONED_CONCURRENCY_DEV` | `0` | `PROVISIONED_CONCURRENCY_PROD` | `0` |

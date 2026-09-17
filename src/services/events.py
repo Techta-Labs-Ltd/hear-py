@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
+from src.alexa.request import AlexaRequest
 from src.clients.events import BackendEventEnvelope, SqsEventClient, WebhookEventClient
 from src.constants.events import EventConstants
 from src.services.logging_control import ApplicationLog
@@ -12,20 +13,30 @@ from src.utils.playback import PlaybackUtils
 
 
 class OutboundEventService:
-    __slots__ = ("_producer", "_webhook")
+    __slots__ = ("_producer", "_webhook", "_stage_event")
 
     def __init__(
         self,
         producer: SqsEventClient | None = None,
         webhook: WebhookEventClient | None = None,
+        stage_event=None,
     ) -> None:
         self._producer = producer
         self._webhook = webhook
+        self._stage_event = stage_event
 
-    def publish(self, event_type: str, data: dict) -> bool:
+    def publish(self, event_type: str, data: dict, *, handler_input=None) -> bool:
+        envelope = EventUtils.envelope(event_type, data)
+        if self._stage_event is not None and handler_input is not None:
+            return bool(self._stage_event(handler_input, envelope))
         if self._producer is None or not self._producer.enabled:
             return False
-        return self._producer.send(EventUtils.envelope(event_type, data))
+        return self._producer.send(envelope)
+
+    @staticmethod
+    def _operation_id(handler_input) -> str | None:
+        request_id = AlexaRequest.get_request_id(handler_input) if handler_input is not None else None
+        return request_id or None
 
     def playback(
         self,
@@ -34,6 +45,7 @@ class OutboundEventService:
         listener_id: str | None,
         state: dict,
         event_type: str,
+        handler_input=None,
     ) -> bool:
         normalized_type = str(event_type or "event").strip().lower()
         event = PlaybackUtils.build_playback_event(
@@ -59,7 +71,9 @@ class OutboundEventService:
                 }
             )
         )
-        return self.publish(f"{EventConstants.PLAYBACK_PREFIX}{normalized_type}", event)
+        return self.publish(
+            f"{EventConstants.PLAYBACK_PREFIX}{normalized_type}", event, handler_input=handler_input
+        )
 
     def feedback(
         self,
@@ -68,6 +82,7 @@ class OutboundEventService:
         listener_id: str | None,
         pending: dict,
         value: str,
+        handler_input=None,
     ) -> bool:
         payload = EventUtils.feedback_payload(
             alexa_user_id=alexa_user_id,
@@ -75,7 +90,9 @@ class OutboundEventService:
             pending=pending,
             value=value,
         )
-        return bool(payload and self.publish(EventConstants.FEEDBACK_GIVEN, payload))
+        return bool(
+            payload and self.publish(EventConstants.FEEDBACK_GIVEN, payload, handler_input=handler_input)
+        )
 
     def following(
         self,
@@ -84,11 +101,15 @@ class OutboundEventService:
         alexa_user_id: str,
         listener_id: str | None,
         source: dict,
+        handler_input,
     ) -> bool:
         source_id = source.get("id")
         source_name = source.get("name")
         source_type = source.get("type") or "creator"
         if not source_id:
+            return False
+        operation_id = self._operation_id(handler_input)
+        if not operation_id:
             return False
         organization = source_type == "organization"
         if followed and organization:
@@ -111,10 +132,11 @@ class OutboundEventService:
                 "clientEventId": (
                     f"follow:{listener_id or alexa_user_id}:"
                     f"{'follow' if followed else 'unfollow'}:{source_type}:{source_id}"
+                    f":{operation_id}"
                 ),
             }
         )
-        return self.publish(event_type, payload)
+        return self.publish(event_type, payload, handler_input=handler_input)
 
     def report(
         self,
@@ -122,6 +144,7 @@ class OutboundEventService:
         alexa_user_id: str,
         listener_id: str | None,
         report: dict,
+        handler_input,
     ) -> bool:
         subject_type = report.get("subjectType")
         event_type = (
@@ -129,6 +152,9 @@ class OutboundEventService:
             if subject_type == "creator"
             else EventConstants.REPORTED_CONTENT
         )
+        operation_id = self._operation_id(handler_input)
+        if not operation_id:
+            return False
         payload = {
             **report,
             "alexaUserId": alexa_user_id,
@@ -136,10 +162,10 @@ class OutboundEventService:
             "reason": "reported_via_alexa",
             "clientEventId": (
                 f"alexa-report:{listener_id or alexa_user_id}:"
-                f"{subject_type}:{report.get('subjectId')}"
+                f"{subject_type}:{report.get('subjectId')}:{operation_id}"
             ),
         }
-        return self.publish(event_type, EventUtils.compact(payload))
+        return self.publish(event_type, EventUtils.compact(payload), handler_input=handler_input)
 
     def notification_preference(
         self,
@@ -148,6 +174,7 @@ class OutboundEventService:
         alexa_user_id: str,
         listener_id: str | None,
         permission_granted: bool,
+        handler_input=None,
     ) -> bool:
         event_type = (
             EventConstants.NOTIFICATIONS_ENABLED
@@ -168,7 +195,7 @@ class OutboundEventService:
                 ),
             }
         )
-        return self.publish(event_type, payload)
+        return self.publish(event_type, payload, handler_input=handler_input)
 
     async def consume(
         self, records: list[dict], *, deadline: RequestDeadline | None = None

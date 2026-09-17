@@ -6,13 +6,20 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from src.alexa.playback_state import PlaybackState
+from src.alexa.playback_workflow import Playback
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.clients.hear import HearApiClient, HearApiOptions, HearApiSupport
+from src.clients.hear import (
+    HearApiClient,
+    HearApiOptions,
+    HearApiSupport,
+    HearHttpResponse,
+    HearRequestIdentity,
+)
 from src.clients.notifications import NotificationApiClient
 from src.clients.pool import CircuitHttpClient, HttpCircuitBreaker, HttpCircuitOpen
 from src.container import ApplicationContainer
-from src.models.playback import Playback
-from src.models.search import Search
+from src.models.user import User
 
 
 @pytest.mark.asyncio
@@ -32,6 +39,31 @@ async def test_http_circuit_opens_after_repeated_server_failures():
         await client.get("https://service.test/three")
     assert calls == 2
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_listener_bound_hear_client_overrides_payload_identity(monkeypatch):
+    search = AsyncMock(return_value={"results": []})
+    availability = AsyncMock(return_value={"items": []})
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr(HearApiClient, "availability", availability)
+    client = HearApiClient().bind(
+        HearRequestIdentity(alexa_user_id="alexa-user", listener_id="listener-1")
+    )
+
+    await client.search({"query": "news", "alexaUserId": "wrong", "listenerId": "wrong"})
+    await client.availability({"filter": {"isLocal": True}})
+
+    assert search.await_args.args[0] == {
+        "query": "news",
+        "alexaUserId": "alexa-user",
+        "listenerId": "listener-1",
+    }
+    assert availability.await_args.args[0] == {
+        "filter": {"isLocal": True},
+        "alexaUserId": "alexa-user",
+        "listenerId": "listener-1",
+    }
 
 
 def test_search_path_applies_configured_prefix_once():
@@ -233,7 +265,7 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
 
     monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
     with caplog.at_level(logging.INFO, logger="hear"):
-        result = await HearApiClient().availability(
+        result = await HearApiClient(HearApiOptions(path_prefix="alexa")).availability(
             {
                 "filter": {
                     "location": {
@@ -273,17 +305,14 @@ async def test_availability_sends_bridge_contract_and_normalizes_response(monkey
         {"type": "organization", "id": "org-1", "name": "Redcar Talking Newspaper"}
     ]
     assert result["publications"][0]["id"] == "publication-1"
-    assert "'city': 'Swindon'" in caplog.text
-    assert "'countryCode': 'gb'" in caplog.text
-    assert "'latitude': 51.56" in caplog.text
-    assert "'longitude': -1.78" in caplog.text
-    assert "availability response data=" in caplog.text
-    assert "'total': 2" in caplog.text
-    assert "'publicationCount': 1" in caplog.text
-    assert "'standaloneTrackCount': 7" in caplog.text
-    assert "'name': 'Redcar Talking Newspaper'" in caplog.text
-    assert "'name': 'A Reader'" in caplog.text
-    assert "'title': 'Redcar News'" in caplog.text
+    assert '"city":"Swindon"' in caplog.text
+    assert "availability response bodyPresent=true" in caplog.text
+    for sensitive_value in (
+        "Redcar Talking Newspaper",
+        "A Reader",
+        "Redcar News",
+    ):
+        assert sensitive_value not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -484,6 +513,38 @@ async def test_search_forwards_canonical_listener_id(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_log_includes_the_full_wire_query_and_filter_but_not_identity(
+    monkeypatch, caplog
+):
+    async def fake_request(self, method, path, body, timeout_ms):
+        return (200, {"results": [], "total": 0})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    with caplog.at_level(logging.INFO, logger="hear"):
+        await HearApiClient().search(
+            {
+                "query": "local sports update",
+                "filter": {
+                    "organizationIds": ["org-talking-news-federation"],
+                    "categorySlugs": ["sport"],
+                },
+                "sort": "latest",
+                "page": 2,
+                "limit": 3,
+                "alexaUserId": "amzn1.ask.account.TEST",
+                "listenerId": "listener-1",
+            }
+        )
+
+    assert '"query":"local sports update"' in caplog.text
+    assert '"organizationIds":["org-talking-news-federation"]' in caplog.text
+    assert '"categorySlugs":["sport"]' in caplog.text
+    assert '"sort":"latest"' in caplog.text
+    assert "amzn1.ask.account.TEST" not in caplog.text
+    assert "listener-1" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_search_does_not_forward_legacy_discovery_flags(monkeypatch):
     sent = {}
 
@@ -505,6 +566,29 @@ async def test_search_does_not_forward_legacy_discovery_flags(monkeypatch):
     assert "isLocal" not in sent
     assert "isRecommended" not in sent
     assert sent["sort"] == "nearest"
+
+
+@pytest.mark.asyncio
+async def test_search_omits_false_boolean_filters(monkeypatch):
+    sent = {}
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        sent.update(body)
+        return (200, {"results": [], "total": 0})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    await HearApiClient().search(
+        {
+            "query": "news",
+            "filter": {
+                "organizationIds": ["organization-1"],
+                "isPublication": False,
+                "isLocal": False,
+            },
+        }
+    )
+
+    assert sent["filter"] == {"organizationIds": ["organization-1"]}
 
 
 @pytest.mark.asyncio
@@ -578,13 +662,79 @@ def test_allowed_sort_values_match_api_enum():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("transient_status", [0, 429, 503])
+async def test_search_retries_transient_transport_and_throttling_statuses(
+    monkeypatch, transient_status
+):
+    calls = []
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        calls.append((method, path, body, timeout_ms))
+        return (transient_status, None) if len(calls) == 1 else (200, {"results": []})
+
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    monkeypatch.setattr("src.clients.hear.asyncio.sleep", AsyncMock())
+
+    result = await HearApiClient(HearApiOptions(retry_count=1)).search({"query": "news"})
+
+    assert result["failed"] is False
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_search_honours_retry_after_when_it_fits_the_request_budget(monkeypatch):
+    calls = 0
+
+    async def fake_request(self, method, path, body, timeout_ms):
+        nonlocal calls
+        calls += 1
+        return (
+            HearHttpResponse(429, None, retry_after_ms=1500)
+            if calls == 1
+            else HearHttpResponse(200, {"results": []})
+        )
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "_raw_request", fake_request)
+    monkeypatch.setattr("src.clients.hear.asyncio.sleep", sleep)
+
+    result = await HearApiClient(
+        HearApiOptions(retry_count=1, timeout_ms=3000)
+    ).search({"query": "news"})
+
+    assert result["failed"] is False
+    sleep.assert_awaited_once_with(1.5)
+
+
+@pytest.mark.asyncio
+async def test_search_does_not_wait_past_its_retry_budget(monkeypatch):
+    request = AsyncMock(return_value=HearHttpResponse(429, None, retry_after_ms=1000))
+    sleep = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "_raw_request", request)
+    monkeypatch.setattr("src.clients.hear.asyncio.sleep", sleep)
+
+    result = await HearApiClient(
+        HearApiOptions(retry_count=1, timeout_ms=20)
+    ).search({"query": "news"})
+
+    assert result["failed"] is True
+    request.assert_awaited_once()
+    sleep.assert_not_awaited()
+
+
+def test_retry_after_parser_accepts_seconds_and_rejects_invalid_values():
+    assert HearApiClient._parse_retry_after_ms("1.2") == 1200
+    assert HearApiClient._parse_retry_after_ms("invalid") is None
+
+
+@pytest.mark.asyncio
 async def test_real_search_shape_reaches_playback_without_catalog_call_error(
     monkeypatch, mock_handler_input
 ):
     expected = {"response": "play"}
     start = AsyncMock(return_value=expected)
-    monkeypatch.setattr("src.models.playback.Playback.start", start)
-    result = await Search.auto_play_first_from_search(
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.start", start)
+    result = await ApplicationContainer().auto_play_from_search(
         mock_handler_input,
         {
             "results": [
@@ -601,7 +751,6 @@ async def test_real_search_shape_reaches_playback_without_catalog_call_error(
             "total_pages": 1,
             "page": 0,
         },
-        deps=ApplicationContainer(),
     )
     assert result == expected
     start.assert_awaited_once()
@@ -612,9 +761,9 @@ async def test_broad_search_playback_intro_uses_request_not_first_item_metadata(
     monkeypatch, mock_handler_input
 ):
     start = AsyncMock(return_value={"response": "play"})
-    monkeypatch.setattr("src.models.playback.Playback.start", start)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.start", start)
 
-    await Search.auto_play_first_from_search(
+    await ApplicationContainer().auto_play_from_search(
         mock_handler_input,
         {
             "results": [
@@ -633,7 +782,6 @@ async def test_broad_search_playback_intro_uses_request_not_first_item_metadata(
                 "filter": {"city": "Herne Bay", "tags": ["local-transport"]},
             },
         },
-        deps=ApplicationContainer(),
     )
 
     assert start.await_args.args[2] == "Playing content on local transport in Herne Bay."
@@ -644,9 +792,9 @@ async def test_broad_search_fallback_does_not_announce_later_item_source(
     monkeypatch, mock_handler_input
 ):
     start = AsyncMock(return_value={"response": "play"})
-    monkeypatch.setattr("src.models.playback.Playback.start", start)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.start", start)
 
-    result = await Search.auto_play_first_from_search(
+    result = await ApplicationContainer().auto_play_from_search(
         mock_handler_input,
         {
             "results": [
@@ -662,7 +810,6 @@ async def test_broad_search_fallback_does_not_announce_later_item_source(
             "_request_label": "content on local history",
             "_search_payload": {"query": "local history", "filter": {}},
         },
-        deps=ApplicationContainer(),
     )
 
     assert result == {"response": "play"}
@@ -674,9 +821,9 @@ async def test_search_initializes_playback_queue_with_first_page_only(
     monkeypatch, mock_handler_input
 ):
     start = AsyncMock(return_value={"response": "play"})
-    monkeypatch.setattr("src.models.playback.Playback.start", start)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.start", start)
     hear_client = AsyncMock()
-    await Search.auto_play_first_from_search(
+    await ApplicationContainer(heara=hear_client).auto_play_from_search(
         mock_handler_input,
         {
             "results": [
@@ -692,7 +839,6 @@ async def test_search_initializes_playback_queue_with_first_page_only(
             "page": 0,
             "_search_payload": {"query": "wakefield", "page": 0, "limit": 2},
         },
-        deps=ApplicationContainer(heara=hear_client),
     )
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
     assert store["playbackQueue"]["orderedContentIds"] == ["content-1", "content-2"]
@@ -704,7 +850,7 @@ async def test_search_initializes_playback_queue_with_first_page_only(
 @pytest.mark.asyncio
 async def test_latest_search_initializes_lazy_navigation_queue(monkeypatch, mock_handler_input):
     start = AsyncMock(return_value={"response": "play"})
-    monkeypatch.setattr("src.models.playback.Playback.start", start)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.start", start)
     hear_client = AsyncMock()
     first_page = [
         {
@@ -715,7 +861,7 @@ async def test_latest_search_initializes_lazy_navigation_queue(monkeypatch, mock
         }
         for index in range(1, 4)
     ]
-    await Search._play_first_search_result(
+    await ApplicationContainer(heara=hear_client).play_first_search_result(
         mock_handler_input,
         {
             "results": first_page,
@@ -725,7 +871,6 @@ async def test_latest_search_initializes_lazy_navigation_queue(monkeypatch, mock
             "_search_payload": {"query": "", "page": 0, "limit": 3},
         },
         label="Pendle Voice",
-        deps=ApplicationContainer(heara=hear_client),
     )
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
     assert store["playbackQueue"]["orderedContentIds"] == [
@@ -771,6 +916,7 @@ async def test_start_playback_builds_audio_directive(monkeypatch):
             "playbackSpeeds": [],
         },
         "Now playing.",
+        playback_repository=PlaybackState(User()),
     )
     directive = response["directives"][0]
     assert directive["type"] == "AudioPlayer.Play"
@@ -840,4 +986,3 @@ async def test_register_listener_without_user_id_returns_none(monkeypatch):
     result = await client.register_listener({})
     assert result is None
     assert called is False
-

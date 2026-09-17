@@ -4,6 +4,11 @@ from src.alexa.playback_speech import PlaybackSpeech
 
 
 class HelpSpeech:
+    BRIEF_GUIDE = (
+        "Welcome to Hear. Say a topic, place, creator, publication, or talking newspaper. "
+        "You can also say what's new or what's trending. Say more to hear the full guide. "
+        "What would you like to do?"
+    )
     GUIDE_OPENING = (
         "Here is your guide to Hear Service. To find something, you can simply say sport, "
         "local news, a place such as Swindon, or a talking newspaper such as Talking News Federation. "
@@ -17,6 +22,7 @@ class HelpSpeech:
         "notifications on or off. To personalise Hear, say change my location or set up my "
         "account. For example, try saying, local news. What would you like to do?"
     )
+    MORE_REPROMPT = "Say more to hear the full guide, or tell me what you would like to hear."
     REPROMPT = "Try saying sport, local news, Swindon, Talking News Federation, or what's trending."
     CARD_TITLE = "Hear - complete voice guide"
     CARD_OPENING = (
@@ -43,8 +49,13 @@ class HelpSpeech:
     )
 
     @staticmethod
-    def guide(stage: str) -> str:
+    def full_guide(stage: str) -> str:
         return f"{HelpSpeech.GUIDE_OPENING}{PlaybackSpeech.guide(stage)} {HelpSpeech.GUIDE_CLOSING}"
+
+    @staticmethod
+    def guide(stage: str) -> str:
+        """Compatibility alias for callers that need the complete guide."""
+        return HelpSpeech.full_guide(stage)
 
     @staticmethod
     def card_text(stage: str) -> str:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.models.onboarding_state import OnboardingService, OnboardingState
+from src.alexa.onboarding_state import OnboardingService, OnboardingState
 from src.models.user import User
 
 

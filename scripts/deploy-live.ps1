@@ -12,7 +12,7 @@ param(
     [string] $EcrRepository = "hear-python",
     [string] $HearApiUrl = "https://alexa.hear.media/api/v1",
     [string] $HearApiPathPrefix = "alexa",
-    [string] $WebhookOutboundUrl = "https://alexa.hear.media/api/v1/alexa/events",
+    [string] $WebhookOutboundUrl = "https://alexa.hear.media/api/v1/webhooks/event",
     [ValidateSet("0", "1")]
     [string] $CanonicalIdentityEnabled = "1",
     [switch] $ConfirmProduction
@@ -55,7 +55,6 @@ function Get-SsmParameter {
 }
 
 $shortStage = if ($Environment -eq "production") { "prod" } else { "dev" }
-$logLevel = if ($Environment -eq "production") { "INFO" } else { "DEBUG" }
 $parameterPrefix = "/hear/$Environment"
 $imageTag = "$Environment-$((Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss'))"
 
@@ -98,7 +97,6 @@ $parameterOverrides = @(
     "WebhookOutboundUrl=$WebhookOutboundUrl",
     "WebhookOutboundSecret=$webhookOutboundSecret",
     "SentryDsn=$sentryDsn",
-    "PowerToolsLogLevel=$logLevel",
     "CanonicalIdentityEnabled=$CanonicalIdentityEnabled"
 )
 

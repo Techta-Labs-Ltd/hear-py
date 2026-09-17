@@ -10,6 +10,7 @@ from src.models.user import PersistenceReceipt, User
 class MemoryPersistenceAdapter:
     def __init__(self) -> None:
         self._store: dict[str, dict] = {}
+        self._outbox: dict[str, dict[str, dict]] = {}
 
     async def get_attributes(
         self, request_envelope: dict, *, persistence_key: str | None = None
@@ -28,6 +29,8 @@ class MemoryPersistenceAdapter:
         user_id = persistence_key or User.persistence_key(request_envelope)
         document = deepcopy(attributes)
         versions = document.pop("_persistenceVersions", {})
+        document.pop("_persistenceCoupledCommit", None)
+        outbox_events = document.pop("_persistenceOutboxEvents", [])
         if not isinstance(versions, dict):
             versions = {}
         changed = document.pop("_persistenceChangedFields", None)
@@ -61,6 +64,11 @@ class MemoryPersistenceAdapter:
             **deepcopy(document),
             "_persistenceVersions": dict(current_versions),
         }
+        if isinstance(outbox_events, list):
+            outbox = self._outbox.setdefault(user_id, {})
+            for envelope in outbox_events:
+                if isinstance(envelope, dict) and str(envelope.get("eventId") or "").strip():
+                    outbox.setdefault(str(envelope["eventId"]), deepcopy(envelope))
         return PersistenceReceipt(versions=dict(current_versions), snapshot=deepcopy(document))
 
     async def delete_attributes(

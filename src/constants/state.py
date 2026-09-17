@@ -10,6 +10,20 @@ class StateSchema:
     DIALOG_SCOPE = "DIALOG"
     CACHE_SCOPE = "CACHE"
     SCOPES = (CORE_SCOPE, PLAYBACK_SCOPE, DIALOG_SCOPE, CACHE_SCOPE)
+    # These are transitional projections of ``activeDialog`` for the few
+    # Alexa-bound adapters which have not yet moved to the dialogue command
+    # API.  The state contract owns the mapping so hydration and runtime
+    # dialogue handling cannot silently drift apart.
+    DIALOG_LEGACY_FLAGS = {
+        "search_confirmation": "awaitingSearchConfirmation",
+        "feedback": "awaitingFeedback",
+        "report_decision": "awaitingReportDecision",
+        "resume": "awaitingResume",
+        "notification": "awaitingNotificationChoice",
+        "organization_name": "awaitingOrganizationName",
+        "publication_source": "awaitingPublicationSource",
+        "feedback_continuation": "awaitingFeedbackContinuation",
+    }
     FIELD_SPECS: dict[str, tuple[object, str | None]] = {
         "activeDialog": (None, DIALOG_SCOPE),
         "locality": (None, CORE_SCOPE),
@@ -19,6 +33,7 @@ class StateSchema:
         "awaitingFeedback": (False, DIALOG_SCOPE),
         "awaitingFeedbackContinuation": (False, DIALOG_SCOPE),
         "feedbackContinuation": (None, DIALOG_SCOPE),
+        "awaitingOrganizationName": (False, DIALOG_SCOPE),
         "awaitingPublicationSource": (False, DIALOG_SCOPE),
         "awaitingFollow": (False, DIALOG_SCOPE),
         "awaitingNotificationChoice": (False, DIALOG_SCOPE),
@@ -72,7 +87,7 @@ class StateSchema:
         "userCity": (None, CORE_SCOPE),
         "userState": (None, None),
         "userCountry": (None, None),
-        "currentPlaybackSpeeds": (None, None),
+        "currentPlaybackSpeeds": (None, PLAYBACK_SCOPE),
         "playbackQueue": (None, PLAYBACK_SCOPE),
         "preparedNextContent": (None, PLAYBACK_SCOPE),
         "browseQueueItems": (None, None),
@@ -117,6 +132,38 @@ class StateSchema:
             "publicationFeedbackProgress",
             "answeredFeedbackKeys",
             "followedCreators",
+        }
+    )
+    # Historical single-document playback fields are accepted only while
+    # hydrating an older record. They are never current persisted fields.
+    LEGACY_PLAYBACK_FIELDS = frozenset(
+        {
+            "lastOffsetMs",
+            "currentContentId",
+            "currentContentTitle",
+            "currentCreator",
+            "currentCreatorId",
+            "currentCategory",
+            "currentAudioUrl",
+            "currentDurationSecs",
+            "currentPublicationId",
+            "feedbackContentTitle",
+            "feedbackCreator",
+            "feedbackCreatorId",
+            "currentTrackIndex",
+            "currentTotalTracks",
+            "currentTracks",
+            "upcomingQueue",
+            "queueIndex",
+            "queueSource",
+            "queueLocality",
+            "queueCategory",
+            "queueItemsCompleted",
+            "playbackParentId",
+            "playbackContentType",
+            "playbackContentId",
+            "activeListenSession",
+            "playbackSession",
         }
     )
 

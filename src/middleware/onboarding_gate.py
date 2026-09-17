@@ -6,12 +6,11 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.context import RequestContext
+from src.alexa.onboarding import Onboarding
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
-from src.models.decline import Decline
-from src.models.onboarding import Onboarding, TownCapture
 from src.services.logging_control import ApplicationLog
 
 
@@ -84,13 +83,31 @@ class OnboardingPolicy:
 class OnboardingGateHandler(AbstractRequestHandler):
     """Gate handler that routes new users through onboarding before any content handlers."""
 
-    def __init__(self, *, deps: object | None = None):
-        self._deps = deps
+    def __init__(
+        self,
+        *,
+        user,
+        onboarding,
+        permission,
+        town_capture,
+        decline,
+        auto_detect_location,
+        finalize_town_skipped,
+        handle_permission_no,
+    ) -> None:
+        self._user = user
+        self._onboarding = onboarding
+        self._permission = permission
+        self._town_capture = town_capture
+        self._decline = decline
+        self._auto_detect_location = auto_detect_location
+        self._finalize_town_skipped = finalize_town_skipped
+        self._handle_permission_no = handle_permission_no
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         rt = AlexaRequest.get_request_type(handler_input)
         if rt == "LaunchRequest":
-            store = self._deps.user.snapshot(handler_input)
+            store = self._user.snapshot(handler_input)
             return OnboardingPolicy._is_new_user(store) and (
                 not OnboardingPolicy._onboarding_completed_in_session(handler_input)
             )
@@ -100,7 +117,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
             return False
         if rt != "IntentRequest":
             return False
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         intent = AlexaRequest.get_intent_name(handler_input)
         if store.get("awaitingProfilePermission") and intent in OnboardingPolicy._SKIP_INTENTS:
             return True
@@ -132,22 +149,18 @@ class OnboardingGateHandler(AbstractRequestHandler):
     async def handle(self, handler_input: HandlerInput):
         rt = AlexaRequest.get_request_type(handler_input)
         if rt == "LaunchRequest":
-            store = self._deps.user.snapshot(handler_input)
+            store = self._user.snapshot(handler_input)
             ApplicationLog.info("Hear: checking device address on onboarding launch")
-            return await Onboarding.auto_detect_location_or_manual(
-                handler_input, store, deps=self._deps
-            )
+            return await self._auto_detect_location(handler_input, store)
         intent = AlexaRequest.get_intent_name(handler_input)
-        store = self._deps.user.snapshot(handler_input)
+        store = self._user.snapshot(handler_input)
         stage = OnboardingPolicy._get_stage(handler_input, store)
         if intent in OnboardingPolicy._SKIP_INTENTS:
             if store.get("awaitingProfilePermission"):
-                return await Decline(deps=self._deps).finalize_profile_skipped(
+                return await self._decline.finalize_profile_skipped(
                     handler_input
                 )
-            return Onboarding.finalize_town_skipped(
-                handler_input, store, deps=self._deps
-            )
+            return self._finalize_town_skipped(handler_input, store)
         if stage == OnboardingConstants.ONBOARDING_ASK_TOWN:
             attrs = RequestContext.request(handler_input) or {}
             nlp = attrs.get("_nlp") or {}
@@ -163,8 +176,8 @@ class OnboardingGateHandler(AbstractRequestHandler):
             return Onboarding.resume_town_capture(
                 handler_input,
                 store,
+                self._onboarding,
                 str(attempted_city).strip() if attempted_city else None,
-                deps=self._deps,
             )
         if stage == OnboardingConstants.ONBOARDING_AWAIT_CONFIRM:
             redirect = OnboardingPolicy._confirm_echo(handler_input, store)
@@ -172,18 +185,18 @@ class OnboardingGateHandler(AbstractRequestHandler):
                 return redirect
         if stage == "ask_permission" or not stage:
             if intent == "AMAZON.YesIntent":
-                return self._deps.permission.start_location(handler_input)
+                return self._permission.start_location(handler_input)
             if intent == "AMAZON.NoIntent":
-                return Onboarding.handle_permission_no(handler_input, store, deps=self._deps)
+                return self._handle_permission_no(handler_input, store)
             if intent in {"SkipFeedbackIntent", "AMAZON.CancelIntent"}:
-                return Onboarding.finalize_town_skipped(handler_input, store, deps=self._deps)
+                return self._finalize_town_skipped(handler_input, store)
             if intent in {
                 "TownCaptureIntent",
                 "SetLocationIntent",
                 "SearchLocationIntent",
             }:
-                self._deps.onboarding.begin_town_capture(handler_input)
-                return await TownCapture(deps=self._deps).execute(handler_input)
+                self._onboarding.begin_town_capture(handler_input)
+                return await self._town_capture.execute(handler_input)
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(

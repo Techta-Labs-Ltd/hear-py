@@ -4,14 +4,14 @@ from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogStateManager
+from src.alexa.launch import LaunchWorkflow
+from src.alexa.onboarding import TownCapture
+from src.alexa.playback_workflow import Playback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.onboarding import OnboardingConstants
-from src.models.dialog import DialogStateManager
-from src.models.launch_workflow import LaunchWorkflow
-from src.models.onboarding import TownCapture
-from src.models.playback import Playback
 from src.models.user import User
 from src.services.logging_control import ApplicationLog
 
@@ -35,14 +35,14 @@ class LaunchRequestHandler(AbstractRequestHandler):
             )
         try:
             await self._playback.flush_previous(
-                AlexaRequest.get_user_id(handler_input), None, handler_input
+                AlexaRequest.get_user_id(handler_input) or "", None, handler_input
             )
         except Exception as err:
             ApplicationLog.warning("Hear: launch flush failed error=%s", type(err).__name__)
         try:
             return await self._workflow.execute(handler_input)
         except Exception as err:
-            ApplicationLog.error("Hear: launch failed %s", err)
+            ApplicationLog.error("Hear: launch failed error=%s", type(err).__name__)
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_ERROR))
                 .reprompt(Ssml.ssml(Speech.REPROMPT_NO_CITY))

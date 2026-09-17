@@ -1,16 +1,8 @@
 import asyncio
 
-from src.alexa.runtime import AsyncSkill
+from src.application import Application
 from src.container import ApplicationContainer
-from src.controllers.fallback import UnmatchedIntentHandler
-from src.controllers.launch import LaunchRequestHandler
-from src.controllers.play import PlayContentHandler
-from src.controllers.report import WhatsThisAboutHandler
-from src.controllers.system import CancelIntentHandler, HelpIntentHandler
 from src.database.persistence import MemoryPersistenceAdapter
-from src.models.launch_workflow import LaunchWorkflow
-from src.models.play import PlayContent
-from src.registry import RouteRegistry
 
 USER_ID = "amzn1.ask.account.AMA5VNMEKZ2IKKQ66FJFFNUFHIZWGKDJXHMTPAWPFIW6Q7NFOQDKCSUNC44TFDRZXRIMA7YZUNKJHK2KAVHFCOAQSSSLDEYEFMJYXTZYYOYK52IGMJMU3KWXBZPGNEUJC4HAKIJUSUZDKD3GRL26OQMBR4BPLCMTN4AVAML7OWIYSU5YAPQOTGCEEPHAMQQFZ4B7EEYUT5H56XOI3SQZ3P5S7IOVYU2UZJJXPGKLG2UA"
 
@@ -83,14 +75,7 @@ persistence._store[USER_ID] = {
     "onboardingComplete": True,
     "userName": "John",
 }
-builder = AsyncSkill(persistence_adapter=persistence)
-container = ApplicationContainer()
-RouteRegistry.register_middleware(builder, container)
-builder.add_request_handler(LaunchRequestHandler(LaunchWorkflow(deps=container), container.playback))
-builder.add_request_handler(PlayContentHandler(PlayContent(deps=ApplicationContainer())))
-builder.add_request_handler(WhatsThisAboutHandler())
-builder.add_request_handler(HelpIntentHandler())
-builder.add_request_handler(CancelIntentHandler(container.user, container.playback))
+builder = Application.build_skill(persistence, container=ApplicationContainer())
 print("=" * 60)
 print("END-TO-END SCENARIO TESTS")
 print("=" * 60)
@@ -110,21 +95,14 @@ run_scenario("help", builder, make_event("IntentRequest", "AMAZON.HelpIntent"))
 run_scenario("cancel", builder, make_event("IntentRequest", "AMAZON.CancelIntent"))
 print()
 persistence2 = MemoryPersistenceAdapter()
-builder2 = AsyncSkill(persistence_adapter=persistence2)
-container2 = ApplicationContainer()
-RouteRegistry.register_middleware(builder2, container2)
-builder2.add_request_handler(
-    LaunchRequestHandler(LaunchWorkflow(deps=container2), container2.playback)
-)
+builder2 = Application.build_skill(persistence2, container=ApplicationContainer())
 print("--- New User (empty store) ---")
 run_scenario("open test development", builder2, make_event("LaunchRequest"))
 run_scenario("help", builder2, make_event("IntentRequest", "AMAZON.HelpIntent"))
 run_scenario("cancel", builder2, make_event("IntentRequest", "AMAZON.CancelIntent"))
 print()
 print("--- Edge: missing userId ---")
-builder3 = AsyncSkill(persistence_adapter=MemoryPersistenceAdapter())
-RouteRegistry.register_middleware(builder3, ApplicationContainer())
-builder3.add_request_handler(UnmatchedIntentHandler())
+builder3 = Application.build_skill(MemoryPersistenceAdapter(), container=ApplicationContainer())
 event_no_user = make_event("IntentRequest", "SomeUnknownIntent")
 del event_no_user["context"]["System"]["user"]
 run_scenario("unknown intent, no user", builder3, event_no_user)

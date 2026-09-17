@@ -3,15 +3,16 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.context import RequestContext
 from src.alexa.feedback import AlexaFeedback
-from src.alexa.request import AlexaRequest
-from src.models.feedback_response import (
+from src.alexa.feedback_response import (
     EnjoyedFeedback,
     NotEnjoyedFeedback,
     RatingRequest,
     SkipFeedback,
     SomewhatFeedback,
 )
+from src.alexa.request import AlexaRequest
 from src.models.user import User
 
 
@@ -26,7 +27,7 @@ class RateContentHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._action.execute(handler_input)
+        return await self._action.execute(RequestContext.bind(handler_input))
 
 
 class FeedbackEnjoyedHandler(AbstractRequestHandler):
@@ -40,7 +41,7 @@ class FeedbackEnjoyedHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._action.execute(handler_input)
+        return await self._action.execute(RequestContext.bind(handler_input))
 
 
 class FeedbackSomewhatHandler(AbstractRequestHandler):
@@ -54,7 +55,7 @@ class FeedbackSomewhatHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._action.execute(handler_input)
+        return await self._action.execute(RequestContext.bind(handler_input))
 
 
 class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
@@ -68,7 +69,7 @@ class FeedbackNotEnjoyedHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._action.execute(handler_input)
+        return await self._action.execute(RequestContext.bind(handler_input))
 
 
 class FeedbackResponseHandler(AbstractRequestHandler):
@@ -93,12 +94,13 @@ class FeedbackResponseHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        feedback = AlexaFeedback.normalize_value(
-            AlexaRequest.get_slot_value(handler_input, "feedback")
+        request = RequestContext.bind(handler_input)
+        feedback = AlexaFeedback.normalize_slot(
+            AlexaRequest.get_slot(handler_input, "feedback")
         )
-        action = self._actions.get(feedback)
-        if action:
-            return await action.execute(handler_input)
+        action = self._actions.get(feedback) if feedback else None
+        if action and hasattr(action, "execute"):
+            return await action.execute(request)
         return AlexaFeedback.present_pending_feedback(
             handler_input, User.snapshot(handler_input)
         )
@@ -115,4 +117,4 @@ class SkipFeedbackHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._action.execute(handler_input)
+        return await self._action.execute(RequestContext.bind(handler_input))

@@ -4,6 +4,67 @@ from src.constants.discovery import DiscoveryConstants
 
 
 class AlexaEntities:
+    _FEEDBACK_VALUES = (
+        {
+            "id": "enjoyed",
+            "name": {
+                "value": "enjoyed",
+                "synonyms": [
+                    "I enjoyed it",
+                    "I liked it",
+                    "loved it",
+                    "that was great",
+                    "it was good",
+                    "brilliant",
+                    "five stars",
+                    "thumbs up",
+                ],
+            },
+        },
+        {
+            "id": "somewhat",
+            "name": {
+                "value": "somewhat",
+                "synonyms": [
+                    "it was okay",
+                    "it was alright",
+                    "not bad",
+                    "it was fine",
+                    "could be better",
+                    "nothing special",
+                    "mixed feelings",
+                    "three stars",
+                ],
+            },
+        },
+        {
+            "id": "not-enjoyed",
+            "name": {
+                "value": "not enjoyed",
+                "synonyms": [
+                    "did not enjoy it",
+                    "didn't enjoy it",
+                    "did not like it",
+                    "not for me",
+                    "that was poor",
+                    "thumbs down",
+                    "one star",
+                ],
+            },
+        },
+    )
+
+    @staticmethod
+    def build_feedback_dynamic_entities_directive() -> dict:
+        """Keep Alexa focused on the currently requested feedback vocabulary."""
+        return {
+            "type": "Dialog.UpdateDynamicEntities",
+            "updateBehavior": "REPLACE",
+            "types": [
+                {"name": "HEAR_FEEDBACK", "values": list(AlexaEntities._FEEDBACK_VALUES)}
+            ],
+        }
+
     @staticmethod
     def build_ambiguity_dynamic_entities_directive(
         candidates: list[dict],

@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+.en-GB.json
 *.zip
 coverage/
 .pytest_cache/

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.models.search import Search
+from src.alexa.search import Search
 
 
 class TestDiscoveryPromptCapture:
@@ -40,6 +40,21 @@ class TestDiscoveryPromptCapture:
 
         assert response["shouldEndSession"] is False
         assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
+
+    def test_empty_search_response_keeps_the_requested_city_in_its_message(self):
+        response = Search._build_search_outcome_response(
+            self._handler_input(),
+            {
+                "failed": False,
+                "_request_label": "sport",
+                "_search_payload": {
+                    "query": "sport",
+                    "filter": {"city": "London"},
+                },
+            },
+        )
+
+        assert "couldn't find anything matching sport in London" in response["outputSpeech"]["ssml"]
 
     def test_capture_directive_uses_the_open_query_slot(self):
         assert AlexaResponse.discovery_capture_directive() == {

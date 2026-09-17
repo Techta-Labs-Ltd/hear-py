@@ -3,8 +3,9 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.context import RequestContext
 from src.alexa.request import AlexaRequest
-from src.models.social import CreatorIdentity, FollowCreator, UnfollowCreator
+from src.alexa.social import CreatorIdentity, FollowCreator, UnfollowCreator
 
 
 class WhoIsCreatorHandler(AbstractRequestHandler):
@@ -17,8 +18,8 @@ class WhoIsCreatorHandler(AbstractRequestHandler):
             and AlexaRequest.get_intent_name(handler_input) == "WhoIsCreatorIntent"
         )
 
-    def handle(self, handler_input: HandlerInput):
-        return self._action.execute(handler_input)
+    async def handle(self, handler_input: HandlerInput):
+        return await self._action.execute(RequestContext.bind(handler_input))
 
 
 class FollowCreatorHandler(AbstractRequestHandler):
@@ -32,7 +33,7 @@ class FollowCreatorHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._action.execute(handler_input)
+        return await self._action.execute(RequestContext.bind(handler_input))
 
 
 class UnfollowCreatorHandler(AbstractRequestHandler):
@@ -46,4 +47,4 @@ class UnfollowCreatorHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input: HandlerInput):
-        return await self._action.execute(handler_input)
+        return await self._action.execute(RequestContext.bind(handler_input))

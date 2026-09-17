@@ -109,6 +109,15 @@ class PlaybackUtils:
         return round(max(0, int(milliseconds or 0)) / 3600000, 6)
 
     @staticmethod
+    def integer(value: object) -> int:
+        if isinstance(value, bool):
+            return 0
+        try:
+            return int(value) if isinstance(value, (str, int, float)) else 0
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
     def playback_observation(
         state: dict,
         *,
@@ -117,17 +126,16 @@ class PlaybackUtils:
         event_type: str,
         status: str,
     ) -> dict:
-        current_offset = max(0, int(offset_ms or 0))
-        previous_offset = max(
-            0,
-            int(
-                state.get("observationOffsetMs")
-                if state.get("observationOffsetMs") is not None
-                else state.get("offsetMs")
-                or 0
-            ),
+        current_offset = max(0, PlaybackUtils.integer(offset_ms))
+        previous_offset_value = (
+            state.get("observationOffsetMs")
+            if state.get("observationOffsetMs") is not None
+            else state.get("offsetMs")
         )
-        previous_timestamp = max(0, int(state.get("observationTimestampMs") or 0))
+        previous_offset = max(0, PlaybackUtils.integer(previous_offset_value))
+        previous_timestamp = max(
+            0, PlaybackUtils.integer(state.get("observationTimestampMs"))
+        )
         offset_advance = max(0, current_offset - previous_offset)
         elapsed = max(0, int(observed_at_ms or 0) - previous_timestamp)
         countable = state.get("status") in {"starting", "playing"} and event_type != "started"

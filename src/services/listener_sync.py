@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from src.clients.hear import HearApiClient
-from src.models.listener import Listener
 from src.models.user import User
+from src.services.listener_repository import Listener
 from src.utils.listener_payload import ListenerPayload
 
 

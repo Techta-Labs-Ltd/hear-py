@@ -45,7 +45,8 @@ class EventUtils:
 
     @staticmethod
     def sqs_message_attributes(envelope: dict) -> dict:
-        data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+        candidate = envelope.get("data")
+        data: dict = candidate if isinstance(candidate, dict) else {}
         values = {
             "eventType": envelope.get("event"),
             "eventId": envelope.get("eventId"),

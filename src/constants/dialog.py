@@ -1,3 +1,6 @@
+from src.constants.state import StateSchema
+
+
 class DialogConstants:
     VALIDATION_FAILURE = "_dialogValidationFailure"
     DIALOG_TTL_SECONDS = 10 * 60
@@ -45,16 +48,7 @@ class DialogConstants:
             "cancel",
         }
     )
-    DIALOG_LEGACY_FLAGS = {
-        "search_confirmation": "awaitingSearchConfirmation",
-        "feedback": "awaitingFeedback",
-        "report_decision": "awaitingReportDecision",
-        "resume": "awaitingResume",
-        "notification": "awaitingNotificationChoice",
-        "organization_name": "awaitingOrganizationName",
-        "publication_source": "awaitingPublicationSource",
-        "feedback_continuation": "awaitingFeedbackContinuation",
-    }
+    DIALOG_LEGACY_FLAGS = StateSchema.DIALOG_LEGACY_FLAGS
     SLOT_CAPTURE = {
         "creator_location": {
             "intentName": "SelectCreatorCityIntent",
@@ -78,6 +72,7 @@ class DialogConstants:
             "organization_name",
             "creator_location",
             "publication_source",
+            "help",
         }
     )
     DEFERRED_DISCOVERY_INTENTS = frozenset(

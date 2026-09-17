@@ -8,6 +8,7 @@ from aws_lambda_powertools import Metrics
 from aws_lambda_powertools.metrics import MetricUnit
 
 from config import settings
+from src.alexa.context import RequestContext
 from src.alexa.response import AlexaResponse
 from src.services.logging_control import ApplicationLog
 from src.utils.deadline import RequestDeadline
@@ -226,12 +227,12 @@ class ResponseBuilder:
         small_image_url: str | None = None,
         large_image_url: str | None = None,
     ) -> "ResponseBuilder":
-        card = {
+        card: dict[str, Any] = {
             "type": "Standard",
             "title": str(title or "").strip(),
             "text": str(text or "").strip(),
         }
-        image = {}
+        image: dict[str, str] = {}
         if AlexaRuntime._valid_card_image_url(small_image_url):
             image["smallImageUrl"] = str(small_image_url)
         if AlexaRuntime._valid_card_image_url(large_image_url):
@@ -277,6 +278,19 @@ class HandlerInput:
         return await self._redispatch(self)
 
 
+class RequestHandlerFactory:
+    """An immutable route declaration that creates one handler per dispatch."""
+
+    __slots__ = ("_factory", "name")
+
+    def __init__(self, factory, name: str | None = None) -> None:
+        self._factory = factory
+        self.name = name or getattr(factory, "__name__", type(factory).__name__)
+
+    def build(self, handler_input: HandlerInput):
+        return self._factory(handler_input)
+
+
 class AsyncSkill:
     def __init__(self, persistence_adapter: Any = None):
         self.persistence_adapter = persistence_adapter
@@ -288,35 +302,48 @@ class AsyncSkill:
     def add_request_handler(self, handler: Any) -> None:
         self.request_handlers.append(handler)
 
+    def add_request_handler_factory(self, factory, *, name: str | None = None) -> None:
+        self.request_handlers.append(RequestHandlerFactory(factory, name))
+
     def add_exception_handler(self, handler: Any) -> None:
         self.exception_handlers.append(handler)
 
     def add_global_request_interceptor(self, interceptor: Any) -> None:
+        if not inspect.iscoroutinefunction(interceptor.process):
+            raise TypeError("request interceptor process must be async")
         self._request_interceptors.append(interceptor.process)
 
     def add_global_response_interceptor(self, interceptor: Any) -> None:
+        if not inspect.iscoroutinefunction(interceptor.process):
+            raise TypeError("response interceptor process must be async")
         self._response_interceptors.append(interceptor.process)
 
     async def invoke(self, event: dict, context: Any) -> dict:
         envelope = AttrDict(event)
         attrs = AttributesManager(envelope, self.persistence_adapter)
         handler_input = HandlerInput(envelope, attrs, context, ResponseBuilder())
+        RequestContext.bind(handler_input)
         handler_input._redispatch = self._dispatch
         response: Any = None
         try:
             for caller in self._request_interceptors:
-                await AlexaRuntime._resolve(caller(handler_input))
+                await caller(handler_input)
             response = await self._dispatch(handler_input)
             response = self._build_envelope(handler_input, response)
             for caller in self._response_interceptors:
-                await AlexaRuntime._resolve(caller(handler_input))
+                await caller(handler_input)
         except Exception as exc:
             handler_input.response_builder = ResponseBuilder()
             response = await self._dispatch_exception(handler_input, exc)
         return self._build_envelope(handler_input, response)
 
     async def _dispatch(self, handler_input: HandlerInput) -> Any:
-        for handler in self.request_handlers:
+        for declaration in self.request_handlers:
+            handler = (
+                declaration.build(handler_input)
+                if isinstance(declaration, RequestHandlerFactory)
+                else declaration
+            )
             try:
                 can = await AlexaRuntime._resolve(handler.can_handle(handler_input))
             except Exception as exc:

@@ -6,8 +6,8 @@ import time
 import config.permission_scopes as permission_scopes
 from src.alexa.context import RequestContext
 from src.clients.alexa_settings import AlexaSettingsClient
-from src.models.listener import Listener
 from src.services.alexa_locality import AlexaLocalitySupport
+from src.services.listener_repository import Listener
 
 
 class AlexaProfileModule:

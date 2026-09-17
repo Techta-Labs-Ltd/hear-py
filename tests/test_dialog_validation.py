@@ -4,17 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.alexa.dialog import DialogSelection
+from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.alexa.runtime import ResponseBuilder
 from src.alexa.speech import Speech
 from src.clients.resolver import ResolverClient
 from src.container import ApplicationContainer
-from src.middleware.dialog_validation import (
-    DialogValidationInterceptor,
-    DialogValidationPolicy,
-)
-from src.middleware.resolver import ResolverInterceptor
-from src.models.dialog import DialogSelection
-from src.models.resolver_workflow import ResolverWorkflow
+from src.middleware.dialog_validation import DialogValidationInterceptor, DialogValidationPolicy
 from src.models.user import User
 
 
@@ -115,8 +111,8 @@ async def test_candidate_name_bypasses_ambiguity_gate_and_resolves_locally(
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
 
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
 
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
@@ -267,6 +263,49 @@ def test_ambiguity_name_matching_is_limited_to_the_current_page(mock_handler_inp
     )
 
 
+def test_ambiguity_uses_one_resolved_dynamic_entity_but_not_multiple(
+    mock_handler_input,
+):
+    pending = {
+        "displayedCandidates": [
+            {"type": "creator", "id": "creator-1", "name": "Creator One"},
+            {"type": "creator", "id": "creator-2", "name": "Creator Two"},
+        ]
+    }
+    selection = mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": "ClarifySelectionIntent",
+            "slots": {
+                "selection": {
+                    "name": "selection",
+                    "value": "first",
+                    "resolutions": {
+                        "resolutionsPerAuthority": [
+                            {
+                                "status": {"code": "ER_SUCCESS_MATCH"},
+                                "values": [{"value": {"id": "creator-1"}}],
+                            }
+                        ]
+                    },
+                }
+            },
+        },
+    }["intent"]["slots"]["selection"]
+
+    assert DialogSelection.match_pending_candidate(mock_handler_input, pending, "first")[
+        "id"
+    ] == "creator-1"
+
+    selection["value"] = "unrelated words"
+    selection["resolutions"]["resolutionsPerAuthority"][0]["values"].append(
+        {"value": {"id": "creator-2"}}
+    )
+    assert DialogSelection.match_pending_candidate(
+        mock_handler_input, pending, "unrelated words"
+    ) is None
+
+
 @pytest.mark.parametrize(
     "spoken, expected_id",
     [
@@ -367,8 +406,6 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
 ):
     from src.controllers.confirmation import NoIntentHandler
     from src.controllers.feedback import SkipFeedbackHandler
-    from src.models.decline import Decline
-    from src.models.feedback_response import SkipFeedback
     from src.models.user import User
 
     pending = {"candidates": [{"name": "Pendle Voice", "id": "one"}]}
@@ -387,9 +424,9 @@ async def test_ambiguity_dismissal_clears_dialog_and_keeps_session_open(
     _intent(mock_handler_input, intent_name)
     mock_handler_input.response_builder = ResponseBuilder()
     handler = (
-        NoIntentHandler(Decline(deps=ApplicationContainer()))
+        NoIntentHandler(ApplicationContainer().build_request_decline(mock_handler_input))
         if intent_name == "AMAZON.NoIntent"
-        else SkipFeedbackHandler(SkipFeedback(deps=ApplicationContainer()))
+        else SkipFeedbackHandler(ApplicationContainer().build_request_skip_feedback(mock_handler_input))
     )
     response = await handler.handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
@@ -512,6 +549,51 @@ def test_feedback_allows_ratings_and_transport_but_rejects_search(mock_handler_i
         _intent(mock_handler_input, allowed)
         assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
     _intent(mock_handler_input, "PlayContentIntent")
+    assert (
+        DialogValidationPolicy.dialog_validation_failure(mock_handler_input)["dialogType"]
+        == "feedback"
+    )
+
+
+@pytest.mark.parametrize("intent_name", ["WhatsThisAboutIntent", "WhoIsCreatorIntent"])
+def test_playback_details_are_allowed_through_feedback_for_unfinished_audio(
+    mock_handler_input, intent_name
+):
+    active = {
+        "contentId": "track-1",
+        "audioUrl": "https://audio.example.test/track-1.mp3",
+        "status": "paused",
+    }
+    User.update(
+        mock_handler_input,
+        {
+            "activePlayback": active,
+            "awaitingFeedback": True,
+            "pendingFeedback": {"contentId": "track-1"},
+            "activeDialog": {"type": "feedback", "context": {"contentId": "track-1"}},
+        },
+    )
+    _intent(mock_handler_input, intent_name)
+
+    assert DialogValidationPolicy.dialog_validation_failure(mock_handler_input) is None
+
+
+def test_playback_details_stay_gated_when_feedback_audio_is_finished(mock_handler_input):
+    User.update(
+        mock_handler_input,
+        {
+            "activePlayback": {
+                "contentId": "track-1",
+                "audioUrl": "https://audio.example.test/track-1.mp3",
+                "status": "completed",
+            },
+            "awaitingFeedback": True,
+            "pendingFeedback": {"contentId": "track-1"},
+            "activeDialog": {"type": "feedback", "context": {"contentId": "track-1"}},
+        },
+    )
+    _intent(mock_handler_input, "WhatsThisAboutIntent")
+
     assert (
         DialogValidationPolicy.dialog_validation_failure(mock_handler_input)["dialogType"]
         == "feedback"
@@ -693,8 +775,8 @@ async def test_invalid_onboarding_reply_never_reaches_resolver(monkeypatch, mock
     }
     resolve = AsyncMock()
     monkeypatch.setattr(ResolverClient, "resolve_utterance", resolve)
-    DialogValidationInterceptor().process(mock_handler_input)
-    await ResolverInterceptor(deps=ApplicationContainer()).process(mock_handler_input)
+    await DialogValidationInterceptor().process(mock_handler_input)
+    await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     resolve.assert_not_awaited()
     assert mock_handler_input.attributes_manager.request_attributes.get("_nlp") is None
 
@@ -710,7 +792,9 @@ def test_latest_content_intent_reconstructs_sort_for_resolver(mock_handler_input
     envelope.request = request
     mock_handler_input.request_envelope = envelope
     assert (
-        ResolverWorkflow._extract_raw_utterance(mock_handler_input, "PlayLatestContentIntent")
+        ResolverWorkflowRunner._extract_raw_utterance(
+            mock_handler_input, "PlayLatestContentIntent"
+        )
         == "play latest news content in Wakefield"
     )
 
@@ -725,4 +809,9 @@ def test_content_intent_preserves_raw_slot_for_internal_state(mock_handler_input
     envelope = MagicMock()
     envelope.request = request
     mock_handler_input.request_envelope = envelope
-    assert ResolverWorkflow._extract_raw_utterance(mock_handler_input, "PlayContentIntent") == "tnf"
+    assert (
+        ResolverWorkflowRunner._extract_raw_utterance(
+            mock_handler_input, "PlayContentIntent"
+        )
+        == "tnf"
+    )

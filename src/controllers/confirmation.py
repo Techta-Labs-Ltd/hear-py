@@ -3,9 +3,9 @@ from __future__ import annotations
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.affirmative import Affirmative
+from src.alexa.decline import Decline
 from src.alexa.request import AlexaRequest
-from src.models.affirmative import Affirmative
-from src.models.decline import Decline
 
 
 class YesIntentHandler(AbstractRequestHandler):

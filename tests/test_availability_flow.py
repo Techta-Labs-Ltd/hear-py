@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.alexa.availability import Availability
 from src.alexa.availability_speech import AvailabilitySpeech
+from src.alexa.dialog import DialogStateManager
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, ResponseBuilder
 from src.constants.state import StateSchema
-from src.models.availability import Availability
 from src.models.availability_data import AvailabilityData
-from src.models.dialog import DialogStateManager
 from src.models.user import User
 
 
@@ -39,6 +40,22 @@ class AvailabilityTestSupport:
                 ),
             ),
             progressive=SimpleNamespace(send=AsyncMock(return_value=True)),
+            user=User(),
+            browse=SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None),
+            playback=SimpleNamespace(
+                queue=SimpleNamespace(initialize=lambda *_args, **_kwargs: None),
+                start=AsyncMock(return_value={"shouldEndSession": True}),
+            ),
+        )
+
+    @staticmethod
+    def action(deps):
+        return Availability(
+            deps.heara,
+            deps.progressive,
+            deps.user,
+            deps.browse,
+            deps.playback,
         )
 
     @staticmethod
@@ -61,11 +78,38 @@ async def test_something_else_leaves_availability_choices_and_returns_to_search(
     DialogStateManager.activate(handler_input, "availability", context=context)
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     assert "What would you like to listen to instead?" in AvailabilityTestSupport.speech(response)
     assert response["shouldEndSession"] is False
     assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
+
+
+@pytest.mark.asyncio
+async def test_empty_source_fallback_keeps_resolution_id(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "publication_count": 0,
+            "standalone_track_count": 0,
+            "publications": [],
+        }
+    )
+
+    await AvailabilityTestSupport.action(deps)._begin_source(
+        handler_input,
+        {"type": "creator", "id": "creator-1", "name": "A Reader"},
+        {
+            "query": "",
+            "filter": {"creatorIds": ["creator-1"]},
+            "resolutionId": "resolution-123",
+        },
+    )
+
+    assert deps.heara.availability.await_args.args[0]["resolutionId"] == "resolution-123"
+    assert deps.heara.search.await_args.args[0]["resolutionId"] == "resolution-123"
+    assert deps.heara.search.await_args.args[0]["filter"] == {"creatorIds": ["creator-1"]}
     assert User.snapshot(handler_input)["activeDialog"] is None
 
 
@@ -89,7 +133,7 @@ async def test_no_leaves_multiple_availability_choices_and_returns_to_search(
     )
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     assert "What would you like to listen to instead?" in AvailabilityTestSupport.speech(response)
     assert response["shouldEndSession"] is False
@@ -259,7 +303,7 @@ async def test_mixed_searches_bypass_availability(mock_handler_input, payload):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "PlayContentIntent")
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_resolution(
+    response = await AvailabilityTestSupport.action(deps).handle_resolution(
         handler_input,
         {"intent": "search", "searchPayload": payload},
         payload,
@@ -288,7 +332,7 @@ async def test_location_and_one_organization_preserves_both_availability_filters
         }
     )
 
-    await Availability(deps=deps).handle_resolution(
+    await AvailabilityTestSupport.action(deps).handle_resolution(
         handler_input,
         {
             "intent": "organization",
@@ -313,11 +357,113 @@ async def test_location_and_one_organization_preserves_both_availability_filters
 
 
 @pytest.mark.asyncio
+async def test_publication_from_one_organization_uses_availability_and_autoplays(
+    mock_handler_input, caplog
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    payload = {
+        "query": "",
+        "filter": {"organizationIds": ["org-1"], "isPublication": True},
+    }
+    publication = {"type": "publication", "id": "pub-1", "name": "April News"}
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "publication_count": 1,
+            "standalone_track_count": 4,
+            "publications": [publication],
+        },
+        {
+            "failed": False,
+            "results": [
+                {
+                    "contentId": "track-1",
+                    "title": "April News track one",
+                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
+                }
+            ],
+            "total_hits": 1,
+        },
+    )
+
+    with caplog.at_level(logging.INFO, logger="hear"):
+        response = await AvailabilityTestSupport.action(deps).handle_resolution(
+            handler_input,
+            {
+                "intent": "publication",
+                "searchPayload": payload,
+                "resolvedEntities": [
+                    {
+                        "type": "organization",
+                        "id": "org-1",
+                        "canonicalValue": "York Talking News",
+                    }
+                ],
+            },
+            payload,
+            "publication from York Talking News",
+        )
+
+    assert response == {"shouldEndSession": True}
+    assert deps.heara.availability.await_args.args[0]["filter"] == {
+        "organizationId": "org-1"
+    }
+    assert deps.heara.search.await_args.args[0]["filter"] == {"publicationIds": ["pub-1"]}
+    assert DialogStateManager.get_active(handler_input) is None
+    assert "availability request filter={'organizationId': 'org-1'}" in caplog.text
+    assert "availability catalogue search filter={'publicationIds': ['pub-1']}" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_publication_from_one_organization_only_lists_multiple_publications(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    payload = {
+        "query": "",
+        "filter": {"organizationIds": ["org-1"], "isPublication": True},
+    }
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "publication_count": 2,
+            "standalone_track_count": 0,
+            "publications": [
+                {"type": "publication", "id": "pub-1", "name": "April News"},
+                {"type": "publication", "id": "pub-2", "name": "May News"},
+            ],
+        }
+    )
+
+    response = await AvailabilityTestSupport.action(deps).handle_resolution(
+        handler_input,
+        {
+            "intent": "publication",
+            "searchPayload": payload,
+            "resolvedEntities": [
+                {
+                    "type": "organization",
+                    "id": "org-1",
+                    "canonicalValue": "York Talking News",
+                }
+            ],
+        },
+        payload,
+        "publication from York Talking News",
+    )
+
+    assert "April News" in AvailabilityTestSupport.speech(response)
+    assert "May News" in AvailabilityTestSupport.speech(response)
+    assert deps.heara.search.await_count == 0
+    assert DialogStateManager.get_active(handler_input)["context"]["kind"] == "publication"
+
+
+@pytest.mark.asyncio
 async def test_general_search_does_not_call_availability(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "PlayContentIntent")
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_resolution(
+    response = await AvailabilityTestSupport.action(deps).handle_resolution(
         handler_input,
         {
             "intent": "search",
@@ -360,7 +506,7 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
         }
     )
 
-    response = await Availability(deps=deps).begin_local(
+    response = await AvailabilityTestSupport.action(deps).begin_local(
         handler_input,
         {"intent": "local", "slots": {"city": "Swindon", "isLocal": True}},
     )
@@ -439,7 +585,7 @@ async def test_creator_location_availability_filters_creators_without_saving_cit
         },
     }
 
-    response = await Availability(deps=deps).begin_creator_location(handler_input, nlp)
+    response = await AvailabilityTestSupport.action(deps).begin_creator_location(handler_input, nlp)
 
     assert deps.heara.availability.await_args.args[0] == {
         "filter": {
@@ -502,7 +648,7 @@ async def test_creator_location_terminal_results_do_not_enter_onboarding(
         },
     }
 
-    response = await Availability(deps=deps).begin_creator_location(handler_input, nlp)
+    response = await AvailabilityTestSupport.action(deps).begin_creator_location(handler_input, nlp)
 
     assert expected_speech in AvailabilityTestSupport.speech(response)
     store = User.snapshot(handler_input)
@@ -554,7 +700,7 @@ async def test_creator_location_pagination_preserves_filter_and_creator_domain(
 
     DialogStateManager.activate(handler_input, "availability", context=context)
 
-    await Availability(deps=deps).handle_dialog(handler_input)
+    await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     request = deps.heara.availability.await_args.args[0]
     assert request["filter"] == availability_filter
@@ -605,7 +751,7 @@ async def test_creator_location_previous_page_reloads_without_growing_state(
 
     DialogStateManager.activate(handler_input, "availability", context=context)
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     request = deps.heara.availability.await_args.args[0]
     assert request["page"] == 0
@@ -644,7 +790,7 @@ async def test_empty_local_availability_stops_without_search_or_playback_mutatio
         }
     )
 
-    response = await Availability(deps=deps).begin_local(
+    response = await AvailabilityTestSupport.action(deps).begin_local(
         handler_input,
         {
             "intent": "local",
@@ -686,7 +832,7 @@ async def test_failed_local_request_uses_listener_language_and_city(mock_handler
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
     deps = AvailabilityTestSupport.dependencies({"failed": True})
 
-    response = await Availability(deps=deps).begin_local(
+    response = await AvailabilityTestSupport.action(deps).begin_local(
         handler_input,
         {
             "intent": "local",
@@ -703,7 +849,7 @@ async def test_failed_local_request_uses_listener_language_and_city(mock_handler
 
 
 @pytest.mark.asyncio
-async def test_empty_source_availability_stops_without_search(mock_handler_input):
+async def test_empty_source_availability_uses_source_preserving_search(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
     deps = AvailabilityTestSupport.dependencies(
         {
@@ -714,14 +860,17 @@ async def test_empty_source_availability_stops_without_search(mock_handler_input
         }
     )
 
-    response = await Availability(deps=deps)._begin_source(
+    response = await AvailabilityTestSupport.action(deps)._begin_source(
         handler_input,
         {"type": "organization", "id": "org-1", "name": "Local Voice"},
         {"query": "", "filter": {"organizationIds": ["org-1"]}},
     )
 
-    deps.heara.search.assert_not_awaited()
-    assert "couldn't find any content from Local Voice right now" in AvailabilityTestSupport.speech(
+    deps.heara.search.assert_awaited_once()
+    assert deps.heara.search.await_args.args[0]["filter"] == {
+        "organizationIds": ["org-1"]
+    }
+    assert "couldn't find anything matching Local Voice" in AvailabilityTestSupport.speech(
         response
     )
     assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
@@ -732,7 +881,7 @@ async def test_failed_availability_stops_without_search(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
     deps = AvailabilityTestSupport.dependencies({"failed": True})
 
-    response = await Availability(deps=deps)._begin_source(
+    response = await AvailabilityTestSupport.action(deps)._begin_source(
         handler_input,
         {"type": "creator", "id": "creator-1", "name": "A Reader"},
         {"query": "", "filter": {"creatorIds": ["creator-1"]}},
@@ -765,7 +914,7 @@ async def test_confirmed_source_continues_to_catalogue_search_when_availability_
         ],
     }
 
-    response = await Availability(deps=deps).handle_resolution(
+    response = await AvailabilityTestSupport.action(deps).handle_resolution(
         handler_input,
         resolution,
         payload,
@@ -822,7 +971,7 @@ async def test_recommendations_list_sources_before_loading_content(mock_handler_
         }
     )
 
-    response = await Availability(deps=deps).begin_recommendations(handler_input)
+    response = await AvailabilityTestSupport.action(deps).begin_recommendations(handler_input)
 
     request = deps.heara.availability.await_args.args[0]
     assert request["filter"] == {}
@@ -904,7 +1053,7 @@ async def test_requested_city_source_does_not_say_near_you(mock_handler_input):
     }
     payload = {"query": "", "filter": {"city": "Liverpool"}}
 
-    response = await Availability(deps=deps).handle_resolution(
+    response = await AvailabilityTestSupport.action(deps).handle_resolution(
         handler_input, resolution, payload, "content in Liverpool"
     )
 
@@ -958,7 +1107,7 @@ async def test_resolver_location_payload_routes_to_availability_instead_of_searc
         "slots": {"residualQuery": "", "isLocal": True, "sort": "latest"},
     }
 
-    response = await Availability(deps=deps).begin_local(handler_input, nlp)
+    response = await AvailabilityTestSupport.action(deps).begin_local(handler_input, nlp)
 
     deps.heara.availability.assert_awaited_once()
     deps.heara.search.assert_not_awaited()
@@ -999,7 +1148,7 @@ async def test_source_with_publications_and_tracks_asks_for_content_type(mock_ha
         }
     )
 
-    response = await Availability(deps=deps)._begin_source(
+    response = await AvailabilityTestSupport.action(deps)._begin_source(
         handler_input,
         {"type": "organization", "id": "org-1", "name": "Redcar Talking Newspaper"},
         {"query": "", "filter": {"organizationIds": ["org-1"]}},
@@ -1037,7 +1186,7 @@ async def test_source_with_only_publications_lists_three_at_a_time(mock_handler_
         }
     )
 
-    response = await Availability(deps=deps)._begin_source(
+    response = await AvailabilityTestSupport.action(deps)._begin_source(
         handler_input,
         {"type": "organization", "id": "org-1", "name": "Redcar Talking Newspaper"},
         {"query": "", "filter": {"organizationIds": ["org-1"]}},
@@ -1048,7 +1197,8 @@ async def test_source_with_only_publications_lists_three_at_a_time(mock_handler_
     assert "Here are the first three publications" in speech
     assert "First, Redcar News 1" in speech
     assert "Fourth" not in speech
-    assert "first, second, third, show more, or next" in speech
+    assert "You can say first, second, or third." in speech
+    assert "To hear more choices, say show more or next." in speech
     assert "something else to return to search" in speech
     assert DialogStateManager.get_active(handler_input)["context"]["kind"] == "publication"
 
@@ -1106,7 +1256,7 @@ async def test_selecting_first_publication_speaks_publication_not_organization(
     )
     deps.browse = SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None)
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     assert response == {"shouldEndSession": True}
     assert deps.heara.search.await_args.args[0]["filter"] == {
@@ -1146,17 +1296,14 @@ async def test_source_without_publications_silently_searches_tracks(mock_handler
         start=AsyncMock(return_value={"shouldEndSession": True}),
     )
 
-    response = await Availability(deps=deps)._begin_source(
+    response = await AvailabilityTestSupport.action(deps)._begin_source(
         handler_input,
         {"type": "organization", "id": "org-1", "name": "Redcar Talking Newspaper"},
         {"query": "", "filter": {"organizationIds": ["org-1"]}},
     )
 
     search_payload = deps.heara.search.await_args.args[0]
-    assert search_payload["filter"] == {
-        "organizationIds": ["org-1"],
-        "isPublication": False,
-    }
+    assert search_payload["filter"] == {"organizationIds": ["org-1"]}
     assert deps.heara.search.await_count == 1
     assert response == {"shouldEndSession": True}
     intro = deps.playback.start.await_args.args[2]
@@ -1206,7 +1353,7 @@ async def test_availability_dialog_accepts_ordinal_and_keeps_retry_open(mock_han
         }
     )
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     body = deps.heara.availability.await_args.args[0]
     assert body["filter"] == {"creatorId": "two"}
@@ -1235,7 +1382,7 @@ async def test_declining_single_available_source_uses_natural_uk_english(mock_ha
     )
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     speech = AvailabilityTestSupport.speech(response)
     assert "What would you like to listen to instead?" in speech
@@ -1293,7 +1440,7 @@ async def test_selecting_tracks_starts_playback_without_offering_track_choices(m
         start=AsyncMock(return_value={"shouldEndSession": True}),
     )
     deps.browse = SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None)
-    availability = Availability(deps=deps)
+    availability = AvailabilityTestSupport.action(deps)
 
     response = await availability.handle_dialog(handler_input)
 
@@ -1368,7 +1515,7 @@ async def test_availability_track_choice_survives_alexa_intent_variants(
     )
     deps.browse = SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None)
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     assert response == {"shouldEndSession": True}
     deps.heara.search.assert_awaited_once()
@@ -1441,7 +1588,7 @@ async def test_availability_publication_choice_survives_alexa_intent_variants(
     )
     deps.browse = SimpleNamespace(set_catalog=lambda *_args, **_kwargs: None)
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     assert response == {"shouldEndSession": True}
     sent = deps.heara.search.await_args.args[0]
@@ -1480,7 +1627,7 @@ async def test_more_page_failure_keeps_dialog_open_for_retry(mock_handler_input)
     )
     deps = AvailabilityTestSupport.dependencies({"failed": True})
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     assert "couldn't load the next source choices just now" in AvailabilityTestSupport.speech(
         response
@@ -1506,7 +1653,7 @@ async def test_availability_publication_choice_retry_on_fallback_intent(mock_han
     DialogStateManager.activate(handler_input, "availability", context=context)
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     speech = AvailabilityTestSupport.speech(response)
     assert "I didn't match that to one of the publication choices." in speech
@@ -1516,6 +1663,43 @@ async def test_availability_publication_choice_retry_on_fallback_intent(mock_han
     assert "Say no, none of these, or something else to return to search." in speech
     assert response["shouldEndSession"] is False
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
+
+
+def test_fallback_retries_active_source_choices_instead_of_returning_to_search(
+    mock_handler_input,
+):
+    from unittest.mock import MagicMock
+
+    from src.alexa.runtime import ResponseBuilder
+    from src.controllers.fallback import FallbackModule
+
+    candidates = [
+        {"type": "organization", "id": "org-1", "name": "Talking News Federation"},
+        {"type": "creator", "id": "creator-1", "name": "Adeshina Ayomide"},
+    ]
+    DialogStateManager.activate(
+        mock_handler_input,
+        "availability",
+        context={
+            "kind": "source",
+            "candidates": candidates,
+            "choiceCandidates": candidates,
+            "displayedCandidates": candidates,
+            "offset": 0,
+        },
+    )
+    mock_handler_input.response_builder = ResponseBuilder()
+
+    response = FallbackModule.fallback_response(
+        mock_handler_input, User(), MagicMock()
+    )
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "I didn't match that to one of the source choices." in speech
+    assert "Talking News Federation" in speech
+    assert "Adeshina Ayomide" in speech
+    assert "Sorry, I didn't catch that" not in speech
+    assert DialogStateManager.get_active(mock_handler_input)["type"] == "availability"
 
 
 @pytest.mark.asyncio
@@ -1539,7 +1723,7 @@ async def test_availability_format_choice_retry_on_fallback_intent(mock_handler_
     DialogStateManager.activate(handler_input, "availability", context=context)
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     speech = AvailabilityTestSupport.speech(response)
     assert "I didn't match that to one of the choices." in speech
@@ -1571,7 +1755,7 @@ async def test_availability_dismiss_phrase_clears_dialog_and_returns_to_search(m
     DialogStateManager.activate(handler_input, "availability", context=context)
     deps = AvailabilityTestSupport.dependencies({"failed": False})
 
-    response = await Availability(deps=deps).handle_dialog(handler_input)
+    response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     speech = AvailabilityTestSupport.speech(response)
     assert "What would you like to listen to instead?" in speech

@@ -1,41 +1,70 @@
 from __future__ import annotations
 
-from ask_sdk_core.handler_input import HandlerInput
+from dataclasses import dataclass
+from typing import Literal
 
-from src.alexa.playback_context import PlaybackContext
-from src.alexa.request import AlexaRequest
-from src.alexa.response import AlexaResponse
-from src.alexa.speech import Speech
-from src.alexa.ssml import Ssml
-from src.models.user import User
-from src.services.logging_control import ApplicationLog
 from src.utils.content import ContentUtils
+
+
+@dataclass(frozen=True, slots=True)
+class FollowCommand:
+    """The canonical source selected for a follow-state transition."""
+
+    source_id: str
+    source_name: str
+    source_type: Literal["creator", "organization"] = "creator"
+
+    def __post_init__(self) -> None:
+        if not self.source_id.strip() or not self.source_name.strip():
+            raise ValueError("follow command requires a source id and name")
+        if self.source_type not in {"creator", "organization"}:
+            raise ValueError("follow command requires a supported source type")
+
+    def event_source(self) -> dict:
+        return {
+            "id": self.source_id,
+            "name": self.source_name,
+            "type": self.source_type,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class FollowReceipt:
+    command: FollowCommand
+    followed: bool
 
 
 class FollowingManager:
     __slots__ = ()
 
     @staticmethod
-    def add(handler_input, source_id: str, source_name: str, source_type: str = "creator") -> dict:
-        store = User.snapshot(handler_input)
-        followed = list(store.get("followedCreators") or [])
-        source_type = "organization" if source_type == "organization" else "creator"
+    def add(followed_items: object, command: FollowCommand) -> tuple[list[dict], FollowReceipt]:
+        raw_items = followed_items if isinstance(followed_items, (list, tuple)) else ()
+        followed = [dict(item) for item in raw_items if isinstance(item, dict)]
         if any(
-            (c.get("id") == source_id and c.get("type", "creator") == source_type for c in followed)
+            (
+                c.get("id") == command.source_id
+                and c.get("type", "creator") == command.source_type
+                for c in followed
+            )
         ):
-            return store
-        followed.append({"id": source_id, "name": source_name, "type": source_type})
-        return User.update(handler_input, {"followedCreators": followed})
+            return followed, FollowReceipt(command=command, followed=True)
+        followed.append(command.event_source())
+        return followed, FollowReceipt(command=command, followed=True)
 
     @staticmethod
-    def remove(handler_input, source_id: str, source_type: str = "creator") -> dict:
-        store = User.snapshot(handler_input)
+    def remove(followed_items: object, command: FollowCommand) -> tuple[list[dict], FollowReceipt]:
+        raw_items = followed_items if isinstance(followed_items, (list, tuple)) else ()
         followed = [
             c
-            for c in store.get("followedCreators") or []
-            if not (c.get("id") == source_id and c.get("type", "creator") == source_type)
+            for c in raw_items
+            if isinstance(c, dict)
+            if not (
+                c.get("id") == command.source_id
+                and c.get("type", "creator") == command.source_type
+            )
         ]
-        return User.update(handler_input, {"followedCreators": followed})
+        return followed, FollowReceipt(command=command, followed=False)
 
     @staticmethod
     def is_following(store: dict, source_id: str, source_type: str = "creator") -> bool:
@@ -77,13 +106,12 @@ class ListeningTracker:
 
     @staticmethod
     def record(
-        handler_input,
+        store: dict,
         *,
         category: str | None = None,
         creator: str | None = None,
         liked: bool | None = None,
     ) -> dict:
-        store = User.snapshot(handler_input)
         pattern = dict(store.get("listeningPattern") or {})
         score = 2 if liked is True else -1 if liked is False else 1
         if category:
@@ -93,153 +121,10 @@ class ListeningTracker:
         if creator_label:
             key = f"creator:{creator_label}"
             pattern[key] = (pattern.get(key) or 0) + score
-        return User.update(handler_input, {"listeningPattern": pattern})
-
-
-class CreatorIdentity:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Social._dependencies(deps)
-
-    "Tells the user who the creator of the currently playing content is."
-
-    def execute(self, handler_input: HandlerInput):
-        store = User.snapshot(handler_input)
-        title = store.get("currentContentTitle") or store.get("feedbackContentTitle")
-        creator = store.get("currentCreator") or store.get("feedbackCreator")
-        if not title:
-            return handler_input.response_builder.speak(Speech.CREATOR_CREDIT_UNKNOWN).response
-        if creator:
-            return handler_input.response_builder.speak(
-                Speech.CREATOR_CREDIT(title, creator)
-            ).response
-        return handler_input.response_builder.speak(Speech.CREATOR_CREDIT_UNKNOWN).response
-
-
-class FollowCreator:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Social._dependencies(deps)
-
-    "Follows the currently playing creator."
-
-    async def execute(self, handler_input: HandlerInput):
-        try:
-            if AlexaRequest.wants_play_from_followed_creators(handler_input):
-                return await self._deps.search.play_from_followed_creators(
-                    handler_input, deps=self._deps
-                )
-        except Exception:
-            pass
-        store = User.snapshot(handler_input)
-        source = Social._follow_source(store) or {}
-        creator_id = source.get("id")
-        creator_name = source.get("name")
-        source_type = source.get("kind") or source.get("type") or "creator"
-        if not creator_id or not creator_name or Speech.is_bad_credit(creator_name):
-            return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
-        if FollowingManager.is_following(store, creator_id, source_type):
-            if store.get("awaitingFollow"):
-                await self._deps.feedback.clear(handler_input)
-            else:
-                audio_ctx = PlaybackContext.read_audio_player_context(handler_input)
-                if not PlaybackContext.is_audio_player_active(audio_ctx):
-                    return await self._deps.search.play_from_followed_creators(
-                        handler_input, deps=self._deps
-                    )
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.ALREADY_FOLLOWING(creator_name))
-                )
-                .reprompt(Ssml.ssml(Speech.IDLE_NEXT_REPROMPT))
-                .set_should_end_session(False)
-                .response
-            )
-        try:
-            FollowingManager.add(handler_input, creator_id, creator_name, source_type)
-            user_id = AlexaRequest.get_user_id(handler_input)
-            if user_id:
-                self._deps.events.following(
-                    followed=True,
-                    alexa_user_id=user_id,
-                    listener_id=store.get("listenerId"),
-                    source={
-                        "id": creator_id,
-                        "name": creator_name,
-                        "type": source_type,
-                    },
-                )
-            if store.get("awaitingFollow"):
-                await self._deps.feedback.clear(handler_input)
-            return AlexaResponse.present_idle_next(
-                handler_input,
-                Speech.FOLLOW_CREATOR(creator_name),
-                Speech.FOLLOW_CREATOR_REPROMPT,
-            )
-        except Exception as err:
-            ApplicationLog.warning("Follow creator error: %s", err)
-            return (
-                handler_input.response_builder.speak(Speech.ERROR_GENERIC)
-                .reprompt(Speech.WELCOME_REPROMPT)
-                .set_should_end_session(False)
-                .response
-            )
-
-
-class UnfollowCreator:
-    def __init__(self, *, deps: object | None = None):
-        self._deps = Social._dependencies(deps)
-
-    "Unfollows the currently playing creator."
-
-    async def execute(self, handler_input: HandlerInput):
-        store = User.snapshot(handler_input)
-        source = Social._follow_source(store) or {}
-        creator_id = source.get("id")
-        creator_name = source.get("name")
-        source_type = source.get("kind") or source.get("type") or "creator"
-        if not creator_id or not creator_name:
-            return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
-        if not FollowingManager.is_following(store, creator_id, source_type):
-            return handler_input.response_builder.speak(Speech.NOT_FOLLOWING(creator_name)).response
-        try:
-            FollowingManager.remove(handler_input, creator_id, source_type)
-            user_id = AlexaRequest.get_user_id(handler_input)
-            if user_id:
-                self._deps.events.following(
-                    followed=False,
-                    alexa_user_id=user_id,
-                    listener_id=store.get("listenerId"),
-                    source={
-                        "id": creator_id,
-                        "name": creator_name,
-                        "type": source_type,
-                    },
-                )
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(Speech.UNFOLLOW_CREATOR(creator_name))
-                )
-                .reprompt(Ssml.ssml(Speech.IDLE_DO_NEXT_REPROMPT))
-                .set_should_end_session(False)
-                .response
-            )
-        except Exception as err:
-            ApplicationLog.warning("Unfollow creator error: %s", err)
-            return (
-                handler_input.response_builder.speak(Speech.ERROR_GENERIC)
-                .reprompt(Speech.WELCOME_REPROMPT)
-                .set_should_end_session(False)
-                .response
-            )
+        return pattern
 
 
 class Social:
-
-    @staticmethod
-    def _dependencies(deps: object | None):
-        if deps is None:
-            raise RuntimeError("Social requires injected dependencies")
-        return deps
-
     @staticmethod
     def _follow_source(store: dict) -> dict | None:
         pending = store.get("pendingFollowSource")

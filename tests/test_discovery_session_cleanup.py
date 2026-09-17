@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.alexa.dialog import DialogStateManager
 from src.alexa.speech import Speech
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.controllers.playback_controls import PauseIntentHandler
 from src.controllers.system import CancelIntentHandler, SessionEndedHandler
 from src.middleware.dialog_validation import DialogValidationPolicy
-from src.models.dialog import DialogStateManager
 from src.models.user import User
 
 
@@ -103,7 +103,7 @@ async def test_session_ended_clears_discovery_state(monkeypatch):
 @pytest.mark.asyncio
 async def test_cancel_clears_discovery_state(monkeypatch):
     handler_input = _handler_input("IntentRequest", "AMAZON.CancelIntent")
-    monkeypatch.setattr("src.models.playback.Playback.emit_user", AsyncMock())
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit_user", AsyncMock())
     container = ApplicationContainer()
     await CancelIntentHandler(container.user, container.playback).handle(handler_input)
     _assert_discovery_cleared(handler_input)
@@ -112,9 +112,10 @@ async def test_cancel_clears_discovery_state(monkeypatch):
 @pytest.mark.asyncio
 async def test_stop_clears_discovery_state(monkeypatch):
     handler_input = _handler_input("IntentRequest", "AMAZON.StopIntent")
-    monkeypatch.setattr("src.models.playback.PlaybackState.merge", lambda *_args: {})
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    await PauseIntentHandler(deps=ApplicationContainer()).handle(handler_input)
+    monkeypatch.setattr("src.alexa.playback_workflow.PlaybackState.merge", lambda *_args: {})
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    container = ApplicationContainer()
+    await PauseIntentHandler(container.playback_controls).handle(handler_input)
     _assert_discovery_cleared(handler_input)
     handler_input.response_builder.speak.assert_called_once_with(Speech.GOODBYE)
 
@@ -122,8 +123,9 @@ async def test_stop_clears_discovery_state(monkeypatch):
 @pytest.mark.asyncio
 async def test_pause_does_not_clear_discovery_state(monkeypatch):
     handler_input = _handler_input("IntentRequest", "AMAZON.PauseIntent")
-    monkeypatch.setattr("src.models.playback.PlaybackState.merge", lambda *_args: {})
-    monkeypatch.setattr("src.models.playback.Playback.emit", AsyncMock())
-    await PauseIntentHandler(deps=ApplicationContainer()).handle(handler_input)
+    monkeypatch.setattr("src.alexa.playback_workflow.PlaybackState.merge", lambda *_args: {})
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    container = ApplicationContainer()
+    await PauseIntentHandler(container.playback_controls).handle(handler_input)
     assert User.snapshot(handler_input)["awaitingSearchConfirmation"] is True
     assert User.snapshot(handler_input)["pendingResolution"]["confirmationLabel"] == "sport"

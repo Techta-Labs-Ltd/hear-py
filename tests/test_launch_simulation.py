@@ -9,7 +9,6 @@ from src.alexa.speech import Speech
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.middleware.onboarding_gate import OnboardingPolicy
-from src.models.launch_workflow import LaunchWorkflow
 from src.models.user import User
 
 USER_ID = "amzn1.ask.account.AMA5VNMEKZ2IKKQ66FJFFNUFHIZWGKDJXHMTPAWPFIW6Q7NFOQDKCSUNC44TFDRZXRIMA7YZUNKJHK2KAVHFCOAQSSSLDEYEFMJYXTZYYOYK52IGMJMU3KWXBZPGNEUJC4HAKIJUSUZDKD3GRL26OQMBR4BPLCMTN4AVAML7OWIYSU5YAPQOTGCEEPHAMQQFZ4B7EEYUT5H56XOI3SQZ3P5S7IOVYU2UZJJXPGKLG2UA"
@@ -136,7 +135,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -163,7 +162,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -190,7 +189,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -215,7 +214,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -237,7 +236,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -264,7 +263,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -301,7 +300,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -327,7 +326,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -348,7 +347,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -369,7 +368,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -392,7 +391,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -417,7 +416,7 @@ class TestIsNewUser:
             }
         )
 
-        LaunchWorkflow(deps=ApplicationContainer())._unfinished_response(
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
             hi, User.snapshot(hi)
         )
 
@@ -457,29 +456,18 @@ class TestSpeechStrings:
 
 class TestLaunchSimulation:
     @pytest.mark.asyncio
-    async def test_launch_discards_stale_community_town_capture(self, monkeypatch):
+    async def test_launch_resumes_pending_community_town_capture(self):
         hi = _build_handler_input(
             store_override={
                 "onboardingComplete": True,
                 "onboardingStage": "confirm_town_for_community",
             }
         )
-        monkeypatch.setattr(
-            "src.models.launch_workflow.LaunchWorkflow._ensure_listener_data_for_launch",
-            AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
-        )
-        monkeypatch.setattr(
-            "src.models.launch_workflow.LaunchWorkflow._sync_listener_for_launch",
-            AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
-        )
-
-        await LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
 
         store = User.snapshot(hi)
-        speech = _speak_text(hi)
-        assert store["onboardingStage"] is None
-        assert "welcome to hear" in speech.casefold()
-        assert "which city are you in" not in speech.casefold()
+        assert store["onboardingStage"] == "ask_town"
+        assert hi.response_builder.speak.called
 
     @pytest.mark.asyncio
     async def test_launch_enrichment_uses_injected_locality_dependency(self):
@@ -487,7 +475,7 @@ class TestLaunchSimulation:
         enriched = {**User.snapshot(hi), "userCity": "Wakefield"}
         listener_profile = MagicMock()
         listener_profile.apply_listener_profile = AsyncMock(return_value=enriched)
-        workflow = LaunchWorkflow(deps=ApplicationContainer(listener_profile=listener_profile))
+        workflow = ApplicationContainer(listener_profile=listener_profile).build_request_launch_workflow(hi)
         result = await workflow._ensure_listener_data_for_launch(hi, User.snapshot(hi))
         listener_profile.apply_listener_profile.assert_awaited_once_with(hi)
         assert result["userCity"] == "Wakefield"
@@ -520,17 +508,17 @@ class TestLaunchSimulation:
             }
         )
         monkeypatch.setattr(
-            "src.models.onboarding.LaunchTracker.record", lambda *_args: {"save": {}}
+            "src.alexa.onboarding.LaunchTracker.record", lambda *_args: {"save": {}}
         )
         monkeypatch.setattr(
-            "src.models.launch_workflow.LaunchWorkflow._ensure_listener_data_for_launch",
+            "src.alexa.launch.LaunchWorkflow._ensure_listener_data_for_launch",
             AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
         )
         monkeypatch.setattr(
-            "src.models.launch_workflow.LaunchWorkflow._schedule_launch_background_work",
+            "src.alexa.launch.LaunchWorkflow._schedule_launch_background_work",
             lambda *_args: None,
         )
-        await LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         store = User.snapshot(hi)
         assert store["pendingAmbiguity"] is None
         assert store["awaitingOrganizationName"] is False
@@ -568,21 +556,21 @@ class TestLaunchSimulation:
             }
         )
         monkeypatch.setattr(
-            "src.models.onboarding.LaunchTracker.record", lambda *_args: {"save": {}}
+            "src.alexa.onboarding.LaunchTracker.record", lambda *_args: {"save": {}}
         )
         monkeypatch.setattr(
-            "src.models.playback.PlaybackState.has_unfinished",
+            "src.alexa.playback_workflow.PlaybackState.has_unfinished",
             lambda _self, _store: False,
         )
         monkeypatch.setattr(
-            "src.models.launch_workflow.LaunchWorkflow._ensure_listener_data_for_launch",
+            "src.alexa.launch.LaunchWorkflow._ensure_listener_data_for_launch",
             AsyncMock(side_effect=lambda _handler_input, store, **_kwargs: store),
         )
         monkeypatch.setattr(
-            "src.models.launch_workflow.LaunchWorkflow._schedule_launch_background_work",
+            "src.alexa.launch.LaunchWorkflow._schedule_launch_background_work",
             lambda *_args: None,
         )
-        await LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         store = User.snapshot(hi)
         assert store["awaitingSearchConfirmation"] is False
         assert store["pendingResolution"] is None
@@ -595,11 +583,11 @@ class TestLaunchSimulation:
         assert store["followedCreators"] == ["creator-123"]
         assert store["userCity"] == "Pendle"
 
-    @patch("src.models.onboarding.LaunchTracker.record")
+    @patch("src.alexa.onboarding.LaunchTracker.record")
     def test_new_user_empty_store(self, mock_record):
         hi = _build_handler_input()
         mock_record.return_value = {"save": {}}
-        result = LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        result = ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         asyncio.run(result)
         store = User.snapshot(hi)
         speech = _speak_text(hi)
@@ -609,11 +597,11 @@ class TestLaunchSimulation:
         print(f"  has_location: {bool(store.get('userCity') or store.get('locality'))}")
         print(f"  Speech: {speech}")
 
-    @patch("src.models.onboarding.LaunchTracker.record")
+    @patch("src.alexa.onboarding.LaunchTracker.record")
     def test_new_user_with_city(self, mock_record):
         hi = _build_handler_input(store_override={"userCity": "London", "locality": "London"})
         mock_record.return_value = {"save": {}}
-        result = LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        result = ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         asyncio.run(result)
         store = User.snapshot(hi)
         speech = _speak_text(hi)
@@ -622,7 +610,7 @@ class TestLaunchSimulation:
         print(f"  has_location: {bool(store.get('userCity'))}")
         print(f"  Speech: {speech}")
 
-    @patch("src.models.onboarding.LaunchTracker.record")
+    @patch("src.alexa.onboarding.LaunchTracker.record")
     def test_returning_with_city(self, mock_record):
         hi = _build_handler_input(
             store_override={
@@ -634,7 +622,7 @@ class TestLaunchSimulation:
             }
         )
         mock_record.return_value = {"save": {}}
-        result = LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        result = ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         asyncio.run(result)
         speech = _speak_text(hi)
         store = User.snapshot(hi)
@@ -643,7 +631,7 @@ class TestLaunchSimulation:
         print(f"  is_new: {OnboardingPolicy._is_new_user(store)}")
         print(f"  Speech: {speech}")
 
-    @patch("src.models.onboarding.LaunchTracker.record")
+    @patch("src.alexa.onboarding.LaunchTracker.record")
     def test_returning_with_name_and_city(self, mock_record):
         hi = _build_handler_input(
             store_override={
@@ -656,14 +644,14 @@ class TestLaunchSimulation:
             }
         )
         mock_record.return_value = {"save": {}}
-        result = LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        result = ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         asyncio.run(result)
         speech = _speak_text(hi)
         User.snapshot(hi)
         print("\n=== RETURNING (name: John, city: London) ===")
         print(f"  Speech: {speech}")
 
-    @patch("src.models.onboarding.LaunchTracker.record")
+    @patch("src.alexa.onboarding.LaunchTracker.record")
     def test_returning_no_city(self, mock_record):
         hi = _build_handler_input(
             store_override={
@@ -673,7 +661,7 @@ class TestLaunchSimulation:
             }
         )
         mock_record.return_value = {"save": {}}
-        result = LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        result = ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         asyncio.run(result)
         speech = _speak_text(hi)
         store = User.snapshot(hi)
@@ -682,7 +670,7 @@ class TestLaunchSimulation:
         print(f"  has_location: {bool(store.get('userCity') or store.get('locality'))}")
         print(f"  Speech: {speech}")
 
-    @patch("src.models.onboarding.LaunchTracker.record")
+    @patch("src.alexa.onboarding.LaunchTracker.record")
     def test_returning_awaiting_feedback(self, mock_record):
         hi = _build_handler_input(
             store_override={
@@ -697,13 +685,13 @@ class TestLaunchSimulation:
             }
         )
         mock_record.return_value = {"save": {}}
-        result = LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        result = ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         asyncio.run(result)
         speech = _speak_text(hi)
         print("\n=== RETURNING (pending feedback) ===")
         print(f"  Speech: {speech}")
 
-    @patch("src.models.onboarding.LaunchTracker.record")
+    @patch("src.alexa.onboarding.LaunchTracker.record")
     def test_returning_awaiting_still_listening(self, mock_record):
         hi = _build_handler_input(
             store_override={
@@ -716,7 +704,7 @@ class TestLaunchSimulation:
             }
         )
         mock_record.return_value = {"save": {}}
-        result = LaunchWorkflow(deps=ApplicationContainer()).execute(hi)
+        result = ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
         asyncio.run(result)
         speech = _speak_text(hi)
         print("\n=== RETURNING (still listening?) ===")

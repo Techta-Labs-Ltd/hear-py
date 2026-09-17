@@ -1,0 +1,666 @@
+from __future__ import annotations
+
+import time
+
+from ask_sdk_core.handler_input import HandlerInput
+
+from config import settings
+from src.alexa.context import RequestContext
+from src.alexa.dialog import DialogSelection, DialogStateManager
+from src.alexa.entities import AlexaEntities
+from src.alexa.feedback import AlexaFeedback
+from src.alexa.feedback_response import FeedbackContinuation
+from src.alexa.playback_speech import PlaybackSpeech
+from src.alexa.playback_state import PlaybackQueue
+from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
+from src.alexa.search import Search
+from src.alexa.search_speech import SearchSpeech
+from src.alexa.speech import Speech
+from src.alexa.ssml import Ssml
+from src.constants.discovery import DiscoveryConstants
+from src.constants.search import SearchConstants
+from src.services.logging_control import ApplicationLog
+from src.utils.content import ContentUtils
+from src.utils.deadline import DeadlineBudget
+from src.utils.filters import SearchFilters
+from src.utils.search_payload import SearchPayload
+
+
+class Affirmative:
+    def __init__(
+        self,
+        *,
+        user,
+        notifications,
+        playback_controls,
+        permission,
+        onboarding,
+        progressive,
+        heara,
+        availability,
+        feedback,
+        playback,
+        enjoyed_feedback,
+        follow_creator,
+        suggestion_confirmation,
+        auto_play_from_search,
+    ) -> None:
+        self._user = user
+        self._notifications = notifications
+        self._playback_controls = playback_controls
+        self._permission = permission
+        self._onboarding = onboarding
+        self._progressive = progressive
+        self._heara = heara
+        self._availability = availability
+        self._feedback = feedback
+        self._playback = playback
+        self._enjoyed_feedback = enjoyed_feedback
+        self._follow_creator = follow_creator
+        self._suggestion_confirmation = suggestion_confirmation
+        self._auto_play_from_search = auto_play_from_search
+
+    @staticmethod
+    def _ambiguity_response(handler_input, store: dict):
+        pending = dict(store.get("pendingAmbiguity") or {})
+        displayed = DialogSelection.displayed_choices(pending)
+        has_more = DialogSelection.displayed_has_more(pending)
+        has_previous = DialogSelection.displayed_has_previous(pending)
+        message = SearchSpeech.ambiguity_retry_message(
+            displayed, has_more=has_more, has_previous=has_previous
+        )
+        reprompt = SearchSpeech.choice_reprompt(
+            displayed, has_more=has_more, has_previous=has_previous
+        )
+        builder = (
+            handler_input.response_builder.speak(Ssml.ssml(message))
+            .reprompt(Ssml.ssml(reprompt))
+            .set_should_end_session(False)
+        )
+        directive = AlexaEntities.build_ambiguity_dynamic_entities_directive(displayed)
+        if directive:
+            builder.add_directive(directive)
+        return builder.response
+
+    async def _dialog_response(
+        self,
+        handler_input,
+        store: dict,
+        session: dict,
+        dialog_type: str | None,
+    ):
+        if dialog_type == "ambiguity":
+            return Affirmative._ambiguity_response(handler_input, store)
+        if dialog_type == "asr_repair":
+            return self._handle_asr_repair_yes(handler_input, store)
+        if dialog_type == "latest_source":
+            return await self._handle_latest_source_yes(handler_input, store)
+        if dialog_type == "notification":
+            return await self._notifications.accept(handler_input)
+        if dialog_type == "feedback_continuation":
+            return await FeedbackContinuation.accept(
+                handler_input, self._playback_controls, self._user
+            )
+        search_pending = bool(
+            dialog_type == "search_confirmation"
+            or not dialog_type
+            and (
+                store.get("awaitingSearchConfirmation") or session.get("awaitingSearchConfirmation")
+            )
+        )
+        if search_pending:
+            return await self._handle_search_confirmation(handler_input, store, session)
+        if store.get("awaitingLocationConfirm") or session.get("awaitingLocationConfirm"):
+            return await self._confirm_location(handler_input, store, session)
+        if store.get("awaitingCommunityPlayback") or session.get("awaitingCommunityPlayback"):
+            return await self._handle_community_play_yes(handler_input, store, session)
+        if dialog_type == "resume" or not dialog_type and store.get("awaitingResume"):
+            return await self._handle_resume_yes(handler_input, store)
+        return None
+
+    def _handle_asr_repair_yes(self, handler_input, store: dict):
+        active = DialogStateManager.active_from_store(store) or {}
+        repair = (active.get("context") or {}).get("repair")
+        DialogStateManager.clear(handler_input, "asr_repair")
+        if repair != "talking_newspaper":
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        self._user.update(handler_input, {"awaitingOrganizationName": True})
+        DialogStateManager.activate(
+            handler_input,
+            "organization_name",
+            context={"sourceKind": "talking_newspaper"},
+        )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER))
+            .reprompt(Ssml.ssml(Speech.ASK_TALKING_NEWSPAPER_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
+
+    async def _state_response(self, handler_input, store: dict):
+        if store.get("onboardingStage") == "confirm_town_for_community":
+            self._user.update(
+                handler_input,
+                {"onboardingStage": None, "awaitingCommunityPlayback": True},
+            )
+            return self._permission.start_location(handler_input)
+        if store.get("awaitingProfilePermission"):
+            return self._permission.start_profile(handler_input)
+        if store.get("listModeActive"):
+            return await self._handle_list_mode_yes(handler_input, store)
+        if store.get("awaitingStillListening"):
+            return await self._handle_still_listening_yes(handler_input, store)
+        if store.get("awaitingContinueAfterFlag"):
+            self._user.update(handler_input, {"awaitingContinueAfterFlag": False})
+            return await self._playback_controls.restart_active(
+                handler_input,
+                speech=AlexaFeedback.continuing_speech(
+                    store.get("activePlayback"),
+                    store,
+                ),
+            )
+        if store.get("awaitingNotificationChoice"):
+            return await self._notifications.accept(handler_input)
+        if store.get("awaitingFeedbackContinuation"):
+            return await FeedbackContinuation.accept(
+                handler_input, self._playback_controls, self._user
+            )
+        if store.get("awaitingFeedback"):
+            return await self._enjoyed_feedback.execute(RequestContext.bind(handler_input))
+        if store.get("awaitingFollow"):
+            return await self._follow_creator.execute(RequestContext.bind(handler_input))
+        if store.get("pendingNlpSuggestion"):
+            return await self._suggestion_confirmation.confirm(handler_input, store)
+        return None
+
+    async def execute(self, handler_input: HandlerInput):
+        store = self._user.snapshot(handler_input)
+        session = RequestContext.session(handler_input) or {}
+        dialog_type = (DialogStateManager.get_active(handler_input) or {}).get("type")
+        response = await self._dialog_response(handler_input, store, session, dialog_type)
+        response = response or await self._state_response(handler_input, store)
+        if response:
+            return response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            f"Ok. {Speech.WELCOME_REPROMPT}",
+            Speech.WELCOME_REPROMPT,
+        )
+
+    async def _confirm_location(self, handler_input, store, session_attrs=None):
+        pending = (
+            store.get("pendingLocationConfirm")
+            or (session_attrs or {}).get("pendingLocationConfirm")
+            or {}
+        )
+        city = pending.get("city")
+        has_coordinates = (
+            pending.get("latitude") is not None and pending.get("longitude") is not None
+        )
+        if not city and not has_coordinates:
+            self._onboarding.clear_invalid_confirmation(handler_input)
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_RETRY))
+                .set_should_end_session(False)
+                .response
+            )
+        resume_community = bool(
+            store.get("awaitingCommunityPlayback")
+            or (session_attrs or {}).get("awaitingCommunityPlayback")
+        )
+        self._onboarding.complete_location(
+            handler_input,
+            pending,
+            offer_community_playback=resume_community,
+            preserve_postal_code=True,
+        )
+        DialogStateManager.clear(handler_input, "onboarding")
+        if resume_community:
+            return await self._handle_community_play_yes(
+                handler_input,
+                self._user.snapshot(handler_input),
+                RequestContext.session(handler_input),
+            )
+        self._user.update(handler_input, {"awaitingProfilePermission": True})
+        confirmation = (
+            Speech.LOCATION_CONFIRMED(city)
+            if city
+            else Speech.LOCATION_COORDINATES_CONFIRMED
+        )
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(f"{confirmation} {Speech.PROFILE_PERMISSION_OFFER}")
+            )
+            .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
+            .set_should_end_session(False)
+            .response
+        )
+
+    async def _handle_latest_source_yes(self, handler_input, store):
+        source = store.get("pendingLatestSource") or {}
+        selected_source = ContentUtils.pick_content_source(source) or {}
+        source_kind = source.get("sourceKind") or selected_source.get("kind")
+        source_id = source.get("sourceId") or selected_source.get("id")
+        source_name = source.get("sourceName") or selected_source.get("name") or "that source"
+        self._user.update(handler_input, {"pendingLatestSource": None})
+        DialogStateManager.clear(handler_input, "latest_source")
+        if not source_id or source_kind not in {"organization", "creator"}:
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.LATEST_SOURCE_DECLINED))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        filters = SearchFilters.source(source_kind, source_id)
+        payload = {
+            "query": "",
+            "filter": filters,
+            "sort": "latest",
+            "page": 0,
+            "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
+        }
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
+        await self._progressive.send(handler_input, Speech.SEARCH_LATEST_PROGRESSIVE)
+        result = await self._heara.search(
+            payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
+        )
+        previous_id = source.get("contentId")
+        result["results"] = [
+            item for item in result.get("results", []) if item.get("contentId") != previous_id
+        ]
+        result["_search_payload"] = payload
+        if result["results"]:
+            return await self._auto_play_from_search(
+                handler_input,
+                result,
+                {
+                    "discoveryIntent": "latest_source",
+                    "q": "",
+                    "introOverride": f"Here is the latest from {Speech.escape_ssml_lite(source_name)}.",
+                },
+            )
+        speech = f"There is nothing newer from {Speech.escape_ssml_lite(source_name)} right now. What would you like to listen to?"
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(speech))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
+
+    async def _handle_community_play_yes(self, handler_input, store, session_attrs=None):
+        session_attrs = session_attrs or {}
+        city = (
+            store.get("userCity")
+            or store.get("locality")
+            or session_attrs.get("userCity")
+            or session_attrs.get("locality")
+        )
+        self._user.update(
+            handler_input,
+            {
+                "awaitingCommunityPlayback": False,
+                "awaitingSearchConfirmation": False,
+                "pendingResolution": None,
+            },
+        )
+        next_session_attrs = dict(RequestContext.session(handler_input) or {})
+        next_session_attrs["awaitingCommunityPlayback"] = False
+        RequestContext.replace_session(handler_input, next_session_attrs)
+        DialogStateManager.clear(handler_input, "search_confirmation")
+        attrs = RequestContext.request(handler_input)
+        attrs["_nlp"] = {
+            "intent": "local",
+            "alexaIntent": "local",
+            "confidence": "high",
+            "nlpMatchesAlexa": True,
+            "needsRedirect": False,
+            "slots": {"city": city, "isLocal": True, "residualQuery": ""},
+        }
+        RequestContext.replace_request(handler_input, attrs)
+        return await self._availability.begin_local(handler_input, attrs["_nlp"])
+
+    def _expired_resolution_response(self, handler_input):
+        self._user.update(
+            handler_input,
+            {"awaitingSearchConfirmation": False, "pendingResolution": None},
+        )
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml("That request has expired. Please say what you'd like to hear again.")
+            )
+            .reprompt(Speech.WELCOME_REPROMPT)
+            .set_should_end_session(False)
+            .response
+        )
+
+    def _clear_confirmed_resolution(self, handler_input, resolution: dict) -> None:
+        self._user.update(
+            handler_input,
+            {
+                "awaitingSearchConfirmation": False,
+                "pendingResolution": None,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "lastExecutedResolutionId": resolution.get("requestId"),
+                "_requiresReliableSave": True,
+            },
+        )
+        DialogStateManager.clear(handler_input, "search_confirmation")
+        RequestContext.replace_session(handler_input, {})
+
+    async def _confirmed_search_result(
+        self,
+        handler_input,
+        resolution: dict,
+        payload: dict,
+        label: str,
+    ):
+        ApplicationLog.info(
+            "Hear: confirmed resolver search START idPresent=%s intent=%s filterKeys=%s queryPresent=%s",
+            bool(resolution.get("requestId")),
+            resolution.get("intent") or "search",
+            sorted((payload.get("filter") or {}).keys()),
+            bool(payload.get("query")),
+        )
+        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        result = await self._heara.search(
+            payload,
+            timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
+        )
+        result.setdefault("_search_payload", dict(payload))
+        result.setdefault("_request_label", label)
+        result = Search.apply_publication_result_ambiguity(
+            handler_input,
+            result,
+            intent=str(resolution.get("intent") or "search"),
+            request_label=label,
+        )
+        if not result.get("results"):
+            if result.get("client_message"):
+                return result, Search._build_search_outcome_response(handler_input, result)
+            return result, None
+        response = await self._auto_play_from_search(
+            handler_input,
+            result,
+            {
+                "discoveryIntent": resolution.get("intent") or "search",
+                "q": payload.get("query") or "",
+            },
+        )
+        return result, response
+
+    def _relaxed_search_response(
+        self,
+        handler_input,
+        resolution: dict,
+        label: str,
+    ):
+        relaxed = self._source_only_relaxation(resolution)
+        if not relaxed:
+            return None
+        self._user.update(
+            handler_input,
+            {
+                "awaitingSearchConfirmation": True,
+                "pendingResolution": relaxed,
+                "_requiresReliableSave": True,
+            },
+        )
+        DialogStateManager.activate(handler_input, "search_confirmation", context=relaxed)
+        source = relaxed["confirmationLabel"].removeprefix("the latest recordings from ")
+        failed_label = label.removeprefix("the latest ")
+        speech = (
+            f"I couldn't find any {Speech.escape_ssml_lite(failed_label)}. "
+            f"Would you like to hear the latest recordings from "
+            f"{Speech.escape_ssml_lite(source)} instead?"
+        )
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(speech))
+            .reprompt(
+                Ssml.ssml("Say yes to hear their latest recordings, or no to try something else.")
+            )
+            .set_should_end_session(False)
+            .response
+        )
+
+    def _failed_search_response(
+        self,
+        handler_input,
+        resolution: dict,
+        result: dict,
+        label: str,
+    ):
+        if result.get("failed"):
+            speech = (
+                f"I couldn't reach the Hear catalogue to search for "
+                f"{Speech.escape_ssml_lite(label)}. Please try again shortly."
+            )
+            return AlexaResponse.present_idle_next(
+                handler_input, speech, Speech.WELCOME_REPROMPT
+            )
+        relaxed = self._relaxed_search_response(handler_input, resolution, label)
+        if relaxed:
+            return relaxed
+        source_name = SearchSpeech.source_no_match_name(
+            resolution.get("searchPayload"),
+            label,
+            resolution.get("slots"),
+        )
+        if source_name:
+            speech = (
+                f"I couldn't find anything from {Speech.escape_ssml_lite(source_name)} right now. "
+                "What would you like to try instead?"
+            )
+        else:
+            speech = (
+                f"I couldn't find anything for {Speech.escape_ssml_lite(label)} right now. "
+                "What would you like to try instead?"
+            )
+        return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
+
+    def _missing_resolution_response(self, handler_input):
+        self._user.update(
+            handler_input,
+            {
+                "awaitingSearchConfirmation": False,
+                "pendingOrganizationConfirmation": False,
+                "pendingSearchIntent": None,
+                "pendingSearchQuery": None,
+                "pendingSearchSlots": {},
+                "pendingSuggestions": [],
+                "suggestionIndex": 0,
+                "excludedSuggestions": [],
+            },
+        )
+        RequestContext.replace_session(handler_input, {})
+        return (
+            handler_input.response_builder.speak(
+                Ssml.ssml(
+                    "That earlier request has expired. Please tell me what you'd like to hear again."
+                )
+            )
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .set_should_end_session(False)
+            .response
+        )
+
+    async def _handle_search_confirmation(self, handler_input, store, session_attrs):
+        resolution = store.get("pendingResolution") or session_attrs.get("pendingResolution")
+        if not isinstance(resolution, dict) or not resolution.get("searchPayload"):
+            return self._missing_resolution_response(handler_input)
+        if int(resolution.get("expiresAt") or 0) < int(time.time()):
+            return self._expired_resolution_response(handler_input)
+        payload = SearchPayload.from_resolution(resolution, settings.search_page_limit)
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
+        label = str(resolution.get("confirmationLabel") or "that request")
+        self._clear_confirmed_resolution(handler_input, resolution)
+        availability_response = await self._availability.handle_resolution(
+            handler_input, resolution, payload, label
+        )
+        if availability_response is not None:
+            return availability_response
+        result, response = await self._confirmed_search_result(
+            handler_input, resolution, payload, label
+        )
+        return response or self._failed_search_response(handler_input, resolution, result, label)
+
+    @staticmethod
+    def _source_only_relaxation(resolution: dict) -> dict | None:
+        payload = dict(resolution.get("searchPayload") or {})
+        filters = dict(payload.get("filter") or {})
+        source_keys = tuple(SearchConstants.SEARCH_SOURCE_FILTERS.values())
+        if not any((filters.get(key) for key in source_keys)):
+            return None
+        constrained = bool(
+            filters.get("categorySlugs")
+            or filters.get("tags")
+            or str(payload.get("query") or "").strip()
+        )
+        if not constrained:
+            return None
+        payload["filter"] = SearchFilters.without(filters, "categorySlugs", "tags")
+        payload["query"] = ""
+        payload["sort"] = "latest"
+        source_name = next(
+            (
+                str(entity.get("canonicalValue") or "")
+                for entity in resolution.get("resolvedEntities") or []
+                if entity.get("type") in {"organization", "creator", "publication"}
+                and entity.get("canonicalValue")
+            ),
+            "that source",
+        )
+        now = int(time.time())
+        return {
+            **resolution,
+            "requestId": f"{resolution.get('requestId')}:source-only",
+            "confirmationLabel": f"the latest recordings from {source_name}",
+            "searchPayload": payload,
+            "createdAt": now,
+            "expiresAt": now + 300,
+            "alternatives": [],
+        }
+
+    async def _handle_list_mode_yes(self, handler_input, store):
+        content_id = PlaybackQueue.content_id(store)
+        if not content_id:
+            self._user.update(handler_input, {"listModeActive": False})
+            return handler_input.response_builder.speak(
+                Ssml.ssml(PlaybackSpeech.NO_TRACKS_AVAILABLE)
+            ).response
+        self._user.update(handler_input, {"listModeActive": False})
+        await self._feedback.clear(handler_input)
+        payload = {
+            "query": "",
+            "filter": SearchFilters.content(content_id),
+            "page": 0,
+            "limit": 1,
+        }
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
+        result = await self._heara.search(
+            payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
+        )
+        if not result.get("results"):
+            return handler_input.response_builder.speak(
+                Ssml.ssml(Speech.NO_CONTENT_AVAILABLE)
+            ).response
+        return await self._playback.start(handler_input, result["results"][0], "")
+
+    async def _handle_resume_yes(self, handler_input, store):
+        state = self._playback.state.current(handler_input)
+        self._user.update(handler_input, {"awaitingResume": False})
+        DialogStateManager.clear(handler_input, "resume")
+        if not state or not state.get("contentId"):
+            return handler_input.response_builder.speak(
+                Ssml.ssml(Speech.NO_CONTENT_AVAILABLE)
+            ).response
+        return await self._playback.resume(
+            handler_input, state, "Continuing where you stopped."
+        )
+
+    async def _handle_still_listening_yes(self, handler_input, store):
+        self._user.update(
+            handler_input,
+            {"awaitingStillListening": False, "awaitingContinueAfterFlag": False},
+        )
+        self._playback.queue.reset_completed(handler_input)
+        queue = PlaybackQueue.read(store)
+        next_id = self._playback.queue.move(handler_input, 1)
+        if queue and (not next_id):
+            loaded = await self._playback.queue.load_next_page(handler_input, self._heara)
+            if loaded:
+                queue = PlaybackQueue.read(self._user.snapshot(handler_input))
+                next_id = self._playback.queue.move(handler_input, 1)
+        if not queue or not next_id:
+            current_queue = PlaybackQueue.read(self._user.snapshot(handler_input))
+            if current_queue and not PlaybackQueue.has_more_pages(current_queue):
+                self._playback.queue.clear(handler_input)
+                message = (
+                    PlaybackSpeech.PUBLICATION_QUEUE_FINISHED
+                    if current_queue.get("publicationId")
+                    else PlaybackSpeech.QUEUE_FINISHED
+                )
+            else:
+                message = Speech.NO_CONTENT_AVAILABLE
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(message))
+                .reprompt(Speech.WELCOME_REPROMPT)
+                .set_should_end_session(False)
+                .response
+            )
+        payload = {
+            "query": "",
+            "filter": SearchFilters.content(next_id),
+            "page": 0,
+            "limit": 1,
+        }
+        payload = SearchPayload.with_identity(
+            payload,
+            alexa_user_id=AlexaRequest.get_user_id(handler_input),
+            listener_id=store.get("listenerId"),
+        )
+        content = PlaybackQueue.cached_content(self._user.snapshot(handler_input), next_id)
+        if not content:
+            result = await self._heara.search(
+                payload,
+                timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input),
+            )
+            if not result.get("results"):
+                self._playback.queue.clear(handler_input)
+                return (
+                    handler_input.response_builder.speak(Ssml.ssml(Speech.NO_CONTENT_AVAILABLE))
+                    .reprompt(Speech.WELCOME_REPROMPT)
+                    .set_should_end_session(False)
+                    .response
+                )
+            content = result["results"][0]
+        current_queue = PlaybackQueue.read(self._user.snapshot(handler_input)) or {}
+        current_index = int(current_queue.get("currentIndex") or 0)
+        content = PlaybackQueue.apply_publication_context(
+            self._user.snapshot(handler_input),
+            content,
+            queue_index=current_index,
+        )
+        total = len(queue["orderedContentIds"])
+        intro = Speech.QUEUE_NEXT_ANNOUNCE(
+            content.get("title"), content.get("creator"), current_index + 1, total
+        )
+        return await self._playback.start(handler_input, content, intro)

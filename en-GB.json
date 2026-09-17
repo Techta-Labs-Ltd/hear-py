@@ -188,7 +188,11 @@
           "samples": [
             "play {searchQuery}",
             "find {searchQuery}",
-            "listen to {searchQuery}"
+            "listen to {searchQuery}",
+            "play content on {searchQuery}",
+            "play content from {searchQuery}",
+            "content on {searchQuery}",
+            "content from {searchQuery}"
           ]
         },
         {
@@ -494,6 +498,8 @@
             "play my local community",
             "play local community",
             "something from my local community",
+            "content from my local community",
+            "content from a local community",
             "play from my area",
             "play something from my city",
             "play something from my town",
@@ -558,6 +564,10 @@
             "curate {recommendationQuery}",
             "recommend something",
             "what do you recommend",
+            "what do you recommended",
+            "what would you recommend",
+            "what should I listen to",
+            "recommend me something",
             "recommend {recommendationQuery}",
             "what's good"
           ]
@@ -828,6 +838,8 @@
           "samples": [
             "what was trending {dateQuery}",
             "what's trending in {topic}",
+            "what's trending content on {topic}",
+            "what is trending content on {topic}",
             "what is trending in {topic}",
             "what's popular in {topic}",
             "show me trending {topic}",
@@ -849,6 +861,9 @@
             "what's on trend",
             "trending audio",
             "popular picks",
+            "trending content",
+            "what's trending content",
+            "what is trending content",
             "most popular right now"
           ]
         },

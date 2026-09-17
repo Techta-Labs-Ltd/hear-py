@@ -7,6 +7,11 @@ import pytest
 
 import config.permission_scopes as permission_scopes
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.feedback_response import (
+    FeedbackContinuation,
+)
+from src.alexa.feedback_service import FeedbackService
+from src.alexa.playback_workflow import Playback
 from src.alexa.runtime import AttrDict
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
@@ -19,29 +24,20 @@ from src.controllers.feedback import (
 )
 from src.controllers.report import ReportContentHandler
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
-from src.models.decline import Decline
-from src.models.feedback import FeedbackService
-from src.models.feedback_response import (
-    EnjoyedFeedback,
-    FeedbackContinuation,
-    NotEnjoyedFeedback,
-    SkipFeedback,
-    SomewhatFeedback,
-)
-from src.models.listener import IdentityContext, Listener, PrincipalType
-from src.models.playback import Playback
+from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
+from src.services.listener_repository import Listener
 from src.services.listener_sync import ListenerSyncService
 from src.utils.content import ContentUtils
 from src.utils.content_normalizer import ContentNormalizer
 
 
-def _feedback_response(deps):
+def _feedback_response(container: ApplicationContainer, handler_input):
     return FeedbackResponseHandler(
-        EnjoyedFeedback(deps=deps),
-        SomewhatFeedback(deps=deps),
-        NotEnjoyedFeedback(deps=deps),
-        SkipFeedback(deps=deps),
+        container.build_request_enjoyed_feedback(handler_input),
+        container.build_request_somewhat_feedback(handler_input),
+        container.build_request_not_enjoyed_feedback(handler_input),
+        container.build_request_skip_feedback(handler_input),
     )
 
 
@@ -67,7 +63,7 @@ def test_pending_feedback_does_not_block_transport_intents(mock_handler_input, i
     mock_handler_input.request_envelope.request = AttrDict(
         {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
     )
-    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
+    assert _feedback_gate(ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
 @pytest.mark.parametrize("intent_name", ["AMAZON.SkipIntent", "AMAZON.NextIntent"])
@@ -87,8 +83,8 @@ def test_pending_feedback_routes_alexa_skip_variants_to_feedback_gate(
     mock_handler_input.request_envelope.request = AttrDict(
         {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
     )
-    assert FeedbackSkipGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is True
-    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
+    assert _feedback_skip_gate(ApplicationContainer(), mock_handler_input).can_handle(mock_handler_input) is True
+    assert _feedback_gate(ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
 @pytest.mark.asyncio
@@ -107,7 +103,7 @@ async def test_alexa_skip_variants_dismiss_active_feedback(mock_handler_input, i
     mock_handler_input.request_envelope.request = AttrDict(
         {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
     )
-    await FeedbackSkipGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    await _feedback_skip_gate(ApplicationContainer(), mock_handler_input).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
     assert store["awaitingFeedback"] is False
     assert store["pendingFeedback"] is None
@@ -128,6 +124,22 @@ async def test_alexa_skip_variants_dismiss_active_feedback(mock_handler_input, i
 )
 def test_feedback_raw_phrases_are_normalized(raw, expected):
     assert AlexaFeedback.normalize_value(raw) == expected
+
+
+def test_feedback_slot_prefers_one_resolved_dynamic_entity():
+    slot = {
+        "value": "something Alexa heard poorly",
+        "resolutions": {
+            "resolutionsPerAuthority": [
+                {
+                    "status": {"code": "ER_SUCCESS_MATCH"},
+                    "values": [{"value": {"id": "enjoyed", "name": "enjoyed"}}],
+                }
+            ]
+        },
+    }
+
+    assert AlexaFeedback.normalize_slot(slot) == "enjoyed"
 
 
 @pytest.mark.asyncio
@@ -164,7 +176,7 @@ async def test_return_time_feedback_asks_to_continue_exact_organization(
             },
         }
     )
-    await _feedback_response(ApplicationContainer()).handle(mock_handler_input)
+    await _feedback_response(ApplicationContainer(), mock_handler_input).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
     assert "continue listening to York Talking News" in spoken
@@ -201,6 +213,7 @@ def test_feedback_continuation_speaks_exact_discovery_name(
         subject,
         store,
         "Thanks for the feedback.",
+        User(),
     )
     assert response is not None
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
@@ -230,18 +243,18 @@ async def test_feedback_continuation_yes_plays_next_queue_item(
         },
     }
     play_next = AsyncMock(return_value={"response": "next"})
-    monkeypatch.setattr("src.models.feedback_response.Playback.play_queue_delta", play_next)
     deps = ApplicationContainer()
+    monkeypatch.setattr(deps.playback_controls, "play_queue_delta", play_next)
     response = await FeedbackContinuation.accept(
         mock_handler_input,
-        deps=deps,
+        deps.playback_controls,
+        deps.user,
     )
     assert response == {"response": "next"}
     play_next.assert_awaited_once_with(
         mock_handler_input,
         1,
         "Continuing David Beard.",
-        deps=deps,
     )
     store = User.snapshot(mock_handler_input)
     assert store["awaitingFeedbackContinuation"] is False
@@ -268,7 +281,7 @@ def test_pending_feedback_does_not_block_an_explicit_notification_request(
         }
     )
 
-    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
+    assert _feedback_gate(ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
 @pytest.mark.parametrize(
@@ -292,7 +305,7 @@ def test_pending_feedback_does_not_block_controller_commands(mock_handler_input,
     }
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.request = AttrDict({"type": request_type})
-    assert FeedbackGateHandler(deps=ApplicationContainer()).can_handle(mock_handler_input) is False
+    assert _feedback_gate(ApplicationContainer()).can_handle(mock_handler_input) is False
 
 
 def test_normalized_credit_prefers_real_organization_then_independent_creator():
@@ -351,7 +364,9 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
             "intent": {"name": "FeedbackEnjoyedIntent", "slots": {}},
         }
     )
-    await FeedbackEnjoyedHandler(EnjoyedFeedback(deps=ApplicationContainer())).handle(mock_handler_input)
+    await FeedbackEnjoyedHandler(
+        ApplicationContainer().build_request_enjoyed_feedback(mock_handler_input)
+    ).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     assert "feedback on TRACK115 by Tynedale Talking Magazine" in spoken
     assert "WhatsApp Ptt" not in spoken
@@ -553,11 +568,10 @@ async def test_previous_publication_track_recovers_queue_subject_context(
     monkeypatch.setattr(Playback, "start_playback", start)
     deps = ApplicationContainer()
 
-    await Playback.play_queue_delta(
+    await deps.playback_controls.play_queue_delta(
         mock_handler_input,
         -1,
         "Playing the previous recording.",
-        deps=deps,
     )
 
     content = start.await_args.args[1]
@@ -628,7 +642,7 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
             },
         }
     )
-    FeedbackGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    _feedback_gate(ApplicationContainer()).handle(mock_handler_input)
     mock_handler_input.request_envelope.request.intent = AttrDict(
         {"name": "FeedbackNotEnjoyedIntent", "slots": {}}
     )
@@ -642,7 +656,7 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
         }
     )
     monkeypatch.setattr("src.controllers.feedback", AsyncMock())
-    feedback_response = await FeedbackNotEnjoyedHandler(NotEnjoyedFeedback(deps=ApplicationContainer())).handle(
+    feedback_response = await FeedbackNotEnjoyedHandler(ApplicationContainer().build_request_not_enjoyed_feedback(mock_handler_input)).handle(
         mock_handler_input
     )
     assert feedback_response is not None
@@ -655,7 +669,14 @@ async def test_negative_feedback_reports_without_resuming_rejected_play_request(
     mock_handler_input.request_envelope.request.intent = AttrDict(
         {"name": "ReportContentIntent", "slots": {}}
     )
-    await ReportContentHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    container = ApplicationContainer()
+    await ReportContentHandler(
+        container.user,
+        container.reports,
+        container.feedback,
+        container.playback_controls,
+        container.events,
+    ).handle(mock_handler_input)
     mock_handler_input.redispatch.assert_not_awaited()
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"].get("deferredIntent")
@@ -710,7 +731,7 @@ async def test_skip_feedback_does_not_restore_rejected_search_confirmation(
     mock_handler_input.request_envelope.request = AttrDict(
         {"type": "IntentRequest", "intent": {"name": "PlayContentIntent", "slots": {}}}
     )
-    FeedbackGateHandler(deps=ApplicationContainer()).handle(mock_handler_input)
+    _feedback_gate(ApplicationContainer()).handle(mock_handler_input)
     mock_handler_input.request_envelope.request.intent = AttrDict(
         {"name": "AMAZON.NoIntent", "slots": {}}
     )
@@ -722,7 +743,7 @@ async def test_skip_feedback_does_not_restore_rejected_search_confirmation(
         }
     )
     monkeypatch.setattr("src.controllers.feedback", AsyncMock())
-    await SkipFeedbackHandler(SkipFeedback(deps=ApplicationContainer())).handle(mock_handler_input)
+    await SkipFeedbackHandler(ApplicationContainer().build_request_skip_feedback(mock_handler_input)).handle(mock_handler_input)
     mock_handler_input.redispatch.assert_not_awaited()
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"].get("deferredIntent")
@@ -744,10 +765,13 @@ async def test_plain_no_records_not_enjoyed_feedback(monkeypatch, mock_handler_i
         "pendingFeedback": {"feedbackKey": "old-content", "contentId": "old-content"},
     }
     submit = AsyncMock()
-    monkeypatch.setattr("src.models.feedback.FeedbackService.submit", submit)
+    monkeypatch.setattr("src.alexa.feedback_service.FeedbackService.submit", submit)
     container = ApplicationContainer()
-    await NoIntentHandler(Decline(deps=container)).handle(mock_handler_input)
-    submit.assert_awaited_once_with(mock_handler_input, "not_enjoyed")
+    await NoIntentHandler(container.build_request_decline(mock_handler_input)).handle(mock_handler_input)
+    submit.assert_awaited_once()
+    request, command = submit.await_args.args
+    assert request.handler_input is mock_handler_input
+    assert command.value == "not_enjoyed"
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"]["awaitingFeedback"]
         is False
@@ -791,3 +815,10 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
         "city": "Manchester",
     }
     assert sync.await_args.kwargs["timeout_ms"] == 2500
+
+def _feedback_gate(container: ApplicationContainer) -> FeedbackGateHandler:
+    return FeedbackGateHandler(container.feedback, container.user)
+
+
+def _feedback_skip_gate(container: ApplicationContainer, handler_input) -> FeedbackSkipGateHandler:
+    return FeedbackSkipGateHandler(container.user, container.build_request_skip_feedback(handler_input))

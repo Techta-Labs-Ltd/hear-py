@@ -3,14 +3,27 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
-from src.constants.resolver import ResolverConstants
+from src.models.entity_ranker import EntityRanker
 from src.utils.filters import SearchFilterUtils
 
 
 class ResolverUnavailable(RuntimeError):
     pass
+
+
+class UtteranceResolver(Protocol):
+    async def resolve_utterance(
+        self,
+        utterance: str,
+        *,
+        alexa_user_id: str | None = None,
+        listener_id: str | None = None,
+        prefer_location: bool = False,
+        timeout_ms: int | None = None,
+    ) -> dict[str, Any]:
+        ...
 
 
 class ResolutionBuilder:
@@ -55,6 +68,8 @@ class ResolvedEntity:
     longitude: float | None = None
     country_code: str | None = None
     location_role: str | None = None
+    county: str | None = None
+    location_type: str | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> ResolvedEntity:
@@ -91,12 +106,14 @@ class ResolvedEntity:
                 longitude=ResolverResult._optional_float(payload.get("longitude")),
                 country_code=ResolverResult._optional_string(payload.get("countryCode")),
                 location_role=ResolverResult._optional_string(payload.get("locationRole")),
+                county=ResolverResult._optional_string(payload.get("county")),
+                location_type=ResolverResult._optional_string(payload.get("locationType")),
             )
         except (TypeError, ValueError) as exc:
             raise ResolverUnavailable("resolver entity contract is invalid") from exc
 
     def to_payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "entityType": self.entity_type,
             "entityId": self.entity_id,
             "canonicalValue": self.canonical_value,
@@ -110,6 +127,11 @@ class ResolvedEntity:
             "countryCode": self.country_code,
             "locationRole": self.location_role,
         }
+        if self.county is not None:
+            payload["county"] = self.county
+        if self.location_type is not None:
+            payload["locationType"] = self.location_type
+        return payload
 
 
 @dataclass(frozen=True)
@@ -120,6 +142,7 @@ class ResolverResult:
     slots: dict[str, Any]
     ambiguities: tuple[dict[str, Any], ...]
     timing_ms: float
+    resolution_id: str | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> ResolverResult:
@@ -140,28 +163,20 @@ class ResolverResult:
                 slots=dict(payload["slots"]),
                 ambiguities=tuple((dict(item) for item in payload["ambiguities"])),
                 timing_ms=float(payload["timingMs"]),
+                resolution_id=ResolverResult._optional_string(payload.get("resolutionId")),
             )
         except (TypeError, ValueError) as exc:
             raise ResolverUnavailable("resolver response contract is invalid") from exc
 
+    def entity_ranking(self):
+        return EntityRanker.rank(self.entities)
+
+    def ranked_entities(self) -> tuple[ResolvedEntity, ...]:
+        ranking = self.entity_ranking()
+        return () if ranking.ambiguous else ranking.accepted
+
     def entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
-        return tuple((entity for entity in self.entities if entity.entity_type == entity_type))
-
-    def selected_entities_of_type(self, entity_type: str) -> tuple[ResolvedEntity, ...]:
-        entities = self.entities_of_type(entity_type)
-        if self.status == "resolved" and self.intent == entity_type:
-            return entities
-        minimum = (
-            ResolverConstants.SECONDARY_FACET_MIN_CONFIDENCE
-            if self.status == "resolved"
-            else 100
-        )
-        return tuple(
-            entity
-            for entity in entities
-            if entity.confidence >= minimum
-        )
-
+        return tuple(entity for entity in self.ranked_entities() if entity.entity_type == entity_type)
     @staticmethod
     def _ambiguity_candidate(candidate: dict) -> dict | None:
         entity_type = candidate.get("type") or candidate.get("entityType")
@@ -183,7 +198,10 @@ class ResolverResult:
             ]
             if candidates:
                 ambiguities.append(
-                    {"phrase": str(ambiguity.get("phrase") or ""), "candidates": candidates}
+                    {
+                        "phrase": str(ambiguity.get("phrase") or ""),
+                        "candidates": EntityRanker.collapse_ambiguity_candidates(candidates),
+                    }
                 )
                 continue
             candidate = ResolverResult._ambiguity_candidate(ambiguity)
@@ -191,16 +209,10 @@ class ResolverResult:
                 flat_candidates.append(candidate)
                 flat_phrase = flat_phrase or str(ambiguity.get("phrase") or "").strip()
         if flat_candidates:
-            matching_intent = [
-                candidate
-                for candidate in flat_candidates
-                if candidate.get("type") == self.intent
-            ]
-            candidates = matching_intent or flat_candidates
             ambiguities.append(
                 {
                     "phrase": flat_phrase or ResolverResult._fallback_query(original_utterance),
-                    "candidates": candidates,
+                    "candidates": EntityRanker.collapse_ambiguity_candidates(flat_candidates),
                 }
             )
         return ambiguities
@@ -212,15 +224,15 @@ class ResolverResult:
             "organization": ("organizationIds", "organizationName"),
             "publication": ("publicationIds", "publicationName"),
         }
-        sources = []
+        sources: list[ResolvedEntity] = []
         for entity_type, (ids_key, name_key) in facet_slots.items():
-            discovered = self.selected_entities_of_type(entity_type)
-            sources.extend(discovered)
-            if discovered:
-                slots[ids_key] = [entity.entity_id for entity in discovered]
-                slots[name_key] = discovered[0].canonical_value
+            entities = self.entities_of_type(entity_type)
+            sources.extend(entities)
+            if entities:
+                slots[ids_key] = [entity.entity_id for entity in entities]
+                slots[name_key] = entities[0].canonical_value
                 filters[ids_key] = list(slots[ids_key])
-        categories = self.selected_entities_of_type("category")
+        categories = self.entities_of_type("category")
         if categories:
             category_slugs = [entity.entity_id for entity in categories]
             slots.update(
@@ -231,94 +243,36 @@ class ResolverResult:
                 }
             )
             filters["categorySlugs"] = category_slugs
-        tags = tuple(
-            tag
-            for tag in self.selected_entities_of_type("tag")
-            if not any(
-                max(tag.start, category.start) < min(tag.end, category.end)
-                for category in categories
-            )
-        )
+        tags = self.entities_of_type("tag")
         if tags:
             slots["tags"] = [entity.entity_id for entity in tags]
             slots["tagNames"] = [entity.canonical_value for entity in tags]
             filters["tags"] = list(slots["tags"])
         return filters, tuple(sources)
+    def _ranking_ambiguity_payload(self) -> list[dict]:
+        ranking = self.entity_ranking()
+        if not ranking.ambiguous:
+            return []
+        return [
+            {
+                "phrase": ranking.ambiguous[0].original_text,
+                "candidates": [
+                    {
+                        "type": entity.entity_type,
+                        "id": entity.entity_id,
+                        "name": entity.canonical_value,
+                    }
+                    for entity in ranking.ambiguous
+                ],
+            }
+        ]
 
     @staticmethod
     def _overlaps_source(location: ResolvedEntity, sources: tuple[ResolvedEntity, ...]) -> bool:
         return any(
-            max(location.start, source.start) < min(location.end, source.end) for source in sources
+            max(location.start, source.start) < min(location.end, source.end)
+            for source in sources
         )
-
-    def _credible_source_locations(self) -> tuple[ResolvedEntity, ...]:
-        locations = self.entities_of_type("location")
-        source_locations = tuple(
-            entity
-            for entity in locations
-            if str(entity.location_role or "").casefold() == "source"
-            and entity.confidence >= ResolverConstants.SOURCE_LOCATION_MIN_CONFIDENCE
-        )
-        if source_locations:
-            return source_locations
-        return tuple(
-            entity
-            for entity in locations
-            if entity.confidence == 100
-            and entity.location_role
-            and entity.location_role.casefold() != "unspecified"
-        )
-
-    @staticmethod
-    def _unique_search_locations(
-        locations: tuple[ResolvedEntity, ...],
-    ) -> tuple[ResolvedEntity, ...]:
-        unique: dict[tuple[str, str], ResolvedEntity] = {}
-        for location in locations:
-            key = (
-                str(location.country_code or "").casefold(),
-                location.canonical_value.casefold(),
-            )
-            current = unique.get(key)
-            if current is None or location.confidence > current.confidence:
-                unique[key] = location
-        return tuple(unique.values())
-
-    @staticmethod
-    def _preferred_search_location(
-        locations: tuple[ResolvedEntity, ...],
-    ) -> ResolvedEntity | None:
-        candidates = ResolverResult._unique_search_locations(locations)
-        exact = tuple(location for location in candidates if location.confidence == 100)
-        preferred = exact or candidates
-        return preferred[0] if len(preferred) == 1 else None
-
-    def _fallback_unspecified_location(
-        self,
-        filters: dict,
-    ) -> ResolvedEntity | None:
-        if filters:
-            return None
-        locations = ResolverResult._unique_search_locations(
-            tuple(
-                entity
-                for entity in self.entities_of_type("location")
-                if str(entity.location_role or "").casefold() == "unspecified"
-                and entity.confidence
-                >= ResolverConstants.STANDALONE_LOCATION_MIN_CONFIDENCE
-                and entity.latitude is not None
-                and entity.longitude is not None
-            )
-        )
-        if not locations:
-            return None
-        highest_confidence = max(location.confidence for location in locations)
-        candidates = tuple(
-            location
-            for location in locations
-            if location.confidence == highest_confidence
-        )
-        return candidates[0] if len(candidates) == 1 else None
 
     def _location_payload(
         self,
@@ -327,38 +281,28 @@ class ResolverResult:
         sources: tuple[ResolvedEntity, ...],
         prefer_location: bool,
     ) -> dict:
-        keys = ("city", "placeName", "countryCode", "latitude", "longitude", "isLocal")
+        keys = (
+            "city",
+            "placeName",
+            "countryCode",
+            "latitude",
+            "longitude",
+            "isLocal",
+            "county",
+            "locationType",
+        )
         for key in keys:
             slots.pop(key, None)
-        if self.intent == "location":
-            all_locations = self.selected_entities_of_type("location")
-        elif prefer_location:
-            all_locations = (
-                self.entities_of_type("location") if self.status == "resolved" else ()
-            )
-        else:
-            all_locations = self._credible_source_locations()
-            if not all_locations:
-                fallback = self._fallback_unspecified_location(filters)
-                all_locations = (fallback,) if fallback else ()
-        locations = (
-            all_locations
-            if prefer_location
-            else tuple(
+        locations = self.entities_of_type("location")
+        if not prefer_location:
+            locations = tuple(
                 location
-                for location in all_locations
-                if not ResolverResult._overlaps_source(location, sources)
+                for location in locations
+                if not self._overlaps_source(location, sources)
             )
-        )
         if not locations:
             return {"match": None, "candidates": []}
-        location = (
-            locations[0]
-            if prefer_location or self.intent == "location"
-            else ResolverResult._preferred_search_location(locations)
-        )
-        if location is None:
-            return {"match": None, "candidates": []}
+        location = locations[0]
         match = {
             "city": location.canonical_value,
             "locality": location.canonical_value,
@@ -368,6 +312,10 @@ class ResolverResult:
             "confidence": location.confidence,
             "method": location.method,
         }
+        if location.county is not None:
+            match["county"] = location.county
+        if location.location_type is not None:
+            match["locationType"] = location.location_type
         slots.update(
             {
                 "city": location.canonical_value,
@@ -378,6 +326,10 @@ class ResolverResult:
                 "isLocal": True,
             }
         )
+        if location.county is not None:
+            slots["county"] = location.county
+        if location.location_type is not None:
+            slots["locationType"] = location.location_type
         filters.update(
             {
                 key: value
@@ -386,12 +338,12 @@ class ResolverResult:
                     "countryCode": location.country_code,
                     "latitude": location.latitude,
                     "longitude": location.longitude,
+                    "county": location.county,
                 }.items()
                 if value is not None
             }
         )
         return {"match": match, "candidates": []}
-
     def _search_plan(self, slots: dict, filters: dict, original_utterance: str) -> dict:
         for key in ("publishedFrom", "publishedTo"):
             if slots.get(key) is not None:
@@ -401,7 +353,7 @@ class ResolverResult:
         ):
             slots["isPublication"] = True
             filters["isPublication"] = True
-        defaults = {
+        defaults: dict[str, object] = {
             "residualQuery": "",
             "latest": slots.get("sort") == "latest",
             "isRecommended": False,
@@ -429,45 +381,43 @@ class ResolverResult:
         self, *, prefer_location: bool = False, original_utterance: str = ""
     ) -> dict[str, Any]:
         slots = dict(self.slots)
+        ranking = self.entity_ranking()
         ambiguities = self._ambiguity_payload(original_utterance)
-        filters, sources = self._facet_payload(slots)
-        resolution = self._location_payload(
-            slots,
-            filters,
-            sources,
-            prefer_location,
-        )
+        ambiguities.extend(self._ranking_ambiguity_payload())
+        resolution: dict[str, Any]
+        if ambiguities:
+            filters: dict[str, Any] = {}
+            resolution = {"match": None, "candidates": []}
+        else:
+            filters, sources = self._facet_payload(slots)
+            resolution = self._location_payload(
+                slots, filters, sources, prefer_location
+            )
         slots["ambiguousReferences"] = list(ambiguities)
-        if filters or ambiguities:
+        if ranking.accepted or ambiguities:
             slots["residualQuery"] = ""
         search_plan = self._search_plan(slots, filters, original_utterance)
+        if self.resolution_id:
+            search_plan["resolutionId"] = self.resolution_id
         slots["searchPlan"] = search_plan
-        accepted_entities = {
-            (entity.entity_type, entity.entity_id)
-            for entity_type in ("creator", "organization", "publication", "category")
-            for entity in self.selected_entities_of_type(entity_type)
-        }
-        accepted_entities.update(
-            (entity.entity_type, entity.entity_id)
-            for entity in self.selected_entities_of_type("tag")
-            if entity.entity_id in slots.get("tags", [])
-        )
-        if resolution.get("match"):
-            accepted_entities.update(
-                (entity.entity_type, entity.entity_id)
-                for entity in self.entities_of_type("location")
-                if entity.canonical_value == resolution["match"].get("city")
-            )
-        entities = [
-            entity.to_payload()
-            for entity in self.entities
-            if (entity.entity_type, entity.entity_id) in accepted_entities
-        ]
+        accepted = () if ambiguities else ranking.accepted
+        entities = [entity.to_payload() for entity in accepted]
+        semantic_intent = ranking.primary.entity_type if ranking.primary else self.intent
         intent = "search" if self.intent in {"tag", "location"} else self.intent
+        primary = ranking.primary.to_payload() if ranking.primary and not ambiguities else None
+        secondary = [
+            entity.to_payload()
+            for entity in accepted
+            if ranking.primary is None or entity != ranking.primary
+        ]
         return {
             "status": "ambiguous" if ambiguities else self.status,
             "intent": intent,
             "resolverIntent": self.intent,
+            "semanticIntent": semantic_intent,
+            "resolutionId": self.resolution_id,
+            "primaryEntity": primary,
+            "secondaryEntities": secondary,
             "entities": entities,
             "slots": slots,
             "ambiguities": list(ambiguities),
@@ -476,7 +426,6 @@ class ResolverResult:
             "confidence": "high",
             "searchPayload": search_plan,
         }
-
     @staticmethod
     def _fallback_query(original_utterance: str) -> str:
         query = str(original_utterance or "").strip()

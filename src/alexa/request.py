@@ -32,8 +32,10 @@ class AlexaRequest:
     @staticmethod
     def get_request_id(handler_input) -> str | None:
         envelope = getattr(handler_input, "request_envelope", {}) or {}
-        request = envelope.get("request", {})
-        return AlexaRequest._non_empty_string(request.get("requestId"))
+        request = AlexaRequest.read(envelope, "request") or {}
+        return AlexaRequest._non_empty_string(
+            AlexaRequest.read(request, "requestId", "request_id")
+        )
 
     @staticmethod
     def get_request_timestamp_ms(handler_input) -> int | None:
@@ -120,31 +122,45 @@ class AlexaRequest:
     @staticmethod
     def get_resolved_slot_id(slot) -> str | None:
         """Return Alexa's matched entity ID without falling back to spoken text."""
+        resolved_ids = AlexaRequest.get_resolved_slot_ids(slot)
+        return resolved_ids[0] if resolved_ids else None
+
+    @staticmethod
+    def get_resolved_slot_ids(slot) -> list[str]:
+        """Return the unique Alexa entity IDs in resolver preference order."""
         resolutions = AlexaRequest.read(slot, "resolutions")
         authorities = (
             AlexaRequest.read(resolutions, "resolutionsPerAuthority", "resolutions_per_authority")
             or []
         )
+        resolved_ids: list[str] = []
+        seen: set[str] = set()
         for authority in authorities:
             status = AlexaRequest.read(AlexaRequest.read(authority, "status"), "code")
-            if status and status != "ER_SUCCESS_MATCH":
+            if status != "ER_SUCCESS_MATCH":
                 continue
             for item in AlexaRequest.read(authority, "values") or []:
                 entity_id = AlexaRequest._non_empty_string(
                     AlexaRequest.read(AlexaRequest.read(item, "value"), "id")
                 )
-                if entity_id:
-                    return entity_id
-        return None
+                if entity_id and entity_id not in seen:
+                    seen.add(entity_id)
+                    resolved_ids.append(entity_id)
+        return resolved_ids
 
     @staticmethod
     def get_slot_value(handler_input, slot_name: str) -> str | None:
+        slot = AlexaRequest.get_slot(handler_input, slot_name)
+        return AlexaRequest.get_resolved_slot_value(slot)
+
+    @staticmethod
+    def get_slot(handler_input, slot_name: str):
+        """Return a raw intent slot so callers can inspect resolution metadata."""
         envelope = getattr(handler_input, "request_envelope", None)
         request = AlexaRequest.read(envelope, "request")
         intent = AlexaRequest.read(request, "intent")
         slots = AlexaRequest.read(intent, "slots") or {}
-        slot = AlexaRequest.read(slots, slot_name)
-        return AlexaRequest.get_resolved_slot_value(slot)
+        return AlexaRequest.read(slots, slot_name)
 
     @staticmethod
     def get_topic_slot(handler_input) -> str:
