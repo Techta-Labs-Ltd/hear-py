@@ -367,8 +367,8 @@ class HearApiClient:
             body["listenerId"] = listener_id
         if is_recommended:
             body["isRecommended"] = True
-        if availability_filter and "location" not in availability_filter:
-            body["isLocal"] = bool(requested.get("isLocal"))
+        if requested.get("isLocal"):
+            body["isLocal"] = True
         if (availability_filter is None and not is_recommended) or not (
             listener_id or alexa_user_id
         ):

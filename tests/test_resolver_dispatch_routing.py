@@ -507,7 +507,6 @@ async def test_play_from_creator_elicits_city_then_forwards_unmatched_spoken_wor
         ("PlayContentIntent", "topic", "astronomy today", "play astronomy today"),
         ("PlayByOrganizationIntent", "organizationQuery", "Ribble Valley TN", "play from Ribble Valley TN"),
         ("PlayPublicationIntent", "publicationSourceQuery", "Craven Herald", "play publication from Craven Herald"),
-        ("PlayLocalIntent", "localQuery", "Barrow-in-Furness", "play near Barrow-in-Furness"),
         ("SelectOrganizationIntent", "organizationQuery", "Colne TN", "play Colne TN"),
         ("SelectPublicationSourceIntent", "publicationSourceQuery", "Yorkshire Post", "play Yorkshire Post"),
         ("SelectCreatorCityIntent", "cityQuery", "Hebden Bridge", "Hebden Bridge"),
@@ -575,6 +574,36 @@ async def test_all_search_slots_forward_unmatched_spoken_words_to_resolver(
     resolver.resolve_utterance.assert_awaited_once()
     called_utterance = resolver.resolve_utterance.await_args.args[0]
     assert called_utterance == expected_carrier_utterance
+
+
+@pytest.mark.asyncio
+async def test_play_local_with_a_slot_stays_out_of_the_resolver(mock_handler_input):
+    mock_handler_input.request_envelope.request.intent = AttrDict(
+        {
+            "name": "PlayLocalIntent",
+            "slots": {
+                "localQuery": {
+                    "name": "localQuery",
+                    "value": "Barrow-in-Furness",
+                }
+            },
+        }
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True,
+        "listenerId": "test-listener-456",
+    }
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock())
+
+    await ApplicationContainer(resolver=resolver).build_resolver_interceptor().process(
+        mock_handler_input
+    )
+
+    resolver.resolve_utterance.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "local"
+    assert nlp["slots"]["isLocal"] is True
+    assert nlp["searchPayload"]["isLocal"] is True
 
 
 @pytest.mark.asyncio

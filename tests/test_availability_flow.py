@@ -492,6 +492,7 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
         "userCity": "Swindon",
         "latitude": 51.56,
         "longitude": -1.78,
+        "listenerId": "listener-1",
     }
     deps = AvailabilityTestSupport.dependencies(
         {
@@ -519,7 +520,8 @@ async def test_local_availability_offers_organizations_and_creators(mock_handler
         "longitude": -1.78,
     }
     assert body["alexaUserId"] == "amzn1.ask.account.TEST"
-    assert "isLocal" not in body
+    assert body["listenerId"] == "listener-1"
+    assert body["isLocal"] is True
     speech = AvailabilityTestSupport.speech(response)
     assert "Here are the talking newspapers and creators closest to Swindon" in speech
     assert "Here are the local sources I found" not in speech
@@ -817,6 +819,7 @@ async def test_empty_local_availability_stops_without_search_or_playback_mutatio
         "alexaUserId": "amzn1.ask.account.TEST",
         "page": 0,
         "limit": 3,
+        "isLocal": True,
     }
     deps.heara.search.assert_not_awaited()
     assert "couldn't find any content in Shalfleet right now" in AvailabilityTestSupport.speech(

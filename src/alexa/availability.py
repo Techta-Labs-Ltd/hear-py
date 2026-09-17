@@ -55,6 +55,7 @@ class Availability:
         discovery: dict | None = None,
         *,
         resolution_id: str | None = None,
+        is_local: bool = False,
     ) -> dict:
         store = self._user.snapshot(handler_input)
         payload = {
@@ -68,8 +69,8 @@ class Availability:
         if resolution_id:
             payload["resolutionId"] = resolution_id
         payload.update(discovery or {})
-        if "location" not in availability_filter:
-            payload["isLocal"] = False
+        if is_local:
+            payload["isLocal"] = True
         ApplicationLog.info(
             "Hear: availability request filter=%s page=%s limit=%s resolutionIdPresent=%s",
             availability_filter,
@@ -314,6 +315,7 @@ class Availability:
             availability_filter,
             0,
             resolution_id=payload.get("resolutionId"),
+            is_local=True,
         )
         outcome = AvailabilityOutcome.classify(
             result, AvailabilityData.source_candidates(result)

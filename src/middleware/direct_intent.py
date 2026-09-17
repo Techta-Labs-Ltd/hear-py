@@ -13,16 +13,40 @@ from src.services.logging_control import ApplicationLog
 class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
     """Apply reusable phrase routing before the resolver can consume a request."""
 
-    _SLOT_PRIORITY = ("searchQuery", "discoveryQuery", "topic", "category")
+    _SLOT_PRIORITY = (
+        "searchQuery",
+        "discoveryQuery",
+        "organizationQuery",
+        "creatorQuery",
+        "publicationSourceQuery",
+        "cityQuery",
+        "query",
+        "localQuery",
+        "recommendationQuery",
+        "topic",
+        "category",
+        "feedbackPhrase",
+        "selection",
+        "sourceKind",
+        "location",
+        "townName",
+    )
 
     @classmethod
-    def _phrase(cls, intent) -> str | None:
+    def _phrases(cls, intent) -> tuple[str, ...]:
         slots = AlexaRequest.read(intent, "slots") or {}
+        phrases: list[str] = []
         for slot_name in cls._SLOT_PRIORITY:
             phrase = AlexaRequest.get_spoken_slot_value(AlexaRequest.read(slots, slot_name))
             if phrase:
-                return phrase
-        return None
+                phrases.append(phrase)
+        for slot_name, slot in slots.items():
+            if slot_name in cls._SLOT_PRIORITY:
+                continue
+            phrase = AlexaRequest.get_spoken_slot_value(slot)
+            if phrase:
+                phrases.append(phrase)
+        return tuple(dict.fromkeys(phrases))
 
     @staticmethod
     def _set(intent, route: PhraseRoute) -> None:
@@ -61,13 +85,15 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
             return
         if source_intent not in DirectIntentPolicy.PHRASE_ROUTABLE_SEARCH_INTENTS:
             return
-        phrase = self._phrase(intent)
-        if active_dialog.get("type") == "help" and PhraseRouter.is_help_more(phrase):
+        phrases = self._phrases(intent)
+        if active_dialog.get("type") == "help" and any(
+            PhraseRouter.is_help_more(phrase) for phrase in phrases
+        ):
             self._set(intent, PhraseRoute("AMAZON.NextIntent"))
             return
         if active_dialog or store.get("pendingAmbiguity"):
-            route = PhraseRouter.control_route(
-                phrase, allowed=PhraseRouter.INTERRUPT_CONTROL_INTENTS
+            route = PhraseRouter.route_phrases(
+                phrases, allowed_controls=PhraseRouter.INTERRUPT_CONTROL_INTENTS
             )
             if route:
                 self._set(intent, route)
@@ -77,7 +103,7 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
                     route.intent_name,
                 )
             return
-        route = PhraseRouter.classify(phrase)
+        route = PhraseRouter.route_phrases(phrases)
         if not route:
             return
         self._set(intent, route)

@@ -331,10 +331,7 @@ class ResolverWorkflow:
             return generic_source
         if alexa_intent == "ChooseSourceKindIntent":
             return ResolverWorkflow._source_kind_resolution(intent_slots)
-        if normalized_raw in DiscoveryConstants.LOCAL_HINTS or (
-            alexa_intent == "PlayLocalIntent"
-            and SearchFilterUtils.wants_local_community_content(raw or "")
-        ):
+        if alexa_intent == "PlayLocalIntent" or normalized_raw in DiscoveryConstants.LOCAL_HINTS:
             return ResolverWorkflow._direct_discovery_result(
                 alexa_intent,
                 "local",
@@ -501,9 +498,12 @@ class ResolverWorkflow:
                 "sort": sort,
                 "page": 0,
                 "limit": DiscoveryConstants.CHOICE_PAGE_SIZE,
+                "isLocal": intent_name == "local",
+                "isRecommended": alexa_intent == "PlayRecommendationIntent",
             },
             "slots": {
                 "residualQuery": "",
+                "isLocal": intent_name == "local",
                 "isRecommended": alexa_intent == "PlayRecommendationIntent",
                 "sort": sort,
             },

@@ -54,6 +54,7 @@ class PhraseRouter:
         (re.compile(r"\b(?:check(?:\s+for)?\s+(?:my\s+)?updates|what\s+are\s+my\s+updates|do\s+i\s+have\s+any\s+(?:updates|notifications)|read\s+my\s+notifications)\b"), "HearNotificationsIntent"),
         (re.compile(r"\b(?:enable|turn\s+on)\s+notifications\b|\bnotify\s+me\s+about\s+new\s+content\b"), "EnableNotificationsIntent"),
         (re.compile(r"\b(?:disable|turn\s+off|stop)\s+notifications\b"), "DisableNotificationsIntent"),
+        (re.compile(r"\b(?:set\s*up|setup|create|manage)\s+(?:my\s+)?account\b"), "SetUpAccountIntent"),
         (re.compile(r"\b(?:pause(?:\s+(?:playback|this))?)\b"), "AMAZON.PauseIntent"),
         (re.compile(r"\b(?:resume|continue(?:\s+playing)?)\b"), "AMAZON.ResumeIntent"),
         (re.compile(r"\b(?:next(?:\s+recording)?|skip\s+this\s+recording)\b"), "AMAZON.NextIntent"),
@@ -206,6 +207,30 @@ class PhraseRouter:
             if (allowed is None or intent_name in allowed) and pattern.fullmatch(normalized):
                 return PhraseRoute(intent_name)
         return cls._fuzzy_control_route(normalized, allowed)
+
+    @classmethod
+    def route_phrases(
+        cls,
+        phrases: tuple[str, ...],
+        *,
+        allowed_controls: frozenset[str] | None = None,
+    ) -> PhraseRoute | None:
+        normalized = tuple(
+            dict.fromkeys(
+                phrase for value in phrases if (phrase := cls.normalize(value))
+            )
+        )
+        for phrase in normalized:
+            route = cls.control_route(phrase, allowed=allowed_controls)
+            if route:
+                return route
+        if allowed_controls is not None:
+            return None
+        for phrase in normalized:
+            route = cls.classify(phrase)
+            if route:
+                return route
+        return None
 
     @classmethod
     def classify(cls, phrase: object) -> PhraseRoute | None:

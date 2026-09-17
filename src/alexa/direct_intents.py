@@ -6,6 +6,7 @@ class DirectIntentPolicy:
         {
             "WhatsTrendingIntent",
             "PlayRecommendationIntent",
+            "SetUpAccountIntent",
             "SetPlaybackSpeedIntent",
             "IncreaseSpeedIntent",
             "DecreaseSpeedIntent",
@@ -52,6 +53,12 @@ class DirectIntentPolicy:
             "SearchContentIntent",
             "SearchCreatorIntent",
             "SearchOrganizationIntent",
+            "SearchPublicationIntent",
+            "PlayByOrganizationIntent",
+            "PlayPublicationIntent",
+            "SelectOrganizationIntent",
+            "SelectPublicationSourceIntent",
+            "BrowseContentIntent",
             "BrowseByCategoryIntent",
         }
     )

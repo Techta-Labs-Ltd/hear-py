@@ -34,6 +34,7 @@ from src.registry import RouteRegistry
         ("normal speed", "SetPlaybackSpeedIntent", "normal"),
         ("feedback check", "RateContentIntent", None),
         ("check my updates", "HearNotificationsIntent", None),
+        ("set up my account", "SetUpAccountIntent", None),
         ("pause", "AMAZON.PauseIntent", None),
         ("help", "AMAZON.HelpIntent", None),
         ("next", "AMAZON.NextIntent", None),
@@ -59,6 +60,26 @@ async def test_global_interceptor_routes_direct_phrases_before_resolver(
     assert intent["name"] == target
     if speed:
         assert intent["slots"] == {"speed": {"name": "speed", "value": speed}}
+    assert ResolverWorkflowRunner._request(mock_intent_request) is None
+
+
+@pytest.mark.asyncio
+async def test_global_interceptor_finds_a_direct_command_in_a_secondary_slot(
+    mock_intent_request,
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {
+        "searchQuery": {"name": "searchQuery", "value": "morning news"},
+        "feedbackPhrase": {"name": "feedbackPhrase", "value": "set up my account"},
+    }
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SetUpAccountIntent"
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
 
 
