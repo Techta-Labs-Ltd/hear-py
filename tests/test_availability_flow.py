@@ -82,6 +82,33 @@ async def test_something_else_leaves_availability_choices_and_returns_to_search(
     assert "What would you like to listen to instead?" in AvailabilityTestSupport.speech(response)
     assert response["shouldEndSession"] is False
     assert response["directives"] == [AlexaResponse.discovery_capture_directive()]
+
+
+@pytest.mark.asyncio
+async def test_empty_source_fallback_keeps_resolution_id(mock_handler_input):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    deps = AvailabilityTestSupport.dependencies(
+        {
+            "failed": False,
+            "publication_count": 0,
+            "standalone_track_count": 0,
+            "publications": [],
+        }
+    )
+
+    await AvailabilityTestSupport.action(deps)._begin_source(
+        handler_input,
+        {"type": "creator", "id": "creator-1", "name": "A Reader"},
+        {
+            "query": "",
+            "filter": {"creatorIds": ["creator-1"]},
+            "resolutionId": "resolution-123",
+        },
+    )
+
+    assert deps.heara.availability.await_args.args[0]["resolutionId"] == "resolution-123"
+    assert deps.heara.search.await_args.args[0]["resolutionId"] == "resolution-123"
+    assert deps.heara.search.await_args.args[0]["filter"] == {"creatorIds": ["creator-1"]}
     assert User.snapshot(handler_input)["activeDialog"] is None
 
 
@@ -719,7 +746,7 @@ async def test_failed_local_request_uses_listener_language_and_city(mock_handler
 
 
 @pytest.mark.asyncio
-async def test_empty_source_availability_stops_without_search(mock_handler_input):
+async def test_empty_source_availability_uses_source_preserving_search(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
     deps = AvailabilityTestSupport.dependencies(
         {
@@ -736,8 +763,11 @@ async def test_empty_source_availability_stops_without_search(mock_handler_input
         {"query": "", "filter": {"organizationIds": ["org-1"]}},
     )
 
-    deps.heara.search.assert_not_awaited()
-    assert "couldn't find any content from Local Voice right now" in AvailabilityTestSupport.speech(
+    deps.heara.search.assert_awaited_once()
+    assert deps.heara.search.await_args.args[0]["filter"] == {
+        "organizationIds": ["org-1"]
+    }
+    assert "couldn't find anything matching Local Voice" in AvailabilityTestSupport.speech(
         response
     )
     assert response["directives"] == [AlexaResponse.discovery_capture_directive()]

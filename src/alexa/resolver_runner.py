@@ -639,7 +639,8 @@ class ResolverWorkflowRunner:
             if alexa_intent not in DiscoveryConstants.ALEXA_TO_NLP:
                 return
             result = {"intent": expected, "confidence": "high", "slots": {}}
-        actual = result["intent"]
+        actual = str(result.get("semanticIntent") or result["intent"])
+        result = {**result, "intent": actual}
         if (
             alexa_intent in ResolverWorkflow.SEARCH_INTENTS
             and actual in ResolverWorkflow.LOCATION_MUTATION_INTENTS

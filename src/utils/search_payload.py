@@ -196,12 +196,15 @@ class SearchPayload:
         ]
         if len(values) != 1:
             return normalized
-        return {
+        selected = {
             "query": "",
             "filter": {"publicationIds": values},
             "limit": normalized["limit"],
             "page": 0,
         }
+        if normalized.get("resolutionId"):
+            selected["resolutionId"] = normalized["resolutionId"]
+        return selected
 
     @classmethod
     def from_resolution(cls, resolution: dict, default_limit: int) -> dict:

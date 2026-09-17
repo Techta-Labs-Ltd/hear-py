@@ -201,6 +201,45 @@ class PlayCreator:
         resolved_creator = bool(nlp_slots.get("creatorIds"))
         if generic_creator_request or not resolved_creator:
             return self._ask_creator_city(handler_input)
+        search_payload = dict(nlp.get("searchPayload") or {})
+        if not search_payload:
+            search_payload = {
+                "query": "",
+                "filter": {"creatorIds": list(nlp_slots.get("creatorIds") or [])},
+            }
+            nlp = {**nlp, "searchPayload": search_payload}
+        filters = dict(search_payload.get("filter") or {})
+        has_content_constraint = bool(
+            str(search_payload.get("query") or "").strip()
+            or filters.get("categorySlugs")
+            or filters.get("tags")
+            or filters.get("publicationIds")
+            or filters.get("contentIds")
+            or filters.get("publishedFrom")
+            or filters.get("publishedTo")
+            or search_payload.get("sort")
+        )
+        if not has_content_constraint:
+            label = SearchPayload.resolved_request_label(
+                nlp_slots,
+                nlp_slots.get("creatorName") or "that creator",
+            )
+            self._user.update(
+                handler_input,
+                {
+                    "awaitingSearchConfirmation": True,
+                    "pendingResolution": ResolutionBuilder.build(nlp, label),
+                    "_requiresReliableSave": True,
+                },
+            )
+            return (
+                handler_input.response_builder.speak(
+                    Ssml.ssml(SearchSpeech.confirm_resolved_search(label))
+                )
+                .reprompt(Ssml.ssml("Say yes to play it, or no to try another name."))
+                .set_should_end_session(False)
+                .response
+            )
         creator_query = str(nlp_slots.get("residualQuery") or "")
         creator_label = nlp_slots.get("creatorName")
         search_result = await Search.discover_content_via_search(

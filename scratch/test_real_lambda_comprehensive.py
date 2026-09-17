@@ -1,15 +1,17 @@
-import sys
-sys.path.insert(0, "c:/Users/USER/Downloads/hear-py")
-
 import json
+import sys
 import types
 from unittest.mock import AsyncMock
 
 import main
 from src.application import Application
-from src.container import ApplicationContainer
 from src.constants.state import StateSchema
+from src.container import ApplicationContainer
 from src.database.persistence import MemoryPersistenceAdapter
+
+sys.path.insert(0, "c:/Users/USER/Downloads/hear-py")
+
+
 
 def make_context():
     return types.SimpleNamespace(
