@@ -384,6 +384,7 @@ class ResolverResult:
         ranking = self.entity_ranking()
         ambiguities = self._ambiguity_payload(original_utterance)
         ambiguities.extend(self._ranking_ambiguity_payload())
+        resolution: dict[str, Any]
         if ambiguities:
             filters: dict[str, Any] = {}
             resolution = {"match": None, "candidates": []}
