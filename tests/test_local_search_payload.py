@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from src.utils.search_payload import SearchPayload
 
 
-def test_saved_city_uses_registered_listener_radius(mock_handler_input):
+def test_local_search_does_not_add_saved_location_to_the_filter(mock_handler_input):
     payload = SearchPayload.build(
         "user-1",
         {
@@ -18,14 +18,10 @@ def test_saved_city_uses_registered_listener_radius(mock_handler_input):
     )
     assert payload["isLocal"] is True
     assert "sort" not in payload
-    assert payload["filter"] == {
-        "city": "York",
-        "latitude": 53.959,
-        "longitude": -1.081,
-    }
+    assert payload["filter"] == {"city": "York"}
 
 
-def test_my_city_without_named_facet_uses_registered_listener_radius(
+def test_local_search_does_not_create_a_filter_from_saved_location(
     mock_handler_input,
 ):
     payload = SearchPayload.build(
@@ -41,21 +37,17 @@ def test_my_city_without_named_facet_uses_registered_listener_radius(
     )
     assert payload["isLocal"] is True
     assert "sort" not in payload
-    assert payload["filter"] == {
-        "city": "Swindon",
-        "latitude": 51.5558,
-        "longitude": -1.7797,
-    }
+    assert "filter" not in payload
 
 
-def test_coordinate_only_location_is_used_for_local_search(mock_handler_input):
+def test_local_search_does_not_add_saved_coordinates(mock_handler_input):
     payload = SearchPayload.build(
         "user-1",
         {"latitude": 53.789, "longitude": -2.248},
         q="",
         nlp_filter={"isLocal": True},
     )
-    assert payload["filter"] == {"latitude": 53.789, "longitude": -2.248}
+    assert "filter" not in payload
     assert "sort" not in payload
 
 

@@ -310,21 +310,6 @@ class SearchPayload:
         nlp_filter = options.get("nlp_filter")
         filter_obj = cls._filter_object(nlp_filter)
         is_local = bool((nlp_filter or {}).get("isLocal"))
-        if is_local:
-            requested_city = str(filter_obj.get("city") or "").strip()
-            saved_city = str(
-                (store or {}).get("userCity") or (store or {}).get("locality") or ""
-            ).strip()
-            if not requested_city and saved_city:
-                requested_city = saved_city
-                filter_obj["city"] = saved_city
-            uses_saved_location = not requested_city or (
-                saved_city and requested_city.casefold() == saved_city.casefold()
-            )
-            if uses_saved_location:
-                for key in ("latitude", "longitude"):
-                    if filter_obj.get(key) is None and (store or {}).get(key) is not None:
-                        filter_obj[key] = (store or {})[key]
         payload = {
             "alexaUserId": alexa_user_id,
             "query": SearchFilterUtils.normalize_search_query(options.get("q", "")),
