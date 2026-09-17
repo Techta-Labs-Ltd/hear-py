@@ -13,6 +13,7 @@ from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.dialog import DialogStateManager
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, ResponseBuilder
+from src.alexa.speech import Speech
 from src.constants.state import StateSchema
 from src.models.availability_data import AvailabilityData
 from src.models.user import User
@@ -994,8 +995,12 @@ async def test_recommendations_list_sources_before_loading_content(mock_handler_
 
     request = deps.heara.availability.await_args.args[0]
     assert request["filter"] == {}
+    assert request["alexaUserId"] == "amzn1.ask.account.TEST"
     assert request["listenerId"] == "listener-1"
     assert request["isRecommended"] is True
+    deps.progressive.send.assert_awaited_once_with(
+        handler_input, Speech.RECOMMENDATION_PROGRESSIVE
+    )
     speech = AvailabilityTestSupport.speech(response)
     assert "Community News" in speech
     assert "Local Reader" in speech

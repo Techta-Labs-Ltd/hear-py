@@ -345,6 +345,7 @@ class Search:
         heara,
         progressive,
         user: User,
+        progressive_speech: str | None = None,
     ) -> Dict[str, Any]:
         user_id = AlexaRequest.get_user_id(handler_input)
         if not user_id:
@@ -399,7 +400,9 @@ class Search:
             intent,
             request_log,
         )
-        await progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        await progressive.send(
+            handler_input, progressive_speech or Speech.SEARCH_PROGRESSIVE
+        )
         result = await heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )

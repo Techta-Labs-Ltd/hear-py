@@ -287,14 +287,8 @@ class ResolverWorkflowRunner:
         )
         return True
 
-    async def _resolver_result(
-        self,
-        handler_input,
-        raw: str,
-        alexa_intent: str | None = None,
-        *,
-        prefer_location: bool = False,
-    ) -> dict:
+    @staticmethod
+    def _resolver_utterance(raw: str, alexa_intent: str | None = None) -> str:
         carrier = ResolverConstants.CARRIERS.get(alexa_intent, "") if alexa_intent else ""
         normalized = SearchFilterUtils.normalize_discovery_phrase(raw)
         carrier_verb = carrier.partition(" ")[0]
@@ -304,11 +298,26 @@ class ResolverWorkflowRunner:
             or normalized.startswith(f"{carrier} ")
             or (carrier_verb and normalized.startswith(f"{carrier_verb} "))
         )
-        utterance = raw if has_carrier else f"{carrier} {raw}"
+        return raw if has_carrier else f"{carrier} {raw}"
+
+    async def _resolver_result(
+        self,
+        handler_input,
+        raw: str,
+        alexa_intent: str | None = None,
+        *,
+        prefer_location: bool = False,
+    ) -> dict:
+        utterance = ResolverWorkflowRunner._resolver_utterance(raw, alexa_intent)
         alexa_user_id = self._alexa_user_id or AlexaRequest.get_user_id(handler_input)
         listener_id = self._listener_id or User.snapshot(handler_input).get("listenerId")
         resolved_listener_id = str(listener_id).strip() if listener_id else None
-        await self._progressive.send(handler_input, Speech.RESOLVER_PROGRESSIVE)
+        await self._progressive.send(
+            handler_input,
+            Speech.LOCATION_PROGRESSIVE
+            if alexa_intent in {"SearchLocationIntent", "SetLocationIntent", "TownCaptureIntent"}
+            else Speech.RESOLVER_PROGRESSIVE,
+        )
         timeout_ms = DeadlineBudget.resolver_timeout_ms(handler_input)
         ApplicationLog.info(
             "Hear: resolver input alexaIntent=%s utterancePresent=%s preferLocation=%s timeoutMs=%s listenerIdPresent=%s",
@@ -642,6 +651,7 @@ class ResolverWorkflowRunner:
                 result,
                 alexa_intent,
                 ResolverWorkflowRunner._resolver_slots(intent_slots),
+                ResolverWorkflowRunner._resolver_utterance(raw, alexa_intent),
             )
         else:
             if alexa_intent not in DiscoveryConstants.ALEXA_TO_NLP:
@@ -785,6 +795,7 @@ class ResolverWorkflowRunner:
                 local,
                 alexa_intent,
                 ResolverWorkflowRunner._resolver_slots(context["slots"]),
+                raw or "",
             )
             ResolverWorkflowRunner._set_nlp(handler_input, local)
             ApplicationLog.info(

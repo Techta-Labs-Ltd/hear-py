@@ -7,6 +7,7 @@ from src.constants.resolver import ResolverConstants
 from src.constants.search import SearchConstants
 from src.models.dialog_policy import DialogPolicy
 from src.models.resolver_inputs import ResolverSlots
+from src.models.temporal_filter_guard import TemporalFilterGuard
 from src.services.logging_control import ApplicationLog
 from src.utils.alexa_date import AlexaDateRange
 from src.utils.filters import SearchFilters, SearchFilterUtils
@@ -267,8 +268,14 @@ class ResolverWorkflow:
         }
 
     @staticmethod
-    def apply_alexa_constraints(result: dict, alexa_intent: str, intent_slots: dict) -> dict:
+    def apply_alexa_constraints(
+        result: dict,
+        alexa_intent: str,
+        intent_slots: dict,
+        original_utterance: str = "",
+    ) -> dict:
         constrained = ResolverWorkflow._apply_date_constraint(result, intent_slots)
+        constrained = TemporalFilterGuard.apply(constrained, original_utterance)
         constrained = ResolverWorkflow._reject_implausible_search_query_source(
             constrained, alexa_intent, intent_slots
         )

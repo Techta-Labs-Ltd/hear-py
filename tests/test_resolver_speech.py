@@ -212,5 +212,5 @@ def test_playback_intro_uses_neutral_fallback_without_context_or_title():
 def test_trending_intro_does_not_attribute_the_whole_list_to_the_first_source():
     assert (
         SearchSpeech.trending_intro(8)
-        == "Here are 8 trending stories. Here's the first one."
+        == "This is what's trending."
     )

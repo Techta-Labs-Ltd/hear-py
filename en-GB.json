@@ -547,12 +547,7 @@
             }
           ],
           "samples": [
-            "play trending content",
-            "play popular content",
-            "play top picks",
             "play recommendations",
-            "play trending {recommendationQuery}",
-            "play popular {recommendationQuery}",
             "surprise me",
             "hit me with something",
             "put something on",
@@ -569,7 +564,14 @@
             "what should I listen to",
             "recommend me something",
             "recommend {recommendationQuery}",
-            "what's good"
+            "what's good",
+            "suggest something",
+            "suggest something for me",
+            "suggest something about {recommendationQuery}",
+            "give me a recommendation",
+            "pick something for me",
+            "what should I hear",
+            "something you recommend"
           ]
         },
         {
@@ -836,6 +838,11 @@
             }
           ],
           "samples": [
+            "play trending content",
+            "play popular content",
+            "play top picks",
+            "play trending {topic}",
+            "play popular {topic}",
             "what was trending {dateQuery}",
             "what's trending in {topic}",
             "what's trending content on {topic}",
@@ -864,7 +871,8 @@
             "trending content",
             "what's trending content",
             "what is trending content",
-            "most popular right now"
+            "most popular right now",
+            "top things right now"
           ]
         },
         {
@@ -895,7 +903,9 @@
             "normal speed",
             "regular speed",
             "reset speed",
-            "normal playback speed"
+            "normal playback speed",
+            "half speed",
+            "double speed"
           ]
         },
         {
@@ -1026,7 +1036,10 @@
             "do I have any updates",
             "do I have any notifications",
             "read my notifications",
-            "play my notifications"
+            "play my notifications",
+            "hear my notifications",
+            "what notifications do I have",
+            "anything new for me"
           ]
         },
         {
@@ -1041,7 +1054,8 @@
             "notify me about new content",
             "tell me when there is something new",
             "let me know when followed sources publish",
-            "send me new publication alerts"
+            "send me new publication alerts",
+            "alert me about new content"
           ]
         },
         {
@@ -1055,7 +1069,8 @@
             "disable new content alerts",
             "turn off new content alerts",
             "stop sending publication alerts",
-            "do not notify me about new content"
+            "do not notify me about new content",
+            "don't notify me"
           ]
         },
         {
@@ -1162,7 +1177,9 @@
             "who is behind this",
             "name of the creator",
             "give me creator info",
-            "who's responsible for this"
+            "who's responsible for this",
+            "who was this made by",
+            "who made this recording"
           ]
         },
         {
@@ -1329,7 +1346,8 @@
             "I moved",
             "my location has changed",
             "change where I am",
-            "update where I live"
+            "update where I live",
+            "set my area"
           ]
         },
         {
@@ -1341,7 +1359,12 @@
             "create my listener account",
             "finish my account setup",
             "personalise my account",
-            "sign me up"
+            "sign me up",
+            "setup my profile",
+            "create my profile",
+            "finish setup",
+            "complete account setup",
+            "manage my account"
           ]
         }
       ],

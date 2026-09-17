@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from src.constants.intent_routes import ROUTE_BYPASS_INTENTS
+
 
 class DirectIntentPolicy:
     BYPASS_RESOLVER_INTENTS = frozenset(
         {
+            *ROUTE_BYPASS_INTENTS,
             "WhatsTrendingIntent",
             "PlayRecommendationIntent",
             "SetUpAccountIntent",

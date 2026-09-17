@@ -182,7 +182,7 @@ class Availability:
         *,
         nlp: dict | None = None,
     ):
-        await self._progressive.send(handler_input, Speech.SEARCH_PROGRESSIVE)
+        await self._progressive.send(handler_input, Speech.RECOMMENDATION_PROGRESSIVE)
         discovery = {"isRecommended": True}
         resolved = nlp if isinstance(nlp, dict) else {}
         payload_candidate = resolved.get("searchPayload")

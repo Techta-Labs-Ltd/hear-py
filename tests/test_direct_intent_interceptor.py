@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -103,9 +104,7 @@ async def test_global_interceptor_routes_direct_phrases_before_resolver(
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
 
 
-@pytest.mark.parametrize(
-    ("phrase", "target"), InteractionModelSamples.locked_samples()
-)
+@pytest.mark.parametrize(("phrase", "target"), InteractionModelSamples.locked_samples())
 @pytest.mark.asyncio
 async def test_global_interceptor_routes_every_declared_locked_phrase(
     mock_intent_request, phrase, target
@@ -181,7 +180,9 @@ async def test_gated_control_phrase_is_forwarded_to_its_handler(
 
 
 @pytest.mark.asyncio
-async def test_global_interceptor_does_not_steal_an_active_dialog_answer(mock_intent_request):
+async def test_global_interceptor_allows_a_hard_transport_interrupt_in_an_active_dialog(
+    mock_intent_request,
+):
     mock_intent_request.attributes_manager.request_attributes["_store"] = {
         "onboardingComplete": True
     }
@@ -192,7 +193,7 @@ async def test_global_interceptor_does_not_steal_an_active_dialog_answer(mock_in
 
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
-    assert intent["name"] == "SearchContentIntent"
+    assert intent["name"] == "AMAZON.PauseIntent"
 
 
 @pytest.mark.asyncio
@@ -204,9 +205,7 @@ async def test_global_interceptor_routes_confident_control_typo_inside_active_di
     }
     intent = mock_intent_request.request_envelope["request"]["intent"]
     intent["name"] = "SearchContentIntent"
-    intent["slots"] = {
-        "searchQuery": {"name": "searchQuery", "value": "increament spede"}
-    }
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": "increament spede"}}
     DialogStateManager.activate(mock_intent_request, "ambiguity", context={"candidates": []})
 
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
@@ -270,6 +269,8 @@ def test_all_direct_command_intents_bypass_the_resolver(mock_intent_request, int
     intent["slots"] = {"query": {"name": "query", "value": "anything"}}
 
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
+
+
 @pytest.mark.parametrize(
     ("source_intent", "phrase", "target_intent", "expected_slots"),
     (
@@ -307,9 +308,7 @@ async def test_global_interceptor_routes_generic_source_patterns_only(
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
     assert intent["name"] == target_intent
-    assert {
-        name: value["value"] for name, value in intent["slots"].items()
-    } == expected_slots
+    assert {name: value["value"] for name, value in intent["slots"].items()} == expected_slots
 
 
 @pytest.mark.asyncio
@@ -319,10 +318,84 @@ async def test_global_interceptor_preserves_a_specific_source_search(mock_intent
     }
     intent = mock_intent_request.request_envelope["request"]["intent"]
     intent["name"] = "SearchOrganizationIntent"
-    intent["slots"] = {
-        "searchQuery": {"name": "searchQuery", "value": "Dorking Talking News"}
-    }
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": "Dorking Talking News"}}
 
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
     assert intent["name"] == "SearchOrganizationIntent"
+
+
+@pytest.mark.parametrize(
+    ("phrase", "target", "slots", "bypasses_resolver"),
+    (
+        ("what is trending", "WhatsTrendingIntent", {}, True),
+        ("popular picks", "WhatsTrendingIntent", {}, True),
+        ("what are people listening to", "WhatsTrendingIntent", {}, True),
+        ("what is hot", "WhatsTrendingIntent", {}, True),
+        ("top content", "WhatsTrendingIntent", {}, True),
+        ("what is trending in sport", "WhatsTrendingIntent", {"topic": "sport"}, True),
+        ("recommend something", "PlayRecommendationIntent", {}, True),
+        ("recommend sport", "PlayRecommendationIntent", {"recommendationQuery": "sport"}, True),
+        ("surprise me", "PlayRecommendationIntent", {}, True),
+        ("what should i listen to", "PlayRecommendationIntent", {}, True),
+        ("change my location", "SetLocationIntent", {}, False),
+        (
+            "change my location to Dorking",
+            "SearchLocationIntent",
+            {"searchQuery": "dorking"},
+            False,
+        ),
+        (
+            "play content in Dorking",
+            "PlayLocalIntent",
+            {"localQuery": "play content in dorking"},
+            False,
+        ),
+        ("turn off notifications", "DisableNotificationsIntent", {}, True),
+        ("turn on notifications", "EnableNotificationsIntent", {}, True),
+        ("check my notifications", "HearNotificationsIntent", {}, True),
+        ("who is this by", "WhoIsCreatorIntent", {}, True),
+        ("unfollow", "UnfollowCreatorIntent", {}, True),
+        ("follow", "FollowCreatorIntent", {}, True),
+        ("report this creator", "ReportCreatorIntent", {}, True),
+        ("report this content", "ReportContentIntent", {}, True),
+    ),
+)
+@pytest.mark.asyncio
+async def test_global_interceptor_recovers_protected_phrases_from_a_wrong_intent(
+    mock_intent_request, phrase, target, slots, bypasses_resolver
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == target
+    assert {name: value["value"] for name, value in intent["slots"].items()} == slots
+    assert (ResolverWorkflowRunner._request(mock_intent_request) is None) is bypasses_resolver
+
+
+@pytest.mark.asyncio
+async def test_global_interceptor_logs_route_metadata_without_slot_text(
+    mock_intent_request, caplog
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": "what is trending in sport"}}
+
+    with caplog.at_level(logging.INFO, logger="hear"):
+        await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert "sourceIntent=SearchContentIntent" in caplog.text
+    assert "targetIntent=WhatsTrendingIntent" in caplog.text
+    assert "routeFamily=trending" in caplog.text
+    assert "routeRule=trending" in caplog.text
+    assert "slot=searchQuery" in caplog.text
+    assert "what is trending in sport" not in caplog.text

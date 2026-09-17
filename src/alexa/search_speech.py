@@ -285,11 +285,7 @@ class SearchSpeech:
 
     @staticmethod
     def trending_intro(count) -> str:
-        total = max(0, int(count or 0))
-        noun = "story" if total == 1 else "stories"
-        count_label = "one" if total == 1 else str(total)
-        intro = f"Here {'is' if total == 1 else 'are'} {count_label} trending {noun}."
-        return intro if total == 1 else f"{intro} Here's the first one."
+        return "This is what's trending."
 
     @staticmethod
     def _search_filter(search_payload: dict | None) -> dict:

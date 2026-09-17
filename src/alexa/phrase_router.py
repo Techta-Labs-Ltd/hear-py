@@ -8,7 +8,7 @@ from functools import cache
 from pathlib import Path
 
 from src.alexa.direct_intents import DirectIntentPolicy
-from src.constants.discovery import DiscoveryConstants
+from src.constants.intent_routes import INTENT_ROUTE_RULES, INTERRUPT_ROUTE_INTENTS
 from src.utils.filters import SearchFilterUtils
 
 
@@ -16,73 +16,23 @@ from src.utils.filters import SearchFilterUtils
 class PhraseRoute:
     intent_name: str
     slots: tuple[tuple[str, str], ...] = ()
+    family: str = ""
+    rule_name: str = ""
 
     def slot_map(self) -> dict[str, dict[str, str]]:
-        return {
-            name: {"name": name, "value": value}
-            for name, value in self.slots
-            if value
-        }
+        return {name: {"name": name, "value": value} for name, value in self.slots if value}
 
 
 class PhraseRouter:
-    """Deterministically classify broad Alexa search phrases before resolution.
-
-    This deliberately uses the standard-library regular-expression engine plus
-    the existing creator, organization, and locality classifiers. It is fast,
-    testable, and does not require a heavyweight NLP model in Lambda.
-    """
-
     _POLITE_PREFIX = re.compile(r"^(?:please\s+)?(?:(?:can|could)\s+you\s+)?")
-    _TRENDING = re.compile(
-        r"\b(?:trending|trend|popular|top\s+(?:content|picks?))\b"
-    )
-    _RECOMMENDATION = re.compile(
-        r"\b(?:recommend(?:ation)?s?|recommended|what\s+do\s+you\s+recommend(?:ed)?|surprise\s+me|what(?:'s|\s+is)\s+good|find\s+me\s+something\s+good)\b"
-    )
-    _TOPIC_SUFFIX = re.compile(r"\b(?:in|on|about)\s+(.+)$")
-    _LOCAL_COMMUNITY = re.compile(
-        r"\b(?:local\s+(?:content|community|recordings?|audio)|(?:my\s+)?local\s+community|near\s+(?:me|here)|nearby|around\s+(?:me|here)|from\s+my\s+(?:city|town|area)|my\s+(?:city|town|area))\b"
-    )
+    _TOPIC_SUFFIX = re.compile(r"\b(?:in|on|about|for)\s+(?P<topic>.+)$")
     _RECOMMENDATION_TOPIC = re.compile(
-        r"\b(?:recommend|discover|curate)\s+(?:me\s+)?(.+)$"
+        r"\b(?:recommend|suggest|discover|curate)(?:\s+me)?\s+(?P<topic>.+)$"
     )
     _HELP_MORE = re.compile(r"(?:more|tell\s+me\s+more|more\s+help|the\s+full\s+guide)")
     _SLOT_MARKER = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)\}")
     _MODEL_PATH = Path(__file__).resolve().parents[2] / "en-GB.json"
-    DECLARED_LOCKED_INTENTS = DirectIntentPolicy.BYPASS_RESOLVER_INTENTS | {
-        "PlayLocalIntent"
-    }
-    _CONTROL_RULES = (
-        (re.compile(r"\b(?:speed\s+(?:it\s+)?up|increase(?:\s+(?:the\s+)?)?speed|play\s+faster|faster)\b"), "IncreaseSpeedIntent"),
-        (re.compile(r"\b(?:slow\s+(?:it\s+)?down|decrease(?:\s+(?:the\s+)?)?speed|play\s+slower|slower)\b"), "DecreaseSpeedIntent"),
-        (re.compile(r"\b(?:feedback(?:\s+check)?|give(?:\s+my)?\s+feedback|leave\s+feedback|rate\s+this(?:\s+(?:content|recording))?)\b"), "RateContentIntent"),
-        (re.compile(r"\b(?:check(?:\s+for)?\s+(?:my\s+)?updates|what\s+are\s+my\s+updates|do\s+i\s+have\s+any\s+(?:updates|notifications)|read\s+my\s+notifications)\b"), "HearNotificationsIntent"),
-        (re.compile(r"\b(?:enable|turn\s+on)\s+notifications\b|\bnotify\s+me\s+about\s+new\s+content\b"), "EnableNotificationsIntent"),
-        (re.compile(r"\b(?:disable|turn\s+off|stop)\s+notifications\b"), "DisableNotificationsIntent"),
-        (re.compile(r"\b(?:set\s*up|setup|create|manage)\s+(?:my\s+)?account\b"), "SetUpAccountIntent"),
-        (re.compile(r"\b(?:pause(?:\s+(?:playback|this))?)\b"), "AMAZON.PauseIntent"),
-        (re.compile(r"\b(?:resume|continue(?:\s+playing)?)\b"), "AMAZON.ResumeIntent"),
-        (re.compile(r"\b(?:next(?:\s+recording)?|skip\s+this\s+recording)\b"), "AMAZON.NextIntent"),
-        (re.compile(r"\bprevious(?:\s+recording)?\b"), "AMAZON.PreviousIntent"),
-        (re.compile(r"\b(?:repeat|replay|play\s+again)\b"), "AMAZON.RepeatIntent"),
-        (re.compile(r"\b(?:start\s+over|restart|from\s+the\s+beginning)\b"), "AMAZON.StartOverIntent"),
-        (re.compile(r"\b(?:rewind|skip\s+back|go\s+back\s+a\s+bit)\b"), "RewindIntent"),
-        (re.compile(r"\b(?:fast\s+forward|skip\s+ahead|go\s+forward)\b"), "FastForwardIntent"),
-        (re.compile(r"\b(?:what(?:'s|\s+is)\s+this\s+about|who\s+is\s+this\s+by)\b"), "WhatsThisAboutIntent"),
-        (re.compile(r"\b(?:who\s+(?:made|recorded)\s+this|who\s+is\s+the\s+creator)\b"), "WhoIsCreatorIntent"),
-        (re.compile(r"\b(?:follow(?:\s+this\s+creator)?|subscribe)\b"), "FollowCreatorIntent"),
-        (re.compile(r"\b(?:unfollow(?:\s+this\s+creator)?|unsubscribe)\b"), "UnfollowCreatorIntent"),
-        (re.compile(r"\b(?:report\s+this(?:\s+content)?|flag\s+this)\b"), "ReportContentIntent"),
-        (re.compile(r"\breport\s+(?:this|the)\s+creator\b"), "ReportCreatorIntent"),
-    )
-    _SPEED_VALUES = {
-        "normal speed": "normal",
-        "regular speed": "normal",
-        "reset speed": "normal",
-        "half speed": "half",
-        "double speed": "double",
-    }
+    DECLARED_LOCKED_INTENTS = DirectIntentPolicy.BYPASS_RESOLVER_INTENTS | {"PlayLocalIntent"}
     _FUZZY_CONTROL_LEXICON = (
         (
             "IncreaseSpeedIntent",
@@ -121,14 +71,7 @@ class PhraseRouter:
             ),
         ),
     )
-    INTERRUPT_CONTROL_INTENTS = frozenset(
-        {
-            "IncreaseSpeedIntent",
-            "DecreaseSpeedIntent",
-            "RateContentIntent",
-            "ReportContentIntent",
-        }
-    )
+    INTERRUPT_CONTROL_INTENTS = INTERRUPT_ROUTE_INTENTS
 
     @classmethod
     def normalize(cls, phrase: object) -> str:
@@ -139,21 +82,28 @@ class PhraseRouter:
         for token in tokens:
             if not collapsed or collapsed[-1] != token:
                 collapsed.append(token)
-        normalized = " ".join(collapsed)
-        return cls._POLITE_PREFIX.sub("", normalized).strip()
+        return cls._POLITE_PREFIX.sub("", " ".join(collapsed)).strip()
 
     @classmethod
     def _topic(cls, phrase: str) -> str:
         match = cls._TOPIC_SUFFIX.search(phrase)
-        return match.group(1).strip() if match else ""
+        return match.group("topic").strip() if match else ""
 
     @classmethod
     def _recommendation_topic(cls, phrase: str) -> str:
+        suffix = cls._topic(phrase)
+        if suffix and suffix not in {"me", "something", "something good"}:
+            return suffix
         match = cls._RECOMMENDATION_TOPIC.search(phrase)
         if not match:
             return ""
-        candidate = match.group(1).strip()
-        return "" if candidate in {"something", "me something", "something good"} else candidate
+        candidate = re.sub(r"^(?:me\s+)?", "", match.group("topic").strip())
+        return (
+            ""
+            if candidate
+            in {"something", "something good", "something for me", "something good for me"}
+            else candidate
+        )
 
     @classmethod
     def is_help_more(cls, phrase: object) -> bool:
@@ -193,9 +143,8 @@ class PhraseRouter:
         cls,
     ) -> tuple[tuple[str, re.Pattern[str], tuple[tuple[str, str], ...], bool], ...]:
         model = json.loads(cls._MODEL_PATH.read_text(encoding="utf-8"))
-        intents = model["interactionModel"]["languageModel"]["intents"]
         routes = []
-        for intent in intents:
+        for intent in model["interactionModel"]["languageModel"]["intents"]:
             intent_name = str(intent.get("name") or "")
             if intent_name not in cls.DECLARED_LOCKED_INTENTS:
                 continue
@@ -207,9 +156,7 @@ class PhraseRouter:
         return tuple(routes)
 
     @classmethod
-    def _declared_locked_route(
-        cls, normalized: str, *, templates: bool
-    ) -> PhraseRoute | None:
+    def _declared_locked_route(cls, normalized: str, *, templates: bool) -> PhraseRoute | None:
         for intent_name, expression, captures, is_template in cls._declared_locked_routes():
             if is_template != templates:
                 continue
@@ -221,7 +168,7 @@ class PhraseRouter:
                 for slot_name, capture_name in captures
                 if (value := match.group(capture_name)) and value.strip()
             )
-            return PhraseRoute(intent_name, slots)
+            return PhraseRoute(intent_name, slots, "declared_sample", "model_sample")
         return None
 
     @staticmethod
@@ -240,9 +187,7 @@ class PhraseRouter:
             )
             available.remove(index)
             scores.append(score)
-        if min(scores) < 0.72:
-            return 0.0
-        return sum(scores) / len(scores)
+        return 0.0 if min(scores) < 0.72 else sum(scores) / len(scores)
 
     @classmethod
     def _fuzzy_control_route(
@@ -264,7 +209,48 @@ class PhraseRouter:
         best_score, intent_name = scores[0]
         next_score = scores[1][0] if len(scores) > 1 else 0.0
         if best_score >= 0.78 and best_score - next_score >= 0.10:
-            return PhraseRoute(intent_name)
+            return PhraseRoute(intent_name, family="fuzzy_control", rule_name="fuzzy")
+        return None
+
+    @classmethod
+    def _semantic_route(
+        cls, normalized: str, allowed: frozenset[str] | None = None
+    ) -> PhraseRoute | None:
+        for rule in INTENT_ROUTE_RULES:
+            if allowed is not None and rule.intent_name not in allowed:
+                continue
+            slots = rule.match(normalized)
+            if slots is None:
+                continue
+            if rule.family == "trending":
+                topic = cls._topic(normalized)
+                slots = (("topic", topic),) if topic else ()
+            elif rule.family == "recommendation":
+                topic = cls._recommendation_topic(normalized)
+                slots = (("recommendationQuery", topic),) if topic else ()
+            elif rule.family == "local_discovery":
+                slots = (("localQuery", normalized),)
+            return PhraseRoute(rule.intent_name, slots, rule.family, rule.rule_name)
+        return None
+
+    @classmethod
+    def _generic_discovery_route(cls, normalized: str) -> PhraseRoute | None:
+        if SearchFilterUtils.organization_request_kind(
+            normalized, organization_intent=True
+        ) == "generic" and re.search(r"\b(?:talking|audio|spoken)\b", normalized):
+            return PhraseRoute(
+                "ChooseSourceKindIntent",
+                (("sourceKind", "talking newspaper"),),
+                "generic_discovery",
+                "talking_newspaper",
+            )
+        if SearchFilterUtils.is_generic_creator_request(normalized):
+            return PhraseRoute(
+                "ChooseSourceKindIntent",
+                (("sourceKind", "creator"),),
+                "generic_discovery",
+                "creator",
+            )
         return None
 
     @classmethod
@@ -274,19 +260,9 @@ class PhraseRouter:
         normalized = cls.normalize(phrase)
         if not normalized:
             return None
-        route = cls._control_rule_route(normalized, allowed)
-        if route:
-            return route
-        return cls._fuzzy_control_route(normalized, allowed)
-
-    @classmethod
-    def _control_rule_route(
-        cls, normalized: str, allowed: frozenset[str] | None = None
-    ) -> PhraseRoute | None:
-        for pattern, intent_name in cls._CONTROL_RULES:
-            if (allowed is None or intent_name in allowed) and pattern.fullmatch(normalized):
-                return PhraseRoute(intent_name)
-        return None
+        return cls._semantic_route(normalized, allowed) or cls._fuzzy_control_route(
+            normalized, allowed
+        )
 
     @classmethod
     def route_phrases(
@@ -296,18 +272,14 @@ class PhraseRouter:
         allowed_controls: frozenset[str] | None = None,
     ) -> PhraseRoute | None:
         normalized = tuple(
-            dict.fromkeys(
-                phrase for value in phrases if (phrase := cls.normalize(value))
-            )
+            dict.fromkeys(phrase for value in phrases if (phrase := cls.normalize(value)))
         )
-        if allowed_controls is not None:
-            for phrase in normalized:
-                route = cls.control_route(phrase, allowed=allowed_controls)
-                if route:
-                    return route
-            return None
         for phrase in normalized:
-            route = cls.classify(phrase)
+            route = (
+                cls.control_route(phrase, allowed=allowed_controls)
+                if allowed_controls is not None
+                else cls.classify(phrase)
+            )
             if route:
                 return route
         return None
@@ -317,52 +289,13 @@ class PhraseRouter:
         normalized = cls.normalize(phrase)
         if not normalized:
             return None
-        speed = cls._SPEED_VALUES.get(normalized)
-        if speed:
-            return PhraseRoute("SetPlaybackSpeedIntent", (("speed", speed),))
         semantic_route = cls._semantic_route(normalized)
-        if semantic_route and semantic_route.intent_name == "ChooseSourceKindIntent":
-            return semantic_route
-        declared_route = cls._declared_locked_route(normalized, templates=False)
-        if declared_route:
-            return (
-                semantic_route
-                if semantic_route and semantic_route.intent_name == declared_route.intent_name
-                else declared_route
-            )
-        route = cls._control_rule_route(normalized)
-        if route:
-            return route
-        declared_route = cls._declared_locked_route(normalized, templates=True)
-        if declared_route:
-            return (
-                semantic_route
-                if semantic_route and semantic_route.intent_name == declared_route.intent_name
-                else declared_route
-            )
         if semantic_route:
             return semantic_route
+        generic_route = cls._generic_discovery_route(normalized)
+        if generic_route:
+            return generic_route
+        for templates in (False, True):
+            if route := cls._declared_locked_route(normalized, templates=templates):
+                return route
         return cls._fuzzy_control_route(normalized)
-
-    @classmethod
-    def _semantic_route(cls, normalized: str) -> PhraseRoute | None:
-        if cls._LOCAL_COMMUNITY.search(normalized):
-            return PhraseRoute("PlayLocalIntent", (("localQuery", normalized),))
-        if normalized in DiscoveryConstants.TRENDING_HINTS or cls._TRENDING.search(normalized):
-            topic = cls._topic(normalized)
-            return PhraseRoute("WhatsTrendingIntent", (("topic", topic),) if topic else ())
-        if cls._RECOMMENDATION.search(normalized):
-            topic = cls._recommendation_topic(normalized)
-            return PhraseRoute(
-                "PlayRecommendationIntent",
-                (("recommendationQuery", topic),) if topic else (),
-            )
-        if SearchFilterUtils.organization_request_kind(
-            normalized, organization_intent=True
-        ) == "generic" and re.search(r"\b(?:talking|audio|spoken)\b", normalized):
-            return PhraseRoute(
-                "ChooseSourceKindIntent", (("sourceKind", "talking newspaper"),)
-            )
-        if SearchFilterUtils.is_generic_creator_request(normalized):
-            return PhraseRoute("ChooseSourceKindIntent", (("sourceKind", "creator"),))
-        return None

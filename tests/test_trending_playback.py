@@ -6,6 +6,7 @@ import pytest
 
 from src.alexa.playback_state import PlaybackState
 from src.alexa.runtime import AttrDict
+from src.alexa.speech import Speech
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
 from src.controllers.browse import WhatsTrendingHandler
@@ -91,7 +92,8 @@ async def test_trending_intent_searches_and_plays_trending_content(
     )
 
     options = autoplay.await_args.args[2]
-    assert options["introOverride"] == "Here are 8 trending stories. Here's the first one."
+    assert options["introOverride"] == "This is what's trending."
+    assert discover.await_args.kwargs["progressive_speech"] == Speech.TRENDING_PROGRESSIVE
     assert response["directives"][0]["type"] == "AudioPlayer.Play"
 
 

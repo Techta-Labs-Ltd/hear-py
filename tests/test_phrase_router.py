@@ -22,9 +22,17 @@ from src.models.resolver_workflow import ResolverWorkflow
         ),
         ("play from talking", "ChooseSourceKindIntent", {"sourceKind": "talking newspaper"}),
         ("play talking", "ChooseSourceKindIntent", {"sourceKind": "talking newspaper"}),
-        ("talking talking newspaper", "ChooseSourceKindIntent", {"sourceKind": "talking newspaper"}),
+        (
+            "talking talking newspaper",
+            "ChooseSourceKindIntent",
+            {"sourceKind": "talking newspaper"},
+        ),
         ("a creator", "ChooseSourceKindIntent", {"sourceKind": "creator"}),
-        ("content from my local community", "PlayLocalIntent", {"localQuery": "content from my local community"}),
+        (
+            "content from my local community",
+            "PlayLocalIntent",
+            {"localQuery": "content from my local community"},
+        ),
         ("please increase speed", "IncreaseSpeedIntent", {}),
         ("normal speed", "SetPlaybackSpeedIntent", {"speed": "normal"}),
     ),
@@ -34,9 +42,7 @@ def test_phrase_router_classifies_normalized_command_families(phrase, intent_nam
 
     assert route is not None
     assert route.intent_name == intent_name
-    assert {
-        name: value["value"] for name, value in route.slot_map().items()
-    } == slots
+    assert {name: value["value"] for name, value in route.slot_map().items()} == slots
 
 
 @pytest.mark.parametrize(
@@ -68,10 +74,50 @@ def test_phrase_router_preserves_meaningful_searches(phrase):
     assert PhraseRouter.classify(phrase) is None
 
 
+@pytest.mark.parametrize(
+    ("phrase", "intent_name", "slots"),
+    (
+        ("change my location", "SetLocationIntent", {}),
+        ("change my location to Dorking", "SearchLocationIntent", {"searchQuery": "dorking"}),
+        ("i have moved to Dorking", "SearchLocationIntent", {"searchQuery": "dorking"}),
+        ("play content in Dorking", "PlayLocalIntent", {"localQuery": "play content in dorking"}),
+        ("turn on notifications", "EnableNotificationsIntent", {}),
+        ("turn off notifications", "DisableNotificationsIntent", {}),
+        ("check my notifications", "HearNotificationsIntent", {}),
+        ("what is this about", "WhatsThisAboutIntent", {}),
+        ("who is this by", "WhoIsCreatorIntent", {}),
+        ("who was this made by", "WhoIsCreatorIntent", {}),
+        ("unfollow this creator", "UnfollowCreatorIntent", {}),
+        ("follow this creator", "FollowCreatorIntent", {}),
+        ("report this creator", "ReportCreatorIntent", {}),
+        ("report this content", "ReportContentIntent", {}),
+        (
+            "suggest something about football",
+            "PlayRecommendationIntent",
+            {"recommendationQuery": "football"},
+        ),
+        ("what should i hear", "PlayRecommendationIntent", {}),
+        ("what are people listening to", "WhatsTrendingIntent", {}),
+        ("top things right now", "WhatsTrendingIntent", {}),
+    ),
+)
+def test_phrase_router_applies_semantic_precedence(phrase, intent_name, slots):
+    route = PhraseRouter.classify(phrase)
+
+    assert route is not None
+    assert route.intent_name == intent_name
+    assert {name: value["value"] for name, value in route.slot_map().items()} == slots
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "phrase",
-    ("play from talking", "talking talking newspaper", "a creator", "content from my local community"),
+    (
+        "play from talking",
+        "talking talking newspaper",
+        "a creator",
+        "content from my local community",
+    ),
 )
 async def test_generic_source_and_local_routes_do_not_call_the_remote_resolver(
     mock_intent_request, phrase

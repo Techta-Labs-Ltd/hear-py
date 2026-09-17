@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from src.models.entity_ranker import EntityRanker
+from src.models.temporal_filter_guard import TemporalFilterGuard
 from src.utils.filters import SearchFilterUtils
 
 
@@ -410,7 +411,7 @@ class ResolverResult:
             for entity in accepted
             if ranking.primary is None or entity != ranking.primary
         ]
-        return {
+        payload = {
             "status": "ambiguous" if ambiguities else self.status,
             "intent": intent,
             "resolverIntent": self.intent,
@@ -426,6 +427,7 @@ class ResolverResult:
             "confidence": "high",
             "searchPayload": search_plan,
         }
+        return TemporalFilterGuard.apply(payload, original_utterance)
     @staticmethod
     def _fallback_query(original_utterance: str) -> str:
         query = str(original_utterance or "").strip()

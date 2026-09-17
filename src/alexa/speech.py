@@ -54,9 +54,11 @@ class Speech:
     )
     RESOLVER_PROGRESSIVE = "One moment while I work that out for you."
     SEARCH_PROGRESSIVE = "Just a moment while I find that for you."
+    TRENDING_PROGRESSIVE = "One moment while I find what's trending."
+    RECOMMENDATION_PROGRESSIVE = "One moment while I find something you might like."
+    LOCATION_PROGRESSIVE = "One moment while I check that location."
     SEARCH_MORE_PROGRESSIVE = "Just a moment while I find a few more options."
     SEARCH_LATEST_PROGRESSIVE = "Just a moment while I find the latest for you."
-    LOCATION_PROGRESSIVE = "One moment while I check that for you."
     ONBOARDING_DEVICE_LOCATION_CONFIRM = (
         "I've found your device location. Would you like me to use it for local content?"
     )

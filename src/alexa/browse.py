@@ -358,6 +358,7 @@ class Browse:
             heara=self._heara,
             progressive=self._progressive,
             user=self._user,
+            progressive_speech=Speech.TRENDING_PROGRESSIVE,
         )
         if not search_result.get("results"):
             return Search._build_search_outcome_response(

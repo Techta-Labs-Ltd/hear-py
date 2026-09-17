@@ -9,6 +9,7 @@ import pytest
 from src.alexa.dialog import DialogStateManager
 from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
+from src.alexa.speech import Speech
 from src.container import ApplicationContainer
 from src.controllers.intent_dispatch import IntentDispatchGateHandler
 from src.models.resolver_workflow import ResolverWorkflow
@@ -88,9 +89,7 @@ def test_ambiguity_response_activates_dialog_and_injects_dynamic_entities(mock_h
 
 
 @pytest.mark.asyncio
-async def test_resolver_log_does_not_record_the_carried_alexa_utterance(
-    mock_handler_input, caplog
-):
+async def test_resolver_log_does_not_record_the_carried_alexa_utterance(mock_handler_input, caplog):
     resolver = SimpleNamespace(resolve_utterance=AsyncMock(return_value={"status": "resolved"}))
     runner = ResolverWorkflowRunner(
         progressive=SimpleNamespace(send=AsyncMock()),
@@ -103,12 +102,31 @@ async def test_resolver_log_does_not_record_the_carried_alexa_utterance(
             mock_handler_input,
             "York Talking News",
             "PlayByOrganizationIntent",
-    )
+        )
 
     assert "resolver input alexaIntent=PlayByOrganizationIntent" in caplog.text
     assert "utterancePresent=True" in caplog.text
     assert "York Talking News" not in caplog.text
     assert "test-listener-456" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_location_resolution_uses_the_location_progressive_response(mock_handler_input):
+    resolver = SimpleNamespace(resolve_utterance=AsyncMock(return_value={"status": "resolved"}))
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    runner = ResolverWorkflowRunner(
+        progressive=progressive,
+        resolver=resolver,
+        user=User(),
+    )
+
+    await runner._resolver_result(
+        mock_handler_input,
+        "Dorking",
+        "SearchLocationIntent",
+    )
+
+    progressive.send.assert_awaited_once_with(mock_handler_input, Speech.LOCATION_PROGRESSIVE)
 
 
 @pytest.mark.asyncio
@@ -224,6 +242,7 @@ async def test_resolver_interceptor_injects_user_and_listener_id(mock_handler_in
     assert captured["listener_id"] == "test-listener-456"
     assert captured["user"] is interceptor._user
 
+
 @pytest.mark.asyncio
 async def test_ambiguity_turn_2_ordinal_selection_resolves_candidate(mock_handler_input):
     candidates = [
@@ -277,6 +296,7 @@ async def test_ambiguity_turn_2_ordinal_selection_resolves_candidate(mock_handle
     assert nlp2["slots"]["creatorName"] == "Pendle Voice Lancashire Life"
     assert User.snapshot(hi2).get("pendingAmbiguity") is None
 
+
 @pytest.mark.asyncio
 async def test_ambiguity_turn_2_distinguishing_name_resolves_candidate(mock_handler_input):
     candidates = [
@@ -328,7 +348,9 @@ async def test_ambiguity_turn_2_distinguishing_name_resolves_candidate(mock_hand
 
 
 @pytest.mark.asyncio
-async def test_ambiguity_turn_2_dismissal_phrase_clears_ambiguity_and_returns_to_search(mock_handler_input):
+async def test_ambiguity_turn_2_dismissal_phrase_clears_ambiguity_and_returns_to_search(
+    mock_handler_input,
+):
     candidates = [
         {"id": "creator-1", "name": "Pendle Voice Dalesman", "type": "creator"},
         {"id": "creator-2", "name": "Pendle Voice Lancashire Life", "type": "creator"},
@@ -503,12 +525,32 @@ async def test_play_from_creator_elicits_city_then_forwards_unmatched_spoken_wor
         ("SearchContentIntent", "searchQuery", "unknown creator", "play unknown creator"),
         ("SearchCreatorIntent", "searchQuery", "David Beard", "play something by David Beard"),
         ("SearchOrganizationIntent", "searchQuery", "Pendle Audio", "play from Pendle Audio"),
-        ("SearchPublicationIntent", "searchQuery", "Lancashire Life", "play publication from Lancashire Life"),
+        (
+            "SearchPublicationIntent",
+            "searchQuery",
+            "Lancashire Life",
+            "play publication from Lancashire Life",
+        ),
         ("PlayContentIntent", "topic", "astronomy today", "play astronomy today"),
-        ("PlayByOrganizationIntent", "organizationQuery", "Ribble Valley TN", "play from Ribble Valley TN"),
-        ("PlayPublicationIntent", "publicationSourceQuery", "Craven Herald", "play publication from Craven Herald"),
+        (
+            "PlayByOrganizationIntent",
+            "organizationQuery",
+            "Ribble Valley TN",
+            "play from Ribble Valley TN",
+        ),
+        (
+            "PlayPublicationIntent",
+            "publicationSourceQuery",
+            "Craven Herald",
+            "play publication from Craven Herald",
+        ),
         ("SelectOrganizationIntent", "organizationQuery", "Colne TN", "play Colne TN"),
-        ("SelectPublicationSourceIntent", "publicationSourceQuery", "Yorkshire Post", "play Yorkshire Post"),
+        (
+            "SelectPublicationSourceIntent",
+            "publicationSourceQuery",
+            "Yorkshire Post",
+            "play Yorkshire Post",
+        ),
         ("SelectCreatorCityIntent", "cityQuery", "Hebden Bridge", "Hebden Bridge"),
         ("BrowseByCategoryIntent", "category", "gardening", "play gardening"),
     ],
@@ -595,8 +637,10 @@ async def test_play_local_with_a_slot_stays_out_of_the_resolver(mock_handler_inp
     }
     resolver = SimpleNamespace(resolve_utterance=AsyncMock())
 
-    await ApplicationContainer(resolver=resolver).build_resolver_interceptor().process(
-        mock_handler_input
+    await (
+        ApplicationContainer(resolver=resolver)
+        .build_resolver_interceptor()
+        .process(mock_handler_input)
     )
 
     resolver.resolve_utterance.assert_not_awaited()
@@ -655,7 +699,10 @@ async def test_user_idle_no_does_not_trigger_search_confirmation():
     gate = IntentDispatchGateHandler(container.build_request_intent_dispatcher(hi))
     assert gate.can_handle(hi) is True
     res = gate.handle(hi)
-    assert "Please say the name of a talking newspaper, creator, publication, or city" in res["outputSpeech"]["ssml"]
+    assert (
+        "Please say the name of a talking newspaper, creator, publication, or city"
+        in res["outputSpeech"]["ssml"]
+    )
 
 
 @pytest.mark.asyncio
@@ -761,10 +808,14 @@ async def test_direct_creator_city_query_routes_to_creator_location_without_gene
     )
     availability = AsyncMock()
     availability.begin_creator_location = AsyncMock(
-        return_value=ResponseBuilder().speak("I found Adeshina Ayomide near Swindon. Would you like to listen?").response
+        return_value=ResponseBuilder()
+        .speak("I found Adeshina Ayomide near Swindon. Would you like to listen?")
+        .response
     )
     progressive = AsyncMock(send=AsyncMock(return_value=True))
-    container = ApplicationContainer(resolver=resolver, progressive=progressive, request_availability=availability)
+    container = ApplicationContainer(
+        resolver=resolver, progressive=progressive, request_availability=availability
+    )
 
     await DialogValidationInterceptor().process(hi)
     await container.build_resolver_interceptor().process(hi)
@@ -825,10 +876,14 @@ async def test_unrecognized_creator_city_reprompts_for_city_not_topic_creators()
     )
     availability = AsyncMock()
     availability.begin_creator_location = AsyncMock(
-        return_value=ResponseBuilder().speak("Sorry, I couldn't identify that location. Please try another city.").response
+        return_value=ResponseBuilder()
+        .speak("Sorry, I couldn't identify that location. Please try another city.")
+        .response
     )
     progressive = AsyncMock(send=AsyncMock(return_value=True))
-    container = ApplicationContainer(resolver=resolver, progressive=progressive, request_availability=availability)
+    container = ApplicationContainer(
+        resolver=resolver, progressive=progressive, request_availability=availability
+    )
 
     await DialogValidationInterceptor().process(hi)
     await container.build_resolver_interceptor().process(hi)
@@ -893,7 +948,10 @@ async def test_user_idle_yes_does_not_trigger_search_confirmation():
     gate = IntentDispatchGateHandler(container.build_request_intent_dispatcher(hi))
     assert gate.can_handle(hi) is True
     res = gate.handle(hi)
-    assert "Please say the name of a talking newspaper, creator, publication, or city" in res["outputSpeech"]["ssml"]
+    assert (
+        "Please say the name of a talking newspaper, creator, publication, or city"
+        in res["outputSpeech"]["ssml"]
+    )
 
 
 @pytest.mark.asyncio
@@ -1166,9 +1224,7 @@ async def test_dialog_validation_gate_speaks_publication_retry_for_unrecognized_
         "SkipFeedbackIntent",
     ),
 )
-def test_direct_handler_intents_bypass_resolver_even_with_slots(
-    mock_handler_input, intent_name
-):
+def test_direct_handler_intents_bypass_resolver_even_with_slots(mock_handler_input, intent_name):
     intent = mock_handler_input.request_envelope.request.intent
     intent.name = intent_name
     intent.slots = {"topic": {"name": "topic", "value": "anything"}}
