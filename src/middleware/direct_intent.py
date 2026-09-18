@@ -144,6 +144,13 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
             match = self._route(
                 slot_phrases, allowed_controls=PhraseRouter.INTERRUPT_CONTROL_INTENTS
             )
+            if not match:
+                locked_match = self._route(slot_phrases)
+                if (
+                    locked_match
+                    and locked_match[0].intent_name in PhraseRouter.DECLARED_LOCKED_INTENTS
+                ):
+                    match = locked_match
             if match:
                 route, slot_name = match
                 self._set(intent, route)

@@ -13,6 +13,7 @@ from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.phrase_router import PhraseRouter
 from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.constants.state import StateSchema
+from src.container import ApplicationContainer
 from src.controllers.confirmation import YesIntentHandler
 from src.controllers.playback_controls import (
     FastForwardIntentHandler,
@@ -212,6 +213,66 @@ async def test_global_interceptor_routes_confident_control_typo_inside_active_di
 
     assert intent["name"] == "IncreaseSpeedIntent"
     assert DialogValidationPolicy.dialog_validation_failure(mock_intent_request) is None
+
+
+@pytest.mark.parametrize(
+    ("phrase", "target"),
+    (
+        ("set up my account", "SetUpAccountIntent"),
+        ("help", "AMAZON.HelpIntent"),
+        ("what's trending", "WhatsTrendingIntent"),
+        ("recommend something", "PlayRecommendationIntent"),
+        ("check my updates", "HearNotificationsIntent"),
+        ("feedback check", "RateContentIntent"),
+        ("report this content", "ReportContentIntent"),
+        ("follow this creator", "FollowCreatorIntent"),
+        ("play my local community", "PlayLocalIntent"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_global_interceptor_routes_locked_families_inside_an_active_dialog(
+    mock_intent_request, phrase, target
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    DialogStateManager.activate(
+        mock_intent_request,
+        "onboarding",
+        context={"stage": "ask_town"},
+    )
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == target
+
+
+@pytest.mark.asyncio
+async def test_account_setup_bypasses_town_capture_in_active_onboarding(mock_intent_request):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+    }
+    DialogStateManager.activate(
+        mock_intent_request,
+        "onboarding",
+        context={"stage": "ask_town"},
+    )
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "OpenDiscoveryIntent"
+    intent["slots"] = {
+        "searchQuery": {"name": "searchQuery", "value": "set up my account"}
+    }
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SetUpAccountIntent"
+    assert ApplicationContainer().build_onboarding_gate(mock_intent_request).can_handle(
+        mock_intent_request
+    ) is False
 
 
 @pytest.mark.asyncio
