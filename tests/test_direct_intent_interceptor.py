@@ -13,7 +13,7 @@ from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.phrase_router import PhraseRouter
 from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.constants.state import StateSchema
-from src.controllers.browse import BrowseNavigationHandler
+from src.controllers.confirmation import YesIntentHandler
 from src.controllers.playback_controls import (
     FastForwardIntentHandler,
     NextIntentHandler,
@@ -23,7 +23,7 @@ from src.controllers.playback_controls import (
     ResumeIntentHandler,
     RewindIntentHandler,
 )
-from src.controllers.system import HelpIntentHandler, HelpMoreIntentHandler
+from src.controllers.system import HelpConfirmationHandler, HelpIntentHandler
 from src.middleware.dialog_validation import DialogValidationPolicy
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
 from src.registry import RouteRegistry
@@ -215,22 +215,28 @@ async def test_global_interceptor_routes_confident_control_typo_inside_active_di
 
 
 @pytest.mark.asyncio
-async def test_help_dialog_routes_more_to_next_without_resolver(mock_intent_request):
+@pytest.mark.parametrize(
+    ("phrase", "expected_intent"),
+    (("yes", "AMAZON.YesIntent"), ("no", "AMAZON.NoIntent")),
+)
+async def test_help_dialog_routes_confirmation_phrases_without_resolver(
+    mock_intent_request, phrase, expected_intent
+):
     mock_intent_request.attributes_manager.request_attributes["_store"] = {
         "onboardingComplete": True
     }
     DialogStateManager.activate(mock_intent_request, "help")
     intent = mock_intent_request.request_envelope["request"]["intent"]
     intent["name"] = "SearchContentIntent"
-    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": "more"}}
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
 
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
-    assert intent["name"] == "AMAZON.NextIntent"
+    assert intent["name"] == expected_intent
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
-    assert HelpMoreIntentHandler().can_handle(mock_intent_request)
-    assert RouteRegistry.REQUEST_CONTROLLERS.index(HelpMoreIntentHandler) < (
-        RouteRegistry.REQUEST_CONTROLLERS.index(BrowseNavigationHandler)
+    assert HelpConfirmationHandler().can_handle(mock_intent_request)
+    assert RouteRegistry.REQUEST_CONTROLLERS.index(HelpConfirmationHandler) < (
+        RouteRegistry.REQUEST_CONTROLLERS.index(YesIntentHandler)
     )
 
 

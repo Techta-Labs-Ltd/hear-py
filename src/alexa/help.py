@@ -5,33 +5,40 @@ from src.alexa.playback_speech import PlaybackSpeech
 
 class HelpSpeech:
     BRIEF_GUIDE = (
-        "Welcome to Hear. Say a topic, place, creator, publication, or talking newspaper. "
-        "You can also say what's new or what's trending. Say more to hear the full guide. "
-        "What would you like to do?"
+        "Welcome to Hear. Search by topic, creator, city, publication, or talking newspaper. "
+        "For example, say find content about the Roman Empire, set my city to Swindon, "
+        "what's trending to hear popular content from across Hear, or play recommendations "
+        "for something chosen for you. "
+        "Would you like to hear more? Say yes or no."
     )
     GUIDE_OPENING = (
-        "Here is your guide to Hear Service. To find something, you can simply say sport, "
-        "local news, a place such as Swindon, or a talking newspaper such as Talking News Federation. "
-        "You can also say what's new, what's trending, or play the latest news. When I read "
-        "out choices, say the name or number, show more, previous choices, or none of these. "
+        "Here is your guide to Hear. Search by topic, creator, city, publication, or talking "
+        "newspaper. For example, say find content about the Roman Empire, set my city to "
+        "Swindon, what's trending to hear popular content from across Hear, or play "
+        "recommendations for something chosen for you. When I read out choices, say the name "
+        "or number, show more, previous choices, or none of these. "
     )
     GUIDE_CLOSING = (
         "To learn more, ask what's this about or who made this. You can "
         "follow or unfollow the creator, play content from creators you follow, rate the "
         "recording, or report inappropriate content. You can ask to hear your updates, or turn "
         "notifications on or off. To personalise Hear, say change my location or set up my "
-        "account. For example, try saying, local news. What would you like to do?"
+        "account. For example, try saying local news. What would you like to hear?"
     )
-    MORE_REPROMPT = "Say more to hear the full guide, or tell me what you would like to hear."
-    REPROMPT = "Try saying sport, local news, Swindon, Talking News Federation, or what's trending."
+    CONFIRMATION_REPROMPT = "Would you like to hear more? Say yes or no."
+    REPROMPT = (
+        "What would you like to hear? Try saying find content about the Roman Empire, set my "
+        "city to Swindon, what's trending, or play recommendations."
+    )
     CARD_TITLE = "Hear - complete voice guide"
     CARD_OPENING = (
         "FIND AND BROWSE\n"
-        "- Say a topic, place, creator, publication, or talking newspaper directly.\n"
-        "- Sport.\n- Swindon.\n- Talking News Federation.\n"
-        "- What's new?\n- What's trending?\n- Play the latest news.\n"
-        "- Play something about [topic].\n- Play local content / Play near [place].\n"
-        "- Play a publication.\n- Play from [creator or organisation].\n"
+        "- Search by topic, creator, city, publication, or talking newspaper.\n"
+        "- Find content about the Roman Empire.\n"
+        "- Set my city to Swindon.\n"
+        "- What's trending? Hear popular content from across Hear.\n"
+        "- Play recommendations for something chosen for you.\n"
+        "- Play something about [topic].\n- Play from [creator or organisation].\n"
         "- Play from a talking newspaper.\n\n"
         "CHOOSE RESULTS\n"
         "- Say a name or number: first, second, third.\n"
@@ -49,17 +56,12 @@ class HelpSpeech:
     )
 
     @staticmethod
-    def full_guide(stage: str) -> str:
-        return f"{HelpSpeech.GUIDE_OPENING}{PlaybackSpeech.guide(stage)} {HelpSpeech.GUIDE_CLOSING}"
-
-    @staticmethod
-    def guide(stage: str) -> str:
-        """Compatibility alias for callers that need the complete guide."""
-        return HelpSpeech.full_guide(stage)
+    def full_guide() -> str:
+        return f"{HelpSpeech.GUIDE_OPENING}{PlaybackSpeech.help_guide()} {HelpSpeech.GUIDE_CLOSING}"
 
     @staticmethod
     def card_text(stage: str) -> str:
         return (
-            f"{HelpSpeech.CARD_OPENING}{PlaybackSpeech.card_section(stage)}\n\n"
+            f"{HelpSpeech.CARD_OPENING}{PlaybackSpeech.help_card_section(stage)}\n\n"
             f"{HelpSpeech.CARD_CLOSING}"
         )

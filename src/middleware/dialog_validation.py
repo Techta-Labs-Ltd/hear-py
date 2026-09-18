@@ -9,6 +9,7 @@ from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.help import HelpSpeech
 from src.alexa.playback_state import PlaybackState
 from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
@@ -56,6 +57,7 @@ class DialogValidationPolicy:
         "ReportContentIntent",
     } | PlaybackConstants.TRANSPORT_INTENTS
     _BINARY_DIALOGS = {
+        "help",
         "search_confirmation",
         "resume",
         "latest_source",
@@ -142,6 +144,8 @@ class DialogValidationPolicy:
     @staticmethod
     def _binary_prompt(active: dict) -> tuple[str, str]:
         context = active.get("context") or {}
+        if active.get("type") == "help":
+            return (HelpSpeech.CONFIRMATION_REPROMPT, HelpSpeech.CONFIRMATION_REPROMPT)
         original = str(
             context.get("question")
             or context.get("prompt")
