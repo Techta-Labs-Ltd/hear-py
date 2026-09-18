@@ -227,10 +227,10 @@ class Permission:
             )
         except Exception as error:
             ApplicationLog.warning("Hear: Alexa address location resolution failed error=%s", type(error).__name__)
-            return None
+            return {**detected, "city": city, "locality": city, "source": "device"}
         resolved = (response.get("resolution") or {}).get("match")
         if not resolved:
-            return None
+            return {**detected, "city": city, "locality": city, "source": "device"}
         return {**detected, **resolved, "source": "device"}
 
     async def _sync(self, handler_input) -> None:

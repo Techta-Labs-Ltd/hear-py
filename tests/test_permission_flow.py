@@ -160,6 +160,36 @@ async def test_first_run_does_not_open_a_permission_connection_when_address_is_m
 
 
 @pytest.mark.asyncio
+async def test_address_city_is_saved_when_coordinate_resolution_has_no_match():
+    handler_input = _handler_input()
+    deps = _deps()
+    deps.locality.detect_device_location.return_value = {
+        "_status": "resolved",
+        "city": "Manchester",
+        "latitude": None,
+        "longitude": None,
+    }
+    deps.resolver.resolve_utterance.return_value = {"resolution": {"match": None}}
+
+    match = await _permission(deps)._resolved_location(handler_input)
+
+    assert match == {
+        "_status": "resolved",
+        "city": "Manchester",
+        "locality": "Manchester",
+        "latitude": None,
+        "longitude": None,
+        "source": "device",
+    }
+    deps.resolver.resolve_utterance.assert_awaited_once_with(
+        "Manchester",
+        alexa_user_id="user",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("profile", "expected_type"),
     [
