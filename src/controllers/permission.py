@@ -53,4 +53,4 @@ class SetUpAccountHandler(AbstractRequestHandler):
         )
 
     async def handle(self, handler_input):
-        return self._permission.start_profile(handler_input)
+        return self._permission.ask_profile_setup(handler_input)

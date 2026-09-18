@@ -43,16 +43,14 @@ async def test_manual_town_capture_completes_onboarding(monkeypatch, mock_handle
     assert store["onboardingStage"] is None
 
 
-def test_handle_permission_yes_sends_permission_card(mock_handler_input):
+def test_handle_permission_no_finishes_onboarding_without_location(mock_handler_input):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.attributes_manager.set_session_attributes = MagicMock()
     mock_handler_input.response_builder = ResponseBuilder()
-    result = ApplicationContainer().handle_permission_yes(mock_handler_input, {})
-    card = result.get("card")
-    assert card is not None, "handle_permission_yes must include a card in the response"
-    assert card.get("type") == "AskForPermissionsConsent"
-    assert card.get("permissions") == ["alexa::devices:all:geolocation:read"]
-    assert result.get("shouldEndSession") is True
+    result = ApplicationContainer().handle_permission_no(mock_handler_input, {})
+    assert "set up your listener profile later" in result["outputSpeech"]["ssml"]
+    assert result.get("shouldEndSession") is False
+    assert User.snapshot(mock_handler_input)["onboardingComplete"] is True
 
 
 @pytest.mark.asyncio
@@ -96,23 +94,14 @@ async def test_device_address_city_is_resolved_to_coordinates_before_confirmatio
         locality=locality,
         resolver=resolver,
         progressive=progressive,
-    ).auto_detect_location_or_manual(
-        mock_handler_input,
-        User.snapshot(mock_handler_input),
-    )
-    pending = User.snapshot(mock_handler_input)["pendingLocationConfirm"]
+    ).permission.complete_first_run(mock_handler_input)
+    store = User.snapshot(mock_handler_input)
     speech = mock_handler_input.response_builder.response["outputSpeech"]["ssml"]
-    assert "Your Alexa device location is set to Burnley" in speech
-    assert "Should I use Burnley for your local content?" in speech
-    assert "I found" not in speech
-    assert pending["latitude"] == 53.789
-    assert pending["longitude"] == -2.248
-    assert pending["postalCode"] == "BB10 1AA"
-    assert pending["source"] == "device"
-    progressive.send.assert_awaited_once_with(
-        mock_handler_input,
-        "One moment while I check that for you.",
-    )
+    assert "I found your location as Burnley" in speech
+    assert store["latitude"] == 53.789
+    assert store["longitude"] == -2.248
+    assert store["devicePostalCode"] == "BB10 1AA"
+    assert store["locationSource"] == "device"
     resolver.resolve_utterance.assert_awaited_once_with(
         "Burnley",
         alexa_user_id="amzn1.ask.account.TEST",
@@ -122,26 +111,24 @@ async def test_device_address_city_is_resolved_to_coordinates_before_confirmatio
 
 
 @pytest.mark.asyncio
-async def test_empty_device_address_explains_missing_saved_city_and_allows_manual_entry(
+async def test_empty_device_address_skips_first_run_location(
     mock_handler_input,
 ):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.response_builder = ResponseBuilder()
     mock_handler_input.attributes_manager.set_session_attributes = MagicMock()
     locality = SimpleNamespace(detect_device_location=AsyncMock(return_value={"_status": "empty"}))
-    result = await ApplicationContainer(locality=locality).auto_detect_location_or_manual(
-        mock_handler_input,
-        User.snapshot(mock_handler_input),
+    result = await ApplicationContainer(locality=locality).permission.complete_first_run(
+        mock_handler_input
     )
     speech = result["outputSpeech"]["ssml"]
-    assert "permission is enabled" in speech
-    assert "couldn't find a location saved for this device" in speech
-    assert "say skip" in result["outputSpeech"]["ssml"]
-    assert User.snapshot(mock_handler_input)["onboardingStage"] == "ask_town"
+    assert "address permission is turned on" in speech
+    assert "set up my account" in speech
+    assert User.snapshot(mock_handler_input)["onboardingStage"] is None
 
 
 @pytest.mark.asyncio
-async def test_geolocation_coordinates_do_not_call_resolver(mock_handler_input):
+async def test_first_run_does_not_use_unrequested_geolocation(mock_handler_input):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.response_builder = ResponseBuilder()
     mock_handler_input.attributes_manager.set_session_attributes = MagicMock()
@@ -166,17 +153,10 @@ async def test_geolocation_coordinates_do_not_call_resolver(mock_handler_input):
         locality=locality,
         resolver=resolver,
         progressive=progressive,
-    ).auto_detect_location_or_manual(
-        mock_handler_input,
-        User.snapshot(mock_handler_input),
-    )
+    ).permission.complete_first_run(mock_handler_input)
 
     speech = result["outputSpeech"]["ssml"]
-    pending = User.snapshot(mock_handler_input)["pendingLocationConfirm"]
-    assert "I've found your device location" in speech
-    assert pending["latitude"] == 53.789
-    assert pending["longitude"] == -2.248
-    assert pending["source"] == "geolocation"
+    assert "I found your location" not in speech
     resolver.resolve_utterance.assert_not_awaited()
 
 
@@ -249,7 +229,7 @@ async def test_manual_town_lookup_sends_location_progressive(mock_handler_input)
     )
 
 
-def test_third_failed_city_attempt_gives_device_setup_guidance(mock_handler_input):
+def test_third_failed_city_attempt_keeps_manual_location_available(mock_handler_input):
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.response_builder = ResponseBuilder()
     store = User.snapshot(mock_handler_input)
@@ -259,8 +239,7 @@ def test_third_failed_city_attempt_gives_device_setup_guidance(mock_handler_inpu
         mock_handler_input, store, container.onboarding
     )
     speech = result["outputSpeech"]["ssml"]
-    assert "update Device Location for this Echo" in speech
-    assert "relaunch Hear" in speech
-    assert "say skip" in speech
+    assert "set my location" in speech
+    assert "relaunch Hear" not in speech
     assert User.snapshot(mock_handler_input)["onboardingComplete"] is False
     assert User.snapshot(mock_handler_input)["onboardingTownAttempts"] == 3

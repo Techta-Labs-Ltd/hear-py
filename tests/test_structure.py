@@ -20,7 +20,6 @@ from src.application import Application
 from src.clients.alexa import AlexaClient
 from src.clients.hear import HearApiClient
 from src.clients.resolver import ResolverClient, ResolverOptions
-from src.constants.onboarding import OnboardingConstants
 from src.container import ApplicationContainer
 from src.controllers.play import PlayContentHandler
 from src.database.persistence import MemoryPersistenceAdapter
@@ -738,7 +737,7 @@ def test_container_allows_search_to_be_replaced_explicitly():
 
 
 @pytest.mark.asyncio
-async def test_onboarding_yes_returns_permission_card(monkeypatch):
+async def test_onboarding_yes_skips_missing_address_permission_without_connection(monkeypatch):
     from src.clients.alexa_settings import AlexaSettingsClient
 
     monkeypatch.setattr(
@@ -771,13 +770,11 @@ async def test_onboarding_yes_returns_permission_card(monkeypatch):
     }
     await skill.invoke(launch, None)
     response = await skill.invoke(yes, None)
-    directive = response["response"]["directives"][0]
-    assert directive["type"] == "Connections.StartConnection"
-    assert directive["token"] == "onboarding_location"
-    assert [
-        scope["permissionScope"] for scope in directive["input"]["permissionScopes"]
-    ] == list(OnboardingConstants.LOCATION_VOICE_PERMISSIONS)
-    assert "shouldEndSession" not in response["response"]
+    assert not any(
+        directive["type"] == "Connections.StartConnection"
+        for directive in response["response"].get("directives", [])
+    )
+    assert response["response"]["shouldEndSession"] is False
 
 
 def test_feedback_service_owns_pending_feedback_policy():

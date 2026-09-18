@@ -35,6 +35,7 @@ class AlexaSettingsSupport:
                 or data.get("fullName")
                 or data.get("email")
                 or data.get("firstName")
+                or data.get("givenName")
                 or data.get("profileName")
             )
             if isinstance(candidate, str) and candidate.strip():
@@ -157,6 +158,7 @@ class AlexaSettingsClient:
                     label or setting_path,
                 )
                 return {"value": None, "status": 204}
+            response.raise_for_status()
             value = AlexaSettingsSupport._parse_profile_setting_value(response.json())
             ApplicationLog.info(
                 "Hear: profile setting response setting=%s status=%s valuePresent=%s",

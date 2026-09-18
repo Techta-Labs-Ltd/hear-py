@@ -48,7 +48,10 @@ class PlayContent:
         )
 
     def _community_setup_response(self, handler_input: HandlerInput):
-        self._user.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
+        self._user.update(
+            handler_input,
+            {"awaitingProfileSetupConsent": True, "awaitingCommunityPlayback": True},
+        )
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.COMMUNITY_NEEDS_TOWN))
             .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))

@@ -38,10 +38,23 @@ class OnboardingPolicy:
 
     @staticmethod
     def _is_new_user(store: Dict[str, Any]) -> bool:
-        """Check if the user is new (no completed onboarding, no prior playback)."""
-        if store.get("onboardingComplete"):
+        if store.get("onboardingComplete") or any(
+            store.get(field)
+            for field in (
+                "listenerId",
+                "firstLaunchedAt",
+                "launchCount",
+                "lastToken",
+                "userCity",
+                "locality",
+                "userName",
+                "fullName",
+                "userEmail",
+                "listenerProfileResolvedAt",
+            )
+        ):
             return False
-        return store.get("playCount", 0) == 0 and (not store.get("lastToken"))
+        return store.get("playCount", 0) == 0
 
     @staticmethod
     def _onboarding_completed_in_session(handler_input: HandlerInput) -> bool:
@@ -91,7 +104,6 @@ class OnboardingGateHandler(AbstractRequestHandler):
         permission,
         town_capture,
         decline,
-        auto_detect_location,
         finalize_town_skipped,
         handle_permission_no,
     ) -> None:
@@ -100,7 +112,6 @@ class OnboardingGateHandler(AbstractRequestHandler):
         self._permission = permission
         self._town_capture = town_capture
         self._decline = decline
-        self._auto_detect_location = auto_detect_location
         self._finalize_town_skipped = finalize_town_skipped
         self._handle_permission_no = handle_permission_no
 
@@ -127,6 +138,8 @@ class OnboardingGateHandler(AbstractRequestHandler):
             return False
         if intent in ("AMAZON.StopIntent", "AMAZON.CancelIntent"):
             return False
+        if intent in {"SetUpAccountIntent", "SetLocationIntent", "SearchLocationIntent"}:
+            return False
         stage = OnboardingPolicy._get_stage(handler_input, store)
         if stage and intent in OnboardingPolicy._SKIP_INTENTS:
             return True
@@ -149,9 +162,9 @@ class OnboardingGateHandler(AbstractRequestHandler):
     async def handle(self, handler_input: HandlerInput):
         rt = AlexaRequest.get_request_type(handler_input)
         if rt == "LaunchRequest":
-            store = self._user.snapshot(handler_input)
-            ApplicationLog.info("Hear: checking device address on onboarding launch")
-            return await self._auto_detect_location(handler_input, store)
+            return Onboarding.ask_for_permission(
+                handler_input, self._user.snapshot(handler_input), self._onboarding
+            )
         intent = AlexaRequest.get_intent_name(handler_input)
         store = self._user.snapshot(handler_input)
         stage = OnboardingPolicy._get_stage(handler_input, store)
@@ -185,7 +198,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
                 return redirect
         if stage == "ask_permission" or not stage:
             if intent == "AMAZON.YesIntent":
-                return self._permission.start_location(handler_input)
+                return await self._permission.complete_first_run(handler_input)
             if intent == "AMAZON.NoIntent":
                 return self._handle_permission_no(handler_input, store)
             if intent in {"SkipFeedbackIntent", "AMAZON.CancelIntent"}:
@@ -200,7 +213,7 @@ class OnboardingGateHandler(AbstractRequestHandler):
         return (
             handler_input.response_builder.speak(
                 Ssml.ssml(
-                    "Please say yes to use your device location, say your city, or say skip to continue as a guest."
+                    "Please say yes or no."
                 )
             )
             .set_should_end_session(False)

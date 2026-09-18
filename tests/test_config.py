@@ -4,9 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from config import Settings, settings
-from config.permission_scopes import (
-    GEOLOCATION_READ,
-)
+from config.permission_scopes import DEVICE_ADDRESS, PROFILE_EMAIL_READ, PROFILE_NAME_READ
 from src.utils.deadline import DeadlineBudget
 
 
@@ -19,7 +17,9 @@ def test_settings_loads_defaults():
 
 
 def test_permission_scopes():
-    assert GEOLOCATION_READ == "alexa::devices:all:geolocation:read"
+    assert DEVICE_ADDRESS == "read::alexa:device:all:address"
+    assert PROFILE_NAME_READ == "alexa::profile:name:read"
+    assert PROFILE_EMAIL_READ == "alexa::profile:email:read"
 
 
 def test_settings_api_timeout_default():

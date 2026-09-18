@@ -6,10 +6,7 @@ from src.clients.alexa_settings import AlexaSettingsClient
 
 
 class AlexaLocalitySupport:
-    FULL_ADDRESS_SCOPES = (
-        permission_scopes.DEVICE_ADDRESS,
-        permission_scopes.DEVICE_ADDRESS_FULL,
-    )
+    FULL_ADDRESS_SCOPES = (permission_scopes.DEVICE_ADDRESS,)
     @staticmethod
     def has_any_profile_name(store: dict) -> bool:
         return bool(store.get("userName") or store.get("fullName"))
@@ -28,22 +25,7 @@ class AlexaLocalityService:
         self._settings = settings
 
     async def detect_device_location(self, handler_input) -> dict:
-        geolocation = RequestContext.get_geolocation(handler_input)
-        if geolocation:
-            return {
-                "_status": "resolved",
-                "city": "",
-                "locality": "",
-                "countryCode": None,
-                "postalCode": None,
-                "stateOrRegion": None,
-                "latitude": geolocation.get("latitude"),
-                "longitude": geolocation.get("longitude"),
-                "source": "geolocation",
-            }
         if not AlexaLocalitySupport.has_full_address_permission(handler_input):
-            if RequestContext.has_permission(handler_input, permission_scopes.GEOLOCATION_READ):
-                return {"_status": "empty"}
             return {"_status": "permission_denied"}
 
         fetched = await self._settings.get_device_address(handler_input)
@@ -70,12 +52,9 @@ class AlexaLocalityService:
 
     def get_missing_permissions(self, handler_input, store: dict) -> list[str]:
         missing: list[str] = []
-        has_location_permission = (
-            AlexaLocalitySupport.has_full_address_permission(handler_input)
-            or RequestContext.has_permission(handler_input, permission_scopes.GEOLOCATION_READ)
-        )
+        has_location_permission = AlexaLocalitySupport.has_full_address_permission(handler_input)
         if not has_location_permission and not store.get("latitude"):
-            missing.append(permission_scopes.GEOLOCATION_READ)
+            missing.append(permission_scopes.DEVICE_ADDRESS)
         if not AlexaLocalitySupport.has_any_profile_name(store):
             missing.extend(self.get_profile_permissions_to_request(handler_input, store))
         return missing

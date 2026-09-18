@@ -9,12 +9,12 @@ from config import settings
 
 class PermissionConstants:
     CONNECTION_URI = "connection://AMAZON.AskForPermissionsConsent/2"
-    LOCATION_PURPOSE = "onboarding_location"
     PROFILE_PURPOSE = "listener_profile"
     NOTIFICATION_PURPOSE = "notifications"
     PROFILE_SCOPES = (
         permission_scopes.PROFILE_NAME_READ,
         permission_scopes.PROFILE_EMAIL_READ,
+        permission_scopes.DEVICE_ADDRESS,
     )
 
 
@@ -33,8 +33,6 @@ class PermissionResumeCommand:
 @dataclass(frozen=True, slots=True)
 class PermissionResumeDecision:
     kind: Literal[
-        "location_granted",
-        "location_denied",
         "profile_granted",
         "profile_denied",
         "notifications_granted",
@@ -81,21 +79,17 @@ class PermissionPolicy:
             and normalized.status == "ACCEPTED"
         )
         kind: Literal[
-            "location_granted",
-            "location_denied",
             "profile_granted",
             "profile_denied",
             "notifications_granted",
             "notifications_denied",
         ]
-        if normalized.purpose == PermissionConstants.LOCATION_PURPOSE:
-            kind = "location_granted" if accepted else "location_denied"
-        elif normalized.purpose == PermissionConstants.PROFILE_PURPOSE:
+        if normalized.purpose == PermissionConstants.PROFILE_PURPOSE:
             kind = "profile_granted" if accepted else "profile_denied"
         elif normalized.purpose == PermissionConstants.NOTIFICATION_PURPOSE:
             kind = "notifications_granted" if accepted else "notifications_denied"
         else:
-            kind = "location_denied"
+            kind = "profile_denied"
         return PermissionResumeDecision(kind, normalized)
 
     @staticmethod

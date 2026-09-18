@@ -122,14 +122,18 @@ class Decline:
         return None
 
     async def _state_response(self, handler_input, store: dict):
-        if store.get("onboardingStage") == "confirm_town_for_community":
+        if store.get("awaitingProfileSetupConsent"):
             self._user.update(
                 handler_input,
-                {"onboardingStage": None, "awaitingCommunityPlayback": False},
+                {"awaitingProfileSetupConsent": False, "awaitingCommunityPlayback": False},
             )
             return AlexaResponse.present_idle_next(
                 handler_input,
-                Speech.COMMUNITY_LOCATION_DECLINED,
+                (
+                    Speech.COMMUNITY_LOCATION_DECLINED
+                    if store.get("awaitingCommunityPlayback")
+                    else Speech.PROFILE_PERMISSION_SKIPPED
+                ),
                 Speech.WELCOME_REPROMPT,
             )
         if store.get("awaitingProfilePermission"):
