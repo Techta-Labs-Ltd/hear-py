@@ -5,12 +5,8 @@ from src.models.launch_policy import LaunchPolicy
 
 class TestLaunchPolicy:
     def test_protected_decisions_preserve_priority(self) -> None:
-        town = LaunchPolicy.protected(
-            {"onboardingStage": "confirm_town_for_community", "awaitingContinueAfterFlag": True}
-        )
         continue_after_flag = LaunchPolicy.protected({"awaitingContinueAfterFlag": True})
 
-        assert town.kind == "town_capture"
         assert continue_after_flag.kind == "continue_after_flag"
 
     def test_pending_decisions_preserve_playback_and_feedback_priority(self) -> None:

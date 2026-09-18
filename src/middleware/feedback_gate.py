@@ -32,7 +32,11 @@ class FeedbackSkipGateHandler(AbstractRequestHandler):
         return bool(
             AlexaRequest.get_intent_name(handler_input)
             in {"AMAZON.SkipIntent", "AMAZON.NextIntent"}
-            and (store.get("awaitingFeedback") or store.get("awaitingReportDecision"))
+            and (
+                store.get("awaitingFeedback")
+                or store.get("awaitingReportDecision")
+                or store.get("awaitingFeedbackContinuation")
+            )
         )
 
     async def handle(self, handler_input):

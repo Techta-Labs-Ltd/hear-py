@@ -9,6 +9,7 @@ from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.help import HelpSpeech
 from src.alexa.playback_state import PlaybackState
 from src.alexa.request import AlexaRequest
 from src.alexa.search_speech import SearchSpeech
@@ -56,6 +57,7 @@ class DialogValidationPolicy:
         "ReportContentIntent",
     } | PlaybackConstants.TRANSPORT_INTENTS
     _BINARY_DIALOGS = {
+        "help",
         "search_confirmation",
         "resume",
         "latest_source",
@@ -142,6 +144,8 @@ class DialogValidationPolicy:
     @staticmethod
     def _binary_prompt(active: dict) -> tuple[str, str]:
         context = active.get("context") or {}
+        if active.get("type") == "help":
+            return (HelpSpeech.CONFIRMATION_REPROMPT, HelpSpeech.CONFIRMATION_REPROMPT)
         original = str(
             context.get("question")
             or context.get("prompt")
@@ -173,7 +177,7 @@ class DialogValidationPolicy:
     @staticmethod
     def _onboarding_binary_prompt(stage: str) -> tuple[str, str]:
         if stage == "ask_permission":
-            speech = "Would you like me to use your device location? Please say yes or no."
+            speech = "May I check the address saved in your Alexa account? Please say yes or no."
         else:
             speech = "Is that the correct city? Please say yes or no."
         return (speech, "Please say yes or no.")
@@ -189,6 +193,11 @@ class DialogValidationPolicy:
         dialog_type = active.get("type")
         context = active.get("context") or {}
         store = User.snapshot(handler_input)
+        if dialog_type == "feedback_continuation" and intent_name in {
+            "AMAZON.NextIntent",
+            "AMAZON.SkipIntent",
+        }:
+            return None
         if (
             intent_name in DialogValidationPolicy._PLAYBACK_DETAIL_INTENTS
             and PlaybackState(User()).has_unfinished(store)

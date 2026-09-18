@@ -15,6 +15,13 @@ class PlaybackSpeech:
         "2 times speed. Available speeds may vary by recording. Say stop when you want to "
         "finish listening. Loop and shuffle are not available."
     )
+    HELP_GUIDE = (
+        "While a recording is playing, say pause to keep your place, then resume to carry on. "
+        "Say next or skip for the next recording, previous for the one before it, repeat, or "
+        "start over to return to the beginning. To change speed, say play faster, play slower, "
+        "increase speed, reduce speed, or normal speed. Say stop when you want to finish "
+        "listening."
+    )
     CARD_SECTION = (
         "CONTROL PLAYBACK\n"
         "- Pause (keeps your place) / Resume.\n"
@@ -26,6 +33,14 @@ class PlaybackSpeech:
         "- First through sixth speed: 0.5x, 0.75x, 1x, 1.25x, 1.5x or 2x.\n"
         "- Stop (finishes listening).\n"
         "Loop and shuffle are not available."
+    )
+    HELP_CARD_SECTION = (
+        "CONTROL PLAYBACK\n"
+        "- Pause (keeps your place) / Resume.\n"
+        "- Next or Skip / Previous.\n"
+        "- Repeat / Start over.\n"
+        "- Play faster / Play slower / Increase speed / Reduce speed / Normal speed.\n"
+        "- Stop (finishes listening)."
     )
     SPEED_NOT_SUPPORTED = "This recording does not have faster or slower versions. I can only play it at normal speed."
     SPEED_MAX = "This is the maximum speed."
@@ -57,12 +72,17 @@ class PlaybackSpeech:
         return (
             "While audio is playing, you can pause it and then say, Alexa, ask "
             f"{invocation} to rate this content. To change the playback speed, say, Alexa, "
-            f"ask {invocation} to play faster, play slower, or use normal speed."
+            f"ask {invocation} to play faster, play slower, increase speed, reduce speed, or "
+            "use normal speed."
         )
 
     @staticmethod
     def guide(stage: str) -> str:
         return f"{PlaybackSpeech.GUIDE} {PlaybackSpeech.mid_session_guide(stage)}"
+
+    @staticmethod
+    def help_guide() -> str:
+        return PlaybackSpeech.HELP_GUIDE
 
     @staticmethod
     def card_section(stage: str) -> str:
@@ -74,6 +94,17 @@ class PlaybackSpeech:
             f"- Alexa, ask {invocation} to play faster.\n"
             f"- Alexa, ask {invocation} to play slower.\n"
             f"- Alexa, ask {invocation} to use normal speed."
+        )
+
+    @staticmethod
+    def help_card_section(stage: str) -> str:
+        invocation = PlaybackSpeech.invocation(stage)
+        return (
+            f"{PlaybackSpeech.HELP_CARD_SECTION}\n"
+            "WHILE AUDIO IS PLAYING\n"
+            f"- Alexa, ask {invocation} to rate this content.\n"
+            f"- Alexa, ask {invocation} to play faster, play slower, increase speed, reduce speed, "
+            "or use normal speed."
         )
 
     @staticmethod

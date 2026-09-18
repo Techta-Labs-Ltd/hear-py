@@ -611,6 +611,30 @@ def test_search_confirmation_gate_blocks_direct_catalogue_fallback():
     assert response["shouldEndSession"] is False
 
 
+@pytest.mark.parametrize("intent_name", ("WhatsTrendingIntent", "PlayRecommendationIntent"))
+def test_search_confirmation_gate_allows_resolver_bypass_discovery_intents(intent_name):
+    envelope = AttrDict(
+        {
+            "version": "1.0",
+            "context": {"System": {"user": {"userId": "test-user"}}},
+            "request": {
+                "type": "IntentRequest",
+                "locale": "en-GB",
+                "intent": {"name": intent_name, "slots": {}},
+            },
+        }
+    )
+    attributes = AttributesManager(envelope)
+    attributes.request_attributes = {
+        "_store": {**StateSchema.DEFAULT_STORE, "onboardingComplete": True},
+        "_dirty": False,
+    }
+
+    assert SearchConfirmationGateHandler().can_handle(
+        HandlerInput(envelope, attributes, None, ResponseBuilder())
+    ) is False
+
+
 @pytest.mark.asyncio
 async def test_search_confirmation_gate_allows_unresolved_reference_handler():
     envelope = AttrDict(

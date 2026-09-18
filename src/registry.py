@@ -28,7 +28,7 @@ from src.controllers.notifications import (
     EnableNotificationsHandler,
     HearNotificationsHandler,
 )
-from src.controllers.permission import PermissionResumeHandler, SetUpAccountHandler
+from src.controllers.permission import SetUpAccountHandler
 from src.controllers.play import (
     PlayByOrganizationHandler,
     PlayContentHandler,
@@ -65,8 +65,8 @@ from src.controllers.social import (
 )
 from src.controllers.system import (
     CancelIntentHandler,
+    HelpConfirmationHandler,
     HelpIntentHandler,
-    HelpMoreIntentHandler,
     NavigateHomeHandler,
     SessionEndedHandler,
     UnknownRequestHandler,
@@ -90,6 +90,7 @@ from src.middleware.persistence import (
     SavePersistenceInterceptor,
 )
 from src.middleware.resolver import ResolverInterceptor
+from src.services.notification_recipient import AlexaNotificationRecipientDirectory
 
 
 class RouteRegistry:
@@ -115,7 +116,6 @@ class RouteRegistry:
     )
     RESPONSE_INTERCEPTORS = (SavePersistenceInterceptor,)
     REQUEST_CONTROLLERS = (
-        PermissionResumeHandler,
         LaunchRequestHandler,
         SetUpAccountHandler,
         HearNotificationsHandler,
@@ -125,7 +125,7 @@ class RouteRegistry:
         BrowseContentHandler,
         PlayByOrganizationHandler,
         PlayContentHandler,
-        HelpMoreIntentHandler,
+        HelpConfirmationHandler,
         BrowseNavigationHandler,
         SetPlaybackSpeedHandler,
         IncreaseSpeedHandler,
@@ -197,7 +197,11 @@ class RouteRegistry:
         builder.add_exception_handler(ErrorHandler(container.error_reporter))
         for interceptor in (
             LambdaDeadlineInterceptor(),
-            IdentityInterceptor(container.listener_identity, container.user),
+            IdentityInterceptor(
+                container.listener_identity,
+                container.user,
+                AlexaNotificationRecipientDirectory(),
+            ),
             LoadPersistenceInterceptor(),
             DirectIntentPhraseInterceptor(),
             DialogValidationInterceptor(),
@@ -210,7 +214,6 @@ class RouteRegistry:
     @staticmethod
     def register_controllers(builder, container: ApplicationContainer) -> None:
         for factory in (
-            lambda _request: PermissionResumeHandler(container.permission),
             lambda request: LaunchRequestHandler(
                 container.build_request_launch_workflow(request), container.playback
             ),
@@ -234,7 +237,7 @@ class RouteRegistry:
                 container.build_request_play_organization(request)
             ),
             lambda request: PlayContentHandler(container.build_request_play_content(request)),
-            lambda _request: HelpMoreIntentHandler(),
+            lambda _request: HelpConfirmationHandler(),
             lambda request: BrowseNavigationHandler(
                 container.build_request_components(request).browse
             ),

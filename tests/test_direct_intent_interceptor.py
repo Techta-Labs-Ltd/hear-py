@@ -13,7 +13,8 @@ from src.alexa.direct_intents import DirectIntentPolicy
 from src.alexa.phrase_router import PhraseRouter
 from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.constants.state import StateSchema
-from src.controllers.browse import BrowseNavigationHandler
+from src.container import ApplicationContainer
+from src.controllers.confirmation import YesIntentHandler
 from src.controllers.playback_controls import (
     FastForwardIntentHandler,
     NextIntentHandler,
@@ -23,7 +24,7 @@ from src.controllers.playback_controls import (
     ResumeIntentHandler,
     RewindIntentHandler,
 )
-from src.controllers.system import HelpIntentHandler, HelpMoreIntentHandler
+from src.controllers.system import HelpConfirmationHandler, HelpIntentHandler
 from src.middleware.dialog_validation import DialogValidationPolicy
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
 from src.registry import RouteRegistry
@@ -214,23 +215,89 @@ async def test_global_interceptor_routes_confident_control_typo_inside_active_di
     assert DialogValidationPolicy.dialog_validation_failure(mock_intent_request) is None
 
 
+@pytest.mark.parametrize(
+    ("phrase", "target"),
+    (
+        ("set up my account", "SetUpAccountIntent"),
+        ("help", "AMAZON.HelpIntent"),
+        ("what's trending", "WhatsTrendingIntent"),
+        ("recommend something", "PlayRecommendationIntent"),
+        ("check my updates", "HearNotificationsIntent"),
+        ("feedback check", "RateContentIntent"),
+        ("report this content", "ReportContentIntent"),
+        ("follow this creator", "FollowCreatorIntent"),
+        ("play my local community", "PlayLocalIntent"),
+    ),
+)
 @pytest.mark.asyncio
-async def test_help_dialog_routes_more_to_next_without_resolver(mock_intent_request):
+async def test_global_interceptor_routes_locked_families_inside_an_active_dialog(
+    mock_intent_request, phrase, target
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    DialogStateManager.activate(
+        mock_intent_request,
+        "onboarding",
+        context={"stage": "ask_town"},
+    )
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == target
+
+
+@pytest.mark.asyncio
+async def test_account_setup_bypasses_town_capture_in_active_onboarding(mock_intent_request):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+    }
+    DialogStateManager.activate(
+        mock_intent_request,
+        "onboarding",
+        context={"stage": "ask_town"},
+    )
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "OpenDiscoveryIntent"
+    intent["slots"] = {
+        "searchQuery": {"name": "searchQuery", "value": "set up my account"}
+    }
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SetUpAccountIntent"
+    assert ApplicationContainer().build_onboarding_gate(mock_intent_request).can_handle(
+        mock_intent_request
+    ) is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("phrase", "expected_intent"),
+    (("yes", "AMAZON.YesIntent"), ("no", "AMAZON.NoIntent")),
+)
+async def test_help_dialog_routes_confirmation_phrases_without_resolver(
+    mock_intent_request, phrase, expected_intent
+):
     mock_intent_request.attributes_manager.request_attributes["_store"] = {
         "onboardingComplete": True
     }
     DialogStateManager.activate(mock_intent_request, "help")
     intent = mock_intent_request.request_envelope["request"]["intent"]
     intent["name"] = "SearchContentIntent"
-    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": "more"}}
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
 
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
-    assert intent["name"] == "AMAZON.NextIntent"
+    assert intent["name"] == expected_intent
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
-    assert HelpMoreIntentHandler().can_handle(mock_intent_request)
-    assert RouteRegistry.REQUEST_CONTROLLERS.index(HelpMoreIntentHandler) < (
-        RouteRegistry.REQUEST_CONTROLLERS.index(BrowseNavigationHandler)
+    assert HelpConfirmationHandler().can_handle(mock_intent_request)
+    assert RouteRegistry.REQUEST_CONTROLLERS.index(HelpConfirmationHandler) < (
+        RouteRegistry.REQUEST_CONTROLLERS.index(YesIntentHandler)
     )
 
 

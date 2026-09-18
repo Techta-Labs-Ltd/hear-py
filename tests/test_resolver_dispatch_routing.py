@@ -126,7 +126,9 @@ async def test_location_resolution_uses_the_location_progressive_response(mock_h
         "SearchLocationIntent",
     )
 
-    progressive.send.assert_awaited_once_with(mock_handler_input, Speech.LOCATION_PROGRESSIVE)
+    progressive.send.assert_awaited_once_with(
+        mock_handler_input, Speech.LOCATION_RESOLUTION_PROGRESSIVE
+    )
 
 
 @pytest.mark.asyncio

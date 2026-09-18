@@ -48,6 +48,7 @@ from src.services.listener_identity import ListenerIdentityService
 from src.services.listener_repository import Listener
 from src.services.listener_sync import ListenerSyncService
 from src.services.notification_delivery import NotificationDeliveryService
+from src.services.notification_recipient import AlexaNotificationRecipientDirectory
 from src.services.observability import ErrorReporter
 
 
@@ -168,6 +169,7 @@ class ApplicationContainer:
         self.notification_delivery = notification_delivery or NotificationDeliveryService(
             self.notification_api,
             self.proactive_events,
+            AlexaNotificationRecipientDirectory(),
         )
         self.listener_sync = listener_sync or ListenerSyncService(
             self.heara,
@@ -202,6 +204,29 @@ class ApplicationContainer:
         def enable_notifications_after_permission(handler_input):
             return self.notifications.enable_after_permission(handler_input)
 
+        async def resume_local(handler_input):
+            store = self.user.snapshot(handler_input)
+            city = store.get("userCity") or store.get("locality")
+            self.user.update(
+                handler_input,
+                {
+                    "awaitingCommunityPlayback": False,
+                    "awaitingSearchConfirmation": False,
+                    "pendingResolution": None,
+                },
+            )
+            attrs = RequestContext.request(handler_input)
+            attrs["_nlp"] = {
+                "intent": "local",
+                "alexaIntent": "local",
+                "confidence": "high",
+                "nlpMatchesAlexa": True,
+                "needsRedirect": False,
+                "slots": {"city": city, "isLocal": True, "residualQuery": ""},
+            }
+            RequestContext.replace_request(handler_input, attrs)
+            return await self.availability.begin_local(handler_input, attrs["_nlp"])
+
         self.permission = permission or Permission(
             self.user,
             self.onboarding,
@@ -211,6 +236,7 @@ class ApplicationContainer:
             self.progressive,
             self.locality,
             self.resolver,
+            resume_local,
         )
         self.notification_workflow = Notification(
             self.notification_api,
@@ -455,9 +481,6 @@ class ApplicationContainer:
         )
 
     def build_onboarding_gate(self, handler_input):
-        async def auto_detect_location(handler_input, store):
-            return await self.auto_detect_location_or_manual(handler_input, store)
-
         def finalize_town_skipped(handler_input, store):
             return self.finalize_town_skipped(handler_input, store)
 
@@ -470,7 +493,6 @@ class ApplicationContainer:
             permission=self.permission,
             town_capture=self.build_town_capture(),
             decline=self.build_request_decline(handler_input),
-            auto_detect_location=auto_detect_location,
             finalize_town_skipped=finalize_town_skipped,
             handle_permission_no=handle_permission_no,
         )
@@ -496,31 +518,6 @@ class ApplicationContainer:
 
     def handle_permission_no(self, handler_input, store):
         return Onboarding.handle_permission_no(handler_input, store, self.onboarding)
-
-    def handle_permission_yes(self, handler_input, store):
-        return Onboarding.handle_permission_yes(handler_input, store, self.onboarding)
-
-    def ask_for_location_permission(self, handler_input, store):
-        return Onboarding.ask_for_permission(handler_input, store, self.onboarding)
-
-    def handle_location_not_found(self, handler_input, store):
-        return Onboarding.handle_location_not_found(handler_input, store, self.onboarding)
-
-    async def auto_detect_location_or_manual(
-        self, handler_input, store, *, after_consent: bool = False
-    ):
-        return await Onboarding.auto_detect_location_or_manual(
-            handler_input,
-            store,
-            self.onboarding,
-            self.progressive,
-            self.locality,
-            self.resolver,
-            self.ask_for_location_permission,
-            self.permission.location_fallback,
-            self.handle_location_not_found,
-            after_consent=after_consent,
-        )
 
     async def finalize_town_captured(self, handler_input, store, phrase):
         return await Onboarding.finalize_town_captured(
@@ -579,6 +576,7 @@ class ApplicationContainer:
             playback_controls=self.build_playback_controls(handler_input),
             permission=self.permission,
             onboarding=self.onboarding,
+            listener_sync=self.listener_sync,
             progressive=self.progressive,
             heara=self.bind_hear_client(handler_input),
             availability=components.availability,

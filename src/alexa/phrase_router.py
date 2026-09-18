@@ -29,7 +29,6 @@ class PhraseRouter:
     _RECOMMENDATION_TOPIC = re.compile(
         r"\b(?:recommend|suggest|discover|curate)(?:\s+me)?\s+(?P<topic>.+)$"
     )
-    _HELP_MORE = re.compile(r"(?:more|tell\s+me\s+more|more\s+help|the\s+full\s+guide)")
     _SLOT_MARKER = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)\}")
     _MODEL_PATH = Path(__file__).resolve().parents[2] / "en-GB.json"
     DECLARED_LOCKED_INTENTS = DirectIntentPolicy.BYPASS_RESOLVER_INTENTS | {"PlayLocalIntent"}
@@ -104,10 +103,6 @@ class PhraseRouter:
             in {"something", "something good", "something for me", "something good for me"}
             else candidate
         )
-
-    @classmethod
-    def is_help_more(cls, phrase: object) -> bool:
-        return bool(cls._HELP_MORE.fullmatch(cls.normalize(phrase)))
 
     @classmethod
     def _declared_pattern(

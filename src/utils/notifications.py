@@ -56,9 +56,6 @@ class NotificationItem:
                 "sourceId": source_id,
                 "sourceName": source_name,
                 "lastDate": last_date,
-                "alexaUserId": NotificationItem.optional_text(
-                    target.get("userId") or source.get("alexaUserId")
-                ),
                 "locale": NotificationItem.optional_text(target.get("locale"))
                 or NotificationConstants.DEFAULT_LOCALE,
                 "sendProactive": source.get("sendProactive") is not False,

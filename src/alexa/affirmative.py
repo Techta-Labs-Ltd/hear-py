@@ -36,6 +36,7 @@ class Affirmative:
         playback_controls,
         permission,
         onboarding,
+        listener_sync,
         progressive,
         heara,
         availability,
@@ -51,6 +52,7 @@ class Affirmative:
         self._playback_controls = playback_controls
         self._permission = permission
         self._onboarding = onboarding
+        self._listener_sync = listener_sync
         self._progressive = progressive
         self._heara = heara
         self._availability = availability
@@ -90,6 +92,8 @@ class Affirmative:
         session: dict,
         dialog_type: str | None,
     ):
+        if store.get("awaitingProfileSetupConsent"):
+            return None
         if dialog_type == "ambiguity":
             return Affirmative._ambiguity_response(handler_input, store)
         if dialog_type == "asr_repair":
@@ -144,14 +148,16 @@ class Affirmative:
         )
 
     async def _state_response(self, handler_input, store: dict):
-        if store.get("onboardingStage") == "confirm_town_for_community":
-            self._user.update(
-                handler_input,
-                {"onboardingStage": None, "awaitingCommunityPlayback": True},
-            )
-            return self._permission.start_location(handler_input)
+        if store.get("awaitingProfileSetupConsent"):
+            response = await self._permission.start_profile(handler_input)
+            updated = self._user.snapshot(handler_input)
+            if updated.get("awaitingCommunityPlayback") and updated.get("userCity"):
+                return await self._handle_community_play_yes(
+                    handler_input, updated, RequestContext.session(handler_input)
+                )
+            return response
         if store.get("awaitingProfilePermission"):
-            return self._permission.start_profile(handler_input)
+            return await self._permission.start_profile(handler_input)
         if store.get("listModeActive"):
             return await self._handle_list_mode_yes(handler_input, store)
         if store.get("awaitingStillListening"):
@@ -222,24 +228,63 @@ class Affirmative:
         )
         DialogStateManager.clear(handler_input, "onboarding")
         if resume_community:
+            if store.get("profileSetupActive"):
+                self._user.update(
+                    handler_input,
+                    {
+                        "awaitingProfilePermission": False,
+                        "awaitingProfileTown": False,
+                        "profileSetupActive": False,
+                        "listenerType": (
+                            "registered"
+                            if store.get("userEmail")
+                            and (store.get("fullName") or store.get("userName"))
+                            else "listener"
+                        ),
+                    },
+                )
+                try:
+                    await self._listener_sync.sync_for_launch(handler_input)
+                except Exception as error:
+                    ApplicationLog.warning("Hear: profile town sync failed error=%s", type(error).__name__)
             return await self._handle_community_play_yes(
                 handler_input,
                 self._user.snapshot(handler_input),
                 RequestContext.session(handler_input),
             )
-        self._user.update(handler_input, {"awaitingProfilePermission": True})
+        if store.get("profileSetupActive"):
+            self._user.update(
+                handler_input,
+                {
+                    "awaitingProfilePermission": False,
+                    "awaitingProfileTown": False,
+                    "profileSetupActive": False,
+                    "listenerType": (
+                        "registered"
+                        if store.get("userEmail")
+                        and (store.get("fullName") or store.get("userName"))
+                        else "listener"
+                    ),
+                },
+            )
+            try:
+                await self._listener_sync.sync_for_launch(handler_input)
+            except Exception as error:
+                ApplicationLog.warning("Hear: profile town sync failed error=%s", type(error).__name__)
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                f"{Speech.TOWN_GOT_IT(city)} Your listener profile is ready. What would you like to listen to?",
+                Speech.WELCOME_REPROMPT,
+            )
         confirmation = (
             Speech.LOCATION_CONFIRMED(city)
             if city
             else Speech.LOCATION_COORDINATES_CONFIRMED
         )
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml(f"{confirmation} {Speech.PROFILE_PERMISSION_OFFER}")
-            )
-            .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            confirmation,
+            Speech.WELCOME_REPROMPT,
         )
 
     async def _handle_latest_source_yes(self, handler_input, store):

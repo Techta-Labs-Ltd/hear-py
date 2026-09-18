@@ -1,7 +1,4 @@
-from config.permission_scopes import (
-    DEVICE_ADDRESS,
-    GEOLOCATION_READ,
-)
+from config.permission_scopes import DEVICE_ADDRESS
 from src.constants.discovery import DiscoveryConstants
 
 
@@ -15,9 +12,8 @@ class OnboardingConstants:
     MAX_TOWN_RESOLVER_FAILURES = 2
     PERMISSIONS = {
         "DEVICE_ADDRESS": DEVICE_ADDRESS,
-        "GEOLOCATION": GEOLOCATION_READ,
     }
-    LOCATION_VOICE_PERMISSIONS = (GEOLOCATION_READ,)
+    LOCATION_VOICE_PERMISSIONS = (DEVICE_ADDRESS,)
     TOWN_CONFIRM_REPROMPT = "Say yes to confirm, or no to set a different city."
     TOWN_SKIP_PHRASES = DiscoveryConstants.FEEDBACK_SKIP_HINTS
     CONTENT_REQUEST_PHRASES = (

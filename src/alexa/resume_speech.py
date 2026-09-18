@@ -8,6 +8,10 @@ class ResumeSpeech:
     CREATOR_SOURCES = frozenset({"creator", "playbycreatorintent"})
     ORGANIZATION_SOURCES = frozenset({"organization", "playbyorganizationintent"})
     PUBLICATION_SOURCES = frozenset({"publication", "playpublicationintent"})
+    TRENDING_SOURCES = frozenset({"trending", "whatstrendingintent"})
+    RECOMMENDATION_SOURCES = frozenset(
+        {"recommendation", "playrecommendationintent"}
+    )
     PLACEHOLDER_LABELS = frozenset(
         {
             "a publication",
@@ -75,6 +79,21 @@ class ResumeSpeech:
         active = subject if isinstance(subject, dict) else {}
         saved = store if isinstance(store, dict) else {}
         source = cls._source(active, saved)
+        context = cls._discovery_context(active, saved)
+        context_kind = str(context.get("kind") or "").strip().casefold()
+
+        if source in cls.TRENDING_SOURCES or context_kind == "trending":
+            title = cls._safe_label(active.get("spokenTitle") or active.get("title"))
+            return cls._question(
+                f"You were listening to {title}" if title else "You were listening to what's trending"
+            )
+        if source in cls.RECOMMENDATION_SOURCES or context_kind == "recommendation":
+            title = cls._safe_label(active.get("spokenTitle") or active.get("title"))
+            return cls._question(
+                f"You were listening to {title}"
+                if title
+                else "You were listening to your recommendations"
+            )
 
         is_publication = bool(
             source in cls.PUBLICATION_SOURCES

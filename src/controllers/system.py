@@ -12,6 +12,7 @@ from src.alexa.playback import AlexaPlayback
 from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.playback_workflow import Playback
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.playback import PlaybackConstants
@@ -30,7 +31,7 @@ class HelpIntentHandler(AbstractRequestHandler):
         DialogStateManager.activate(handler_input, "help", ttl_seconds=120)
         return (
             handler_input.response_builder.speak(Ssml.ssml(HelpSpeech.BRIEF_GUIDE))
-            .reprompt(Ssml.ssml(HelpSpeech.MORE_REPROMPT))
+            .reprompt(Ssml.ssml(HelpSpeech.CONFIRMATION_REPROMPT))
             .with_simple_card(
                 HelpSpeech.CARD_TITLE,
                 HelpSpeech.card_text(settings.STAGE),
@@ -40,24 +41,28 @@ class HelpIntentHandler(AbstractRequestHandler):
         )
 
 
-class HelpMoreIntentHandler(AbstractRequestHandler):
-    """Serve the complete guide before generic next/browse navigation runs."""
-
-    MORE_INTENTS = frozenset({"AMAZON.NextIntent", "ShowMoreBrowseIntent"})
+class HelpConfirmationHandler(AbstractRequestHandler):
+    CONFIRMATION_INTENTS = frozenset({"AMAZON.YesIntent", "AMAZON.NoIntent"})
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         active = DialogStateManager.get_active(handler_input) or {}
         return (
             AlexaRequest.get_request_type(handler_input) == "IntentRequest"
             and active.get("type") == "help"
-            and AlexaRequest.get_intent_name(handler_input) in self.MORE_INTENTS
+            and AlexaRequest.get_intent_name(handler_input) in self.CONFIRMATION_INTENTS
         )
 
     def handle(self, handler_input: HandlerInput):
         DialogStateManager.clear(handler_input, "help")
+        if AlexaRequest.get_intent_name(handler_input) == "AMAZON.NoIntent":
+            return AlexaResponse.present_idle_next(
+                handler_input,
+                "Ok. What would you like to listen to?",
+                Speech.WELCOME_REPROMPT,
+            )
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml(HelpSpeech.full_guide(settings.STAGE))
+                Ssml.ssml(HelpSpeech.full_guide())
             )
             .reprompt(Ssml.ssml(HelpSpeech.REPROMPT))
             .with_simple_card(

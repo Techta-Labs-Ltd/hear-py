@@ -453,6 +453,7 @@ class Playback:
                 .set_should_end_session(False)
                 .response
             )
+        playback_repository.clear_prepared(handler_input)
         offset_ms = max(0, int(state.get("offsetMs") or 0))
         raw_speeds = content.get("playbackSpeeds")
         speeds = raw_speeds if isinstance(raw_speeds, list) else []

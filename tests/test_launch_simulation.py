@@ -373,7 +373,7 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        assert "You were listening to a recording." in speech
+        assert "You were listening to what's trending." in speech
         assert "Would you like to continue?" in speech
 
     def test_resume_prompt_uses_creator_for_creator_search(self):
@@ -429,7 +429,7 @@ class TestIsNewUser:
 
 class TestSpeechStrings:
     def test_onboarding_ask_permission(self):
-        assert "location" in Speech.ONBOARDING_ASK_PERMISSION.lower()
+        assert "address saved in your Alexa account" in Speech.ONBOARDING_ASK_PERMISSION
 
     def test_welcome_return_named_is_lambda(self):
         result = Speech.WELCOME_RETURN_NAMED("John", "London")
@@ -456,7 +456,7 @@ class TestSpeechStrings:
 
 class TestLaunchSimulation:
     @pytest.mark.asyncio
-    async def test_launch_resumes_pending_community_town_capture(self):
+    async def test_launch_does_not_restart_removed_community_town_capture(self):
         hi = _build_handler_input(
             store_override={
                 "onboardingComplete": True,
@@ -466,7 +466,7 @@ class TestLaunchSimulation:
         await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
 
         store = User.snapshot(hi)
-        assert store["onboardingStage"] == "ask_town"
+        assert store["onboardingStage"] == "confirm_town_for_community"
         assert hi.response_builder.speak.called
 
     @pytest.mark.asyncio

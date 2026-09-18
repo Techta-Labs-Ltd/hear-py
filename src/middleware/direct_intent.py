@@ -131,15 +131,26 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
         phrases = tuple(phrase for _, phrase in slot_phrases)
         if not phrases:
             AlexaMetrics.increment("IntentRouteNoText")
-        if active_dialog.get("type") == "help" and any(
-            PhraseRouter.is_help_more(phrase) for phrase in phrases
-        ):
-            self._set(intent, PhraseRoute("AMAZON.NextIntent"))
-            return
+        if active_dialog.get("type") == "help":
+            help_response = PhraseRouter.route_phrases(phrases)
+            if help_response and help_response.intent_name in {
+                "AMAZON.YesIntent",
+                "AMAZON.NoIntent",
+            }:
+                self._set(intent, help_response)
+                self._record_route(source_intent, help_response, "help_response")
+                return
         if active_dialog or store.get("pendingAmbiguity"):
             match = self._route(
                 slot_phrases, allowed_controls=PhraseRouter.INTERRUPT_CONTROL_INTENTS
             )
+            if not match:
+                locked_match = self._route(slot_phrases)
+                if (
+                    locked_match
+                    and locked_match[0].intent_name in PhraseRouter.DECLARED_LOCKED_INTENTS
+                ):
+                    match = locked_match
             if match:
                 route, slot_name = match
                 self._set(intent, route)

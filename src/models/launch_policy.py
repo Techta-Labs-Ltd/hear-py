@@ -30,8 +30,6 @@ class LaunchPolicy:
     @classmethod
     def protected(cls, store: dict) -> LaunchDecision:
         user_name = cls.user_name(store)
-        if store.get("onboardingStage") == "confirm_town_for_community":
-            return LaunchDecision("town_capture", user_name=user_name)
         if store.get("awaitingContinueAfterFlag"):
             return LaunchDecision("continue_after_flag", user_name=user_name)
         return LaunchDecision("none", user_name=user_name)

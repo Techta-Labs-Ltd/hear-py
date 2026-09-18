@@ -70,6 +70,19 @@ Parameters:
     Default: 100
     MinValue: 2
     MaxValue: 1000
+  NotificationRecipientTtlDays:
+    Type: Number
+    Default: 90
+    MinValue: 1
+  NotificationRecipientRefreshSeconds:
+    Type: Number
+    Default: 86400
+    MinValue: 60
+  ProactiveSendConcurrency:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    MaxValue: 100
 
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
@@ -103,6 +116,9 @@ Globals:
         HEAR_PERSISTENCE_TTL_DAYS: "180"
         HEAR_PLAYBACK_STATE_TTL_DAYS: "30"
         HEAR_LISTENER_CACHE_TTL_DAYS: "90"
+        HEAR_NOTIFICATION_RECIPIENT_TTL_DAYS: !Ref NotificationRecipientTtlDays
+        HEAR_NOTIFICATION_RECIPIENT_REFRESH_SECONDS: !Ref NotificationRecipientRefreshSeconds
+        HEAR_PROACTIVE_SEND_CONCURRENCY: !Ref ProactiveSendConcurrency
         HEAR_DIALOG_STATE_TTL_SECONDS: "86400"
         HEAR_DDB_ITEM_SIZE_WARN_BYTES: "65536"
         HEAR_DDB_ITEM_SIZE_MAX_BYTES: "350000"

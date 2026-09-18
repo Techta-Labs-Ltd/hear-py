@@ -116,40 +116,6 @@ class RequestContext:
         except Exception:
             return False
 
-    def geolocation_value(self) -> dict | None:
-        try:
-            envelope = getattr(self._handler_input, "request_envelope", {}) or {}
-            context = envelope.get("context", {}) if isinstance(envelope, dict) else envelope.context
-            if context is None:
-                return None
-            geolocation = context.get("Geolocation") if isinstance(context, dict) else context.Geolocation
-            if geolocation is None:
-                return None
-            coordinate = (
-                geolocation.get("coordinate")
-                if isinstance(geolocation, dict)
-                else geolocation.coordinate
-            )
-            if not coordinate:
-                return None
-            timestamp = geolocation.get("timestamp") if isinstance(geolocation, dict) else getattr(geolocation, "timestamp", None)
-            if isinstance(coordinate, dict):
-                latitude = coordinate.get("latitudeInDegrees")
-                longitude = coordinate.get("longitudeInDegrees")
-                accuracy = coordinate.get("accuracyInMeters")
-            else:
-                latitude = getattr(coordinate, "latitudeInDegrees", None)
-                longitude = getattr(coordinate, "longitudeInDegrees", None)
-                accuracy = getattr(coordinate, "accuracyInMeters", None)
-            return {
-                "latitude": latitude,
-                "longitude": longitude,
-                "accuracy": accuracy,
-                "timestamp": timestamp,
-            }
-        except Exception:
-            return None
-
     @staticmethod
     def get_request_id(handler_input) -> str:
         return RequestContext.bind(handler_input).request_id
@@ -161,10 +127,6 @@ class RequestContext:
     @staticmethod
     def has_permission(handler_input, scope: str) -> bool:
         return RequestContext.bind(handler_input).permission_granted(scope)
-
-    @staticmethod
-    def get_geolocation(handler_input) -> dict | None:
-        return RequestContext.bind(handler_input).geolocation_value()
 
     @staticmethod
     def request(handler_input) -> dict:

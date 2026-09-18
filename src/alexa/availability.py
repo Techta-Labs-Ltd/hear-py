@@ -303,7 +303,10 @@ class Availability:
         )
         requested_city = AvailabilityData.requested_city(resolved, payload)
         if not availability_filter or "location" not in availability_filter:
-            self._user.update(handler_input, {"onboardingStage": "confirm_town_for_community"})
+            self._user.update(
+                handler_input,
+                {"awaitingProfileSetupConsent": True, "awaitingCommunityPlayback": True},
+            )
             return self._response(
                 handler_input,
                 Speech.COMMUNITY_NEEDS_TOWN,

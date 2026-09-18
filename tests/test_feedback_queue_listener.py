@@ -109,6 +109,85 @@ async def test_alexa_skip_variants_dismiss_active_feedback(mock_handler_input, i
     assert store["pendingFeedback"] is None
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("intent_name", ["AMAZON.SkipIntent", "AMAZON.NextIntent"])
+async def test_transport_skip_advances_queue_without_a_continuation_prompt(
+    monkeypatch, mock_handler_input, intent_name
+):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedback": True,
+        "pendingFeedback": {"feedbackKey": "completed-1", "contentId": "completed-1"},
+        "playbackQueue": {
+            "queueId": "queue-1",
+            "orderedContentIds": ["completed-1", "content-2"],
+            "currentIndex": 0,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": intent_name, "slots": {}}}
+    )
+    container = ApplicationContainer()
+    play_next = AsyncMock(return_value={"response": "next"})
+    controls = SimpleNamespace(play_queue_delta=play_next)
+    monkeypatch.setattr(
+        ApplicationContainer,
+        "build_playback_controls",
+        lambda _container, _handler_input: controls,
+    )
+
+    response = await _feedback_skip_gate(container, mock_handler_input).handle(mock_handler_input)
+
+    assert response == {"response": "next"}
+    play_next.assert_awaited_once_with(
+        mock_handler_input,
+        1,
+        "Playing the next recording.",
+    )
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingFeedback"] is False
+    assert store["awaitingFeedbackContinuation"] is False
+
+
+@pytest.mark.asyncio
+async def test_next_advances_queue_when_feedback_continuation_is_active(monkeypatch, mock_handler_input):
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingFeedbackContinuation": True,
+        "feedbackContinuation": {"kind": "topic", "name": "trending"},
+        "activeDialog": {
+            "type": "feedback_continuation",
+            "context": {"kind": "topic", "name": "trending"},
+            "createdAt": 1,
+            "expiresAt": 4102444800,
+        },
+    }
+    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
+    mock_handler_input.request_envelope.request = AttrDict(
+        {"type": "IntentRequest", "intent": {"name": "AMAZON.NextIntent", "slots": {}}}
+    )
+    container = ApplicationContainer()
+    play_next = AsyncMock(return_value={"response": "next"})
+    controls = SimpleNamespace(play_queue_delta=play_next)
+    monkeypatch.setattr(
+        ApplicationContainer,
+        "build_playback_controls",
+        lambda _container, _handler_input: controls,
+    )
+
+    assert _feedback_skip_gate(container, mock_handler_input).can_handle(mock_handler_input) is True
+    response = await _feedback_skip_gate(container, mock_handler_input).handle(mock_handler_input)
+
+    assert response == {"response": "next"}
+    play_next.assert_awaited_once_with(
+        mock_handler_input,
+        1,
+        "Playing the next recording.",
+    )
+    store = User.snapshot(mock_handler_input)
+    assert store["awaitingFeedbackContinuation"] is False
+    assert store["activeDialog"] is None
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
@@ -414,6 +493,24 @@ def test_feedback_subject_uses_discovery_context_when_track_title_is_missing():
     }
 
     assert AlexaFeedback.subject_title(subject, {}) == "York Talking News"
+
+
+def test_feedback_subject_uses_track_title_for_trending_content():
+    subject = {
+        "title": "Community news roundup",
+        "discoveryContext": {"kind": "trending", "name": "what's trending"},
+    }
+
+    assert AlexaFeedback.subject_title(subject, {}) == "Community news roundup"
+
+
+def test_feedback_subject_names_trending_when_the_track_title_is_missing():
+    subject = {
+        "title": None,
+        "discoveryContext": {"kind": "trending", "name": "what's trending"},
+    }
+
+    assert AlexaFeedback.subject_title(subject, {}) == "this trending recording"
 
 
 def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_input):

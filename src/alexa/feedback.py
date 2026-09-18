@@ -105,10 +105,16 @@ class AlexaFeedback:
             or active.get("discoveryContext")
             or queue.get("discoveryContext")
         )
+        if not isinstance(discovery_context, dict):
+            return None
+        if str(discovery_context.get("kind") or "").strip().casefold() in {
+            "trending",
+            "recommendation",
+        }:
+            return None
         return (
             ContentUtils.publication_title({"discoveryContext": discovery_context})
-            if isinstance(discovery_context, dict)
-            and discovery_context.get("kind") == "publication"
+            if discovery_context.get("kind") == "publication"
             else DiscoverySpeech.subject(discovery_context)
         )
 
@@ -204,6 +210,17 @@ class AlexaFeedback:
             return title
         if is_publication:
             return cls._publication_source(current, active, active_matches)
+        discovery_context = (
+            current.get("discoveryContext")
+            or active.get("discoveryContext")
+            or queue.get("discoveryContext")
+        )
+        if isinstance(discovery_context, dict):
+            kind = str(discovery_context.get("kind") or "").strip().casefold()
+            if kind == "trending":
+                return "this trending recording"
+            if kind == "recommendation":
+                return "this recommended recording"
         return "this recording"
 
     @staticmethod

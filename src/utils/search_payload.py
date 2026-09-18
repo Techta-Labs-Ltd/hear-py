@@ -128,7 +128,11 @@ class SearchPayload:
         filter_candidate = payload.get("filter") if isinstance(payload, dict) else None
         filters: dict = filter_candidate if isinstance(filter_candidate, dict) else {}
         kind = (
-            "publication"
+            "trending"
+            if lowered in {"trending", "whatstrendingintent"}
+            else "recommendation"
+            if lowered in {"recommendation", "playrecommendationintent"}
+            else "publication"
             if "publication" in lowered or filters.get("publicationIds")
             else "organization"
             if "organization" in lowered or filters.get("organizationIds")
@@ -144,6 +148,10 @@ class SearchPayload:
         )
         first: dict = next((item for item in items or [] if isinstance(item, dict)), {})
         raw_label = " ".join(str(label or "").strip().split())
+        if kind == "trending" and not raw_label:
+            raw_label = "what's trending"
+        elif kind == "recommendation" and not raw_label:
+            raw_label = "your recommendations"
         if kind == "publication":
             name = first.get("publicationTitle") or raw_label
         elif kind == "organization":

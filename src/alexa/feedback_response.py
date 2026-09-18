@@ -5,7 +5,9 @@ from src.alexa.dialog import DeferredIntentManager, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback_controls import PlaybackControls
+from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.playback_state import PlaybackQueue
+from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -360,6 +362,10 @@ class SkipFeedback:
     async def execute(self, request: RequestContext):
         handler_input = request.handler_input
         store = self._user.snapshot(handler_input)
+        transport_skip = AlexaRequest.get_intent_name(handler_input) in {
+            "AMAZON.NextIntent",
+            "AMAZON.SkipIntent",
+        }
         active_dialog = store.get("activeDialog")
         if (
             isinstance(active_dialog, dict)
@@ -374,6 +380,17 @@ class SkipFeedback:
                 .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
                 .set_should_end_session(False)
                 .response
+            )
+        if store.get("awaitingFeedbackContinuation") and transport_skip:
+            self._user.update(
+                handler_input,
+                {"awaitingFeedbackContinuation": False, "feedbackContinuation": None},
+            )
+            DialogStateManager.clear(handler_input, "feedback_continuation")
+            return await self._playback_controls.play_queue_delta(
+                handler_input,
+                1,
+                PlaybackSpeech.PLAYING_NEXT,
             )
         if store.get("awaitingReportDecision"):
             resume_after_decision = bool(
@@ -423,6 +440,12 @@ class SkipFeedback:
             )
         if DeferredIntentManager.has(handler_input):
             return await DeferredIntentManager.resume(handler_input)
+        if transport_skip:
+            return await self._playback_controls.play_queue_delta(
+                handler_input,
+                1,
+                PlaybackSpeech.PLAYING_NEXT,
+            )
         continuation = FeedbackContinuation.present(
             handler_input,
             dict(pending),

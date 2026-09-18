@@ -314,7 +314,7 @@ class ResolverWorkflowRunner:
         resolved_listener_id = str(listener_id).strip() if listener_id else None
         await self._progressive.send(
             handler_input,
-            Speech.LOCATION_PROGRESSIVE
+            Speech.LOCATION_RESOLUTION_PROGRESSIVE
             if alexa_intent in {"SearchLocationIntent", "SetLocationIntent", "TownCaptureIntent"}
             else Speech.RESOLVER_PROGRESSIVE,
         )

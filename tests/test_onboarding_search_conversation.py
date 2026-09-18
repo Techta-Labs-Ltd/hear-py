@@ -4223,7 +4223,7 @@ async def test_location_follow_up_yes_checks_community_availability(
 
 
 @pytest.mark.asyncio
-async def test_local_setup_yes_retries_voice_location_permission(mock_handler_input):
+async def test_local_setup_yes_starts_manual_profile_city_capture(mock_handler_input):
 
     handler_input = _town_request(mock_handler_input, "yes")
     handler_input.request_envelope.request.intent.name = "AMAZON.YesIntent"
@@ -4232,19 +4232,34 @@ async def test_local_setup_yes_retries_voice_location_permission(mock_handler_in
     handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
-        "onboardingStage": "confirm_town_for_community",
+        "awaitingProfileSetupConsent": True,
+        "awaitingCommunityPlayback": True,
     }
     response = await ApplicationContainer().build_request_affirmative(handler_input).execute(handler_input)
     store = User.snapshot(handler_input)
-    assert store["onboardingStage"] is None
     assert store["awaitingCommunityPlayback"] is True
-    directive = response["directives"][0]
-    assert directive["type"] == "Connections.StartConnection"
-    assert directive["token"] == "onboarding_location"
+    assert store["awaitingProfileTown"] is True
+    assert store["profileSetupActive"] is True
+    assert "Manage Permissions" in response["outputSpeech"]["ssml"]
+    assert "Which town or city" in response["outputSpeech"]["ssml"]
+    assert not any(
+        directive.get("type") == "Connections.StartConnection"
+        for directive in response.get("directives", [])
+    )
+
+
+def test_onboarding_gate_does_not_intercept_profile_setup_consent(mock_handler_input):
+    handler_input = _intent_request(mock_handler_input, "AMAZON.YesIntent")
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingProfileSetupConsent": True,
+    }
+
+    assert ApplicationContainer().build_onboarding_gate(handler_input).can_handle(handler_input) is False
 
 
 @pytest.mark.asyncio
-async def test_local_setup_no_keeps_guest_out_of_permission_flow(mock_handler_input):
+async def test_local_setup_no_returns_to_normal_hear_use(mock_handler_input):
 
     handler_input = _town_request(mock_handler_input, "no")
     handler_input.request_envelope.request.intent.name = "AMAZON.NoIntent"
@@ -4252,11 +4267,11 @@ async def test_local_setup_no_keeps_guest_out_of_permission_flow(mock_handler_in
     handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
-        "onboardingStage": "confirm_town_for_community",
+        "awaitingProfileSetupConsent": True,
+        "awaitingCommunityPlayback": True,
     }
     await ApplicationContainer().build_request_decline(handler_input).execute(handler_input)
     store = User.snapshot(handler_input)
-    assert store["onboardingStage"] is None
     assert store["awaitingCommunityPlayback"] is False
     handler_input.response_builder.add_directive.assert_not_called()
 
@@ -4344,13 +4359,15 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     handler_input.attributes_manager.request_attributes["_store"] = store
     sync = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(HearApiClient, "sync_listener", sync)
-    await ApplicationContainer().build_request_affirmative(handler_input)._confirm_location(handler_input, store)
+    await ApplicationContainer().build_request_affirmative(handler_input)._confirm_location(
+        handler_input, store
+    )
     updated = User.snapshot(handler_input)
     assert updated["onboardingComplete"] is True
     assert updated["userCity"] == "Swindon"
     assert updated["locationSource"] == "manual"
     assert updated["awaitingCommunityPlayback"] is False
-    assert updated["awaitingProfilePermission"] is True
+    assert updated["awaitingProfilePermission"] is False
     assert updated["_requiresReliableSave"] is True
     session = handler_input.attributes_manager.set_session_attributes.call_args.args[0]
     assert session["onboardingStage"] is None
@@ -4360,7 +4377,12 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     assert session["userCity"] == "Swindon"
     spoken = handler_input.response_builder.speak.call_args.args[0]
     assert "I've set your location to Swindon" in spoken
-    assert "share your name and email" in spoken
+    assert "listener profile" not in spoken
+    handler_input.response_builder.speak.return_value.reprompt.return_value.add_directive.assert_called_once()
+    (
+        handler_input.response_builder.speak.return_value.reprompt.return_value.add_directive.return_value
+        .set_should_end_session.assert_called_once_with(False)
+    )
     sync.assert_not_awaited()
 
 

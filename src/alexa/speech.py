@@ -9,19 +9,19 @@ class Speech:
         "Say no, none of these, or something else to return to search."
     )
     CHOICES_DISMISSED = "Ok. What would you like to listen to instead?"
-    ONBOARDING_LOCATION_REASON = "Your location helps Hear find nearby news, sport, publications, and talking newspapers. Alexa will now ask whether you give Hear permission to use your location."
-    LOCATION_PERMISSION_DENIED = "Location permission is currently turned off. You can enable it in the Alexa app, say my city is followed by your city, or say skip to continue as a guest."
-    LOCATION_PERMISSION_EMPTY = "Location permission is enabled, but I couldn't find a location saved for this device. Please say my city is followed by your city, or say skip to continue as a guest."
-    LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check your device location right now. Please say my city is followed by your city, or say skip to continue as a guest."
-    PROFILE_PERMISSION_OFFER = "Would you like to share your name and email so I can set up your Hear listener profile? You can say yes or skip."
-    PROFILE_PERMISSION_REASON = "Your name lets me personalise Hear, and your email identifies your listener account. Alexa will now ask whether you give Hear permission to share them."
-    PROFILE_PERMISSION_SKIPPED = "Ok. You can continue using Hear as a guest. What would you like to listen to?"
+    ONBOARDING_LOCATION_REASON = "Your saved Alexa address helps Hear find local content. Alexa will now ask for permission to use it."
+    LOCATION_PERMISSION_DENIED = "I don't currently have permission to read the address saved in your Alexa account. You can enable Device Address later in the Alexa app under Hear Service, Settings, Manage Permissions. I'll skip this for now. If you'd like to set up your listener profile later, say set up my account. What would you like to listen to?"
+    LOCATION_PERMISSION_EMPTY = "Your Alexa address permission is turned on, but I couldn't find a location saved in your Alexa account. I'll skip this for now. If you'd like to set up your listener profile later, say set up my account. What would you like to listen to?"
+    LOCATION_PERMISSION_UNAVAILABLE = "I couldn't check the address saved in your Alexa account right now. I'll skip this for now. If you'd like to set up your listener profile later, say set up my account. What would you like to listen to?"
+    PROFILE_PERMISSION_OFFER = "To set up your listener profile, Hear Service may need permission to use details from your Alexa account and your saved location. Would you like to continue? Please say yes or no."
+    PROFILE_PERMISSION_REASON = "Alexa will now ask for permission to use your account details and saved address to set up your listener profile."
+    PROFILE_PERMISSION_SKIPPED = "No problem. You can set up your listener profile later by saying set up my account. What would you like to listen to?"
     PROFILE_PERMISSION_DENIED = "I couldn't set up your listener profile because permission to share your name and email was not granted."
     PROFILE_PERMISSION_NOT_ANSWERED = "I couldn't set up your listener profile because the permission question was not answered."
     PROFILE_PERMISSION_APP_REQUIRED = "Alexa couldn't complete the permission request by voice, so your listener profile was not set up."
     PROFILE_PERMISSION_FAILED = "Alexa couldn't complete the permission request, so your listener profile was not set up."
     PROFILE_PERMISSION_MISSING_DETAILS = "Permission was granted, but your Alexa profile did not provide {details}, so your listener profile was not set up."
-    PROFILE_PERMISSION_GUEST_CONTINUE = "You can continue using Hear as a guest. What would you like to listen to?"
+    PROFILE_PERMISSION_GUEST_CONTINUE = "You can still use Hear. What would you like to listen to?"
     PROFILE_PERMISSION_COMPLETE = "Thanks. Your Hear listener account is ready. What would you like to listen to?"
     TOWN_SKIPPED = "Okay. What would you like to listen to?"
     TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say my city is followed by the full city name, or say skip to continue without one."
@@ -29,15 +29,13 @@ class Speech:
         "I can't check that city right now. Please try the city name again."
     )
     TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
-    CITY_SETUP_GUIDANCE = "Sorry, I still couldn't identify your city. You can update Device Location for this Echo in the Alexa app and then relaunch Hear, try saying your city again, or say skip to continue."
+    CITY_SETUP_GUIDANCE = "I still couldn't identify that location. I've saved the other details Alexa provided. You can set your location later by saying set my location. What would you like to listen to?"
     REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
     REPROMPT_ASK_TOWN = "Say my city is followed by your city. You can also say skip."
     ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which city are you in?"
-    COMMUNITY_NEEDS_TOWN = (
-        "I'll need your city to find local content. Would you like to set that up?"
-    )
-    COMMUNITY_LOCATION_DECLINED = "Ok. I can still play other Hear content, but I need a city to find content from your local area."
-    COMMUNITY_LOCATION_SKIPPED = "Ok. You can continue as a guest, but I need a city before I can play local content. What else would you like to hear?"
+    COMMUNITY_NEEDS_TOWN = "Before I can play content from your city, I need to set up your listener profile. Would you like to set it up now? Please say yes or no."
+    COMMUNITY_LOCATION_DECLINED = "No problem. You can still listen to talking newspapers, creators, recommendations and what's trending. What would you like to hear?"
+    COMMUNITY_LOCATION_SKIPPED = COMMUNITY_LOCATION_DECLINED
     WELCOME_REPROMPT = (
         "Please say the name of a talking newspaper, creator, publication, or city "
         "you would like to listen to."
@@ -56,7 +54,8 @@ class Speech:
     SEARCH_PROGRESSIVE = "Just a moment while I find that for you."
     TRENDING_PROGRESSIVE = "One moment while I find what's trending."
     RECOMMENDATION_PROGRESSIVE = "One moment while I find something you might like."
-    LOCATION_PROGRESSIVE = "One moment while I check that location."
+    LOCATION_PROGRESSIVE = "One moment while I check that for you."
+    LOCATION_RESOLUTION_PROGRESSIVE = "One moment while I check that location."
     SEARCH_MORE_PROGRESSIVE = "Just a moment while I find a few more options."
     SEARCH_LATEST_PROGRESSIVE = "Just a moment while I find the latest for you."
     ONBOARDING_DEVICE_LOCATION_CONFIRM = (
@@ -77,7 +76,7 @@ class Speech:
         "That update is no longer available. What would you like to listen to instead?"
     )
     NOTIFICATION_DECLINED = "Ok. I'll leave that update for now."
-    NOTIFICATION_PERMISSION_REASON = "Hear can let you know when sources you follow publish something new. Alexa will now ask whether you want to allow notifications."
+    NOTIFICATION_PERMISSION_REASON = "To receive Alexa notifications from Hear Service outside the skill, open the Alexa app, go to Hear Service, Settings, then Manage Permissions, and turn on notifications. Even without that permission, Hear Service can still show you updates from the creators and talking newspapers you follow when you use the skill. What would you like to listen to?"
     NOTIFICATIONS_ENABLED = (
         "Notifications are on. Hear can now let you know when followed sources publish."
     )
@@ -136,12 +135,10 @@ class Speech:
     FALLBACK_SPEECH = f"Sorry, I didn't catch that. {WELCOME_REPROMPT}"
     GOODBYE = "Thanks for listening to Hear. Goodbye."
     ERROR_GENERIC = f"Sorry, I didn't quite catch that. {WELCOME_REPROMPT}"
-    ONBOARDING_ASK_PERMISSION = "Welcome to Hear. I can bring you the latest audio from your local community — news, sport, talking newspapers and more. To get started, I'll need your location. Would that be alright?"
-    ONBOARDING_CONSENT_CARD_SENT = "Please open the Alexa app, find test development under Your Skills, then open Settings and Manage Permissions and enable Device Address. After that, relaunch Hear."
-    ONBOARDING_LOCATION_DENIED = "No worries. Which city are you in?"
+    ONBOARDING_ASK_PERMISSION = "Welcome to Hear Service. This free service is brought to you by volunteers across the UK and is designed for people who are visually impaired or have difficulty reading. You can ask for a talking newspaper or creator, search for topics such as news or sport, hear what's trending, or ask for a recommendation. To find out more, visit hear dot media slash Alexa. To help me find local content for you, may I check the address saved in your Alexa account? Please say yes or no."
+    ONBOARDING_LOCATION_DENIED = PROFILE_PERMISSION_SKIPPED
     ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
     CONSENT_CARD_THANKS = "Thanks — you're all set. What would you like to listen to?"
-    LOCATION_NOT_FOUND = "Welcome back to Hear. I don't have a city for this Echo yet. You can tell me your city now, or say skip. To use your Echo's saved location instead, update Device Location in the Alexa app and relaunch Hear."
     LOCATION_DECLINED = "Ok. What would you like to listen to?"
     LOCATION_RETRY = "Ok. Which city should I set instead?"
     WELCOME_RETURN_GENERIC = f"Welcome back to Hear. {WELCOME_REPROMPT}"

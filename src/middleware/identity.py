@@ -8,6 +8,7 @@ from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
 from src.services.listener_identity import ListenerIdentityService
 from src.services.logging_control import ApplicationLog
+from src.services.notification_recipient import AlexaNotificationRecipientDirectory
 
 
 class IdentityPolicy:
@@ -72,9 +73,11 @@ class IdentityInterceptor(AbstractRequestInterceptor):
         self,
         identity_service: ListenerIdentityService | None,
         user: User,
+        recipient_directory: AlexaNotificationRecipientDirectory | None = None,
     ) -> None:
         self._identity_service = identity_service
         self._user = user
+        self._recipient_directory = recipient_directory
 
     async def process(self, handler_input) -> None:
         identity = IdentityPolicy.capture(handler_input)
@@ -94,6 +97,23 @@ class IdentityInterceptor(AbstractRequestInterceptor):
             listener_id=identity.listener_id,
             alexa_user_id=identity.alexa_user_id,
         )
+        if (
+            self._recipient_directory is not None
+            and identity.listener_id
+            and identity.alexa_user_id
+        ):
+            try:
+                await self._recipient_directory.remember(
+                    listener_id=identity.listener_id,
+                    alexa_user_id=identity.alexa_user_id,
+                    device_id=identity.device_id,
+                    locale=identity.locale,
+                )
+            except Exception as exc:
+                ApplicationLog.warning(
+                    "Hear: notification recipient refresh failed error=%s",
+                    type(exc).__name__,
+                )
         if not identity.alexa_user_id:
             ApplicationLog.warning(
                 "Hear request rejected for backend dispatch: missing Alexa user ID"

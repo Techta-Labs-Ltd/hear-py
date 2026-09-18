@@ -20,7 +20,7 @@ class _Pool:
         return self.client
 
 
-def _handler_input(*, scopes=None, geolocation=None):
+def _handler_input(*, scopes=None):
     context = {
         "System": {
             "apiEndpoint": "https://api.eu.amazonalexa.com",
@@ -29,8 +29,6 @@ def _handler_input(*, scopes=None, geolocation=None):
             "user": {"permissions": {"scopes": scopes or {}}},
         }
     }
-    if geolocation:
-        context["Geolocation"] = geolocation
     return SimpleNamespace(
         request_envelope=AttrDict(
             {
@@ -80,35 +78,6 @@ async def test_address_api_is_used_only_with_full_address_permission(caplog):
 
 
 @pytest.mark.asyncio
-async def test_geolocation_coordinates_are_used_without_an_http_call():
-    pool = _Pool(SimpleNamespace(status_code=500))
-    result = await AlexaLocalityService(AlexaSettingsClient(pool=pool)).detect_device_location(
-        _handler_input(
-            geolocation={
-                "coordinate": {
-                    "latitudeInDegrees": 53.789,
-                    "longitudeInDegrees": -2.248,
-                    "accuracyInMeters": 20,
-                },
-                "timestamp": "2026-09-04T10:00:00Z",
-            }
-        )
-    )
-    assert result == {
-        "_status": "resolved",
-        "city": "",
-        "locality": "",
-        "countryCode": None,
-        "postalCode": None,
-        "stateOrRegion": None,
-        "latitude": 53.789,
-        "longitude": -2.248,
-        "source": "geolocation",
-    }
-    pool.client.get.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 async def test_address_uses_district_when_city_is_empty():
     response = SimpleNamespace(
         status_code=200,
@@ -151,3 +120,21 @@ async def test_address_api_is_not_called_without_a_location_permission():
     )
     assert result == {"_status": "permission_denied"}
     pool.client.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_profile_name_uses_the_alexa_account_profile_endpoint():
+    response = SimpleNamespace(
+        status_code=200,
+        raise_for_status=lambda: None,
+        json=lambda: {"name": "Alex Hear"},
+    )
+    pool = _Pool(response)
+    result = await AlexaSettingsClient(pool=pool).get_profile_setting(
+        _handler_input(), "Profile.name", label="Profile.name"
+    )
+    assert result == {"value": "Alex Hear", "status": 200}
+    assert (
+        pool.client.get.await_args.args[0]
+        == "https://api.eu.amazonalexa.com/v2/accounts/~current/settings/Profile.name"
+    )

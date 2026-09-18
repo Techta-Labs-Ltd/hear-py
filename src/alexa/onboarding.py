@@ -90,7 +90,6 @@ class TownCapture:
             handler_input, store, self._onboarding
         )
 
-
 class SetLocation:
     __slots__ = ("_user", "_onboarding", "_stage_town_confirmation")
 
@@ -124,7 +123,12 @@ class Onboarding(OnboardingService):
         super().__init__(OnboardingState(store or User()))
 
     @staticmethod
-    def _town_retry_response(handler_input: HandlerInput, speech: str, reprompt: str):
+    def _town_retry_response(
+        handler_input: HandlerInput,
+        speech: str,
+        reprompt: str,
+        capture_profile_town: bool = False,
+    ):
         """Keep Alexa's active location intent open so a bare town fills its slot."""
         builder = handler_input.response_builder.speak(Ssml.ssml(speech)).reprompt(
             Ssml.ssml(reprompt)
@@ -137,6 +141,23 @@ class Onboarding(OnboardingService):
         if slot_name:
             builder = builder.add_directive(
                 {"type": "Dialog.ElicitSlot", "slotToElicit": slot_name}
+            )
+        elif capture_profile_town:
+            builder = builder.add_directive(
+                {
+                    "type": "Dialog.ElicitSlot",
+                    "slotToElicit": "townName",
+                    "updatedIntent": {
+                        "name": "TownCaptureIntent",
+                        "confirmationStatus": "NONE",
+                        "slots": {
+                            "townName": {
+                                "name": "townName",
+                                "confirmationStatus": "NONE",
+                            }
+                        },
+                    },
+                }
             )
         return builder.set_should_end_session(False).response
 
@@ -186,44 +207,13 @@ class Onboarding(OnboardingService):
         )
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.ONBOARDING_ASK_PERMISSION))
+            .with_simple_card("Learn more about Hear", "https://hear.media/alexa")
+            .reprompt(
+                Ssml.ssml("May I check the address saved in your Alexa account? Please say yes or no.")
+            )
             .set_should_end_session(False)
             .response
         )
-
-    @staticmethod
-    def handle_permission_yes(
-        handler_input: HandlerInput,
-        store: Dict[str, Any],
-        onboarding: OnboardingService,
-    ):
-        """Send the Alexa-owned consent card for the location data we consume."""
-        permissions = [OnboardingConstants.PERMISSIONS["GEOLOCATION"]]
-        onboarding.keep_permission_pending(handler_input)
-        DialogStateManager.activate(
-            handler_input, "onboarding", context={"stage": "ask_permission"}
-        )
-        ApplicationLog.info(
-            "Hear: permission card requested scopes=%s requestId=%s cardPresent=true",
-            permissions,
-            Onboarding._request_id(handler_input),
-        )
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.ONBOARDING_CONSENT_CARD_SENT))
-            .with_ask_for_permissions_consent_card(permissions)
-            .set_should_end_session(True)
-            .response
-        )
-
-    @staticmethod
-    def _request_id(handler_input: HandlerInput) -> str:
-        try:
-            request = handler_input.request_envelope.request
-            return str(request.requestId or "")
-        except Exception:
-            try:
-                return str(handler_input.request_envelope["request"].get("requestId") or "")
-            except Exception:
-                return ""
 
     @staticmethod
     def handle_permission_no(
@@ -231,15 +221,11 @@ class Onboarding(OnboardingService):
         store: Dict[str, Any],
         onboarding: OnboardingService,
     ):
-        onboarding.decline_permission(handler_input)
-        DialogStateManager.activate(
-            handler_input,
-            "onboarding",
-            context={"stage": OnboardingConstants.ONBOARDING_ASK_TOWN},
-        )
+        onboarding.complete_without_location(handler_input)
+        DialogStateManager.clear(handler_input, "onboarding")
         return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.ONBOARDING_LOCATION_DENIED))
-            .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
+            handler_input.response_builder.speak(Ssml.ssml(Speech.PROFILE_PERMISSION_SKIPPED))
+            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
             .set_should_end_session(False)
             .response
         )
@@ -325,6 +311,15 @@ class Onboarding(OnboardingService):
         """Retry city capture, then give actionable setup guidance without auto-skipping."""
         attempts = onboarding.record_town_attempt(handler_input, store)
         if attempts >= OnboardingConstants.MAX_TOWN_ATTEMPTS:
+            if store.get("profileSetupActive"):
+                onboarding.complete_without_location(handler_input, reliable=False)
+                DialogStateManager.clear(handler_input, "onboarding")
+                return (
+                    handler_input.response_builder.speak(Ssml.ssml(Speech.CITY_SETUP_GUIDANCE))
+                    .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                    .set_should_end_session(False)
+                    .response
+                )
             speech = Speech.CITY_SETUP_GUIDANCE
         elif attempted_city:
             speech = Speech.CITY_NOT_FOUND(attempted_city)
@@ -486,6 +481,22 @@ class Onboarding(OnboardingService):
         """Skip town capture and proceed without location."""
         local_playback_pending = bool(store.get("awaitingCommunityPlayback"))
         onboarding.complete_without_location(handler_input)
+        if store.get("profileSetupActive"):
+            user.update(
+                handler_input,
+                {
+                    "awaitingProfilePermission": False,
+                    "awaitingProfileTown": False,
+                    "profileSetupActive": False,
+                },
+            )
+            DialogStateManager.clear(handler_input, "onboarding")
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.CITY_SETUP_GUIDANCE))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
         if local_playback_pending:
             user.update(
                 handler_input,
@@ -506,119 +517,6 @@ class Onboarding(OnboardingService):
         return (
             handler_input.response_builder.speak(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
             .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
-            .set_should_end_session(False)
-            .response
-        )
-
-    @staticmethod
-    def handle_location_not_found(
-        handler_input: HandlerInput,
-        store: Dict[str, Any],
-        onboarding: OnboardingService,
-    ):
-        """Handle device location lookup failure when permissions are granted."""
-        onboarding.location_not_found(handler_input)
-        DialogStateManager.activate(
-            handler_input,
-            "onboarding",
-            context={"stage": OnboardingConstants.ONBOARDING_ASK_TOWN},
-        )
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_NOT_FOUND))
-            .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
-            .set_should_end_session(False)
-            .response
-        )
-
-    @staticmethod
-    async def auto_detect_location_or_manual(
-        handler_input: HandlerInput,
-        store: Dict[str, Any],
-        onboarding: OnboardingService,
-        progressive,
-        locality,
-        resolver,
-        ask_for_permission,
-        location_fallback,
-        handle_location_not_found,
-        after_consent: bool = False,
-    ):
-        await progressive.send(handler_input, Speech.LOCATION_PROGRESSIVE)
-        match = await locality.detect_device_location(handler_input)
-        if not match or match.get("_status") == "permission_denied":
-            if after_consent:
-                return location_fallback(handler_input, denied=True)
-            return ask_for_permission(handler_input, store)
-        if match.get("_status") != "resolved":
-            onboarding.location_not_found(handler_input)
-            speech = (
-                Speech.LOCATION_PERMISSION_EMPTY
-                if match.get("_status") in {"empty", "not_found"}
-                else Speech.LOCATION_PERMISSION_UNAVAILABLE
-            )
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(speech))
-                .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
-                .set_should_end_session(False)
-                .response
-            )
-        city = str(match.get("city") or "").strip()
-        has_coordinates = match.get("latitude") is not None and match.get("longitude") is not None
-        if not city and not has_coordinates:
-            onboarding.location_not_found(handler_input)
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.LOCATION_PERMISSION_EMPTY))
-                .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
-                .set_should_end_session(False)
-                .response
-            )
-        if city and not has_coordinates:
-            try:
-                options = {
-                    "alexa_user_id": AlexaRequest.get_user_id(handler_input),
-                    "prefer_location": True,
-                    "timeout_ms": DeadlineBudget.resolver_timeout_ms(handler_input),
-                }
-                if store.get("listenerId"):
-                    options["listener_id"] = store["listenerId"]
-                response = await resolver.resolve_utterance(city, **options)
-                resolved = (response.get("resolution") or {}).get("match")
-            except ResolverUnavailable as exc:
-                ApplicationLog.warning(
-                    "Hear: device-address coordinate resolution unavailable error=%s",
-                    type(exc).__name__,
-                )
-                resolved = None
-            if not resolved:
-                ApplicationLog.info(
-                    "Hear: device-address city could not be resolved to coordinates"
-                )
-                return handle_location_not_found(handler_input, store)
-            match = {
-                **match,
-                **resolved,
-                "postalCode": match.get("postalCode"),
-                "source": "device",
-                "_status": "resolved",
-            }
-            ApplicationLog.info(
-                "Hear: device-address city resolved coordinates=true"
-            )
-        onboarding.stage_confirmation(handler_input, match, reset_attempts=True)
-        DialogStateManager.activate(
-            handler_input,
-            "onboarding",
-            context={"stage": OnboardingConstants.ONBOARDING_AWAIT_CONFIRM},
-        )
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml(
-                    Speech.ONBOARDING_DEVICE_TOWN_CONFIRM(city)
-                    if city
-                    else Speech.ONBOARDING_DEVICE_LOCATION_CONFIRM
-                )
-            )
-            .reprompt(Ssml.ssml(OnboardingConstants.TOWN_CONFIRM_REPROMPT))
             .set_should_end_session(False)
             .response
         )

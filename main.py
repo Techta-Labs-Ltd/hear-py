@@ -5,8 +5,6 @@ import threading
 
 from aws_lambda_powertools import Tracer
 
-
-
 from config import settings
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AlexaMetrics
@@ -17,10 +15,11 @@ from src.clients.proactive import ProactiveEventsClient
 from src.container import ApplicationContainer
 from src.database.dynamodb import DynamoTable
 from src.models.resolver import ResolverUnavailable
-from src.services.logging_control import ApplicationLog
-from src.services.observability import ErrorReporter
-from src.services.notification_delivery import NotificationDeliveryService
 from src.services.events import OutboundEventService
+from src.services.logging_control import ApplicationLog
+from src.services.notification_delivery import NotificationDeliveryService
+from src.services.notification_recipient import AlexaNotificationRecipientDirectory
+from src.services.observability import ErrorReporter
 from src.services.outbox import OutboxRelayService
 from src.utils.deadline import RequestDeadline
 from src.utils.events import SqsBatch
@@ -149,6 +148,7 @@ class NotificationLambdaApplication:
                     client_secret=settings.ALEXA_PROACTIVE_CLIENT_SECRET,
                     stage=settings.STAGE,
                 ),
+                AlexaNotificationRecipientDirectory(),
             )
         return self._delivery
 
