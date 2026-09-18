@@ -4248,6 +4248,16 @@ async def test_local_setup_yes_starts_manual_profile_city_capture(mock_handler_i
     )
 
 
+def test_onboarding_gate_does_not_intercept_profile_setup_consent(mock_handler_input):
+    handler_input = _intent_request(mock_handler_input, "AMAZON.YesIntent")
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "awaitingProfileSetupConsent": True,
+    }
+
+    assert ApplicationContainer().build_onboarding_gate(handler_input).can_handle(handler_input) is False
+
+
 @pytest.mark.asyncio
 async def test_local_setup_no_returns_to_normal_hear_use(mock_handler_input):
 

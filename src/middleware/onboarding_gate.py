@@ -132,6 +132,8 @@ class OnboardingGateHandler(AbstractRequestHandler):
         intent = AlexaRequest.get_intent_name(handler_input)
         if store.get("awaitingProfilePermission") and intent in OnboardingPolicy._SKIP_INTENTS:
             return True
+        if store.get("awaitingProfileSetupConsent"):
+            return False
         if not OnboardingPolicy._is_new_user(
             store
         ) or OnboardingPolicy._onboarding_completed_in_session(handler_input):
