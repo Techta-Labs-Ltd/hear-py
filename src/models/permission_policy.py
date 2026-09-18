@@ -14,7 +14,6 @@ class PermissionConstants:
     PROFILE_SCOPES = (
         permission_scopes.PROFILE_NAME_READ,
         permission_scopes.PROFILE_EMAIL_READ,
-        permission_scopes.DEVICE_ADDRESS,
     )
 
 

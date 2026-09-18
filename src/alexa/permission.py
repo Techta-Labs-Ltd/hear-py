@@ -57,6 +57,7 @@ class Permission:
             .set_should_end_session(False)
             .response
         )
+
     async def start_profile(self, handler_input):
         self._user.update(
             handler_input,
@@ -75,7 +76,6 @@ class Permission:
                     PermissionConstants.PROFILE_SCOPES,
                 )
             )
-            .set_should_end_session(False)
             .response
         )
 

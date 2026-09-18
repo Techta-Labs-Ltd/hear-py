@@ -124,7 +124,7 @@ def test_notification_permission_gives_app_guidance_without_a_connection():
 
 
 @pytest.mark.asyncio
-async def test_profile_consent_requests_name_email_and_saved_address():
+async def test_profile_consent_requests_name_and_email_only():
     handler_input = _handler_input()
     response = await _permission(_deps()).start_profile(handler_input)
 
@@ -138,12 +138,8 @@ async def test_profile_consent_requests_name_email_and_saved_address():
             "permissionScope": "alexa::profile:email:read",
             "consentLevel": "ACCOUNT",
         },
-        {
-            "permissionScope": "read::alexa:device:all:address",
-            "consentLevel": "ACCOUNT",
-        },
     ]
-    assert response["shouldEndSession"] is False
+    assert "shouldEndSession" not in response
 
 
 @pytest.mark.asyncio
