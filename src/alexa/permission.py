@@ -203,16 +203,12 @@ class Permission:
             "Which town or city should I use for your listener profile? "
             "You can say, my city is, followed by your town or city."
         )
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(f"{guidance}{prompt}"))
-            .reprompt(
-                Ssml.ssml(
-                    "Please say, my city is, followed by your town or city. "
-                    "For example, my city is Manchester."
-                )
-            )
-            .set_should_end_session(False)
-            .response
+        return Onboarding._town_retry_response(
+            handler_input,
+            f"{guidance}{prompt}",
+            "Please say, my city is, followed by your town or city. "
+            "For example, my city is Manchester.",
+            capture_profile_town=True,
         )
 
     def _profile_details_missing(self, handler_input, store: dict):

@@ -122,6 +122,10 @@ async def test_profile_setup_without_permissions_gives_app_guidance_and_asks_for
     assert "Manage Permissions" in speech
     assert "Which town or city" in speech
     assert response["shouldEndSession"] is False
+    directive = response["directives"][0]
+    assert directive["type"] == "Dialog.ElicitSlot"
+    assert directive["updatedIntent"]["name"] == "TownCaptureIntent"
+    assert directive["slotToElicit"] == "townName"
     assert not any(
         directive.get("type") == "Connections.StartConnection"
         for directive in response.get("directives", [])

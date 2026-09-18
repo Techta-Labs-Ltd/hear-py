@@ -123,7 +123,12 @@ class Onboarding(OnboardingService):
         super().__init__(OnboardingState(store or User()))
 
     @staticmethod
-    def _town_retry_response(handler_input: HandlerInput, speech: str, reprompt: str):
+    def _town_retry_response(
+        handler_input: HandlerInput,
+        speech: str,
+        reprompt: str,
+        capture_profile_town: bool = False,
+    ):
         """Keep Alexa's active location intent open so a bare town fills its slot."""
         builder = handler_input.response_builder.speak(Ssml.ssml(speech)).reprompt(
             Ssml.ssml(reprompt)
@@ -136,6 +141,23 @@ class Onboarding(OnboardingService):
         if slot_name:
             builder = builder.add_directive(
                 {"type": "Dialog.ElicitSlot", "slotToElicit": slot_name}
+            )
+        elif capture_profile_town:
+            builder = builder.add_directive(
+                {
+                    "type": "Dialog.ElicitSlot",
+                    "slotToElicit": "townName",
+                    "updatedIntent": {
+                        "name": "TownCaptureIntent",
+                        "confirmationStatus": "NONE",
+                        "slots": {
+                            "townName": {
+                                "name": "townName",
+                                "confirmationStatus": "NONE",
+                            }
+                        },
+                    },
+                }
             )
         return builder.set_should_end_session(False).response
 
