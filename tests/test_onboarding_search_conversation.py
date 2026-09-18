@@ -4223,7 +4223,7 @@ async def test_location_follow_up_yes_checks_community_availability(
 
 
 @pytest.mark.asyncio
-async def test_local_setup_yes_starts_profile_setup_permission(mock_handler_input):
+async def test_local_setup_yes_starts_manual_profile_city_capture(mock_handler_input):
 
     handler_input = _town_request(mock_handler_input, "yes")
     handler_input.request_envelope.request.intent.name = "AMAZON.YesIntent"
@@ -4238,9 +4238,14 @@ async def test_local_setup_yes_starts_profile_setup_permission(mock_handler_inpu
     response = await ApplicationContainer().build_request_affirmative(handler_input).execute(handler_input)
     store = User.snapshot(handler_input)
     assert store["awaitingCommunityPlayback"] is True
-    directive = response["directives"][0]
-    assert directive["type"] == "Connections.StartConnection"
-    assert directive["token"] == "listener_profile"
+    assert store["awaitingProfileTown"] is True
+    assert store["profileSetupActive"] is True
+    assert "Manage Permissions" in response["outputSpeech"]["ssml"]
+    assert "Which town or city" in response["outputSpeech"]["ssml"]
+    assert not any(
+        directive.get("type") == "Connections.StartConnection"
+        for directive in response.get("directives", [])
+    )
 
 
 @pytest.mark.asyncio

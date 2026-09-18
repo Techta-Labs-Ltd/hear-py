@@ -28,7 +28,7 @@ from src.controllers.notifications import (
     EnableNotificationsHandler,
     HearNotificationsHandler,
 )
-from src.controllers.permission import PermissionResumeHandler, SetUpAccountHandler
+from src.controllers.permission import SetUpAccountHandler
 from src.controllers.play import (
     PlayByOrganizationHandler,
     PlayContentHandler,
@@ -116,7 +116,6 @@ class RouteRegistry:
     )
     RESPONSE_INTERCEPTORS = (SavePersistenceInterceptor,)
     REQUEST_CONTROLLERS = (
-        PermissionResumeHandler,
         LaunchRequestHandler,
         SetUpAccountHandler,
         HearNotificationsHandler,
@@ -215,7 +214,6 @@ class RouteRegistry:
     @staticmethod
     def register_controllers(builder, container: ApplicationContainer) -> None:
         for factory in (
-            lambda _request: PermissionResumeHandler(container.permission),
             lambda request: LaunchRequestHandler(
                 container.build_request_launch_workflow(request), container.playback
             ),

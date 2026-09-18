@@ -235,7 +235,12 @@ class Affirmative:
                         "awaitingProfilePermission": False,
                         "awaitingProfileTown": False,
                         "profileSetupActive": False,
-                        "listenerType": "registered",
+                        "listenerType": (
+                            "registered"
+                            if store.get("userEmail")
+                            and (store.get("fullName") or store.get("userName"))
+                            else "listener"
+                        ),
                     },
                 )
                 try:
@@ -254,7 +259,12 @@ class Affirmative:
                     "awaitingProfilePermission": False,
                     "awaitingProfileTown": False,
                     "profileSetupActive": False,
-                    "listenerType": "registered",
+                    "listenerType": (
+                        "registered"
+                        if store.get("userEmail")
+                        and (store.get("fullName") or store.get("userName"))
+                        else "listener"
+                    ),
                 },
             )
             try:

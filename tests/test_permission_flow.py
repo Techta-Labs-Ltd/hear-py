@@ -6,15 +6,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import config.permission_scopes as permission_scopes
 from src.alexa.permission import Permission
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
-from src.controllers.permission import PermissionResumeRequestAdapter
 from src.models.listener import IdentityContext, PrincipalType
-from src.models.permission_policy import (
-    PermissionConstants,
-    PermissionPolicy,
-    PermissionResumeCommand,
-)
+from src.models.permission_policy import PermissionPolicy
 from src.models.user import User
 from src.services.listener_repository import Listener
 from src.services.listener_sync import ListenerSyncPayload
@@ -93,13 +89,6 @@ def _permission(deps):
     )
 
 
-async def _resume(deps, handler_input):
-    return await _permission(deps).resume(
-        handler_input,
-        PermissionResumeRequestAdapter.command(handler_input),
-    )
-
-
 @pytest.mark.asyncio
 async def test_first_run_skips_location_when_address_permission_is_missing():
     handler_input = _handler_input()
@@ -124,22 +113,41 @@ def test_notification_permission_gives_app_guidance_without_a_connection():
 
 
 @pytest.mark.asyncio
-async def test_profile_consent_requests_name_and_email_only():
+async def test_profile_setup_without_permissions_gives_app_guidance_and_asks_for_a_city():
     handler_input = _handler_input()
-    response = await _permission(_deps()).start_profile(handler_input)
+    deps = _deps()
+    response = await _permission(deps).start_profile(handler_input)
 
-    directive = response["directives"][0]
-    assert directive["input"]["permissionScopes"] == [
-        {
-            "permissionScope": "alexa::profile:name:read",
-            "consentLevel": "ACCOUNT",
-        },
-        {
-            "permissionScope": "alexa::profile:email:read",
-            "consentLevel": "ACCOUNT",
-        },
-    ]
-    assert "shouldEndSession" not in response
+    speech = response["outputSpeech"]["ssml"]
+    assert "Manage Permissions" in speech
+    assert "Which town or city" in speech
+    assert response["shouldEndSession"] is False
+    assert not any(
+        directive.get("type") == "Connections.StartConnection"
+        for directive in response.get("directives", [])
+    )
+    deps.onboarding.begin_town_capture.assert_called_once_with(handler_input)
+    store = deps.user.snapshot(handler_input)
+    assert store["awaitingProfileTown"] is True
+    assert store["profileSetupActive"] is True
+
+
+@pytest.mark.asyncio
+async def test_profile_setup_without_device_address_permission_gives_app_guidance_and_asks_for_a_city():
+    handler_input = _handler_input()
+    handler_input.request_envelope.context.System.user.permissions.scopes = {
+        permission_scopes.PROFILE_NAME_READ: {"status": "GRANTED"},
+        permission_scopes.PROFILE_EMAIL_READ: {"status": "GRANTED"},
+    }
+    deps = _deps()
+    deps.locality.detect_device_location.return_value = {"_status": "permission_denied"}
+
+    response = await _permission(deps).start_profile(handler_input)
+
+    speech = response["outputSpeech"]["ssml"]
+    assert "Manage Permissions" in speech
+    assert "Which town or city" in speech
+    deps.listener_profile.apply_listener_profile.assert_awaited_once_with(handler_input)
 
 
 @pytest.mark.asyncio
@@ -184,110 +192,6 @@ async def test_address_city_is_saved_when_coordinate_resolution_has_no_match():
         prefer_location=True,
         timeout_ms=5000,
     )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("profile", "expected_type"),
-    [
-        ({"fullName": "Ada Lovelace", "userEmail": "ada@example.com"}, "listener"),
-        ({"fullName": "Ada Lovelace", "userEmail": None}, "listener"),
-    ],
-)
-async def test_profile_consent_requires_both_name_and_email(profile, expected_type):
-    handler_input = _handler_input(
-        token=PermissionConstants.PROFILE_PURPOSE,
-        status="ACCEPTED",
-    )
-    deps = _deps(profile=profile)
-    deps.locality.detect_device_location.return_value = {
-        "_status": "resolved",
-        "city": "Manchester",
-    }
-    deps.resolver.resolve_utterance.return_value = {
-        "resolution": {
-            "match": {
-                "city": "Manchester",
-                "locality": "Manchester",
-                "latitude": 53.48,
-                "longitude": -2.24,
-            }
-        }
-    }
-    response = await _resume(deps, handler_input)
-    assert deps.user.snapshot(handler_input)["listenerType"] == expected_type
-    deps.listener_sync.sync_for_launch.assert_awaited_once_with(handler_input)
-    if expected_type == "listener":
-        speech = response["outputSpeech"]["ssml"]
-        assert "Permission was granted" in speech
-        assert "your email address" in speech
-        assert "Permission was granted" in speech
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("status", "connection_code", "expected"),
-    [
-        ("DENIED", "200", "permission to share your name and email was not granted"),
-        ("NOT_ANSWERED", "200", "permission question was not answered"),
-        ("", "204", "permission question was not answered"),
-        ("REDIRECT_TO_APP", "200", "couldn't complete the permission request by voice"),
-        ("", "500", "couldn't complete the permission request"),
-    ],
-)
-async def test_profile_consent_failure_explains_the_outcome_and_recovery(
-    status,
-    connection_code,
-    expected,
-):
-    handler_input = _handler_input(
-        token=PermissionConstants.PROFILE_PURPOSE,
-        status=status,
-        connection_code=connection_code,
-    )
-    deps = _deps()
-
-    response = await _resume(deps, handler_input)
-
-    speech = response["outputSpeech"]["ssml"]
-    assert expected in speech
-    assert "Manage Permissions" in speech
-    assert "You can still use Hear" in speech
-    assert "card" not in response
-    assert response["shouldEndSession"] is False
-    assert deps.user.snapshot(handler_input)["awaitingProfilePermission"] is False
-    deps.listener_profile.apply_listener_profile.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_profile_consent_uses_pending_state_when_alexa_omits_token():
-    handler_input = _handler_input(status="DENIED")
-    deps = _deps()
-    deps.user.update(handler_input, {"awaitingProfilePermission": True})
-
-    response = await _resume(deps, handler_input)
-    speech = response["outputSpeech"]["ssml"]
-    assert "permission to share your name and email was not granted" in speech
-    assert "say the name of your city" not in speech
-    deps.onboarding.decline_permission.assert_not_called()
-
-
-def test_resume_policy_uses_typed_command_without_platform_input():
-    granted = PermissionPolicy.resume_decision(
-        PermissionResumeCommand(
-            purpose=PermissionConstants.NOTIFICATION_PURPOSE,
-            status="accepted",
-            connection_code="200",
-        ),
-        awaiting_profile_permission=False,
-    )
-    inferred_profile = PermissionPolicy.resume_decision(
-        PermissionResumeCommand(status="denied", connection_code="200"),
-        awaiting_profile_permission=True,
-    )
-
-    assert granted.kind == "notifications_granted"
-    assert inferred_profile.kind == "profile_denied"
 
 
 def test_permission_policy_has_no_platform_dependency():

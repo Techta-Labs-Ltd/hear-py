@@ -40,7 +40,10 @@ def test_skill_factory_registers_the_complete_pipeline():
 
 def test_skill_routes_build_fresh_request_scoped_handlers(mock_handler_input):
     skill = Application.build_skill(MemoryPersistenceAdapter(), container=ApplicationContainer())
-    play_content_route = skill.request_handlers[len(RouteRegistry.GATE_HANDLERS) + 9]
+    play_content_route = skill.request_handlers[
+        len(RouteRegistry.GATE_HANDLERS)
+        + RouteRegistry.REQUEST_CONTROLLERS.index(PlayContentHandler)
+    ]
 
     assert isinstance(play_content_route, RequestHandlerFactory)
     first = play_content_route.build(mock_handler_input)

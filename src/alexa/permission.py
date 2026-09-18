@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import config.permission_scopes as permission_scopes
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogStateManager
 from src.alexa.onboarding import Onboarding
@@ -14,7 +15,6 @@ from src.constants.onboarding import OnboardingConstants
 from src.models.permission_policy import (
     PermissionConstants,
     PermissionPolicy,
-    PermissionResumeCommand,
 )
 from src.models.resolver import UtteranceResolver
 from src.models.user import User
@@ -59,24 +59,15 @@ class Permission:
         )
 
     async def start_profile(self, handler_input):
-        self._user.update(
-            handler_input,
-            {"awaitingProfilePermission": True, "awaitingProfileSetupConsent": False},
-        )
+        self._user.update(handler_input, {"awaitingProfileSetupConsent": False})
         if all(
             RequestContext.has_permission(handler_input, scope)
             for scope in PermissionConstants.PROFILE_SCOPES
         ):
             return await self._complete_profile(handler_input)
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.PROFILE_PERMISSION_REASON))
-            .add_directive(
-                PermissionPolicy.connection_directive(
-                    PermissionConstants.PROFILE_PURPOSE,
-                    PermissionConstants.PROFILE_SCOPES,
-                )
-            )
-            .response
+        return self._begin_manual_profile_town_capture(
+            handler_input,
+            with_permission_guidance=True,
         )
 
     def start_notifications(self, handler_input):
@@ -120,69 +111,16 @@ class Permission:
         )
         return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
 
-    async def resume(self, handler_input, command: PermissionResumeCommand):
-        store = self._user.snapshot(handler_input)
-        decision = PermissionPolicy.resume_decision(
-            command,
-            awaiting_profile_permission=bool(store.get("awaitingProfilePermission")),
-        )
-        ApplicationLog.info(
-            "Hear: permission consent resumed purpose=%s status=%s connectionCode=%s decision=%s",
-            decision.command.purpose or "unknown",
-            decision.command.status or "missing",
-            decision.command.connection_code or "missing",
-            decision.kind,
-        )
-        if decision.kind == "profile_granted":
-            return await self._complete_profile(handler_input)
-        if decision.kind == "notifications_granted":
-            return self._notification_enable_after_permission(handler_input)
-        if decision.kind == "notifications_denied":
-            return AlexaResponse.present_idle_next(
-                handler_input,
-                "Ok. Notifications will stay off.",
-                Speech.WELCOME_REPROMPT,
-            )
-        if decision.kind == "profile_denied":
-            self._user.update(handler_input, {"awaitingProfilePermission": False})
-            return self._profile_permission_failure(
-                handler_input,
-                status=decision.command.status,
-                connection_code=decision.command.connection_code,
-            )
-
     async def _complete_profile(self, handler_input):
         store = await self._listener_profile.apply_listener_profile(handler_input)
         match = await self._resolved_location(handler_input)
         if not match:
-            await self._sync(handler_input)
-            self._onboarding.begin_town_capture(handler_input)
-            self._user.update(
+            return self._begin_manual_profile_town_capture(
                 handler_input,
-                {
-                    "awaitingProfilePermission": False,
-                    "awaitingProfileTown": True,
-                    "profileSetupActive": True,
-                },
-            )
-            DialogStateManager.activate(
-                handler_input,
-                "onboarding",
-                context={"stage": OnboardingConstants.ONBOARDING_ASK_TOWN},
-            )
-            return (
-                handler_input.response_builder.speak(
-                    Ssml.ssml(
-                        "I couldn't get a location from your Alexa account. Which town or city should I use for your listener profile? You can say, my city is, followed by your town or city."
-                    )
-                )
-                .reprompt(
-                    Ssml.ssml(
-                        "Please say, my city is, followed by your town or city. For example, my city is Manchester."
-                    )
-                )
-                .set_should_end_session(False)
-                .response
+                with_permission_guidance=not RequestContext.has_permission(
+                    handler_input,
+                    permission_scopes.DEVICE_ADDRESS,
+                ),
             )
         self._onboarding.complete_location(
             handler_input,
@@ -240,31 +178,39 @@ class Permission:
         except Exception as error:
             ApplicationLog.warning("Hear: listener sync failed error=%s", type(error).__name__)
 
-    @staticmethod
-    def _profile_failure_reason(*, status: str, connection_code: str) -> str:
-        if status == "DENIED":
-            return Speech.PROFILE_PERMISSION_DENIED
-        if status == "NOT_ANSWERED" or connection_code == "204":
-            return Speech.PROFILE_PERMISSION_NOT_ANSWERED
-        if status == "REDIRECT_TO_APP":
-            return Speech.PROFILE_PERMISSION_APP_REQUIRED
-        return Speech.PROFILE_PERMISSION_FAILED
-
-    def _profile_permission_failure(
-        self,
-        handler_input,
-        *,
-        status: str,
-        connection_code: str,
-    ):
-        speech = (
-            f"{self._profile_failure_reason(status=status, connection_code=connection_code)} "
+    def _begin_manual_profile_town_capture(self, handler_input, *, with_permission_guidance=False):
+        self._onboarding.begin_town_capture(handler_input)
+        self._user.update(
+            handler_input,
+            {
+                "awaitingProfilePermission": False,
+                "awaitingProfileTown": True,
+                "profileSetupActive": True,
+            },
+        )
+        DialogStateManager.activate(
+            handler_input,
+            "onboarding",
+            context={"stage": OnboardingConstants.ONBOARDING_ASK_TOWN},
+        )
+        guidance = (
+            f"I don't currently have permission to use details from your Alexa account. "
             f"{PermissionPolicy.profile_app_guidance()} "
-            f"{Speech.PROFILE_PERMISSION_GUEST_CONTINUE}"
+            if with_permission_guidance
+            else ""
+        )
+        prompt = (
+            "Which town or city should I use for your listener profile? "
+            "You can say, my city is, followed by your town or city."
         )
         return (
-            handler_input.response_builder.speak(Ssml.ssml(speech))
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            handler_input.response_builder.speak(Ssml.ssml(f"{guidance}{prompt}"))
+            .reprompt(
+                Ssml.ssml(
+                    "Please say, my city is, followed by your town or city. "
+                    "For example, my city is Manchester."
+                )
+            )
             .set_should_end_session(False)
             .response
         )
