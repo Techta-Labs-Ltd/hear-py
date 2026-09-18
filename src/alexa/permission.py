@@ -75,6 +75,7 @@ class Permission:
                     PermissionConstants.PROFILE_SCOPES,
                 )
             )
+            .set_should_end_session(False)
             .response
         )
 

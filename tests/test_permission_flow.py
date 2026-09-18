@@ -143,6 +143,7 @@ async def test_profile_consent_requests_name_email_and_saved_address():
             "consentLevel": "ACCOUNT",
         },
     ]
+    assert response["shouldEndSession"] is False
 
 
 @pytest.mark.asyncio
