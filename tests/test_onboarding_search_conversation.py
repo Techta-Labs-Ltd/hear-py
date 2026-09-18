@@ -4344,13 +4344,15 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     handler_input.attributes_manager.request_attributes["_store"] = store
     sync = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(HearApiClient, "sync_listener", sync)
-    await ApplicationContainer().build_request_affirmative(handler_input)._confirm_location(handler_input, store)
+    await ApplicationContainer().build_request_affirmative(handler_input)._confirm_location(
+        handler_input, store
+    )
     updated = User.snapshot(handler_input)
     assert updated["onboardingComplete"] is True
     assert updated["userCity"] == "Swindon"
     assert updated["locationSource"] == "manual"
     assert updated["awaitingCommunityPlayback"] is False
-    assert updated["awaitingProfilePermission"] is True
+    assert updated["awaitingProfilePermission"] is False
     assert updated["_requiresReliableSave"] is True
     session = handler_input.attributes_manager.set_session_attributes.call_args.args[0]
     assert session["onboardingStage"] is None
@@ -4360,7 +4362,12 @@ async def test_location_confirmation_finishes_onboarding_without_forcing_empty_s
     assert session["userCity"] == "Swindon"
     spoken = handler_input.response_builder.speak.call_args.args[0]
     assert "I've set your location to Swindon" in spoken
-    assert "account and your saved location" in spoken
+    assert "listener profile" not in spoken
+    handler_input.response_builder.speak.return_value.reprompt.return_value.add_directive.assert_called_once()
+    (
+        handler_input.response_builder.speak.return_value.reprompt.return_value.add_directive.return_value
+        .set_should_end_session.assert_called_once_with(False)
+    )
     sync.assert_not_awaited()
 
 

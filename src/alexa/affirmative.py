@@ -266,19 +266,15 @@ class Affirmative:
                 f"{Speech.TOWN_GOT_IT(city)} Your listener profile is ready. What would you like to listen to?",
                 Speech.WELCOME_REPROMPT,
             )
-        self._user.update(handler_input, {"awaitingProfilePermission": True})
         confirmation = (
             Speech.LOCATION_CONFIRMED(city)
             if city
             else Speech.LOCATION_COORDINATES_CONFIRMED
         )
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml(f"{confirmation} {Speech.PROFILE_PERMISSION_OFFER}")
-            )
-            .reprompt(Ssml.ssml(Speech.PROFILE_PERMISSION_OFFER))
-            .set_should_end_session(False)
-            .response
+        return AlexaResponse.present_idle_next(
+            handler_input,
+            confirmation,
+            Speech.WELCOME_REPROMPT,
         )
 
     async def _handle_latest_source_yes(self, handler_input, store):
