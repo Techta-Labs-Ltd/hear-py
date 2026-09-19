@@ -673,6 +673,7 @@ def test_template_owns_sqs_notification_delivery_worker_without_notification_dyn
     )
     assert "contentId" not in schema["properties"]
     assert "publicationId" not in schema["properties"]
+    assert schema["properties"]["publication"]["required"] == ["id"]
     assert set(message_schema["required"]) == {
         "schemaVersion",
         "notificationId",

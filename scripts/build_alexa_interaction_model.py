@@ -21,8 +21,15 @@ class AlexaInteractionModelBuilder:
     MAX_MODEL_BYTES = 1_500_000
 
     @classmethod
-    def build(cls, model_path: Path) -> dict:
+    def build(cls, model_path: Path, invocation_name: str | None = None) -> dict:
         model = json.loads(model_path.read_text(encoding="utf-8"))
+        if invocation_name is not None:
+            normalized_invocation = invocation_name.strip()
+            if not normalized_invocation:
+                raise ValueError("Alexa invocation name cannot be empty")
+            model["interactionModel"]["languageModel"]["invocationName"] = (
+                normalized_invocation
+            )
         types = {
             item["name"]
             for item in model["interactionModel"]["languageModel"]["types"]
@@ -46,8 +53,13 @@ class AlexaInteractionModelBuilder:
         return payload
 
     @classmethod
-    def write(cls, model_path: Path, output_path: Path) -> None:
-        payload = cls.serialize(cls.build(model_path))
+    def write(
+        cls,
+        model_path: Path,
+        output_path: Path,
+        invocation_name: str | None = None,
+    ) -> None:
+        payload = cls.serialize(cls.build(model_path, invocation_name))
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(payload + "\n", encoding="utf-8")
 
@@ -58,8 +70,13 @@ class AlexaInteractionModelCommand:
         parser = argparse.ArgumentParser()
         parser.add_argument("--model", type=Path, default=Path("en-GB.json"))
         parser.add_argument("--output", type=Path, required=True)
+        parser.add_argument("--invocation-name")
         arguments = parser.parse_args()
-        AlexaInteractionModelBuilder.write(arguments.model, arguments.output)
+        AlexaInteractionModelBuilder.write(
+            arguments.model,
+            arguments.output,
+            arguments.invocation_name,
+        )
         print(f"Wrote Alexa interaction model to {arguments.output}")
 
 

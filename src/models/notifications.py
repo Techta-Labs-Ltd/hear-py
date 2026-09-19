@@ -127,11 +127,16 @@ class Notification:
         await self.update_status(
             listener_id=command.listener_id, item=item, status="resolving"
         )
-        filters = SearchFilters.source(
-            str(item.get("sourceType") or ""), item.get("sourceId")
+        publication = item.get("publication")
+        publication_id = (
+            str(publication.get("id") or "").strip()
+            if isinstance(publication, Mapping)
+            else ""
         )
-        if item.get("lastDate"):
-            filters["publishedFrom"] = item["lastDate"]
+        filters = SearchFilters.source(
+            "publication" if publication_id else str(item.get("sourceType") or ""),
+            publication_id or item.get("sourceId"),
+        )
         payload = SearchPayload.build(
             command.alexa_user_id,
             dict(command.store),
