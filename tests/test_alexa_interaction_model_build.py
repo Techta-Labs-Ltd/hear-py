@@ -71,3 +71,23 @@ class TestAlexaInteractionModelBuild:
 
         assert output.stat().st_size <= AlexaInteractionModelBuilder.MAX_MODEL_BYTES
         assert json.loads(output.read_text(encoding="utf-8")) == self._model()
+
+    def test_production_model_changes_only_the_invocation_name(self):
+        development_model = self._model()
+        production_model = AlexaInteractionModelBuilder.build(
+            self.ROOT / "en-GB.json",
+            "hear service",
+        )
+
+        assert development_model["interactionModel"]["languageModel"]["invocationName"] == (
+            "test development"
+        )
+        assert production_model["interactionModel"]["languageModel"]["invocationName"] == (
+            "hear service"
+        )
+        assert production_model["interactionModel"]["languageModel"]["intents"] == (
+            development_model["interactionModel"]["languageModel"]["intents"]
+        )
+        assert production_model["interactionModel"]["languageModel"]["types"] == (
+            development_model["interactionModel"]["languageModel"]["types"]
+        )
