@@ -22,6 +22,9 @@ class NotificationItem:
         source_id = str(notification.get("sourceId") or "").strip()
         source_name = NotificationItem.optional_text(notification.get("sourceName"))
         last_date = NotificationItem.optional_text(notification.get("lastDate"))
+        publication = NotificationItem.publication(
+            notification.get("publication") or source.get("publication")
+        )
         if (
             not listener_id
             or not notification_id
@@ -56,6 +59,7 @@ class NotificationItem:
                 "sourceId": source_id,
                 "sourceName": source_name,
                 "lastDate": last_date,
+                "publication": publication,
                 "locale": NotificationItem.optional_text(target.get("locale"))
                 or NotificationConstants.DEFAULT_LOCALE,
                 "sendProactive": source.get("sendProactive") is not False,
@@ -90,6 +94,24 @@ class NotificationItem:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def publication(value: object) -> dict | None:
+        if not isinstance(value, dict):
+            return None
+        publication_id = NotificationItem.optional_text(value.get("id"))
+        if not publication_id:
+            return None
+        track_count = NotificationItem.integer(value.get("trackCount"))
+        return {
+            key: item
+            for key, item in {
+                "id": publication_id,
+                "title": NotificationItem.optional_text(value.get("title")),
+                "trackCount": track_count if track_count is not None and track_count >= 0 else None,
+            }.items()
+            if item is not None
+        }
 
     @staticmethod
     def response_items(response: dict | list | None) -> list[dict]:

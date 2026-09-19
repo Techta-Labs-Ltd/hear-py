@@ -10,6 +10,7 @@ from src.models.notifications import (
     NotificationAcceptCommand,
     NotificationOfferCommand,
 )
+from src.utils.notifications import NotificationItem
 
 
 class TestNotificationPolicy:
@@ -57,11 +58,72 @@ class TestNotificationPolicy:
             {
                 "notificationId": "notice-1",
                 "sourceName": "The Gazette",
+                "publication": {
+                    "id": "publication-1",
+                    "title": "Morning Brief",
+                    "trackCount": 1,
+                },
                 "listenerId": "listener-1",
                 "secret": "do-not-copy",
             }
         )
-        assert item == {"notificationId": "notice-1", "sourceName": "The Gazette"}
+        assert item == {
+            "notificationId": "notice-1",
+            "sourceName": "The Gazette",
+            "publication": {
+                "id": "publication-1",
+                "title": "Morning Brief",
+                "trackCount": 1,
+            },
+        }
+
+    def test_normalize_preserves_structured_publication(self) -> None:
+        normalized = NotificationItem.normalize(
+            {
+                "listenerId": "listener-1",
+                "notificationId": "notice-1",
+                "notificationType": "creator_update",
+                "sourceType": "creator",
+                "sourceId": "creator-1",
+                "sourceName": "Creator",
+                "lastDate": "2026-09-11T10:00:00Z",
+                "publication": {
+                    "id": "publication-1",
+                    "title": "Morning Brief",
+                    "trackCount": 1,
+                    "ignored": "value",
+                },
+            }
+        )
+
+        assert normalized is not None
+        assert normalized["publication"] == {
+            "id": "publication-1",
+            "title": "Morning Brief",
+            "trackCount": 1,
+        }
+
+    def test_dialog_item_keeps_only_safe_publication_fields(self) -> None:
+        item = NotificationPolicy.dialog_item(
+            {
+                "notificationId": "notice-1",
+                "publication": {
+                    "id": "publication-1",
+                    "title": " Morning Brief ",
+                    "trackCount": 1,
+                    "secret": "value",
+                },
+            }
+        )
+
+        assert item == {
+            "notificationId": "notice-1",
+            "publication": {
+                "id": "publication-1",
+                "title": "Morning Brief",
+                "trackCount": 1,
+            },
+        }
 
     def test_policy_has_no_platform_dependency(self) -> None:
         source = (Path(__file__).parents[1] / "src/models/notification_policy.py").read_text(
@@ -90,6 +152,7 @@ class TestNotificationPolicy:
                             "sourceType": "creator",
                             "sourceId": "creator-1",
                             "sourceName": "Creator",
+                            "publication": {"id": "publication-1"},
                             "secret": "not-in-dialogue-state",
                         }
                     ]
@@ -114,6 +177,7 @@ class TestNotificationPolicy:
             "sourceType": "creator",
             "sourceId": "creator-1",
             "sourceName": "Creator",
+            "publication": {"id": "publication-1"},
         }
         assert notification_api.update.await_args.args[0]["status"] == "offered"
 
@@ -142,4 +206,5 @@ class TestNotificationPolicy:
         assert result.kind == "play"
         assert result.results == ({"contentId": "content-1"},)
         assert heara.search.await_args.kwargs["timeout_ms"] == 1000
+        assert heara.search.await_args.args[0]["filter"] == {"creatorIds": ["creator-1"]}
         assert notification_api.update.await_args_list[0].args[0]["status"] == "resolving"

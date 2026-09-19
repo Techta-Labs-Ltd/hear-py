@@ -37,5 +37,23 @@ class NotificationPolicy:
             "sourceName",
             "lastDate",
             "expiresAt",
+            "publication",
         }
-        return {key: item[key] for key in allowed if item.get(key) is not None}
+        result = {key: item[key] for key in allowed if item.get(key) is not None}
+        publication = result.get("publication")
+        if not isinstance(publication, dict):
+            result.pop("publication", None)
+            return result
+        publication_id = str(publication.get("id") or "").strip()
+        if not publication_id:
+            result.pop("publication", None)
+            return result
+        safe_publication: dict[str, object] = {"id": publication_id}
+        title = publication.get("title")
+        if isinstance(title, str) and title.strip():
+            safe_publication["title"] = title.strip()
+        track_count = publication.get("trackCount")
+        if isinstance(track_count, int) and not isinstance(track_count, bool) and track_count >= 0:
+            safe_publication["trackCount"] = track_count
+        result["publication"] = safe_publication
+        return result

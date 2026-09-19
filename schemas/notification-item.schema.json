@@ -23,7 +23,17 @@
     "sourceId": { "type": "string", "minLength": 1 },
     "sourceName": { "type": "string", "minLength": 1, "maxLength": 100 },
     "lastDate": { "type": "string", "format": "date-time" },
-    "expiresAt": { "type": "string", "format": "date-time" }
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "publication": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "trackCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
   },
   "allOf": [
     {

@@ -202,6 +202,16 @@ class NotificationExamples:
         )
         return item
 
+    @staticmethod
+    def publication(item):
+        result = dict(item)
+        result["publication"] = {
+            "id": "publication-1",
+            "title": "Morning Brief",
+            "trackCount": 1,
+        }
+        return result
+
 
 class NotificationTestSupport:
     @staticmethod
@@ -321,7 +331,7 @@ async def test_return_launch_offers_new_update_before_an_unfinished_recording(
 
 
 @pytest.mark.asyncio
-async def test_creator_update_searches_source_since_last_date_and_consumes_on_start(
+async def test_creator_recording_update_searches_creator_and_consumes_on_start(
     monkeypatch,
     mock_handler_input,
 ):
@@ -362,10 +372,7 @@ async def test_creator_update_searches_source_since_last_date_and_consumes_on_st
     response = await deps.notifications.accept(mock_handler_input)
 
     assert response == {"playing": True}
-    assert hear.payload["filter"] == {
-        "creatorIds": ["creator-1"],
-        "publishedFrom": "2026-09-11T10:00:00Z",
-    }
+    assert hear.payload["filter"] == {"creatorIds": ["creator-1"]}
     assert [status[2] for status in hear.statuses] == ["resolving", "queued"]
     assert User.snapshot(mock_handler_input)["notificationPlayback"] == {
         "notificationId": "notification-1",
@@ -379,7 +386,7 @@ async def test_creator_update_searches_source_since_last_date_and_consumes_on_st
 
 
 @pytest.mark.asyncio
-async def test_organization_update_searches_source_since_last_date(
+async def test_organization_recording_update_searches_organization(
     monkeypatch,
     mock_handler_input,
 ):
@@ -421,12 +428,63 @@ async def test_organization_update_searches_source_since_last_date(
 
     await deps.notifications.accept(mock_handler_input)
 
-    assert hear.payload["filter"] == {
-        "organizationIds": ["organization-1"],
-        "publishedFrom": "2026-09-11T10:00:00Z",
-    }
+    assert hear.payload["filter"] == {"organizationIds": ["organization-1"]}
     assert hear.payload["limit"] == 10
     assert hear.payload["sort"] == "latest"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "item_factory",
+    [
+        lambda: NotificationExamples.publication(NotificationExamples.creator()),
+        lambda: NotificationExamples.publication(NotificationExamples.organization()),
+    ],
+)
+async def test_publication_notification_searches_exact_publication(
+    monkeypatch,
+    mock_handler_input,
+    item_factory,
+):
+    item = item_factory()
+    NotificationTestSupport.prepare(
+        mock_handler_input,
+        {
+            "awaitingNotificationChoice": True,
+            "pendingNotification": {
+                key: value
+                for key, value in item.items()
+                if key not in {"alexaUserId", "listenerId"}
+            },
+        },
+    )
+    hear = FakeHearApi(
+        {
+            "results": [
+                {
+                    "contentId": "publication-track-1",
+                    "title": "Track one",
+                    "audioUrl": "https://cdn.example.com/publication-track-1.mp3",
+                }
+            ],
+            "failed": False,
+        }
+    )
+    deps = ApplicationContainer(
+        heara=hear,
+        notification_api=hear,
+        progressive=FakeProgressive(),
+    )
+    monkeypatch.setattr(
+        Search,
+        "auto_play_first_from_search",
+        AsyncMock(return_value={"playing": True}),
+    )
+
+    await deps.notifications.accept(mock_handler_input)
+
+    assert hear.payload["filter"] == {"publicationIds": ["publication-1"]}
+    assert "publishedFrom" not in hear.payload["filter"]
 
 
 @pytest.mark.asyncio
