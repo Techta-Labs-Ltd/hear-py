@@ -1438,6 +1438,16 @@
           ]
         },
         {
+          "name": "HEAR_CREATOR",
+          "values": [
+            {
+              "name": {
+                "value": "Crawley Audio News"
+              }
+            }
+          ]
+        },
+        {
           "name": "HEAR_TOPIC",
           "values": [
             {

@@ -576,12 +576,14 @@ def test_topic_slot_includes_multi_word_catalog_topics():
     assert "English Premier League" in topics["Premier League"]["synonyms"]
 
 
-def test_creator_name_slot_is_removed():
+def test_creator_name_slot_is_preserved():
     types = {
         item["name"]: item
         for item in _model()["interactionModel"]["languageModel"]["types"]
     }
-    assert "HEAR_CREATOR" not in types
+    assert types["HEAR_CREATOR"]["values"] == [
+        {"name": {"value": "Crawley Audio News"}}
+    ]
 
 
 def test_backend_domain_slot_schema_forbids_value_ids():

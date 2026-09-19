@@ -13,6 +13,7 @@ class AlexaInteractionModelBuilder:
     """
 
     RETAINED_SLOT_NAMES = (
+        "HEAR_CREATOR",
         "HEAR_LOCATION",
         "HEAR_ORGANIZATION",
         "HEAR_TOPIC",

@@ -24,13 +24,15 @@ class TestAlexaInteractionModelBuild:
             for slot_name in (
                 "HEAR_LOCATION",
                 "HEAR_ORGANIZATION",
+                "HEAR_CREATOR",
                 "HEAR_TOPIC",
                 "HEAR_DISCOVERY",
             )
         } == {
-            "HEAR_LOCATION": 3,
-            "HEAR_ORGANIZATION": 3,
-            "HEAR_TOPIC": 3,
+                "HEAR_LOCATION": 3,
+                "HEAR_ORGANIZATION": 3,
+                "HEAR_CREATOR": 1,
+                "HEAR_TOPIC": 3,
             "HEAR_DISCOVERY": 4,
         }
 
