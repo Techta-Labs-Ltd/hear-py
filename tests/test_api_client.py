@@ -115,6 +115,11 @@ async def test_notification_fetch_posts_listener_identity_and_normalizes_item(mo
                     "sourceName": "News Reader",
                     "lastDate": "2026-09-11T10:00:00Z",
                     "expiresAt": "2026-09-12T10:00:00Z",
+                    "publication": {
+                        "id": "publication-1",
+                        "title": "Morning Brief",
+                        "trackCount": 1,
+                    },
                 },
                 "listenerId": "listener-1",
                 "deliveryTarget": {
@@ -145,6 +150,11 @@ async def test_notification_fetch_posts_listener_identity_and_normalizes_item(mo
     }
     assert result["failed"] is False
     assert result["items"][0]["notificationId"] == "notification-1"
+    assert result["items"][0]["publication"] == {
+        "id": "publication-1",
+        "title": "Morning Brief",
+        "trackCount": 1,
+    }
 
 
 @pytest.mark.asyncio

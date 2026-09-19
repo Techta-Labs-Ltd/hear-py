@@ -25,6 +25,7 @@ class FakeHearApi:
         self.notification_request = None
         self.statuses = []
         self.deliveries = []
+        self.availability = AsyncMock()
 
     async def search(self, payload, timeout_ms=None):
         del timeout_ms
@@ -373,6 +374,7 @@ async def test_creator_recording_update_searches_creator_and_consumes_on_start(
 
     assert response == {"playing": True}
     assert hear.payload["filter"] == {"creatorIds": ["creator-1"]}
+    hear.availability.assert_not_awaited()
     assert [status[2] for status in hear.statuses] == ["resolving", "queued"]
     assert User.snapshot(mock_handler_input)["notificationPlayback"] == {
         "notificationId": "notification-1",
@@ -431,6 +433,7 @@ async def test_organization_recording_update_searches_organization(
     assert hear.payload["filter"] == {"organizationIds": ["organization-1"]}
     assert hear.payload["limit"] == 10
     assert hear.payload["sort"] == "latest"
+    hear.availability.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -485,6 +488,7 @@ async def test_publication_notification_searches_exact_publication(
 
     assert hear.payload["filter"] == {"publicationIds": ["publication-1"]}
     assert "publishedFrom" not in hear.payload["filter"]
+    hear.availability.assert_not_awaited()
 
 
 @pytest.mark.asyncio
