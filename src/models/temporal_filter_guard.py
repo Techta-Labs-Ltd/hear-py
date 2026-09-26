@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+
 class TemporalFilterGuard:
     SOURCE_TYPES = frozenset({"organization", "creator", "publication"})
     TEMPORAL_SLOT_KEYS = frozenset(
