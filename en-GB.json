@@ -904,7 +904,6 @@
             "regular speed",
             "reset speed",
             "normal playback speed",
-            "half speed",
             "double speed"
           ]
         },
@@ -1532,26 +1531,13 @@
           "name": "HEAR_PLAYBACK_SPEED",
           "values": [
             {
-              "id": "0.5",
-              "name": {
-                "value": "0.5",
-                "synonyms": [
-                  "first",
-                  "first speed",
-                  "first level",
-                  "half",
-                  "half speed"
-                ]
-              }
-            },
-            {
               "id": "0.75",
               "name": {
                 "value": "0.75",
                 "synonyms": [
-                  "second",
-                  "second speed",
-                  "second level",
+                  "first",
+                  "first speed",
+                  "first level",
                   "point seven five",
                   "three quarters",
                   "three quarter speed"
@@ -1563,9 +1549,9 @@
               "name": {
                 "value": "1",
                 "synonyms": [
-                  "third",
-                  "third speed",
-                  "third level",
+                  "second",
+                  "second speed",
+                  "second level",
                   "normal",
                   "normal speed",
                   "regular speed",
@@ -1578,9 +1564,9 @@
               "name": {
                 "value": "1.25",
                 "synonyms": [
-                  "fourth",
-                  "fourth speed",
-                  "fourth level",
+                  "third",
+                  "third speed",
+                  "third level",
                   "one point two five",
                   "one and a quarter"
                 ]
@@ -1591,9 +1577,9 @@
               "name": {
                 "value": "1.5",
                 "synonyms": [
-                  "fifth",
-                  "fifth speed",
-                  "fifth level",
+                  "fourth",
+                  "fourth speed",
+                  "fourth level",
                   "one point five",
                   "one and a half"
                 ]
@@ -1604,9 +1590,9 @@
               "name": {
                 "value": "2",
                 "synonyms": [
-                  "sixth",
-                  "sixth speed",
-                  "sixth level",
+                  "fifth",
+                  "fifth speed",
+                  "fifth level",
                   "double",
                   "double speed"
                 ]

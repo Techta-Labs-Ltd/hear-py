@@ -302,6 +302,10 @@ class User:
             **StateSchema.defaults(),
             **deepcopy(persisted),
         }
+        merged["playbackSpeed"] = (
+            PlaybackUtils.normalise_speed(merged.get("playbackSpeed"))
+            or settings.default_speed
+        )
         merged["recentTrackListens"] = User.normalize_recent_track_listens(
             merged.get("recentTrackListens")
         )

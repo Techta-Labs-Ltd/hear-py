@@ -10,6 +10,7 @@ from pathlib import Path
 from src.alexa.direct_intents import DirectIntentPolicy
 from src.constants.intent_routes import INTENT_ROUTE_RULES, INTERRUPT_ROUTE_INTENTS
 from src.utils.filters import SearchFilterUtils
+from src.utils.playback import PlaybackUtils
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +164,11 @@ class PhraseRouter:
                 for slot_name, capture_name in captures
                 if (value := match.group(capture_name)) and value.strip()
             )
+            if intent_name == "SetPlaybackSpeedIntent" and any(
+                slot_name == "speed" and PlaybackUtils.normalise_speed(value) is None
+                for slot_name, value in slots
+            ):
+                continue
             return PhraseRoute(intent_name, slots, "declared_sample", "model_sample")
         return None
 
