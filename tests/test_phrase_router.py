@@ -61,7 +61,7 @@ def test_phrase_router_fuzzily_routes_confident_control_typos(phrase, intent_nam
     assert route.intent_name == intent_name
 
 
-@pytest.mark.parametrize("phrase", ["mumu", "speed", "reporting"])
+@pytest.mark.parametrize("phrase", ["mumu", "speed", "reporting", "half speed"])
 def test_phrase_router_does_not_guess_low_confidence_control_phrases(phrase):
     assert PhraseRouter.classify(phrase) is None
 

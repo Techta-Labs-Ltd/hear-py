@@ -39,6 +39,10 @@ class TestPersistence:
         assert merged["playbackSpeed"] == 2.0
         assert merged["userCity"] == "London"
 
+    def test_merge_initial_store_resets_removed_playback_speed(self):
+        merged = User.merge_persisted({"playbackSpeed": 0.5})
+        assert merged["playbackSpeed"] == 1.0
+
     def test_default_state_serializes_to_an_empty_sparse_document(self):
         assert User.persisted_snapshot(dict(StateSchema.DEFAULT_STORE)) == {}
 

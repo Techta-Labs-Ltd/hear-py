@@ -9,10 +9,9 @@ class PlaybackSpeech:
         "Say next or skip for the next recording, previous for the one before it, repeat or "
         "start over to return to the beginning, rewind 30 seconds, or fast forward 2 minutes. "
         "If you do not give a time, rewind and fast forward move by the standard step. You can "
-        "say faster, slower, or normal speed. You can also choose first through sixth speed: "
-        "first for 0.5 times, second for 0.75, third for normal speed, fourth for "
-        "1.25, fifth for 1.5, or sixth for "
-        "2 times speed. Available speeds may vary by recording. Say stop when you want to "
+        "say faster, slower, or normal speed. You can also choose first through fifth speed: "
+        "first for 0.75 times, second for normal speed, third for 1.25, fourth for 1.5, "
+        "or fifth for 2 times speed. Available speeds may vary by recording. Say stop when you want to "
         "finish listening. Loop and shuffle are not available."
     )
     HELP_GUIDE = (
@@ -30,7 +29,7 @@ class PlaybackSpeech:
         "- Rewind 30 seconds / Fast forward 2 minutes.\n"
         "- Rewind / Fast forward (uses the standard step).\n"
         "- Faster / Slower / Normal speed.\n"
-        "- First through sixth speed: 0.5x, 0.75x, 1x, 1.25x, 1.5x or 2x.\n"
+        "- First through fifth speed: 0.75x, 1x, 1.25x, 1.5x or 2x.\n"
         "- Stop (finishes listening).\n"
         "Loop and shuffle are not available."
     )
@@ -45,7 +44,7 @@ class PlaybackSpeech:
     SPEED_NOT_SUPPORTED = "This recording does not have faster or slower versions. I can only play it at normal speed."
     SPEED_MAX = "This is the maximum speed."
     SPEED_MIN = "This is the minimum speed."
-    SPEED_INVALID = "Say first through sixth speed, normal speed, faster, or slower."
+    SPEED_INVALID = "Say first through fifth speed, normal speed, faster, or slower."
     QUEUE_FINISHED = "You've reached the end of these recordings. What would you like to listen to next?"
     PUBLICATION_QUEUE_FINISHED = "You've reached the end of this publication. What would you like to listen to next?"
     RESUMING = "Resuming where you left off."

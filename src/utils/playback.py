@@ -10,26 +10,22 @@ from src.utils.events import EventUtils
 
 class PlaybackUtils:
     SPEED_ALIASES = {
-        "first": 0.5,
-        "first speed": 0.5,
-        "half": 0.5,
-        "half speed": 0.5,
-        "second": 0.75,
-        "second speed": 0.75,
+        "first": 0.75,
+        "first speed": 0.75,
         "three quarter speed": 0.75,
-        "third": 1.0,
-        "third speed": 1.0,
+        "second": 1.0,
+        "second speed": 1.0,
         "normal": 1.0,
         "normal speed": 1.0,
         "regular speed": 1.0,
         "reset speed": 1.0,
-        "fourth": 1.25,
-        "fourth speed": 1.25,
-        "fifth": 1.5,
-        "fifth speed": 1.5,
+        "third": 1.25,
+        "third speed": 1.25,
+        "fourth": 1.5,
+        "fourth speed": 1.5,
         "one and a half": 1.5,
-        "sixth": 2.0,
-        "sixth speed": 2.0,
+        "fifth": 2.0,
+        "fifth speed": 2.0,
         "double": 2.0,
         "double speed": 2.0,
     }
@@ -47,9 +43,13 @@ class PlaybackUtils:
 
     @staticmethod
     def find_speed_url(speeds: list | None, target_speed: float) -> str | None:
-        if not isinstance(speeds, list) or not speeds:
+        if target_speed not in settings.speeds or not isinstance(speeds, list) or not speeds:
             return None
-        matches = [(abs(entry["speed"] - target_speed), entry.get("audioUrl")) for entry in speeds]
+        matches = [
+            (abs(entry["speed"] - target_speed), entry.get("audioUrl"))
+            for entry in speeds
+            if entry.get("speed") in settings.speeds
+        ]
         difference, url = min(matches, default=(float("inf"), None))
         return url if difference < 0.15 else None
 
@@ -57,7 +57,10 @@ class PlaybackUtils:
     def get_next_speed(speeds: list | None, current_speed: float, direction: str) -> dict | None:
         if not isinstance(speeds, list) or not speeds:
             return None
-        ordered = sorted(speeds, key=lambda entry: entry["speed"])
+        ordered = sorted(
+            (entry for entry in speeds if entry.get("speed") in settings.speeds),
+            key=lambda entry: entry["speed"],
+        )
         candidates = (
             (entry for entry in ordered if entry["speed"] > current_speed + 0.01)
             if direction == "up"
@@ -77,7 +80,12 @@ class PlaybackUtils:
     @staticmethod
     def resolve_effective_speed(speed, variants: list | None) -> float:
         numeric = float(speed) if speed is not None else None
-        if numeric is None or numeric != numeric or numeric == settings.default_speed:
+        if (
+            numeric is None
+            or numeric != numeric
+            or numeric not in settings.speeds
+            or numeric == settings.default_speed
+        ):
             return settings.default_speed
         if not isinstance(variants, list) or not variants:
             return settings.default_speed

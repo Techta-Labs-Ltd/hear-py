@@ -617,11 +617,10 @@ def test_intent_samples_are_unique_within_each_intent():
         assert len(samples) == len(set(samples)), f"{intent['name']} contains duplicate samples"
 
 
-def test_playback_speed_type_has_all_six_named_levels():
+def test_playback_speed_type_has_all_five_named_levels():
     types = {item["name"]: item for item in _model()["interactionModel"]["languageModel"]["types"]}
     values = types["HEAR_PLAYBACK_SPEED"]["values"]
     assert [item["name"]["value"] for item in values] == [
-        "0.5",
         "0.75",
         "1",
         "1.25",
@@ -629,7 +628,7 @@ def test_playback_speed_type_has_all_six_named_levels():
         "2",
     ]
     assert "first speed" in values[0]["name"]["synonyms"]
-    assert "sixth speed" in values[-1]["name"]["synonyms"]
+    assert "fifth speed" in values[-1]["name"]["synonyms"]
 
 
 def test_active_audio_commands_include_natural_speed_and_rating_phrases():

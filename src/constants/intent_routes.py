@@ -124,14 +124,6 @@ INTENT_ROUTE_RULES = tuple(
             _rule(
                 "SetPlaybackSpeedIntent",
                 "playback_control",
-                "speed_half",
-                1190,
-                r"(?:(?:set|change) (?:play ?back )?speed to |play at )?half(?: speed)?",
-                slots=(("speed", "half"),),
-            ),
-            _rule(
-                "SetPlaybackSpeedIntent",
-                "playback_control",
                 "speed_double",
                 1190,
                 r"(?:(?:set|change) (?:play ?back )?speed to |play at )?double(?: speed)?",

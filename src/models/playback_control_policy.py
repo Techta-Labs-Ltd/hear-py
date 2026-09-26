@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from config import settings
 from src.constants.playback import PlaybackConstants
 from src.utils.playback import PlaybackUtils
 
@@ -36,7 +37,9 @@ class PlaybackControlPolicy:
             if raw_speed is None:
                 continue
             try:
-                values.append(float(raw_speed))
+                speed = float(raw_speed)
+                if speed in settings.speeds:
+                    values.append(speed)
             except (TypeError, ValueError):
                 continue
         return tuple(values)

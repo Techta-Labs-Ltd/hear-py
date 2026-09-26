@@ -28,7 +28,7 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q main.py src config
       - name: Lint Python
-        run: python -m ruff check src tests --select E4,E7,E9,F,I
+        run: python -m ruff check src tests scripts --select E4,E7,E9,F,I
       - name: Dead-code audit
         run: python -m vulture src --min-confidence 80
       - name: Type-check application source
@@ -72,6 +72,8 @@ jobs:
       ALEXA_PROACTIVE_CLIENT_SECRET: ${{ secrets.ALEXA_PROACTIVE_CLIENT_SECRET_PROD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Validate production configuration
         env:
           AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
@@ -146,6 +148,33 @@ jobs:
             --cli-binary-format raw-in-base64-out --payload '{"diagnostic":"resolver"}' \
             "$RUNNER_TEMP/resolver-health.json"
           jq -e '.ok == true and .canonicalValue == "Herne Bay"' "$RUNNER_TEMP/resolver-health.json"
+      - name: Detect Alexa model changes
+        id: alexa_model
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
+             ! git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null || \
+             ! git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- en-GB.json; then
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload production-review Alexa model
+        if: steps.alexa_model.outputs.upload == 'true'
+        env:
+          ALEXA_LWA_CLIENT_ID: ${{ secrets.ALEXA_LWA_CLIENT_ID_PROD }}
+          ALEXA_LWA_CLIENT_SECRET: ${{ secrets.ALEXA_LWA_CLIENT_SECRET_PROD }}
+          ALEXA_REFRESH_TOKEN: ${{ secrets.ALEXA_REFRESH_TOKEN_PROD }}
+        run: |
+          : "${ALEXA_LWA_CLIENT_ID:?Set the ALEXA_LWA_CLIENT_ID_PROD secret}"
+          : "${ALEXA_LWA_CLIENT_SECRET:?Set the ALEXA_LWA_CLIENT_SECRET_PROD secret}"
+          : "${ALEXA_REFRESH_TOKEN:?Set the ALEXA_REFRESH_TOKEN_PROD secret}"
+          python scripts/upload_alexa_model.py \
+            --skill-id "$ALEXA_SKILL_ID" \
+            --invocation-name "hear service" \
+            --client-id "$ALEXA_LWA_CLIENT_ID" \
+            --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
+            --refresh-token "$ALEXA_REFRESH_TOKEN"
       - name: Show CloudFormation failure details
         if: steps.cloudformation.outcome == 'failure'
         run: |
