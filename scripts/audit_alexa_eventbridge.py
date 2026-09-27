@@ -64,6 +64,26 @@ def main():
         token = page.get("NextToken")
         if not token:
             break
+    # Check explicitly scoped resources as well: missing inventory permission
+    # does not by itself prove that scoped deployment operations are denied.
+    exact_bus_name = f"hear-notifications-{stage}"
+    bus_result = read("events", "describe_event_bus", Name=exact_bus_name)
+    report["exact_bus"] = {"name": exact_bus_name, "verified_arn": bus_result.get("Arn")}
+    deployment_role = "github-actions-hear-deploy"
+    inline_names = read("iam", "list_role_policies", RoleName=deployment_role).get("PolicyNames", [])
+    policies = []
+    for name in inline_names:
+        value = read("iam", "get_role_policy", RoleName=deployment_role, PolicyName=name)
+        document = value.get("PolicyDocument", {})
+        statements = document.get("Statement", []) if isinstance(document, dict) else []
+        policies.append({"name": name, "statements": statements})
+    attached = read("iam", "list_attached_role_policies", RoleName=deployment_role).get("AttachedPolicies", [])
+    for policy in attached:
+        value = read("iam", "get_policy", PolicyArn=policy["PolicyArn"]).get("Policy", {})
+        if value.get("DefaultVersionId"):
+            document = read("iam", "get_policy_version", PolicyArn=policy["PolicyArn"], VersionId=value["DefaultVersionId"]).get("PolicyVersion", {}).get("Document", {})
+            policies.append({"name": policy["PolicyName"], "statements": document.get("Statement", []) if isinstance(document, dict) else []})
+    report["deployment_policies"] = policies
     report["roles_anywhere_anchors"] = [{"name": x.get("name"), "arn": x.get("trustAnchorArn"), "enabled": x.get("enabled")} for x in read("rolesanywhere", "list_trust_anchors").get("trustAnchors", [])]
     Path("aws-setup-report").mkdir(exist_ok=True)
     Path(f"aws-setup-report/{environment}.json").write_text(json.dumps(report, indent=2))
