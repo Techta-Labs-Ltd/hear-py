@@ -87,7 +87,7 @@ jobs:
           : "${HEAR_API_KEY:?Set the HEAR_API_KEY_PROD secret}"
           : "${ALEXA_PROACTIVE_CLIENT_ID:?Set the ALEXA_PROACTIVE_CLIENT_ID_PROD secret}"
           : "${ALEXA_PROACTIVE_CLIENT_SECRET:?Set the ALEXA_PROACTIVE_CLIENT_SECRET_PROD secret}"
-      - name: Validate Alexa endpoint environment isolation
+      - name: Validate shared Alexa API and webhook endpoints
         run: python scripts/check_notification_environment.py --environment production
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4

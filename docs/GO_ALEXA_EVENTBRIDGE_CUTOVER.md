@@ -23,10 +23,17 @@ straight to the existing recipient delivery queue, which requires listenerId.
 
 ## Environment contract
 
-Development API: https://alexa.hear.surf/api/v1.
-Production API: https://alexa.hear.media/api/v1.
-The development deployment formerly defaulted to the production API; the
-hear-py workflow now rejects cross-environment endpoint overrides.
+Temporary shared-backend policy (explicitly requested by the project owner):
+Development and production both use https://alexa.hear.media/api/v1 and
+https://alexa.hear.media/api/v1/webhooks/event for now. The hear-py deployment
+check accepts this shared hostname for both stages and continues to require
+HTTPS. Do not change either stage to alexa.hear.surf without a separate request.
+
+This is a public API/webhook endpoint exception, not a change to Go database,
+private API, RabbitMQ, EventBridge, credentials or environment fencing. Requests
+from both skill stages reach the shared backend. The new source pipeline remains
+disabled: development source jobs still require verified backend/environment
+routing before activation; do not bypass the source API's environment checks.
 
 Go .env.dev and .env.production have the same configuration key contract, not
 shared secrets or data. DATABASE_URL, CATALOG_DATABASE_URL, Redis, Meilisearch,

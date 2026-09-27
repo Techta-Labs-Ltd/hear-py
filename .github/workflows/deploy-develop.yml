@@ -59,9 +59,9 @@ jobs:
       NOTIFICATION_EVENT_BUS_NAME: ${{ vars.ALEXA_EVENT_BUS_NAME_DEV || '' }}
       SHORT_STAGE: ${{ vars.SHORT_STAGE_DEV }}
       ALEXA_SKILL_ID: ${{ vars.ALEXA_SKILL_ID_DEV }}
-      HEAR_API_URL: ${{ vars.HEAR_API_URL_DEV || 'https://alexa.hear.surf/api/v1' }}
+      HEAR_API_URL: ${{ vars.HEAR_API_URL_DEV || 'https://alexa.hear.media/api/v1' }}
       HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_DEV || 'alexa' }}
-      WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_DEV || 'https://alexa.hear.surf/api/v1/webhooks/event' }}
+      WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_DEV || 'https://alexa.hear.media/api/v1/webhooks/event' }}
       HEAR_LOGGING_ENABLED: ${{ vars.HEAR_LOGGING_ENABLED_DEV || 'true' }}
       CANONICAL_IDENTITY_ENABLED: ${{ vars.CANONICAL_IDENTITY_ENABLED_DEV || '1' }}
       RESERVED_CONCURRENCY: '0'
@@ -80,7 +80,7 @@ jobs:
           : "${STACK_NAME:?Set the STACK_NAME_DEV variable}"
           : "${SHORT_STAGE:?Set the SHORT_STAGE_DEV variable}"
           : "${ALEXA_SKILL_ID:?Set the ALEXA_SKILL_ID_DEV variable}"
-      - name: Validate Alexa endpoint environment isolation
+      - name: Validate shared Alexa API and webhook endpoints
         run: python scripts/check_notification_environment.py --environment development
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
