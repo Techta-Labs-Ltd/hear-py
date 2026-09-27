@@ -189,7 +189,7 @@ class WebhookEventClient:
             )
             if 200 <= response.status_code < 300:
                 return True
-            detail = " ".join(str(response.text or "").split())[:500]
+            detail = " ".join(str(getattr(response, "text", "") or "").split())[:500]
             ApplicationLog.error(
                 "Hear outbound webhook rejected event=%s event_id=%s status=%s response=%s",
                 envelope.get("event"),
