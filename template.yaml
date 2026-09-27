@@ -3,6 +3,16 @@ Transform: AWS::Serverless-2016-10-31
 Description: Hear Alexa skill (Python container image).
 
 Parameters:
+  NotificationSourceEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable only after the Go source API and environment ownership are verified.
+  NotificationEventBusName:
+    Type: String
+    Default: ""
+    AllowedPattern: '[A-Za-z0-9_.-]*'
+    Description: Existing environment-specific event bus name; empty creates a managed bus.
   Stage:
     Type: String
     Default: development
@@ -85,6 +95,8 @@ Parameters:
     MaxValue: 100
 
 Conditions:
+  SourcePipelineEnabled: !Equals [!Ref NotificationSourceEnabled, "true"]
+  ManagedSourceBus: !Equals [!Ref NotificationEventBusName, ""]
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
   HasProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
@@ -105,7 +117,7 @@ Globals:
         HEAR_API_PATH_PREFIX: !Ref HearApiPathPrefix
         HEAR_API_KEY: !Ref HearApiKey
         HEAR_CLIENT_VERSION: alexa-skill
-        HEAR_DDB_REGION: eu-west-1
+        HEAR_DDB_REGION: !Ref AWS::Region
         HEAR_DDB_TABLE: !Ref HearListenerStateTable
         HEAR_DDB_PARTITION_KEY: id
         HEAR_DDB_SORT_KEY: scope
@@ -145,6 +157,138 @@ Globals:
         HEAR_METRICS_NAMESPACE: HearAlexa
 
 Resources:
+  NotificationEventBus:
+    Type: AWS::Events::EventBus
+    Condition: ManagedSourceBus
+    Properties:
+      Name: !Sub hear-notifications-${ShortStage}
+      Tags:
+        - Key: Stage
+          Value: !Ref Stage
+
+  NotificationSourceDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-alexa-sources-${ShortStage}-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  NotificationSourceQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hear-alexa-sources-${ShortStage}
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt NotificationSourceDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  NotificationSourceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub hear-alexa-source-ready-${ShortStage}
+      EventBusName: !If [ManagedSourceBus, !Ref NotificationEventBus, !Ref NotificationEventBusName]
+      State: !If [SourcePipelineEnabled, ENABLED, DISABLED]
+      EventPattern:
+        source: [hear.notifications]
+        detail-type: [AlexaNotificationSourceReady]
+      Targets:
+        - Id: notification-source-queue
+          Arn: !GetAtt NotificationSourceQueue.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 86400
+            MaximumRetryAttempts: 185
+          DeadLetterConfig:
+            Arn: !GetAtt NotificationSourceDeadLetterQueue.Arn
+
+  NotificationSourceQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref NotificationSourceQueue, !Ref NotificationSourceDeadLetterQueue]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: events.amazonaws.com}
+            Action: sqs:SendMessage
+            Resource: [!GetAtt NotificationSourceQueue.Arn, !GetAtt NotificationSourceDeadLetterQueue.Arn]
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt NotificationSourceRule.Arn
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  NotificationSourceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Hear-Notification-Source-${ShortStage}
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: ["main.notification_source_handler"]
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          HEAR_NOTIFICATION_SOURCE_QUEUE_URL: !Ref NotificationSourceQueue
+          HEAR_NOTIFICATION_DELIVERY_QUEUE_URL: !Ref ProactiveNotificationQueue
+          HEAR_NOTIFICATION_SOURCE_PAGE_SIZE: "100"
+      Policies:
+        - SQSPollerPolicy: {QueueName: !GetAtt NotificationSourceQueue.QueueName}
+        - SQSSendMessagePolicy: {QueueName: !GetAtt NotificationSourceQueue.QueueName}
+        - SQSSendMessagePolicy: {QueueName: !GetAtt ProactiveNotificationQueue.QueueName}
+        - Statement:
+            Effect: Allow
+            Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+            Resource: !GetAtt HearListenerStateTable.Arn
+            Condition:
+              ForAllValues:StringLike:
+                dynamodb:LeadingKeys: ["NOTIFICATION_SOURCE#*"]
+      Events:
+        SourcePages:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt NotificationSourceQueue.Arn
+            Enabled: !If [SourcePipelineEnabled, true, false]
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 5
+
+  GoSourceEventBridgePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Go source signalling only; no Amazon proactive delivery or recipient SQS access.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [events:PutEvents, events:DescribeEventBus]
+            Resource: !If
+              - ManagedSourceBus
+              - !GetAtt NotificationEventBus.Arn
+              - !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:event-bus/${NotificationEventBusName}
+          - Effect: Allow
+            Action: [events:DescribeRule, events:ListTargetsByRule]
+            Resource: !GetAtt NotificationSourceRule.Arn
+
+  NotificationSourceDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alexa source planning or EventBridge target delivery failed.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt NotificationSourceDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
   HearListenerStateTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
@@ -254,6 +398,7 @@ Resources:
           ALEXA_PROACTIVE_CLIENT_SECRET: !Ref AlexaProactiveClientSecret
       Policies:
         - SQSPollerPolicy: { QueueName: !GetAtt ProactiveNotificationQueue.QueueName }
+        - DynamoDBReadPolicy: { TableName: !Ref HearListenerStateTable }
       Events:
         NotificationMessages:
           Type: SQS
@@ -589,6 +734,17 @@ Resources:
       EventSourceToken: !Ref AlexaSkillId
 
 Outputs:
+  NotificationEventBusArn:
+    Value: !If
+      - ManagedSourceBus
+      - !GetAtt NotificationEventBus.Arn
+      - !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:event-bus/${NotificationEventBusName}
+  NotificationSourceRuleName:
+    Value: !Ref NotificationSourceRule
+  NotificationSourceQueueArn:
+    Value: !GetAtt NotificationSourceQueue.Arn
+  GoSourceEventBridgePolicyArn:
+    Value: !Ref GoSourceEventBridgePolicy
   PersistenceTableName:
     Description: DynamoDB table used for durable Alexa listener state.
     Value: !Ref HearListenerStateTable

@@ -454,3 +454,11 @@ class HearApiClient:
             timeout_ms,
         )
         return data if status == 200 and isinstance(data, dict) else None
+
+    async def notification_source_candidates(self, payload: dict, *, timeout_ms: int = 6000) -> dict:
+        status, data = await self._raw_request(
+            "POST", self._build_alexa_relative_path("notification-source/candidates"), payload, timeout_ms
+        )
+        if status != 200 or not isinstance(data, dict):
+            raise RuntimeError("source_planner_unavailable")
+        return data

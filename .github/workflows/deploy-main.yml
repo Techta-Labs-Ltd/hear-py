@@ -55,6 +55,8 @@ jobs:
       ECR_REPO: ${{ vars.ECR_REPO_PROD || 'hear-python' }}
       STACK_NAME: ${{ vars.STACK_NAME_PROD || 'hear-py-prod' }}
       STAGE: production
+      NOTIFICATION_SOURCE_ENABLED: ${{ vars.ALEXA_SOURCE_PIPELINE_ENABLED_PROD || 'false' }}
+      NOTIFICATION_EVENT_BUS_NAME: ${{ vars.ALEXA_EVENT_BUS_NAME_PROD || '' }}
       SHORT_STAGE: ${{ vars.SHORT_STAGE_PROD || 'prod' }}
       ALEXA_SKILL_ID: ${{ vars.ALEXA_SKILL_ID_PROD }}
       HEAR_API_URL: ${{ vars.HEAR_API_URL_PROD || 'https://alexa.hear.media/api/v1' }}
@@ -85,6 +87,8 @@ jobs:
           : "${HEAR_API_KEY:?Set the HEAR_API_KEY_PROD secret}"
           : "${ALEXA_PROACTIVE_CLIENT_ID:?Set the ALEXA_PROACTIVE_CLIENT_ID_PROD secret}"
           : "${ALEXA_PROACTIVE_CLIENT_SECRET:?Set the ALEXA_PROACTIVE_CLIENT_SECRET_PROD secret}"
+      - name: Validate Alexa endpoint environment isolation
+        run: python scripts/check_notification_environment.py --environment production
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -123,6 +127,7 @@ jobs:
             --region "$AWS_REGION" \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
+              NotificationSourceEnabled="$NOTIFICATION_SOURCE_ENABLED" NotificationEventBusName="$NOTIFICATION_EVENT_BUS_NAME" \
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
