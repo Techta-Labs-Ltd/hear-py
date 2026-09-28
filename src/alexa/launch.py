@@ -30,14 +30,12 @@ class LaunchWorkflow:
         playback,
         listener_profile,
         listener_sync,
-        start_town_capture,
     ) -> None:
         self._user = user
         self._notifications = notifications
         self._playback = playback
         self._listener_profile = listener_profile
         self._listener_sync = listener_sync
-        self._start_town_capture = start_town_capture
 
     async def execute(self, handler_input: HandlerInput):
         store = self._initial_store(handler_input)
@@ -77,15 +75,28 @@ class LaunchWorkflow:
 
     def _repair_stale_returning_setup(self, handler_input: HandlerInput) -> dict:
         store = self._user.snapshot(handler_input)
-        if (
-            not store.get("onboardingComplete")
-            or store.get("activeDialog")
-            or not store.get("onboardingStage")
-        ):
+        if not store.get("onboardingComplete"):
+            return store
+        active = store.get("activeDialog")
+        active_onboarding = (
+            isinstance(active, dict) and active.get("type") == "onboarding"
+        )
+        has_stale_setup = bool(
+            active_onboarding
+            or store.get("onboardingStage")
+            or store.get("awaitingProfilePermission")
+            or store.get("awaitingProfileSetupConsent")
+            or store.get("awaitingProfileTown")
+            or store.get("profileSetupActive")
+            or store.get("awaitingLocationConfirm")
+            or store.get("pendingLocationConfirm")
+        )
+        if not has_stale_setup:
             return store
         self._user.update(
             handler_input,
             {
+                "activeDialog": None,
                 "onboardingStage": None,
                 "onboardingTownAttempts": 0,
                 "onboardingTownResolverFailures": 0,
@@ -108,8 +119,6 @@ class LaunchWorkflow:
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
         decision = LaunchPolicy.protected(store)
-        if decision.kind == "town_capture":
-            return self._start_town_capture(handler_input, store, user_name)
         if decision.kind == "continue_after_flag":
             subject = store.get("activePlayback") or store.get("reportContext") or {}
             question = AlexaFeedback.keep_listening_question(subject, store)
