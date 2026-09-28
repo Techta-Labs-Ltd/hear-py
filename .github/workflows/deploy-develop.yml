@@ -332,6 +332,69 @@ jobs:
           echo "latest_image=$LATEST_IMAGE"
           echo "live_alias=live live_version=$LIVE_VERSION live_image=$LIVE_IMAGE"
           echo "expected_digest=$EXPECTED_DIGEST"
+      - name: Verify reported resolver cases
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          set -euo pipefail
+          HEAR_API_KEY=$(aws ssm get-parameter \
+            --name "$SSM_PARAMETER_PREFIX/HEAR_API_KEY" \
+            --with-decryption --region "$AWS_REGION" \
+            --query 'Parameter.Value' --output text)
+          echo "::add-mask::$HEAR_API_KEY"
+
+          resolve_case() {
+            local utterance="$1"
+            curl --fail --silent --show-error \
+              https://resolver.hear.media/resolve \
+              -H "Content-Type: application/json" \
+              -H "X-Api-Key: $HEAR_API_KEY" \
+              --data "$(jq -nc --arg q "$utterance" \
+                '{utterance:$q,timezone:"Europe/London",country_code:"gb"}')"
+          }
+
+          THIS_MONTH=$(resolve_case "find me this month salmon")
+          echo "$THIS_MONTH" | jq -e '
+            .status == "resolved"
+            and .slots.publishedFrom != null
+            and .slots.publishedTo != null
+            and ((.slots.residualQuery // "" | ascii_downcase | contains("this month")) | not)
+          '
+          echo "PASS resolver: this month salmon -> temporal range"
+
+          TODAY=$(resolve_case "find me content on today's bible study")
+          echo "$TODAY" | jq -e '
+            .status == "resolved"
+            and .slots.publishedFrom != null
+            and .slots.publishedTo != null
+            and ((.slots.residualQuery // "" | ascii_downcase | contains("today")) | not)
+          '
+          echo "PASS resolver: today's bible study -> temporal range"
+
+          SOUTHAMPTON=$(resolve_case "find me content in southampton")
+          echo "$SOUTHAMPTON" | jq -e '
+            any(.entities[]?;
+              .entityType == "location"
+              and (.canonicalValue | ascii_downcase) == "southampton"
+            )
+            and (
+              [ .entities[]? | select(.entityType == "organization") ] | length == 0
+            )
+          '
+          echo "PASS resolver: Southampton -> location"
+
+          SCOTTISH_FARMER=$(resolve_case "play the scottish farmer")
+          echo "$SCOTTISH_FARMER" | jq -e '
+            .intent == "organization"
+            and any(.entities[]?;
+              .entityType == "organization"
+              and (.canonicalValue | ascii_downcase) == "the scottish farmer"
+            )
+            and (
+              [ .entities[]? | select(.entityType == "tag" or .entityType == "category") ]
+              | length == 0
+            )
+          '
+          echo "PASS resolver: Scottish Farmer -> organization only"
       - name: Mark development Alexa model for upload
         id: alexa_model
         if: steps.cloudformation.outcome == 'success'
