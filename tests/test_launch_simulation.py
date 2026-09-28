@@ -490,7 +490,8 @@ class TestLaunchSimulation:
         await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
 
         store = User.snapshot(hi)
-        assert store["onboardingStage"] == "confirm_town_for_community"
+        assert store["onboardingStage"] is None
+        assert store["activeDialog"] is None
         assert hi.response_builder.speak.called
 
     @pytest.mark.asyncio
