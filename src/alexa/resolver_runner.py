@@ -400,7 +400,7 @@ class ResolverWorkflowRunner:
             candidate = DialogSelection.match_pending_candidate(handler_input, pending, raw)
         if candidate:
             result = ResolverWorkflow._resolved_pending_candidate(pending, candidate)
-        elif alexa_intent == "ClarifySelectionIntent":
+        elif alexa_intent in {"ClarifySelectionIntent", "AMAZON.FallbackIntent"}:
             result = ResolverWorkflow._unmatched_ambiguity_result(pending, raw)
         else:
             result = await self._resolver_result(handler_input, raw, alexa_intent)
