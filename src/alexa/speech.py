@@ -262,14 +262,6 @@ class Speech:
         return ContentUtils.is_bad_credit_name(value)
 
     @staticmethod
-    def WELCOME_FIRST_ASK_TOWN(name):
-        return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. Say my city is followed by your city."
-            if name
-            else "Hello, welcome to Hear. Say my city is followed by your city."
-        )
-
-    @staticmethod
     def WELCOME_FIRST_HAS_CITY(name, city=None):
         return (
             f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
