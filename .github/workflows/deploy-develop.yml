@@ -332,15 +332,37 @@ jobs:
           echo "latest_image=$LATEST_IMAGE"
           echo "live_alias=live live_version=$LIVE_VERSION live_image=$LIVE_IMAGE"
           echo "expected_digest=$EXPECTED_DIGEST"
-      - name: Verify reported resolver cases
+      - name: Verify reported Lambda session cases
+        id: lambda_report
+        continue-on-error: true
         if: steps.cloudformation.outcome == 'success'
         run: |
-          set -euo pipefail
+          FUNCTION_ARN=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='SkillFunctionArn'].OutputValue | [0]" \
+            --output text)
+          FUNCTION_NAME=${FUNCTION_ARN##*:function:}
+          TABLE_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='PersistenceTableName'].OutputValue | [0]" \
+            --output text)
+          python scripts/verify_issue_report_lambda.py \
+            --function-name "$FUNCTION_NAME" \
+            --table-name "$TABLE_NAME" \
+            --skill-id "$ALEXA_SKILL_ID" \
+            --region "$AWS_REGION"
+      - name: Verify reported resolver cases
+        id: resolver_report
+        continue-on-error: true
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          set -u
           HEAR_API_KEY=$(aws ssm get-parameter \
             --name "$SSM_PARAMETER_PREFIX/HEAR_API_KEY" \
             --with-decryption --region "$AWS_REGION" \
             --query 'Parameter.Value' --output text)
           echo "::add-mask::$HEAR_API_KEY"
+          failures=0
 
           resolve_case() {
             local utterance="$1"
@@ -352,26 +374,52 @@ jobs:
                 '{utterance:$q,timezone:"Europe/London",country_code:"gb"}')"
           }
 
-          THIS_MONTH=$(resolve_case "find me this month salmon")
-          echo "$THIS_MONTH" | jq -e '
+          show_result() {
+            jq -c '{
+              status,
+              intent,
+              taxonomyRevision,
+              entities: [.entities[]? | {entityType,canonicalValue,originalText,confidence,method}],
+              slots: {
+                residualQuery: .slots.residualQuery,
+                publishedFrom: .slots.publishedFrom,
+                publishedTo: .slots.publishedTo
+              },
+              ambiguities
+            }'
+          }
+
+          THIS_MONTH=$(resolve_case "find me this month salmon" || echo '{"transportError":true}')
+          echo "RESULT this_month=$(echo "$THIS_MONTH" | show_result 2>/dev/null || echo "$THIS_MONTH")"
+          if echo "$THIS_MONTH" | jq -e '
             .status == "resolved"
             and .slots.publishedFrom != null
             and .slots.publishedTo != null
             and ((.slots.residualQuery // "" | ascii_downcase | contains("this month")) | not)
-          '
-          echo "PASS resolver: this month salmon -> temporal range"
+          ' >/dev/null; then
+            echo "PASS resolver: this month salmon -> temporal range"
+          else
+            echo "FAIL resolver: this month salmon"
+            failures=$((failures + 1))
+          fi
 
-          TODAY=$(resolve_case "find me content on today's bible study")
-          echo "$TODAY" | jq -e '
+          TODAY=$(resolve_case "find me content on today's bible study" || echo '{"transportError":true}')
+          echo "RESULT today=$(echo "$TODAY" | show_result 2>/dev/null || echo "$TODAY")"
+          if echo "$TODAY" | jq -e '
             .status == "resolved"
             and .slots.publishedFrom != null
             and .slots.publishedTo != null
             and ((.slots.residualQuery // "" | ascii_downcase | contains("today")) | not)
-          '
-          echo "PASS resolver: today's bible study -> temporal range"
+          ' >/dev/null; then
+            echo "PASS resolver: today's bible study -> temporal range"
+          else
+            echo "FAIL resolver: today's bible study"
+            failures=$((failures + 1))
+          fi
 
-          SOUTHAMPTON=$(resolve_case "find me content in southampton")
-          echo "$SOUTHAMPTON" | jq -e '
+          SOUTHAMPTON=$(resolve_case "find me content in southampton" || echo '{"transportError":true}')
+          echo "RESULT southampton=$(echo "$SOUTHAMPTON" | show_result 2>/dev/null || echo "$SOUTHAMPTON")"
+          if echo "$SOUTHAMPTON" | jq -e '
             any(.entities[]?;
               .entityType == "location"
               and (.canonicalValue | ascii_downcase) == "southampton"
@@ -379,11 +427,16 @@ jobs:
             and (
               [ .entities[]? | select(.entityType == "organization") ] | length == 0
             )
-          '
-          echo "PASS resolver: Southampton -> location"
+          ' >/dev/null; then
+            echo "PASS resolver: Southampton -> location"
+          else
+            echo "FAIL resolver: Southampton"
+            failures=$((failures + 1))
+          fi
 
-          SCOTTISH_FARMER=$(resolve_case "play the scottish farmer")
-          echo "$SCOTTISH_FARMER" | jq -e '
+          SCOTTISH_FARMER=$(resolve_case "play the scottish farmer" || echo '{"transportError":true}')
+          echo "RESULT scottish_farmer=$(echo "$SCOTTISH_FARMER" | show_result 2>/dev/null || echo "$SCOTTISH_FARMER")"
+          if echo "$SCOTTISH_FARMER" | jq -e '
             .intent == "organization"
             and any(.entities[]?;
               .entityType == "organization"
@@ -393,8 +446,15 @@ jobs:
               [ .entities[]? | select(.entityType == "tag" or .entityType == "category") ]
               | length == 0
             )
-          '
-          echo "PASS resolver: Scottish Farmer -> organization only"
+          ' >/dev/null; then
+            echo "PASS resolver: Scottish Farmer -> organization only"
+          else
+            echo "FAIL resolver: Scottish Farmer"
+            failures=$((failures + 1))
+          fi
+
+          echo "Resolver issue-report failures=$failures"
+          test "$failures" -eq 0
       - name: Mark development Alexa model for upload
         id: alexa_model
         if: steps.cloudformation.outcome == 'success'
@@ -428,6 +488,12 @@ jobs:
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
+      - name: Fail reported issue verification
+        if: steps.lambda_report.outcome == 'failure' || steps.resolver_report.outcome == 'failure'
+        run: |
+          echo "Reported issue verification failed."
+          echo "lambda=${{ steps.lambda_report.outcome }} resolver=${{ steps.resolver_report.outcome }}"
+          exit 1
       - name: Show CloudFormation failure details
         if: steps.cloudformation.outcome == 'failure'
         run: |

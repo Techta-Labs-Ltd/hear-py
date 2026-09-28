@@ -187,6 +187,8 @@ def main() -> None:
         SmokeCase("increase speed", "IncreaseSpeedIntent"),
         SmokeCase("set speed to first", "SetPlaybackSpeedIntent", "speed"),
         SmokeCase("find this month salmon", "SearchContentIntent", "searchQuery"),
+        SmokeCase("I enjoyed it", "FeedbackEnjoyedIntent"),
+        SmokeCase("number 1", "ClarifySelectionIntent", "selection"),
     )
     for case in cases:
         _assert_case(client, args.invocation_name, case)
