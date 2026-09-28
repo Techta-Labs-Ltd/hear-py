@@ -514,6 +514,8 @@
             "find content near me",
             "find content near {localQuery}",
             "find content around {localQuery}",
+            "find content in {cityQuery}",
+            "find me content in {cityQuery}",
             "play content in {cityQuery}",
             "play {topic} near {localQuery}",
             "play {topic} in {cityQuery}",
