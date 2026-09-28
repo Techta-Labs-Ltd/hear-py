@@ -814,7 +814,7 @@ async def test_auto_notification_does_not_overlay_active_onboarding_dialog(
 
 
 @pytest.mark.asyncio
-async def test_return_launch_resumes_active_town_setup_before_notifications(
+async def test_return_launch_clears_profile_town_setup_before_notifications(
     monkeypatch,
     mock_handler_input,
 ):
@@ -836,16 +836,28 @@ async def test_return_launch_resumes_active_town_setup_before_notifications(
     hear = FakeHearApi(items=[NotificationExamples.creator()])
     deps = ApplicationContainer(notification_api=hear)
     monkeypatch.setattr(LaunchTracker, "record", lambda *_args: {"save": {}})
+    monkeypatch.setattr(
+        LaunchWorkflow,
+        "_ensure_listener_data_for_launch",
+        AsyncMock(side_effect=lambda _handler_input, store: store),
+    )
+    monkeypatch.setattr(
+        LaunchWorkflow,
+        "_sync_listener_for_launch",
+        AsyncMock(side_effect=lambda _handler_input, store: store),
+    )
 
     response = await deps.build_request_launch_workflow(mock_handler_input).execute(
         mock_handler_input
     )
 
     assert response == {"response": True}
-    assert hear.statuses == []
+    assert hear.statuses == [("listener-1", "notification-1", "offered")]
     store = User.snapshot(mock_handler_input)
-    assert store["activeDialog"]["type"] == "onboarding"
-    assert store["awaitingNotificationChoice"] is False
+    assert store["onboardingStage"] is None
+    assert store["awaitingProfileTown"] is False
+    assert store["profileSetupActive"] is False
+    assert store["activeDialog"]["type"] == "notification"
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "city" in spoken.casefold()
-    assert "new release" not in spoken.casefold()
+    assert "new release from Pendle Voice" in spoken
+    assert "my city is" not in spoken.casefold()

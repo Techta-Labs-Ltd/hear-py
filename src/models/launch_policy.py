@@ -8,7 +8,6 @@ from typing import Literal
 class LaunchDecision:
     kind: Literal[
         "none",
-        "town_capture",
         "continue_after_flag",
         "unfinished_playback",
         "pending_feedback",
@@ -32,11 +31,6 @@ class LaunchPolicy:
         user_name = cls.user_name(store)
         if store.get("awaitingContinueAfterFlag"):
             return LaunchDecision("continue_after_flag", user_name=user_name)
-        active = store.get("activeDialog")
-        if isinstance(active, dict) and active.get("type") == "onboarding":
-            context = active.get("context") or {}
-            if context.get("stage") == "ask_town":
-                return LaunchDecision("town_capture", user_name=user_name)
         return LaunchDecision("none", user_name=user_name)
 
     @classmethod

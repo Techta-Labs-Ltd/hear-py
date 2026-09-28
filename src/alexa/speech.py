@@ -141,7 +141,7 @@ class Speech:
     CONSENT_CARD_THANKS = "Thanks — you're all set. What would you like to listen to?"
     LOCATION_DECLINED = "Ok. What would you like to listen to?"
     LOCATION_RETRY = "Ok. Which city should I set instead?"
-    WELCOME_RETURN_GENERIC = f"Welcome back to Hear. {WELCOME_REPROMPT}"
+    WELCOME_RETURN_GENERIC = f"Welcome back to Hear Service. {WELCOME_REPROMPT}"
     LATEST_SOURCE_DECLINED = f"Ok. {WELCOME_REPROMPT}"
 
     @staticmethod
@@ -262,27 +262,19 @@ class Speech:
         return ContentUtils.is_bad_credit_name(value)
 
     @staticmethod
-    def WELCOME_FIRST_ASK_TOWN(name):
-        return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. Say my city is followed by your city."
-            if name
-            else "Hello, welcome to Hear. Say my city is followed by your city."
-        )
-
-    @staticmethod
     def WELCOME_FIRST_HAS_CITY(name, city=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
             if name
-            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            else f"Welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
     def WELCOME_FIRST(name=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
             if name
-            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            else f"Welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
@@ -379,15 +371,15 @@ class Speech:
 
     @staticmethod
     def WELCOME_RETURN_NAMED(user_name, city=None):
-        return f"Welcome back to Hear, {Speech.escape_ssml_lite(user_name)}. {Speech.WELCOME_REPROMPT}"
+        return f"Welcome back to Hear Service, {Speech.escape_ssml_lite(user_name)}. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def WELCOME_RETURN_CITY(city=None):
-        return f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
+        return f"Welcome back to Hear Service. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def LATEST_SOURCE_OFFER(source):
-        return f"Welcome back to Hear. Would you like to hear the latest from {Speech.escape_ssml_lite(source)}?"
+        return f"Welcome back to Hear Service. Would you like to hear the latest from {Speech.escape_ssml_lite(source)}?"
 
     @staticmethod
     def LATEST_SOURCE_REPROMPT(source):
