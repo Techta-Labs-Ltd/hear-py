@@ -166,7 +166,7 @@ class LaunchWorkflow:
         greeting = (
             f"Welcome back, {Speech.escape_ssml_lite(user_name)}. Before we continue. "
             if user_name
-            else "Welcome back to Hear. Before we continue. "
+            else "Welcome back to Hear Service. Before we continue. "
         )
         prompt = f"{greeting}{AlexaFeedback.feedback_question(subject)}"
         return (
