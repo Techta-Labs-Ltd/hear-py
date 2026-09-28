@@ -465,15 +465,15 @@ class TestSpeechStrings:
 
     def test_welcome_return_city_is_lambda(self):
         result = Speech.WELCOME_RETURN_CITY("London")
-        assert result == f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
+        assert result == f"Welcome back to Hear Service. {Speech.WELCOME_REPROMPT}"
 
     def test_welcome_return_generic(self):
         assert Speech.WELCOME_RETURN_GENERIC == (
-            f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
+            f"Welcome back to Hear Service. {Speech.WELCOME_REPROMPT}"
         )
 
     def test_guest_first_welcome_is_concise(self):
-        expected = f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
+        expected = f"Welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
         assert Speech.WELCOME_FIRST() == expected
         assert Speech.WELCOME_FIRST_HAS_CITY(None, "London") == expected
 
@@ -759,3 +759,18 @@ def test_returning_launch_repairs_stale_town_stage_without_active_dialog():
     assert store["profileSetupActive"] is False
     assert store["awaitingCommunityPlayback"] is False
     assert store["activeDialog"] is None
+
+
+@pytest.mark.asyncio
+async def test_true_first_launch_uses_full_hear_service_onboarding_not_town_capture():
+    hi = _build_handler_input()
+    gate = ApplicationContainer().build_onboarding_gate(hi)
+
+    assert gate.can_handle(hi) is True
+    await gate.handle(hi)
+
+    speech = _speak_text(hi) or ""
+    assert "Welcome to Hear Service." in speech
+    assert "may I check the address saved in your Alexa account?" in speech
+    assert "my city is" not in speech.casefold()
+    assert User.snapshot(hi)["onboardingStage"] == "ask_permission"
