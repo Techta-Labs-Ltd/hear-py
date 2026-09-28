@@ -724,6 +724,11 @@ async def test_active_location_change_owns_city_misclassified_as_local_search(
         **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
         "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
     }
 
     await container.build_resolver_interceptor().process(handler_input)
