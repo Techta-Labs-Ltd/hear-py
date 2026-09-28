@@ -166,9 +166,7 @@ class IssueReportLambdaVerifier:
         response = self.invoke(
             user_id,
             {
-                "type": "IncreaseSpeedIntent"
-                if direction == "up"
-                else "DecreaseSpeedIntent",
+                "type": "IntentRequest",
                 "intent": {
                     "name": "IncreaseSpeedIntent"
                     if direction == "up"
