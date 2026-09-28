@@ -67,9 +67,9 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "topic": "HEAR_TOPIC",
             "discoveryQuery": "HEAR_DISCOVERY",
         },
-        "TownCaptureIntent": {"townName": "HEAR_LOCATION"},
+        "TownCaptureIntent": {"location": "HEAR_LOCATION"},
         "SetLocationIntent": {},
-        "SearchLocationIntent": {"searchQuery": "AMAZON.SearchQuery"},
+        "SearchLocationIntent": {"location": "HEAR_LOCATION"},
         "PlayContentIntent": {
             "topic": "HEAR_TOPIC",
             "format": "ContentFormat",
@@ -120,11 +120,11 @@ def test_location_dialogs_elicit_bare_town_replies():
     }
     assert "SearchContentIntent" not in dialog_intents
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
-        "name": "townName",
+        "name": "location",
         "type": "HEAR_LOCATION",
         "confirmationRequired": False,
         "elicitationRequired": True,
-        "prompts": {"elicitation": "Elicit.TownCaptureIntent.townName"},
+        "prompts": {"elicitation": "Elicit.TownCaptureIntent.location"},
     }
     assert "SetLocationIntent" not in dialog_intents
 
@@ -184,15 +184,15 @@ def test_existing_domain_slots_accept_bare_discovery_requests():
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
     swindon = next((item for item in city_type["values"] if item["name"]["value"] == "Swindon"))
     assert set(intents["TownCaptureIntent"]["samples"]) == {
-        "{townName}",
-        "my city is {townName}",
-        "my town is {townName}",
-        "I am in {townName}",
-        "I live in {townName}",
-        "my area is {townName}",
+        "{location}",
+        "my city is {location}",
+        "my town is {location}",
+        "I am in {location}",
+        "I live in {location}",
+        "my area is {location}",
     }
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
-    assert intents["TownCaptureIntent"]["slots"][0]["samples"] == ["{townName}"]
+    assert intents["TownCaptureIntent"]["slots"][0]["samples"] == ["{location}"]
     assert intents["SetLocationIntent"]["slots"] == []
     assert all("{" not in sample for sample in intents["SetLocationIntent"]["samples"])
     assert "id" not in herne_bay
@@ -250,13 +250,13 @@ def test_local_search_keeps_city_search_separate_from_location_mutation():
     assert "play something from {cityQuery}" in local_samples
     assert all("{cityQuery}" not in sample for sample in location_samples)
     assert {
-        "my city is {searchQuery}",
-        "my town is {searchQuery}",
-        "I am in {searchQuery}",
-        "I live in {searchQuery}",
-        "my area is {searchQuery}",
+        "my city is {location}",
+        "my town is {location}",
+        "I am in {location}",
+        "I live in {location}",
+        "my area is {location}",
     }.isdisjoint(location_query_samples)
-    assert "change my location to {searchQuery}" in location_query_samples
+    assert "change my location to {location}" in location_query_samples
 
 
 def test_generic_source_search_is_neutral_and_specialized_routes_are_explicit():
@@ -302,7 +302,7 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
         "PlayByOrganizationIntent": "organizationQuery",
         "PlayPublicationIntent": "publicationSourceQuery",
         "ClarifySelectionIntent": "selection",
-        "TownCaptureIntent": "townName",
+        "TownCaptureIntent": "location",
     }.items():
         slot = next(item for item in intents[intent_name]["slots"] if item["name"] == slot_name)
         assert slot.get("samples"), f"{intent_name}.{slot_name} needs reply samples"
@@ -332,7 +332,6 @@ def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
         "SearchCreatorIntent": "play content by {searchQuery}",
         "SearchOrganizationIntent": "play from {searchQuery}",
         "SearchPublicationIntent": "play publication from {searchQuery}",
-        "SearchLocationIntent": "change my location to {searchQuery}",
     }
     for intent_name, sample in expected_samples.items():
         slots = intents[intent_name]["slots"]
@@ -341,6 +340,13 @@ def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
         ]
         assert sample in intents[intent_name]["samples"]
         assert all(value.endswith("{searchQuery}") for value in intents[intent_name]["samples"])
+
+    location = intents["SearchLocationIntent"]
+    assert [(slot["name"], slot["type"]) for slot in location["slots"]] == [
+        ("location", "HEAR_LOCATION")
+    ]
+    assert "change my location to {location}" in location["samples"]
+    assert all(value.endswith("{location}") for value in location["samples"])
 
 
 def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms():
@@ -524,7 +530,7 @@ def test_carrierless_discovery_uses_topic_and_combined_hear_slots():
     ]
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     for intent_name, bare_sample in {
-        "TownCaptureIntent": "{townName}",
+        "TownCaptureIntent": "{location}",
         "SelectCreatorCityIntent": "{cityQuery}",
         "SelectOrganizationIntent": "{organizationQuery}",
         "SelectPublicationSourceIntent": "{publicationSourceQuery}",
@@ -732,3 +738,11 @@ def test_direct_discovery_intents_include_misrecognition_and_community_phrases()
         "content from my local community",
         "content from a local community",
     }.issubset(set(intents["PlayLocalIntent"]["samples"]))
+
+
+def test_speed_selection_accepts_bare_ordinal_reply():
+    intents = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    assert "{speed}" in intents["SetPlaybackSpeedIntent"]["samples"]

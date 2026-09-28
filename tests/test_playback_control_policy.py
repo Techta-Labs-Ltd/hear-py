@@ -19,7 +19,7 @@ class TestPlaybackControlPolicy:
             {"status": "playing", "offsetMs": 4000}, store, 1.5, default_speed=1.0
         )
 
-        assert (unavailable.kind, unavailable.available_speeds) == ("unavailable", (1.0, 1.5))
+        assert (unavailable.kind, unavailable.speed) == ("idle", 1.25)
         assert (idle.kind, idle.speed) == ("idle", 1.0)
         assert (restart.kind, restart.offset_ms) == ("restart", 4000)
 
@@ -40,6 +40,19 @@ class TestPlaybackControlPolicy:
 
         assert at_limit.kind == "limit"
         assert (seek.kind, seek.offset_ms, seek.moved_ms) == ("restart", 59_000, 500)
+
+    def test_idle_step_speed_changes_listener_default_without_track_variants(self) -> None:
+        faster = PlaybackControlPolicy.step_speed(
+            None, {"playbackSpeed": 1.0}, "up", default_speed=1.0
+        )
+        slower = PlaybackControlPolicy.step_speed(
+            None, {"playbackSpeed": 1.0}, "down", default_speed=1.0
+        )
+
+        assert faster.kind == "idle"
+        assert faster.speed > 1.0
+        assert slower.kind == "idle"
+        assert slower.speed < 1.0
 
     def test_policy_has_no_platform_dependency(self) -> None:
         source = (

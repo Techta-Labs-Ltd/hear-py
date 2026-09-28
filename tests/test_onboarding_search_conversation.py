@@ -723,7 +723,7 @@ async def test_active_location_change_owns_city_misclassified_as_local_search(
     resolver.resolve_utterance.assert_not_awaited()
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
-    assert nlp["slots"] == {"townName": "Swindon", "placeName": "Swindon"}
+    assert nlp["slots"] == {"location": "Swindon"}
     assert _town_capture_handler(container).can_handle(handler_input) is True
 
 
@@ -750,7 +750,7 @@ async def test_explicit_one_turn_location_change_keeps_mutation_route(mock_handl
     handler_input = _intent_request(
         mock_handler_input,
         "SearchLocationIntent",
-        {"searchQuery": {"name": "searchQuery", "value": "Swindon"}},
+        {"location": {"name": "location", "value": "Swindon"}},
     )
     handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
@@ -762,7 +762,7 @@ async def test_explicit_one_turn_location_change_keeps_mutation_route(mock_handl
     resolver.resolve_utterance.assert_not_awaited()
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "location_set"
-    assert nlp["slots"] == {"townName": "Swindon"}
+    assert nlp["slots"] == {"location": "Swindon"}
 
 
 @pytest.mark.asyncio
@@ -818,8 +818,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
     await ApplicationContainer().build_resolver_interceptor().process(handler_input)
     await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"] == {
-        "townName": "Herne Bay",
-        "placeName": "Herne Bay",
+        "location": "Herne Bay",
     }
     resolve.assert_awaited_once()
     assert resolve.await_args.args == ("Herne Bay",)
@@ -865,7 +864,7 @@ async def test_unknown_city_search_query_reaches_the_location_resolver(mock_hand
 
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
-    assert nlp["slots"] == {"townName": "dorking", "placeName": "dorking"}
+    assert nlp["slots"] == {"location": "dorking"}
     assert _town_capture_handler(container).can_handle(handler_input) is True
 
     await _town_capture_handler(container).handle(handler_input)
@@ -972,7 +971,7 @@ async def test_onboarding_treats_creator_misclassification_as_town(monkeypatch, 
     await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
-    assert nlp["slots"]["townName"] == "Gloucester"
+    assert nlp["slots"]["location"] == "Gloucester"
     assert _town_capture_handler(ApplicationContainer()).can_handle(mock_handler_input)
     await _town_capture_handler(ApplicationContainer()).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
@@ -1074,7 +1073,7 @@ async def test_unknown_city_names_city_and_keeps_session_open(monkeypatch, mock_
     assert "couldn't find nottinghamshire place as a city" in speech.casefold()
     retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
     retry_builder.add_directive.assert_called_once_with(
-        {"type": "Dialog.ElicitSlot", "slotToElicit": "townName"}
+        {"type": "Dialog.ElicitSlot", "slotToElicit": "location"}
     )
     retry_builder.add_directive.return_value.set_should_end_session.assert_called_once_with(False)
     assert User.snapshot(handler_input)["onboardingStage"] == "ask_town"
@@ -1115,7 +1114,7 @@ async def test_town_resolver_failure_retries_once_without_closing_session(
     assert "try the city name again" in speech
     retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
     retry_builder.add_directive.assert_called_once_with(
-        {"type": "Dialog.ElicitSlot", "slotToElicit": "townName"}
+        {"type": "Dialog.ElicitSlot", "slotToElicit": "location"}
     )
     retry_builder.add_directive.return_value.set_should_end_session.assert_called_once_with(False)
     assert store["onboardingStage"] == "ask_town"

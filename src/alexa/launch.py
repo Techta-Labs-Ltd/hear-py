@@ -50,9 +50,6 @@ class LaunchWorkflow:
         except Exception:
             pass
         store = await self._sync_listener_for_launch(handler_input, store)
-        notification_response = await self._notifications.offer(handler_input)
-        if notification_response is not None:
-            return notification_response
         store = self._user.snapshot(handler_input)
         pending_response = await self._pending_response(
             handler_input,
@@ -61,6 +58,10 @@ class LaunchWorkflow:
         )
         if pending_response is not None:
             return pending_response
+        notification_response = await self._notifications.offer(handler_input)
+        if notification_response is not None:
+            return notification_response
+        store = self._user.snapshot(handler_input)
         self._schedule_launch_background_work(handler_input, store)
         return self._welcome_response(handler_input, store)
 
@@ -122,9 +123,14 @@ class LaunchWorkflow:
     async def _feedback_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
-        title = Speech.humanize_spoken_title(store.get("feedbackContentTitle")) or "that track"
-        creator = Speech.escape_ssml_lite(store.get("feedbackCreator") or "the creator")
-        prompt = Speech.LAUNCH_PENDING_FEEDBACK(title, creator, user_name)
+        pending = dict(store.get("pendingFeedback") or {})
+        subject = AlexaFeedback.subject_title(pending, store)
+        greeting = (
+            f"Welcome back, {Speech.escape_ssml_lite(user_name)}. Before we continue. "
+            if user_name
+            else "Welcome back to Hear. Before we continue. "
+        )
+        prompt = f"{greeting}{AlexaFeedback.feedback_question(subject)}"
         return (
             handler_input.response_builder.speak(Ssml.ssml(prompt))
             .reprompt(Ssml.ssml(Speech.FEEDBACK_AWAITING_REPROMPT))

@@ -287,7 +287,7 @@ async def test_automatic_notification_offer_never_interrupts_an_active_intent(
 
 
 @pytest.mark.asyncio
-async def test_return_launch_offers_new_update_before_an_unfinished_recording(
+async def test_return_launch_prompts_unfinished_recording_before_new_update(
     monkeypatch,
     mock_handler_input,
 ):
@@ -323,11 +323,13 @@ async def test_return_launch_offers_new_update_before_an_unfinished_recording(
 
     assert response == {"response": True}
     store = User.snapshot(mock_handler_input)
-    assert store["activeDialog"]["type"] == "notification"
-    assert store["awaitingNotificationChoice"] is True
-    assert store["awaitingResume"] is False
+    assert store["activeDialog"]["type"] == "resume"
+    assert store["awaitingNotificationChoice"] is False
+    assert store["awaitingResume"] is True
+    assert hear.statuses == []
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "new release from Pendle Voice" in spoken
+    assert "You were listening to a recording" in spoken
+    assert "new release from Pendle Voice" not in spoken
     assert "Yesterday's recording" not in spoken
 
 
@@ -735,3 +737,47 @@ async def test_sqs_consumer_batches_and_bounds_proactive_sends():
     }
     assert len(hear.deliveries) == 2
     assert proactive.maximum == 1
+
+
+@pytest.mark.asyncio
+async def test_automatic_notification_offer_is_blocked_by_pending_feedback(
+    mock_handler_input,
+):
+    NotificationTestSupport.prepare(
+        mock_handler_input,
+        {
+            "awaitingFeedback": True,
+            "pendingFeedback": {
+                "feedbackKey": "content-1",
+                "contentId": "content-1",
+                "completed": True,
+            },
+        },
+    )
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    deps = ApplicationContainer(notification_api=hear)
+
+    response = await deps.notifications.offer(mock_handler_input)
+
+    assert response is None
+    assert hear.statuses == []
+    assert User.snapshot(mock_handler_input)["awaitingNotificationChoice"] is False
+
+
+@pytest.mark.asyncio
+async def test_followup_notification_offer_is_allowed_after_feedback_clears(
+    mock_handler_input,
+):
+    NotificationTestSupport.prepare(mock_handler_input)
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {"name": "FeedbackResponseIntent", "slots": {}},
+    }
+    hear = FakeHearApi(items=[NotificationExamples.creator()])
+    deps = ApplicationContainer(notification_api=hear)
+
+    response = await deps.notifications.offer(mock_handler_input, followup=True)
+
+    assert response == {"response": True}
+    assert hear.statuses == [("listener-1", "notification-1", "offered")]
+    assert User.snapshot(mock_handler_input)["awaitingNotificationChoice"] is True

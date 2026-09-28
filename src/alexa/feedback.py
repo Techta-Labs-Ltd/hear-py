@@ -173,9 +173,6 @@ class AlexaFeedback:
         saved = store if isinstance(store, dict) else {}
         active = saved.get("activePlayback") or {}
         queue = saved.get("playbackQueue") or {}
-        discovery_subject = cls._discovery_subject(current, active, queue)
-        if discovery_subject:
-            return discovery_subject
         has_current_identity, is_publication = cls._publication_identity(current, active)
         active_matches = not has_current_identity or (
             str(active.get("publicationId") or active.get("contentId") or "")
@@ -185,31 +182,35 @@ class AlexaFeedback:
             str(queue.get("publicationId") or "")
             == str(current.get("publicationId") or "")
         )
-        candidates = (
-            (
-                current.get("publicationTitle"),
-                current.get("subjectTitle"),
-                active.get("publicationTitle") if active_matches else None,
-                active.get("subjectTitle") if active_matches else None,
-                queue.get("publicationTitle") if queue_matches else None,
-                current.get("title"),
-                saved.get("feedbackContentTitle"),
-            )
-            if is_publication
-            else (
-                current.get("title"),
-                current.get("subjectTitle"),
-                active.get("title") if active_matches else None,
-                active.get("subjectTitle") if active_matches else None,
-                saved.get("feedbackContentTitle"),
-                saved.get("currentContentTitle"),
-            )
-        )
-        title = cls._first_valid_title(candidates, is_publication)
-        if title:
-            return title
         if is_publication:
-            return cls._publication_source(current, active, active_matches)
+            publication = cls._first_valid_title(
+                (
+                    current.get("publicationTitle"),
+                    current.get("subjectTitle"),
+                    active.get("publicationTitle") if active_matches else None,
+                    active.get("subjectTitle") if active_matches else None,
+                    queue.get("publicationTitle") if queue_matches else None,
+                    current.get("title"),
+                ),
+                True,
+            )
+            return publication or cls._publication_source(current, active, active_matches)
+
+        source = cls._first_valid_title(
+            (
+                current.get("organizationName"),
+                active.get("organizationName") if active_matches else None,
+                current.get("creatorName"),
+                active.get("creatorName") if active_matches else None,
+            ),
+            False,
+        )
+        if source:
+            return source
+
+        discovery_subject = cls._discovery_subject(current, active, queue)
+        if discovery_subject:
+            return discovery_subject
         discovery_context = (
             current.get("discoveryContext")
             or active.get("discoveryContext")
@@ -218,14 +219,14 @@ class AlexaFeedback:
         if isinstance(discovery_context, dict):
             kind = str(discovery_context.get("kind") or "").strip().casefold()
             if kind == "trending":
-                return "this trending recording"
+                return "what's trending"
             if kind == "recommendation":
-                return "this recommended recording"
+                return "your recommendations"
         return "this recording"
 
     @staticmethod
     def feedback_question(title: str) -> str:
-        return f"Did you enjoy {Speech.escape_ssml_lite(title)}? Say enjoyed, it was okay, not enjoyed, or skip."
+        return f"Did you enjoy {Speech.escape_ssml_lite(title)}? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
 
     @staticmethod
     def resuming_speech(subject: dict | None, store: dict, *, skipped: bool = False) -> str:

@@ -459,16 +459,23 @@ class ApplicationContainer:
             self.feedback,
             self.events,
             play_followed_creators,
+            self.notifications,
         )
 
     def build_request_enjoyed_feedback(self, handler_input):
         return EnjoyedFeedback(
-            self.feedback, self.build_playback_controls(handler_input), self.user
+            self.feedback,
+            self.build_playback_controls(handler_input),
+            self.user,
+            self.notifications,
         )
 
     def build_request_somewhat_feedback(self, handler_input):
         return SomewhatFeedback(
-            self.feedback, self.build_playback_controls(handler_input), self.user
+            self.feedback,
+            self.build_playback_controls(handler_input),
+            self.user,
+            self.notifications,
         )
 
     def build_request_not_enjoyed_feedback(self, handler_input):
@@ -477,7 +484,10 @@ class ApplicationContainer:
 
     def build_request_skip_feedback(self, handler_input):
         return SkipFeedback(
-            self.feedback, self.build_playback_controls(handler_input), self.user
+            self.feedback,
+            self.build_playback_controls(handler_input),
+            self.user,
+            self.notifications,
         )
 
     def build_onboarding_gate(self, handler_input):

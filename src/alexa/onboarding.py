@@ -77,12 +77,16 @@ class TownCapture:
         attrs = RequestContext.request(handler_input)
         nlp = attrs.get("_nlp", {}) if attrs else {}
         nlp_slots = nlp.get("slots", {}) if nlp else {}
-        town = nlp_slots.get("townName") or nlp_slots.get("placeName")
+        town = (
+            nlp_slots.get("location")
+            or nlp_slots.get("townName")
+            or nlp_slots.get("placeName")
+        )
         if not town:
             town = (
-                AlexaRequest.get_slot_value(handler_input, "townName")
+                AlexaRequest.get_slot_value(handler_input, "location")
+                or AlexaRequest.get_slot_value(handler_input, "townName")
                 or AlexaRequest.get_slot_value(handler_input, "city")
-                or AlexaRequest.get_slot_value(handler_input, "location")
             )
         if town:
             return await self._stage_town_confirmation(handler_input, store, town)
@@ -101,7 +105,8 @@ class SetLocation:
     async def execute(self, handler_input: HandlerInput):
         attrs = RequestContext.request(handler_input)
         nlp = attrs.get("_nlp", {}) if attrs else {}
-        town = (nlp.get("slots", {}) or {}).get("townName")
+        nlp_slots = nlp.get("slots", {}) or {}
+        town = nlp_slots.get("location") or nlp_slots.get("townName")
         if town:
             return await self._stage_town_confirmation(
                 handler_input,
@@ -135,8 +140,9 @@ class Onboarding(OnboardingService):
         )
         intent_name = AlexaRequest.get_intent_name(handler_input)
         slot_name = {
-            "TownCaptureIntent": "townName",
+            "TownCaptureIntent": "location",
             "SetLocationIntent": "location",
+            "SearchLocationIntent": "location",
         }.get(intent_name) if intent_name else None
         if slot_name:
             builder = builder.add_directive(
@@ -146,13 +152,13 @@ class Onboarding(OnboardingService):
             builder = builder.add_directive(
                 {
                     "type": "Dialog.ElicitSlot",
-                    "slotToElicit": "townName",
+                    "slotToElicit": "location",
                     "updatedIntent": {
                         "name": "TownCaptureIntent",
                         "confirmationStatus": "NONE",
                         "slots": {
-                            "townName": {
-                                "name": "townName",
+                            "location": {
+                                "name": "location",
                                 "confirmationStatus": "NONE",
                             }
                         },

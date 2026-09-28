@@ -815,3 +815,20 @@ def test_content_intent_preserves_raw_slot_for_internal_state(mock_handler_input
         )
         == "tnf"
     )
+
+
+def test_request_candidate_accepts_number_one_for_city_ambiguity(mock_handler_input):
+    candidates = [
+        {"name": "Swindon Talking News", "id": "swindon-1"},
+        {"name": "Swindon Audio News", "id": "swindon-2"},
+    ]
+    pending = {"candidates": candidates}
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {
+            "name": "ClarifySelectionIntent",
+            "slots": {"selection": {"value": "number 1"}},
+        },
+    }
+
+    assert DialogSelection.request_candidate(mock_handler_input, pending) == candidates[0]

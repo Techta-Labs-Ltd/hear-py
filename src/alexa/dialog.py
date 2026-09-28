@@ -187,6 +187,11 @@ class DialogSelection:
             value = AlexaRequest.get_resolved_slot_value(slot)
             if not value:
                 continue
+            ordinal = DiscoveryConstants.ORDINAL_INDEX.get(
+                DialogSelection._selection_text(value)
+            )
+            if ordinal is not None and ordinal < len(candidates):
+                return candidates[ordinal]
             candidate = DialogSelection.closest_candidate(value, candidates)
             if candidate:
                 return candidate

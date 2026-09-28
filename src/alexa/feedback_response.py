@@ -18,6 +18,12 @@ from src.models.user import User
 from src.utils.content import ContentUtils
 
 
+async def _offer_notification_followup(notifications, handler_input):
+    if notifications is None:
+        return None
+    return await notifications.offer(handler_input, followup=True)
+
+
 class RatingRequest:
     def __init__(
         self,
@@ -127,12 +133,17 @@ class FeedbackContinuation:
         )
 
     @staticmethod
-    def decline(handler_input, user: User):
+    async def decline(handler_input, user: User, notifications=None):
         user.update(
             handler_input,
             {"awaitingFeedbackContinuation": False, "feedbackContinuation": None},
         )
         DialogStateManager.clear(handler_input, "feedback_continuation")
+        notification_response = await _offer_notification_followup(
+            notifications, handler_input
+        )
+        if notification_response is not None:
+            return notification_response
         return AlexaResponse.present_idle_next(handler_input, "Ok.")
 
 
@@ -142,10 +153,12 @@ class EnjoyedFeedback:
         feedback: FeedbackService,
         playback_controls: PlaybackControls,
         user: User,
+        notifications=None,
     ) -> None:
         self._feedback = feedback
         self._playback_controls = playback_controls
         self._user = user
+        self._notifications = notifications
 
     async def execute(self, request: RequestContext):
         handler_input = request.handler_input
@@ -232,6 +245,11 @@ class EnjoyedFeedback:
             if title or creator_name
             else Speech.FEEDBACK_FOLLOW_DECLINED
         )
+        notification_response = await _offer_notification_followup(
+            self._notifications, handler_input
+        )
+        if notification_response is not None:
+            return notification_response
         return AlexaResponse.present_idle_next(handler_input, already_msg)
 
 
@@ -241,10 +259,12 @@ class SomewhatFeedback:
         feedback: FeedbackService,
         playback_controls: PlaybackControls,
         user: User,
+        notifications=None,
     ) -> None:
         self._feedback = feedback
         self._playback_controls = playback_controls
         self._user = user
+        self._notifications = notifications
 
     async def execute(self, request: RequestContext):
         handler_input = request.handler_input
@@ -290,6 +310,11 @@ class SomewhatFeedback:
         )
         if continuation:
             return continuation
+        notification_response = await _offer_notification_followup(
+            self._notifications, handler_input
+        )
+        if notification_response is not None:
+            return notification_response
         return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SOMEWHAT)
 
 
@@ -354,10 +379,12 @@ class SkipFeedback:
         feedback: FeedbackService,
         playback_controls: PlaybackControls,
         user: User,
+        notifications=None,
     ) -> None:
         self._feedback = feedback
         self._playback_controls = playback_controls
         self._user = user
+        self._notifications = notifications
 
     async def execute(self, request: RequestContext):
         handler_input = request.handler_input
@@ -418,6 +445,11 @@ class SkipFeedback:
             )
             if continuation:
                 return continuation
+            notification_response = await _offer_notification_followup(
+                self._notifications, handler_input
+            )
+            if notification_response is not None:
+                return notification_response
             return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SKIP_INTRO)
         if not store.get("awaitingFeedback"):
             return (
@@ -455,6 +487,11 @@ class SkipFeedback:
         )
         if continuation:
             return continuation
+        notification_response = await _offer_notification_followup(
+            self._notifications, handler_input
+        )
+        if notification_response is not None:
+            return notification_response
         return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_SKIP_INTRO)
 
 

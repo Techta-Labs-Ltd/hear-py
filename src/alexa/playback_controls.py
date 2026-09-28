@@ -92,6 +92,15 @@ class PlaybackControls:
             speech=PlaybackSpeech.speed_set(speed),
         )
 
+    async def invalid_speed(self, handler_input: HandlerInput):
+        state = self._playback.state.current(handler_input)
+        if state and state.get("status") in {"starting", "playing"}:
+            return await self.restart_active(
+                handler_input,
+                speech=PlaybackSpeech.SPEED_INVALID,
+            )
+        return Playback.open_queue_response(handler_input, PlaybackSpeech.SPEED_INVALID)
+
     async def step_speed(self, handler_input: HandlerInput, direction: str):
         store = self._user.snapshot(handler_input)
         state = self._playback.state.current(handler_input)
