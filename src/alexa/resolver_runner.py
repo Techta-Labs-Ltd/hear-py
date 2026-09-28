@@ -240,8 +240,7 @@ class ResolverWorkflowRunner:
             }
             and not context["ambiguity_active"]
         ):
-            slot_name = "searchQuery" if alexa_intent == "SearchLocationIntent" else "location"
-            town = AlexaRequest.get_resolved_slot_value(context["slots"].get(slot_name))
+            town = AlexaRequest.get_resolved_slot_value(context["slots"].get("location"))
             ResolverWorkflowRunner._set_nlp(
                 handler_input,
                 {
@@ -251,7 +250,7 @@ class ResolverWorkflowRunner:
                     "nlpMatchesAlexa": True,
                     "needsRedirect": False,
                     "confidence": "high",
-                    "slots": {"townName": town} if town else {},
+                    "slots": {"location": town} if town else {},
                     "localResolved": bool(town),
                 },
             )
@@ -272,7 +271,10 @@ class ResolverWorkflowRunner:
                 },
             )
             return True
-        town = AlexaRequest.get_resolved_slot_value(context["slots"].get("townName"))
+        town = (
+            AlexaRequest.get_resolved_slot_value(context["slots"].get("location"))
+            or AlexaRequest.get_resolved_slot_value(context["slots"].get("townName"))
+        )
         ResolverWorkflowRunner._set_nlp(
             handler_input,
             {
@@ -282,7 +284,7 @@ class ResolverWorkflowRunner:
                 "nlpMatchesAlexa": True,
                 "needsRedirect": False,
                 "confidence": "high",
-                "slots": {"townName": town, "placeName": town} if town else {},
+                "slots": {"location": town} if town else {},
             },
         )
         return True
@@ -525,7 +527,7 @@ class ResolverWorkflowRunner:
                     "nlpMatchesAlexa": False,
                     "needsRedirect": True,
                     "confidence": "high",
-                    "slots": {"townName": raw, "placeName": raw},
+                    "slots": {"location": raw},
                 },
             )
             return True

@@ -312,7 +312,7 @@ class TestIsNewUser:
         assert "Comprehensive coverage" not in speech
         assert "Independent Creator" not in speech
 
-    def test_resume_prompt_uses_title_without_discovery_context_or_summary(self):
+    def test_resume_prompt_does_not_use_track_title_without_source_context(self):
         hi = _build_handler_input(
             store_override={
                 "activePlayback": {
@@ -331,10 +331,34 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        assert "You were listening to Community news roundup." in speech
+        assert "You were listening to a recording." in speech
+        assert "Community news roundup" not in speech
         assert "A detailed description" not in speech
 
-    def test_resume_prompt_uses_title_when_trending_result_has_no_description(self):
+    def test_resume_prompt_prefers_organization_for_location_playback(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "Track__001",
+                    "organizationName": "Sound On",
+                    "discoverySource": "search",
+                    "discoveryContext": {"kind": "location", "name": "Ipswich"},
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to Sound On." in speech
+        assert "Track__001" not in speech
+
+    def test_resume_prompt_keeps_trending_context_instead_of_track_title(self):
         hi = _build_handler_input(
             store_override={
                 "activePlayback": {
@@ -352,9 +376,9 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        assert "You were listening to Community news roundup." in speech
+        assert "You were listening to what's trending." in speech
+        assert "Community news roundup" not in speech
         assert "Would you like to continue?" in speech
-        assert "from what" not in speech
 
     def test_resume_prompt_always_says_what_the_listener_was_doing(self):
         hi = _build_handler_input(

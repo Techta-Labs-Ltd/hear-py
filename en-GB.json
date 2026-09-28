@@ -244,21 +244,21 @@
           "name": "SearchLocationIntent",
           "slots": [
             {
-              "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "name": "location",
+              "type": "HEAR_LOCATION"
             }
           ],
           "samples": [
-            "set my location to {searchQuery}",
-            "set my town to {searchQuery}",
-            "change my location to {searchQuery}",
-            "update my location to {searchQuery}",
-            "I've moved to {searchQuery}",
-            "I moved to {searchQuery}",
-            "I now live in {searchQuery}",
-            "change my town to {searchQuery}",
-            "change my city to {searchQuery}",
-            "update my town to {searchQuery}"
+            "set my location to {location}",
+            "set my town to {location}",
+            "change my location to {location}",
+            "update my location to {location}",
+            "I've moved to {location}",
+            "I moved to {location}",
+            "I now live in {location}",
+            "change my town to {location}",
+            "change my city to {location}",
+            "update my town to {location}"
           ]
         },
         {
@@ -900,6 +900,7 @@
             "{speed} times normal speed",
             "at {speed} x",
             "{speed} speed",
+            "{speed}",
             "normal speed",
             "regular speed",
             "reset speed",
@@ -1311,20 +1312,20 @@
           "name": "TownCaptureIntent",
           "slots": [
             {
-              "name": "townName",
+              "name": "location",
               "type": "HEAR_LOCATION",
               "samples": [
-                "{townName}"
+                "{location}"
               ]
             }
           ],
           "samples": [
-            "{townName}",
-            "my city is {townName}",
-            "my town is {townName}",
-            "I am in {townName}",
-            "I live in {townName}",
-            "my area is {townName}"
+            "{location}",
+            "my city is {location}",
+            "my town is {location}",
+            "I am in {location}",
+            "I live in {location}",
+            "my area is {location}"
           ]
         },
         {
@@ -1926,12 +1927,12 @@
           "prompts": {},
           "slots": [
             {
-              "name": "townName",
+              "name": "location",
               "type": "HEAR_LOCATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
-                "elicitation": "Elicit.TownCaptureIntent.townName"
+                "elicitation": "Elicit.TownCaptureIntent.location"
               }
             }
           ]
@@ -2049,7 +2050,7 @@
         ]
       },
       {
-        "id": "Elicit.TownCaptureIntent.townName",
+        "id": "Elicit.TownCaptureIntent.location",
         "variations": [
           {
             "type": "PlainText",

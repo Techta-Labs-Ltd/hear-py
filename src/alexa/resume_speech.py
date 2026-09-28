@@ -83,17 +83,9 @@ class ResumeSpeech:
         context_kind = str(context.get("kind") or "").strip().casefold()
 
         if source in cls.TRENDING_SOURCES or context_kind == "trending":
-            title = cls._safe_label(active.get("spokenTitle") or active.get("title"))
-            return cls._question(
-                f"You were listening to {title}" if title else "You were listening to what's trending"
-            )
+            return cls._question("You were listening to what's trending")
         if source in cls.RECOMMENDATION_SOURCES or context_kind == "recommendation":
-            title = cls._safe_label(active.get("spokenTitle") or active.get("title"))
-            return cls._question(
-                f"You were listening to {title}"
-                if title
-                else "You were listening to your recommendations"
-            )
+            return cls._question("You were listening to your recommendations")
 
         is_publication = bool(
             source in cls.PUBLICATION_SOURCES
@@ -135,12 +127,18 @@ class ResumeSpeech:
         if topic_statement:
             return cls._question(topic_statement)
 
-        description = cls._safe_label(
-            active.get("spokenTitle") or active.get("title")
+        organization = cls._safe_label(active.get("organizationName"), credit=True)
+        if organization:
+            return cls._question(f"You were listening to {organization}")
+        creator = cls._safe_label(active.get("creatorName"), credit=True)
+        if creator:
+            return cls._question(f"You were listening to {creator}")
+        publication = cls._safe_label(
+            active.get("publicationTitle") or active.get("subjectTitle")
         )
-        return cls._question(
-            f"You were listening to {description}" if description else None
-        )
+        if publication:
+            return cls._question(f"You were listening to {publication}")
+        return cls._question("You were listening to a recording")
 
     @classmethod
     def reprompt(cls, subject: dict | None, store: dict | None = None) -> str:

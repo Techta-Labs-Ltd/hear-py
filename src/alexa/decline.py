@@ -4,6 +4,7 @@ from ask_sdk_core.handler_input import HandlerInput
 
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogStateManager
+from src.alexa.feedback import AlexaFeedback
 from src.alexa.feedback_response import FeedbackContinuation
 from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback import AlexaPlayback
@@ -114,11 +115,13 @@ class Decline:
         ):
             return await self._skip_feedback.execute(RequestContext.bind(handler_input))
         if dialog_type == "feedback_continuation":
-            return FeedbackContinuation.decline(handler_input, self._user)
+            return await FeedbackContinuation.decline(
+                handler_input, self._user, self._notifications
+            )
         if dialog_type == "feedback" or not dialog_type and store.get("awaitingFeedback"):
             return await self._not_enjoyed_feedback.execute(RequestContext.bind(handler_input))
         if dialog_type == "resume" or not dialog_type and store.get("awaitingResume"):
-            return self._handle_resume_no(handler_input, store)
+            return await self._handle_resume_no(handler_input, store)
         return None
 
     async def _state_response(self, handler_input, store: dict):
@@ -145,7 +148,9 @@ class Decline:
         if store.get("awaitingNotificationChoice"):
             return await self._notifications.decline(handler_input)
         if store.get("awaitingFeedbackContinuation"):
-            return FeedbackContinuation.decline(handler_input, self._user)
+            return await FeedbackContinuation.decline(
+                handler_input, self._user, self._notifications
+            )
         if store.get("awaitingContinueAfterFlag"):
             self._user.update(handler_input, {"awaitingContinueAfterFlag": False})
             return await self._playback_controls.play_queue_delta(
@@ -155,6 +160,11 @@ class Decline:
             return await self._not_enjoyed_feedback.execute(RequestContext.bind(handler_input))
         if store.get("awaitingFollow"):
             await self._feedback.clear(handler_input)
+            notification_response = await self._notifications.offer(
+                handler_input, followup=True
+            )
+            if notification_response is not None:
+                return notification_response
             return AlexaResponse.present_idle_next(handler_input, Speech.FEEDBACK_FOLLOW_DECLINED)
         if store.get("awaitingReportDecision"):
             return await self._skip_feedback.execute(RequestContext.bind(handler_input))
@@ -287,7 +297,7 @@ class Decline:
             Speech.WELCOME_REPROMPT,
         )
 
-    def _handle_resume_no(self, handler_input, store):
+    async def _handle_resume_no(self, handler_input, store):
         state = self._playback.state.current(handler_input)
         if state:
             state = self._playback.state.merge(handler_input, {"status": "abandoned"})
@@ -296,6 +306,14 @@ class Decline:
                 FeedbackService.activate_best(handler_input)
         self._user.update(handler_input, {"awaitingResume": False})
         DialogStateManager.clear(handler_input, "resume")
+        updated_store = self._user.snapshot(handler_input)
+        if updated_store.get("awaitingFeedback"):
+            return AlexaFeedback.present_pending_feedback(handler_input, updated_store)
+        notification_response = await self._notifications.offer(
+            handler_input, followup=True
+        )
+        if notification_response is not None:
+            return notification_response
         return AlexaResponse.present_idle_next(
             handler_input,
             Speech.RESUME_DECLINED_NEXT_OPTIONS,

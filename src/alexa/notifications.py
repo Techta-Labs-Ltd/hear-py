@@ -51,8 +51,19 @@ class AlexaNotificationAdapter:
         self._events = events
         self._notification_api_enabled = notification_api_enabled
 
-    async def offer(self, handler_input, *, explicit: bool = False):
+    async def offer(
+        self, handler_input, *, explicit: bool = False, followup: bool = False
+    ):
         store = self._user.snapshot(handler_input)
+        if not explicit and (
+            store.get("awaitingResume")
+            or store.get("awaitingFeedback")
+            or store.get("awaitingFeedbackContinuation")
+            or store.get("awaitingReportDecision")
+            or store.get("awaitingContinueAfterFlag")
+            or self._playback.state.has_unfinished(store)
+        ):
+            return None
         listener_id = str(store.get("listenerId") or "").strip()
         result = await self._workflow.offer(
             NotificationOfferCommand(
@@ -60,6 +71,7 @@ class AlexaNotificationAdapter:
                 request_type=AlexaRequest.get_request_type(handler_input),
                 listener_id=listener_id,
                 api_enabled=self._notification_api_enabled,
+                followup=followup,
             )
         )
         if result.kind == "none":

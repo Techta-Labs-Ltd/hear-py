@@ -53,12 +53,12 @@ class PlaybackControlPolicy:
         *,
         default_speed: float,
     ) -> PlaybackSpeedDecision:
+        if not state or state.get("status") not in PlaybackConstants.ACTIVE_PLAYBACK_STATUSES:
+            return PlaybackSpeedDecision("idle", speed=speed)
         variants = cls._variants(state, store)
         available = cls._available_speeds(variants)
         if speed != default_speed and variants and not PlaybackUtils.find_speed_url(variants, speed):
             return PlaybackSpeedDecision("unavailable", speed=speed, available_speeds=available)
-        if not state or state.get("status") not in PlaybackConstants.ACTIVE_PLAYBACK_STATUSES:
-            return PlaybackSpeedDecision("idle", speed=speed)
         return PlaybackSpeedDecision(
             "restart", speed=speed, offset_ms=int(state.get("offsetMs") or 0)
         )
@@ -72,7 +72,14 @@ class PlaybackControlPolicy:
         *,
         default_speed: float,
     ) -> PlaybackSpeedDecision:
-        variants = cls._variants(state, store)
+        active = bool(
+            state and state.get("status") in PlaybackConstants.ACTIVE_PLAYBACK_STATUSES
+        )
+        variants = (
+            cls._variants(state, store)
+            if active
+            else [{"speed": speed} for speed in settings.speeds]
+        )
         if not variants:
             return PlaybackSpeedDecision("unsupported")
         value = PlaybackUtils.get_next_speed(

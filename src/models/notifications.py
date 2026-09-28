@@ -17,6 +17,7 @@ class NotificationOfferCommand:
     request_type: str
     listener_id: str
     api_enabled: bool
+    followup: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +81,7 @@ class Notification:
             request_type=command.request_type,
             listener_id=command.listener_id,
             api_enabled=command.api_enabled,
+            followup=command.followup,
         )
         if initial.kind == "none":
             return NotificationOfferResult("none")
@@ -108,6 +110,7 @@ class Notification:
             listener_id=command.listener_id,
             api_enabled=True,
             has_items=bool(items),
+            followup=command.followup,
         )
         if decision.kind == "empty":
             return NotificationOfferResult("empty")

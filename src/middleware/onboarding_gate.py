@@ -181,7 +181,10 @@ class OnboardingGateHandler(AbstractRequestHandler):
             nlp = attrs.get("_nlp") or {}
             slots = nlp.get("slots") or {}
             attempted_city = (
-                slots.get("townName") or slots.get("placeName") or slots.get("residualQuery")
+                slots.get("location")
+                or slots.get("townName")
+                or slots.get("placeName")
+                or slots.get("residualQuery")
             )
             ApplicationLog.info(
                 "Hear: city reply was not captured intent=%s attempted=%s; asking again",

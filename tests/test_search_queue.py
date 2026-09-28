@@ -211,7 +211,7 @@ async def test_voice_next_loads_next_page_at_loaded_boundary(monkeypatch, mock_h
     [
         (
             {"contentId": "content-1"},
-            "You've reached the end of these recordings.",
+            "You've reached the end of this selection.",
         ),
         (
             {
@@ -219,7 +219,7 @@ async def test_voice_next_loads_next_page_at_loaded_boundary(monkeypatch, mock_h
                 "publicationId": "publication-1",
                 "publicationTitle": "The Gazette",
             },
-            "You've reached the end of this publication.",
+            "You've reached the end of this episode.",
         ),
     ],
 )
@@ -303,7 +303,7 @@ async def test_still_listening_confirmation_uses_publication_end_message(
     )
 
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "You've reached the end of this publication." in spoken
+    assert "You've reached the end of this episode." in spoken
     assert PlaybackQueue.read(user.snapshot(mock_handler_input)) is None
 
 

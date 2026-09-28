@@ -18,8 +18,9 @@ class NotificationPolicy:
         listener_id: str,
         api_enabled: bool,
         has_items: bool | None = None,
+        followup: bool = False,
     ) -> NotificationOfferDecision:
-        if not explicit and request_type != "LaunchRequest":
+        if not explicit and request_type != "LaunchRequest" and not followup:
             return NotificationOfferDecision("none")
         if not listener_id or not api_enabled:
             return NotificationOfferDecision("unavailable" if explicit else "none")

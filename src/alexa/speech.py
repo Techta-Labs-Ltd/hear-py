@@ -105,10 +105,10 @@ class Speech:
     FEEDBACK_NOT_ENJOYED = "Sorry to hear that. If you feel the content was inappropriate, say report this content and we'll flag it for review. Otherwise say skip to carry on."
     FEEDBACK_SKIP_INTRO = "Ok. What would you like to listen to next?"
     FEEDBACK_AWAITING_REPROMPT = (
-        "Did you enjoy that track? Say enjoyed, it was okay, not enjoyed, or skip."
+        "Did you enjoy that content? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
     )
     RATE_CONTENT_PROMPT = (
-        "Did you enjoy this? Say enjoyed, it was okay, not enjoyed, or skip."
+        "Did you enjoy this? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
     )
     RATE_CONTENT_NOTHING = "There isn't any content to rate right now."
     RATE_CONTENT_SAVED_RESUMING = "Thanks for the feedback. Resuming."
@@ -200,23 +200,19 @@ class Speech:
             if user_name
             else "Welcome back to Hear. Before we continue"
         )
-        return f"{greeting} — did you enjoy {title} by {creator}? You can say enjoyed, it was okay, or not enjoyed. Say skip if you'd rather not rate it."
+        return f"{greeting} — did you enjoy content from {creator}? You can say I enjoyed it, it was okay, or I did not enjoy it. Say skip if you'd rather not rate it."
 
     @staticmethod
     def _build_enjoyed_following(title, creator_name) -> str:
-        safe_title = (
-            Speech.escape_ssml_lite(title)
-            if title and (not Speech.is_bad_credit(title))
-            else "that"
-        )
+        del title
         safe_creator = (
             Speech.escape_ssml_lite(creator_name)
             if creator_name and (not Speech.is_bad_credit(creator_name))
             else None
         )
         if safe_creator:
-            return f"Thanks for your feedback on {safe_title} by {safe_creator}. What would you like to listen to next?"
-        return f"Thanks for your feedback on {safe_title}. What would you like to listen to next?"
+            return f"Thanks for your feedback on {safe_creator}. What would you like to listen to next?"
+        return "Thanks for your feedback. What would you like to listen to next?"
 
     @staticmethod
     def _build_community_intro(locality, total_hits) -> str:
