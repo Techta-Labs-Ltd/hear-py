@@ -746,3 +746,13 @@ def test_speed_selection_accepts_bare_ordinal_reply():
         for item in _model()["interactionModel"]["languageModel"]["intents"]
     }
     assert "{speed}" in intents["SetPlaybackSpeedIntent"]["samples"]
+
+
+def test_local_city_search_includes_find_content_in_carriers():
+    intents = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    samples = set(intents["PlayLocalIntent"]["samples"])
+    assert "find content in {cityQuery}" in samples
+    assert "find me content in {cityQuery}" in samples

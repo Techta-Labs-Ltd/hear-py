@@ -466,3 +466,31 @@ async def test_global_interceptor_logs_route_metadata_without_slot_text(
     assert "routeRule=trending" in caplog.text
     assert "slot=searchQuery" in caplog.text
     assert "what is trending in sport" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_active_ambiguity_ordinal_beats_bare_speed_route(mock_intent_request):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    candidates = [
+        {"id": "swindon-1", "name": "Swindon, Wiltshire", "type": "location"},
+        {"id": "swindon-2", "name": "Swindon, Gloucestershire", "type": "location"},
+    ]
+    pending = {
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates,
+    }
+    DialogStateManager.activate(mock_intent_request, "ambiguity", context=pending)
+
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SetPlaybackSpeedIntent"
+    intent["slots"] = {"speed": {"name": "speed", "value": "first"}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "ClarifySelectionIntent"
+    assert intent["slots"] == {
+        "selection": {"name": "selection", "value": "first"}
+    }
