@@ -523,7 +523,10 @@ class ResolverWorkflowRunner:
         if not raw:
             return False
         alexa_intent = context["alexa_intent"]
-        if store.get("onboardingStage") == "ask_town":
+        if (
+            store.get("onboardingStage") == "ask_town"
+            and ResolverWorkflowRunner._location_capture_active(context)
+        ):
             ResolverWorkflowRunner._set_nlp(
                 handler_input,
                 {
