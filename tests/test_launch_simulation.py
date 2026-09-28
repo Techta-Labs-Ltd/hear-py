@@ -453,7 +453,10 @@ class TestIsNewUser:
 
 class TestSpeechStrings:
     def test_onboarding_ask_permission(self):
-        assert "address saved in your Alexa account" in Speech.ONBOARDING_ASK_PERMISSION
+        speech = Speech.ONBOARDING_ASK_PERMISSION
+        assert speech.startswith("Welcome to Hear Service.")
+        assert "address saved in your Alexa account" in speech
+        assert "my city is" not in speech.casefold()
 
     def test_welcome_return_named_is_lambda(self):
         result = Speech.WELCOME_RETURN_NAMED("John", "London")
