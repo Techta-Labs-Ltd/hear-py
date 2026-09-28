@@ -552,18 +552,12 @@ class ApplicationContainer:
         return SetLocation(self.user, self.onboarding, self.stage_town_confirmation)
 
     def build_request_launch_workflow(self, handler_input):
-        def start_town_capture(handler_input, store, user_name):
-            return Onboarding.start_town_capture(
-                handler_input, store, user_name, self.onboarding
-            )
-
         return LaunchWorkflow(
             user=self.user,
             notifications=self.build_request_notifications(handler_input),
             playback=self.playback,
             listener_profile=self.listener_profile,
             listener_sync=self.listener_sync,
-            start_town_capture=start_town_capture,
         )
 
     def build_request_affirmative(self, handler_input):
