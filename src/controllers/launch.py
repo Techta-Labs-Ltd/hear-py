@@ -63,7 +63,10 @@ class TownCaptureHandler(AbstractRequestHandler):
         if store.get("onboardingStage") != OnboardingConstants.ONBOARDING_ASK_TOWN:
             return False
         active_dialog = DialogStateManager.get_active(handler_input)
-        if active_dialog and active_dialog.get("type") != "onboarding":
+        if not active_dialog or active_dialog.get("type") != "onboarding":
+            return False
+        dialog_context = active_dialog.get("context") or {}
+        if dialog_context.get("stage") != OnboardingConstants.ONBOARDING_ASK_TOWN:
             return False
         nlp = (RequestContext.request(handler_input) or {}).get("_nlp", {})
         nlp_intent = nlp.get("intent")
