@@ -242,6 +242,7 @@ jobs:
                       "sessionId": f"amzn1.echo-api.session.lambda-smoke-{os.environ['GITHUB_RUN_ID']}-{suffix}",
                       "application": {"applicationId": os.environ["ALEXA_SKILL_ID"]},
                       "user": {"userId": user_id},
+                      "attributes": {"onboardingComplete": True},
                   },
                   "context": {
                       "System": {
@@ -300,6 +301,8 @@ jobs:
 
             jq -e '.version == "1.0" and (.response | type == "object")' "$response_file"
             speech=$(jq -r '.response.outputSpeech.ssml // .response.outputSpeech.text // ""' "$response_file")
+            echo "$label response=$(jq -c '{version,response}' "$response_file")"
+            echo "$label speech=$speech"
             grep -F "Playback speed set to 1.25x." <<<"$speech"
             if grep -Fq "does not have faster or slower versions" <<<"$speech"; then
               echo "$label Lambda returned the old idle-speed error" >&2
