@@ -7,7 +7,6 @@ from config import settings
 from src.alexa.dialog import DialogStateManager
 from src.alexa.playback_controls import PlaybackControls
 from src.alexa.playback_speech import PlaybackSpeech
-from src.alexa.playback_workflow import Playback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.constants.playback import PlaybackConstants
