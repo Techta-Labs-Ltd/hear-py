@@ -6,6 +6,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class AlexaDateRange:
+    _SPOKEN_RELATIVE = re.compile(
+        r"\b(?P<period>today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month|this\s+year|last\s+year)\b",
+        re.IGNORECASE,
+    )
+
     @staticmethod
     def _label(start: datetime, end: datetime) -> str:
         last = end - timedelta(days=1)
@@ -25,6 +30,68 @@ class AlexaDateRange:
             "publishedTo": int(end.timestamp()),
             "temporalOriginal": label or AlexaDateRange._label(start, end),
         }
+
+    @staticmethod
+    def _month_start(value: datetime) -> datetime:
+        return value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    @staticmethod
+    def _next_month_start(value: datetime) -> datetime:
+        return (
+            value.replace(year=value.year + 1, month=1, day=1)
+            if value.month == 12
+            else value.replace(month=value.month + 1, day=1)
+        )
+
+    @classmethod
+    def extract_spoken(
+        cls,
+        value: object,
+        timezone_name: str,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[dict, str]:
+        text = " ".join(str(value or "").split())
+        match = cls._SPOKEN_RELATIVE.search(text)
+        if not text or not match:
+            return {}, text
+        try:
+            zone = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            return {}, text
+        current = now.astimezone(zone) if isinstance(now, datetime) else datetime.now(zone)
+        day = current.replace(hour=0, minute=0, second=0, microsecond=0)
+        period = " ".join(match.group("period").casefold().split())
+
+        if period == "today":
+            start, end = day, day + timedelta(days=1)
+        elif period == "yesterday":
+            start, end = day - timedelta(days=1), day
+        elif period in {"this week", "last week"}:
+            this_week = day - timedelta(days=day.weekday())
+            if period == "this week":
+                start, end = this_week, this_week + timedelta(days=7)
+            else:
+                start, end = this_week - timedelta(days=7), this_week
+        elif period in {"this month", "last month"}:
+            this_month = cls._month_start(day)
+            if period == "this month":
+                start, end = this_month, cls._next_month_start(this_month)
+            else:
+                end = this_month
+                start = cls._month_start(this_month - timedelta(days=1))
+        else:
+            this_year = day.replace(month=1, day=1)
+            if period == "this year":
+                start, end = this_year, this_year.replace(year=this_year.year + 1)
+            else:
+                end = this_year
+                start = this_year.replace(year=this_year.year - 1)
+
+        remainder = " ".join(
+            f"{text[:match.start()]} {text[match.end():]}".split()
+        )
+        return cls._result(start, end, period), remainder
 
     @staticmethod
     def _bounds(value: str, zone: ZoneInfo) -> tuple[datetime, datetime] | None:
