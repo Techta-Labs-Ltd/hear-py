@@ -151,6 +151,184 @@ jobs:
             --cli-binary-format raw-in-base64-out --payload '{"diagnostic":"resolver"}' \
             "$RUNNER_TEMP/resolver-health.json"
           jq -e '.ok == true and .canonicalValue == "Herne Bay"' "$RUNNER_TEMP/resolver-health.json"
+      - name: Verify deployed Lambda directly
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          set -euo pipefail
+          FUNCTION_ARN=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='SkillFunctionArn'].OutputValue | [0]" \
+            --output text)
+          FUNCTION_NAME=${FUNCTION_ARN##*:function:}
+          TABLE_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='PersistenceTableName'].OutputValue | [0]" \
+            --output text)
+
+          STATE=$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+            --query State --output text)
+          UPDATE_STATUS=$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+            --query LastUpdateStatus --output text)
+          [[ "$STATE" == "Active" ]]
+          [[ "$UPDATE_STATUS" == "Successful" ]]
+
+          LIVE_VERSION=$(aws lambda get-alias \
+            --function-name "$FUNCTION_NAME" --name live --region "$AWS_REGION" \
+            --query FunctionVersion --output text)
+          QUALIFIED_VERSION=$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" --qualifier live --region "$AWS_REGION" \
+            --query Version --output text)
+          [[ "$LIVE_VERSION" != '$LATEST' ]]
+          [[ "$LIVE_VERSION" == "$QUALIFIED_VERSION" ]]
+
+          LATEST_IMAGE=$(aws lambda get-function \
+            --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+            --query Code.ResolvedImageUri --output text)
+          LIVE_IMAGE=$(aws lambda get-function \
+            --function-name "$FUNCTION_NAME" --qualifier live --region "$AWS_REGION" \
+            --query Code.ResolvedImageUri --output text)
+          EXPECTED_DIGEST=$(aws ecr describe-images \
+            --repository-name "$ECR_REPO" \
+            --image-ids imageTag=development-${{ github.sha }} \
+            --region "$AWS_REGION" \
+            --query 'imageDetails[0].imageDigest' --output text)
+
+          [[ "$LATEST_IMAGE" == *"@$EXPECTED_DIGEST" ]]
+          [[ "$LIVE_IMAGE" == *"@$EXPECTED_DIGEST" ]]
+
+          TEST_USER_LATEST="amzn1.ask.account.LAMBDA_SMOKE_LATEST_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          TEST_USER_LIVE="amzn1.ask.account.LAMBDA_SMOKE_LIVE_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          export TEST_USER_LATEST TEST_USER_LIVE ALEXA_SKILL_ID GITHUB_RUN_ID
+
+          cleanup_lambda_smoke_user() {
+            local user_id="$1"
+            local values
+            local items
+            values=$(jq -nc --arg id "$user_id" '{":id":{S:$id}}')
+            items=$(aws dynamodb query \
+              --table-name "$TABLE_NAME" --region "$AWS_REGION" \
+              --key-condition-expression '#id = :id' \
+              --expression-attribute-names '{"#id":"id","#scope":"scope"}' \
+              --expression-attribute-values "$values" \
+              --projection-expression '#id,#scope' \
+              --output json 2>/dev/null || true)
+            if [[ -n "$items" ]]; then
+              echo "$items" | jq -c '.Items[]? | {id:.id,scope:.scope}' | while read -r key; do
+                aws dynamodb delete-item \
+                  --table-name "$TABLE_NAME" --region "$AWS_REGION" \
+                  --key "$key" >/dev/null || true
+              done
+            fi
+          }
+          cleanup_lambda_smoke_state() {
+            cleanup_lambda_smoke_user "$TEST_USER_LATEST"
+            cleanup_lambda_smoke_user "$TEST_USER_LIVE"
+          }
+          trap cleanup_lambda_smoke_state EXIT
+
+          python - <<'PY_PAYLOAD'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          def payload(user_id: str, suffix: str) -> dict:
+              return {
+                  "version": "1.0",
+                  "session": {
+                      "new": True,
+                      "sessionId": f"amzn1.echo-api.session.lambda-smoke-{os.environ['GITHUB_RUN_ID']}-{suffix}",
+                      "application": {"applicationId": os.environ["ALEXA_SKILL_ID"]},
+                      "user": {"userId": user_id},
+                  },
+                  "context": {
+                      "System": {
+                          "application": {"applicationId": os.environ["ALEXA_SKILL_ID"]},
+                          "user": {
+                              "userId": user_id,
+                              "permissions": {"scopes": {}},
+                          },
+                          "device": {
+                              "deviceId": f"amzn1.ask.device.LAMBDA_SMOKE_{suffix}",
+                              "supportedInterfaces": {},
+                          },
+                          "apiEndpoint": "https://api.amazonalexa.com",
+                          "apiAccessToken": "lambda-smoke-token",
+                      },
+                      "AudioPlayer": {"playerActivity": "IDLE"},
+                  },
+                  "request": {
+                      "type": "IntentRequest",
+                      "requestId": f"amzn1.echo-api.request.lambda-smoke-{os.environ['GITHUB_RUN_ID']}-{suffix}",
+                      "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                      "locale": "en-GB",
+                      "intent": {
+                          "name": "IncreaseSpeedIntent",
+                          "confirmationStatus": "NONE",
+                          "slots": {},
+                      },
+                  },
+              }
+
+          Path("/tmp/lambda-speed-latest.json").write_text(
+              json.dumps(payload(os.environ["TEST_USER_LATEST"], "latest"), separators=(",", ":")),
+              encoding="utf-8",
+          )
+          Path("/tmp/lambda-speed-live.json").write_text(
+              json.dumps(payload(os.environ["TEST_USER_LIVE"], "live"), separators=(",", ":")),
+              encoding="utf-8",
+          )
+          PY_PAYLOAD
+
+          invoke_and_assert() {
+            local label="$1"
+            local payload_file="$2"
+            local response_file="$3"
+            shift 3
+            local meta
+            local speech
+            meta=$(aws lambda invoke \
+              --function-name "$FUNCTION_NAME" "$@" --region "$AWS_REGION" \
+              --cli-binary-format raw-in-base64-out \
+              --log-type Tail \
+              --payload "fileb://$payload_file" \
+              "$response_file")
+            echo "$meta" | jq -e 'has("FunctionError") | not'
+            echo "$meta" | jq -r '.LogResult // empty' | base64 -d > "$RUNNER_TEMP/lambda-$label.log"
+
+            jq -e '.version == "1.0" and (.response | type == "object")' "$response_file"
+            speech=$(jq -r '.response.outputSpeech.ssml // .response.outputSpeech.text // ""' "$response_file")
+            grep -F "Playback speed set to 1.25x." <<<"$speech"
+            if grep -Fq "does not have faster or slower versions" <<<"$speech"; then
+              echo "$label Lambda returned the old idle-speed error" >&2
+              exit 1
+            fi
+            echo "$label speech=$speech"
+          }
+
+          invoke_and_assert \
+            "latest" "/tmp/lambda-speed-latest.json" "$RUNNER_TEMP/lambda-latest-response.json"
+          invoke_and_assert \
+            "live" "/tmp/lambda-speed-live.json" "$RUNNER_TEMP/lambda-live-response.json" \
+            --qualifier live
+
+          LIVE_EXECUTED_VERSION=$(aws lambda invoke \
+            --function-name "$FUNCTION_NAME" --qualifier live --region "$AWS_REGION" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{"diagnostic":"resolver"}' \
+            "$RUNNER_TEMP/lambda-live-resolver.json" \
+            --query ExecutedVersion --output text)
+          [[ "$LIVE_EXECUTED_VERSION" == "$LIVE_VERSION" ]]
+          jq -e '.ok == true and .canonicalValue == "Herne Bay"' \
+            "$RUNNER_TEMP/lambda-live-resolver.json"
+
+          echo "Lambda direct verification passed"
+          echo "function=$FUNCTION_NAME state=$STATE update=$UPDATE_STATUS"
+          echo "latest_image=$LATEST_IMAGE"
+          echo "live_alias=live live_version=$LIVE_VERSION live_image=$LIVE_IMAGE"
+          echo "expected_digest=$EXPECTED_DIGEST"
       - name: Mark development Alexa model for upload
         id: alexa_model
         if: steps.cloudformation.outcome == 'success'
