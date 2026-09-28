@@ -332,25 +332,58 @@ jobs:
           echo "latest_image=$LATEST_IMAGE"
           echo "live_alias=live live_version=$LIVE_VERSION live_image=$LIVE_IMAGE"
           echo "expected_digest=$EXPECTED_DIGEST"
+      - name: Resolve stateful verification resources
+        id: verifier_resources
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          set -euo pipefail
+          FUNCTION_ARN=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='SkillFunctionArn'].OutputValue | [0]" \
+            --output text)
+          TABLE_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='PersistenceTableName'].OutputValue | [0]" \
+            --output text)
+          VERIFIER_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='IssueReportVerifierRoleArn'].OutputValue | [0]" \
+            --output text)
+          [[ -n "$FUNCTION_ARN" && "$FUNCTION_ARN" != "None" ]]
+          [[ -n "$TABLE_NAME" && "$TABLE_NAME" != "None" ]]
+          [[ -n "$VERIFIER_ROLE_ARN" && "$VERIFIER_ROLE_ARN" != "None" ]]
+          echo "function_name=${FUNCTION_ARN##*:function:}" >> "$GITHUB_OUTPUT"
+          echo "table_name=$TABLE_NAME" >> "$GITHUB_OUTPUT"
+          echo "role_arn=$VERIFIER_ROLE_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials for stateful Lambda verification
+        if: steps.cloudformation.outcome == 'success'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.verifier_resources.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: HearIssueReportVerifier
+          unset-current-credentials: true
+
       - name: Verify reported Lambda session cases
         id: lambda_report
         continue-on-error: true
         if: steps.cloudformation.outcome == 'success'
         run: |
-          FUNCTION_ARN=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
-            --region "$AWS_REGION" \
-            --query "Stacks[0].Outputs[?OutputKey=='SkillFunctionArn'].OutputValue | [0]" \
-            --output text)
-          FUNCTION_NAME=${FUNCTION_ARN##*:function:}
-          TABLE_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
-            --region "$AWS_REGION" \
-            --query "Stacks[0].Outputs[?OutputKey=='PersistenceTableName'].OutputValue | [0]" \
-            --output text)
           python scripts/verify_issue_report_lambda.py \
-            --function-name "$FUNCTION_NAME" \
-            --table-name "$TABLE_NAME" \
+            --function-name "${{ steps.verifier_resources.outputs.function_name }}" \
+            --table-name "${{ steps.verifier_resources.outputs.table_name }}" \
             --skill-id "$ALEXA_SKILL_ID" \
             --region "$AWS_REGION"
+
+      - name: Restore development deploy credentials
+        if: always() && steps.cloudformation.outcome == 'success'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions
+          unset-current-credentials: true
       - name: Verify reported resolver cases
         id: resolver_report
         continue-on-error: true
