@@ -89,6 +89,7 @@ Conditions:
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
   HasProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
   HasProactiveReservedConcurrency: !Not [!Equals [!Ref ProactiveReservedConcurrency, 0]]
+  IsDevelopment: !Equals [!Ref Stage, development]
 
 Globals:
   Function:
@@ -214,6 +215,43 @@ Resources:
               - dynamodb:TransactWriteItems
             Resource: !GetAtt HearListenerStateTable.Arn
         - SQSSendMessagePolicy: { QueueName: !GetAtt OutboundQueue.QueueName }
+
+  IssueReportVerifierRole:
+    Type: AWS::IAM::Role
+    Condition: IsDevelopment
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                "token.actions.githubusercontent.com:sub": repo:Techta-Labs-Ltd/hear-py:environment:development
+      Policies:
+        - PolicyName: hear-development-issue-report-verifier
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InvokeDevelopmentSkill
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt HearSkillFunction.Arn
+              - Sid: VerifyDevelopmentListenerState
+                Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt HearListenerStateTable.Arn
 
   ProactiveNotificationDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -595,6 +633,10 @@ Outputs:
   SkillFunctionArn:
     Description: Set this as the skill's Default Endpoint in the Alexa console.
     Value: !GetAtt HearSkillFunction.Arn
+  IssueReportVerifierRoleArn:
+    Condition: IsDevelopment
+    Description: Development-only OIDC role used by CI for stateful Lambda regression verification.
+    Value: !GetAtt IssueReportVerifierRole.Arn
   OutboundQueueUrl:
     Description: SQS queue carrying Alexa events to the Hear backend worker.
     Value: !Ref OutboundQueue
