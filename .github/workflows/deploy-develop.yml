@@ -151,17 +151,10 @@ jobs:
             --cli-binary-format raw-in-base64-out --payload '{"diagnostic":"resolver"}' \
             "$RUNNER_TEMP/resolver-health.json"
           jq -e '.ok == true and .canonicalValue == "Herne Bay"' "$RUNNER_TEMP/resolver-health.json"
-      - name: Detect Alexa model changes
+      - name: Mark development Alexa model for upload
         id: alexa_model
         if: steps.cloudformation.outcome == 'success'
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
-             ! git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null || \
-             ! git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- en-GB.json; then
-            echo "upload=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "upload=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "upload=true" >> "$GITHUB_OUTPUT"
       - name: Upload development Alexa model
         if: steps.alexa_model.outputs.upload == 'true'
         env:
@@ -173,6 +166,19 @@ jobs:
           : "${ALEXA_LWA_CLIENT_SECRET:?Set the ALEXA_LWA_CLIENT_SECRET_DEV secret}"
           : "${ALEXA_REFRESH_TOKEN:?Set the ALEXA_REFRESH_TOKEN_DEV secret}"
           python scripts/upload_alexa_model.py \
+            --skill-id "$ALEXA_SKILL_ID" \
+            --invocation-name "test development" \
+            --client-id "$ALEXA_LWA_CLIENT_ID" \
+            --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
+            --refresh-token "$ALEXA_REFRESH_TOKEN"
+      - name: Smoke test development Alexa routing and Lambda
+        if: steps.cloudformation.outcome == 'success'
+        env:
+          ALEXA_LWA_CLIENT_ID: ${{ secrets.ALEXA_LWA_CLIENT_ID_DEV }}
+          ALEXA_LWA_CLIENT_SECRET: ${{ secrets.ALEXA_LWA_CLIENT_SECRET_DEV }}
+          ALEXA_REFRESH_TOKEN: ${{ secrets.ALEXA_REFRESH_TOKEN_DEV }}
+        run: |
+          python scripts/smoke_test_alexa_development.py \
             --skill-id "$ALEXA_SKILL_ID" \
             --invocation-name "test development" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
