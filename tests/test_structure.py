@@ -841,3 +841,16 @@ def test_development_issue_verifier_role_is_least_privilege():
     assert "steps.verifier_resources.outputs.role_arn" in workflow
     assert "unset-current-credentials: true" in workflow
     assert "Restore development deploy credentials" in workflow
+
+
+def test_stateful_issue_verifier_uses_real_alexa_intent_request_envelope():
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "scripts" / "verify_issue_report_lambda.py").read_text(
+        encoding="utf-8"
+    )
+    idle_speed = source.split("def verify_idle_speed", 1)[1].split(
+        "def verify_active_invalid_speed_continues", 1
+    )[0]
+    assert '"type": "IntentRequest"' in idle_speed
+    assert '"type": "IncreaseSpeedIntent"' not in idle_speed
+    assert '"type": "DecreaseSpeedIntent"' not in idle_speed
