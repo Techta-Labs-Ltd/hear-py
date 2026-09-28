@@ -111,7 +111,7 @@ class LaunchWorkflow:
             },
         )
         ApplicationLog.warning(
-            "Hear: cleared stale returning onboarding state without active dialog"
+            "Hear: cleared returning profile/onboarding state on launch"
         )
         return self._user.snapshot(handler_input)
 
