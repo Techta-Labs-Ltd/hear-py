@@ -377,7 +377,7 @@ class User:
             (state.get("awaitingOrganizationName"), "organization_name", {}),
             (state.get("awaitingPublicationSource"), "publication_source", {}),
             (
-                state.get("onboardingStage"),
+                state.get("onboardingStage") and not state.get("onboardingComplete"),
                 "onboarding",
                 {"stage": state.get("onboardingStage")},
             ),
