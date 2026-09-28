@@ -235,11 +235,9 @@ class EnjoyedFeedback:
                 .set_should_end_session(False)
                 .response
             )
-        title = (
-            pending.get("title")
-            or store.get("feedbackContentTitle")
-            or store.get("currentContentTitle")
-        )
+        title = AlexaFeedback.subject_title(pending, store)
+        if creator_name and title.casefold() == str(creator_name).casefold():
+            creator_name = None
         already_msg = (
             Speech.FEEDBACK_ENJOYED_ALREADY_FOLLOWING(title, creator_name)
             if title or creator_name
