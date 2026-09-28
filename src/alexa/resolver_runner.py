@@ -68,7 +68,12 @@ class ResolverWorkflowRunner:
             spoken = AlexaRequest.get_spoken_slot_value(slots.get("discoveryQuery"))
             if spoken:
                 return spoken
-        if User.snapshot(handler_input).get("onboardingStage") == "ask_town":
+        active_dialog = DialogStateManager.get_active(handler_input) or {}
+        active_context = active_dialog.get("context") or {}
+        if (
+            active_dialog.get("type") == "onboarding"
+            and active_context.get("stage") == OnboardingConstants.ASK_TOWN
+        ):
             return next(
                 (
                     value.strip()
@@ -219,10 +224,11 @@ class ResolverWorkflowRunner:
 
     @staticmethod
     def _location_capture_active(context: dict) -> bool:
-        store = context["store"]
         dialog = context.get("dialog") or {}
+        if dialog.get("type") != "onboarding":
+            return False
         dialog_context = dialog.get("context") or {}
-        stage = store.get("onboardingStage") or dialog_context.get("stage")
+        stage = dialog_context.get("stage")
         return stage in {
             OnboardingConstants.ASK_PERMISSION,
             OnboardingConstants.ASK_TOWN,
