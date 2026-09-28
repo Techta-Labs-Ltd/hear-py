@@ -432,6 +432,95 @@ class IssueReportLambdaVerifier:
                 )
         return speech or "ambiguity consumed"
 
+    def verify_notification_decline_releases_stale_town_state(self) -> str:
+        user_id = self.user("notification-town-state")
+        now = int(time.time())
+        self.seed(
+            user_id,
+            "CORE",
+            {
+                "onboardingComplete": True,
+                "onboardingStage": "ask_town",
+                "playCount": 1,
+            },
+        )
+        self.add_scope(
+            user_id,
+            "DIALOG",
+            {
+                "activeDialog": {
+                    "type": "notification",
+                    "context": {"question": "Would you like to listen?"},
+                    "createdAt": now,
+                    "expiresAt": now + 600,
+                },
+                "awaitingNotificationChoice": True,
+                "awaitingProfileTown": True,
+                "profileSetupActive": True,
+            },
+        )
+
+        declined = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "AMAZON.NoIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {},
+                },
+            },
+        )
+        declined_speech = self.speech(declined)
+        if "leave that update for now" not in declined_speech.casefold():
+            raise AssertionError(
+                f"notification decline did not complete normally: {declined_speech!r}"
+            )
+
+        response = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "TownCaptureIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {
+                        "townName": {
+                            "name": "townName",
+                            "value": "scotish farmer",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        )
+        speech = self.speech(response)
+        lowered = speech.casefold()
+        forbidden = (
+            "identify that location",
+            "town or city",
+            "set my location",
+            "alexa provided",
+            "which city",
+        )
+        matched = next((phrase for phrase in forbidden if phrase in lowered), None)
+        if matched:
+            raise AssertionError(
+                f"stale town/profile flow hijacked discovery via {matched!r}: {speech!r}"
+            )
+        directives = (response.get("response") or {}).get("directives") or []
+        for directive in directives:
+            if not isinstance(directive, dict):
+                continue
+            if directive.get("type") != "Dialog.ElicitSlot":
+                continue
+            updated = directive.get("updatedIntent") or {}
+            if updated.get("name") == "TownCaptureIntent":
+                raise AssertionError(
+                    f"stale town capture elicitation returned: {directives!r}"
+                )
+        return speech or "normal discovery response returned without location guidance"
+
     def verify(self) -> None:
         try:
             self.run(
@@ -461,6 +550,10 @@ class IssueReportLambdaVerifier:
             self.run(
                 "number 1 consumes ambiguity",
                 self.verify_ambiguity_number_one,
+            )
+            self.run(
+                "notification decline releases stale town state",
+                self.verify_notification_decline_releases_stale_town_state,
             )
         finally:
             self.cleanup()
