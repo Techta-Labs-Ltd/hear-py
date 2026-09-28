@@ -76,7 +76,15 @@ def _town_request(mock_handler_input, value: str):
             },
         }
     )
-    store = {**StateSchema.DEFAULT_STORE, "onboardingStage": "ask_town"}
+    store = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
     mock_handler_input.attributes_manager.request_attributes["_store"] = store
     return mock_handler_input
 
