@@ -68,12 +68,41 @@ class LaunchWorkflow:
     def _initial_store(self, handler_input: HandlerInput) -> dict:
         store = self._user.snapshot(handler_input)
         DialogStateManager.clear_transient_discovery(handler_input)
-        store = self._user.snapshot(handler_input)
+        store = self._repair_stale_returning_setup(handler_input)
         launch = LaunchTracker.record(AlexaRequest.get_user_id(handler_input) or "", store)
         if launch.get("save"):
             self._user.update(handler_input, launch["save"])
             return self._user.snapshot(handler_input)
         return store
+
+    def _repair_stale_returning_setup(self, handler_input: HandlerInput) -> dict:
+        store = self._user.snapshot(handler_input)
+        if (
+            not store.get("onboardingComplete")
+            or store.get("activeDialog")
+            or not store.get("onboardingStage")
+        ):
+            return store
+        self._user.update(
+            handler_input,
+            {
+                "onboardingStage": None,
+                "onboardingTownAttempts": 0,
+                "onboardingTownResolverFailures": 0,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "awaitingProfilePermission": False,
+                "awaitingProfileSetupConsent": False,
+                "awaitingProfileTown": False,
+                "profileSetupActive": False,
+                "awaitingCommunityPlayback": False,
+                "_requiresReliableSave": True,
+            },
+        )
+        ApplicationLog.warning(
+            "Hear: cleared stale returning onboarding state without active dialog"
+        )
+        return self._user.snapshot(handler_input)
 
     def _protected_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None

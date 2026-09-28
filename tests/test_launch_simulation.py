@@ -490,7 +490,8 @@ class TestLaunchSimulation:
         await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
 
         store = User.snapshot(hi)
-        assert store["onboardingStage"] == "confirm_town_for_community"
+        assert store["onboardingStage"] is None
+        assert store["activeDialog"] is None
         assert hi.response_builder.speak.called
 
     @pytest.mark.asyncio
@@ -733,3 +734,25 @@ class TestLaunchSimulation:
         speech = _speak_text(hi)
         print("\n=== RETURNING (still listening?) ===")
         print(f"  Speech: {speech}")
+
+
+def test_returning_launch_repairs_stale_town_stage_without_active_dialog():
+    hi = _build_handler_input(
+        store_override={
+            "onboardingComplete": True,
+            "onboardingStage": "ask_town",
+            "awaitingProfileTown": True,
+            "profileSetupActive": True,
+            "awaitingCommunityPlayback": True,
+            "activeDialog": None,
+        }
+    )
+    workflow = ApplicationContainer().build_request_launch_workflow(hi)
+
+    store = workflow._repair_stale_returning_setup(hi)
+
+    assert store["onboardingStage"] is None
+    assert store["awaitingProfileTown"] is False
+    assert store["profileSetupActive"] is False
+    assert store["awaitingCommunityPlayback"] is False
+    assert store["activeDialog"] is None

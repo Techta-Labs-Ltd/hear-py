@@ -76,7 +76,15 @@ def _town_request(mock_handler_input, value: str):
             },
         }
     )
-    store = {**StateSchema.DEFAULT_STORE, "onboardingStage": "ask_town"}
+    store = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
     mock_handler_input.attributes_manager.request_attributes["_store"] = store
     return mock_handler_input
 
@@ -716,6 +724,11 @@ async def test_active_location_change_owns_city_misclassified_as_local_search(
         **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
         "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
     }
 
     await container.build_resolver_interceptor().process(handler_input)
@@ -4440,3 +4453,64 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
     availability.assert_awaited_once()
     discover.assert_not_awaited()
     play.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stale_town_stage_without_active_dialog_cannot_capture_scottish_farmer(
+    mock_handler_input,
+):
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "organization",
+                "entities": [
+                    {
+                        "entityType": "organization",
+                        "entityId": "org-scottish-farmer",
+                        "canonicalValue": "The Scottish Farmer",
+                        "originalText": "scotish farmer",
+                        "confidence": 98,
+                        "method": "fuzzy",
+                        "start": 5,
+                        "end": 19,
+                    }
+                ],
+                "slots": {
+                    "organizationIds": ["org-scottish-farmer"],
+                    "organizationName": "The Scottish Farmer",
+                    "residualQuery": "",
+                },
+                "searchPayload": {
+                    "query": "",
+                    "filter": {"organizationIds": ["org-scottish-farmer"]},
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {"townName": {"name": "townName", "value": "scotish farmer"}},
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": None,
+    }
+
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    await container.build_resolver_interceptor().process(mock_handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once()
+    assert resolver.resolve_utterance.await_args.args == ("play scotish farmer",)
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "organization"
+    assert nlp["alexaRawIntent"] == "TownCaptureIntent"
+    assert nlp["needsRedirect"] is True
+    assert _town_capture_handler(container).can_handle(mock_handler_input) is False

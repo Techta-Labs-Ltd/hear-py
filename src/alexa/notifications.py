@@ -55,8 +55,12 @@ class AlexaNotificationAdapter:
         self, handler_input, *, explicit: bool = False, followup: bool = False
     ):
         store = self._user.snapshot(handler_input)
+        active_dialog = DialogStateManager.get_active(handler_input) or {}
         if not explicit and (
-            store.get("awaitingResume")
+            active_dialog.get("type") == "onboarding"
+            or store.get("awaitingProfileSetupConsent")
+            or store.get("awaitingProfilePermission")
+            or store.get("awaitingResume")
             or store.get("awaitingFeedback")
             or store.get("awaitingFeedbackContinuation")
             or store.get("awaitingReportDecision")
