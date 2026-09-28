@@ -287,27 +287,6 @@ class Onboarding(OnboardingService):
         )
 
     @staticmethod
-    def start_town_capture(
-        handler_input: HandlerInput,
-        store: Dict[str, Any],
-        name: Optional[str],
-        onboarding: OnboardingService,
-    ):
-        """Begin the town-capture flow asking where the user is based."""
-        onboarding.begin_town_capture(handler_input)
-        DialogStateManager.activate(
-            handler_input,
-            "onboarding",
-            context={"stage": OnboardingConstants.ONBOARDING_ASK_TOWN},
-        )
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(Speech.WELCOME_FIRST_ASK_TOWN(name)))
-            .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
-            .set_should_end_session(False)
-            .response
-        )
-
-    @staticmethod
     def resume_town_capture(
         handler_input: HandlerInput,
         store: Dict[str, Any],
