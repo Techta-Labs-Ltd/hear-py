@@ -508,6 +508,16 @@ jobs:
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
+      - name: Load Hear API key for Alexa launch verification
+        if: steps.cloudformation.outcome == 'success'
+        run: |
+          set -euo pipefail
+          HEAR_API_KEY=$(aws ssm get-parameter \
+            --name "$SSM_PARAMETER_PREFIX/HEAR_API_KEY" \
+            --with-decryption --region "$AWS_REGION" \
+            --query 'Parameter.Value' --output text)
+          echo "::add-mask::$HEAR_API_KEY"
+          printf 'HEAR_API_KEY=%s\n' "$HEAR_API_KEY" >> "$GITHUB_ENV"
       - name: Configure AWS credentials for Alexa launch verification
         if: steps.cloudformation.outcome == 'success'
         uses: aws-actions/configure-aws-credentials@v4
