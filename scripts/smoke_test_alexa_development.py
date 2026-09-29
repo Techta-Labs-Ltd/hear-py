@@ -114,19 +114,55 @@ class AlexaSimulationClient:
         return json.loads(raw) if raw else {}
 
 
-def _intent_request(simulation: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _invocations(simulation: dict[str, Any]) -> list[dict[str, Any]]:
     skill_info = (simulation.get("result") or {}).get("skillExecutionInfo") or {}
     invocations = skill_info.get("invocations") or []
     if isinstance(invocations, dict):
         invocations = [invocations]
+    return [item for item in invocations if isinstance(item, dict)]
 
-    for invocation in reversed(invocations):
+
+def _request_response(
+    simulation: dict[str, Any], request_type: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    for invocation in reversed(_invocations(simulation)):
         request_body = (invocation.get("invocationRequest") or {}).get("body") or {}
         request = request_body.get("request") or {}
-        if request.get("type") == "IntentRequest":
+        if request.get("type") == request_type:
             response_body = (invocation.get("invocationResponse") or {}).get("body") or {}
             return request, response_body
-    raise RuntimeError("Alexa simulation did not invoke the skill with an IntentRequest")
+    raise RuntimeError(
+        f"Alexa simulation did not invoke the skill with a {request_type}"
+    )
+
+
+def _intent_request(simulation: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    return _request_response(simulation, "IntentRequest")
+
+
+def _spoken_response(response: dict[str, Any]) -> str:
+    output = (response.get("response") or {}).get("outputSpeech") or {}
+    return str(output.get("ssml") or output.get("text") or "")
+
+
+def _assert_launch(client: AlexaSimulationClient, invocation_name: str) -> None:
+    simulation = client.simulate(f"open {invocation_name}")
+    _, response = _request_response(simulation, "LaunchRequest")
+    if not isinstance(response, dict) or not response.get("version"):
+        raise AssertionError("Launch returned no valid Alexa response envelope")
+
+    speech = _spoken_response(response)
+    normalized = speech.casefold()
+    if "hear service" not in normalized:
+        raise AssertionError(
+            f"Launch did not use Hear Service branding: {speech!r}"
+        )
+    if "say my city is followed by your city" in normalized:
+        raise AssertionError(
+            f"Launch regressed to automatic town capture: {speech!r}"
+        )
+
+    print("PASS launch -> Hear Service onboarding/welcome (no automatic town capture)")
 
 
 def _assert_case(
@@ -177,6 +213,9 @@ def main() -> None:
         args.client_secret,
         args.refresh_token,
     )
+    _assert_launch(client, args.invocation_name)
+    time.sleep(1)
+
     cases = (
         SmokeCase(
             "set my location to southampton",
