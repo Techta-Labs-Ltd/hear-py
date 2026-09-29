@@ -508,6 +508,14 @@ jobs:
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
+      - name: Configure AWS credentials for Alexa launch verification
+        if: steps.cloudformation.outcome == 'success'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.verifier_resources.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: HearAlexaLaunchVerifier
+          unset-current-credentials: true
       - name: Smoke test development Alexa routing and Lambda
         if: steps.cloudformation.outcome == 'success'
         env:
@@ -520,7 +528,9 @@ jobs:
             --invocation-name "test development" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
-            --refresh-token "$ALEXA_REFRESH_TOKEN"
+            --refresh-token "$ALEXA_REFRESH_TOKEN" \
+            --table-name "${{ steps.verifier_resources.outputs.table_name }}" \
+            --region "$AWS_REGION"
       - name: Fail reported issue verification
         if: steps.lambda_report.outcome == 'failure' || steps.resolver_report.outcome == 'failure'
         run: |
