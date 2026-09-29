@@ -533,7 +533,7 @@ jobs:
           ALEXA_LWA_CLIENT_SECRET: ${{ secrets.ALEXA_LWA_CLIENT_SECRET_DEV }}
           ALEXA_REFRESH_TOKEN: ${{ secrets.ALEXA_REFRESH_TOKEN_DEV }}
         run: |
-          python scripts/smoke_test_alexa_development.py \
+          PYTHONPATH=. python scripts/smoke_test_alexa_development.py \
             --skill-id "$ALEXA_SKILL_ID" \
             --invocation-name "test development" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
