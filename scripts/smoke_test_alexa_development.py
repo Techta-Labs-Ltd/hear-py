@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -9,6 +11,8 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from src.clients.hear import HearApiClient
 
 
 @dataclass(frozen=True)
@@ -171,9 +175,24 @@ def _aws_json(*args: str) -> dict[str, Any]:
     return json.loads(completed.stdout or "{}")
 
 
-def _clear_listener_state(table_name: str, region: str, user_id: str) -> int:
+def _resolve_listener_id(user_id: str) -> str:
+    result = asyncio.run(
+        HearApiClient().resolve_listener_identity(
+            {"alexaUserId": user_id},
+            timeout_ms=5000,
+        )
+    )
+    listener_id = str((result or {}).get("listenerId") or "").strip()
+    if not listener_id:
+        raise RuntimeError(
+            "Hear API did not resolve the Alexa simulator to a canonical listener"
+        )
+    return listener_id
+
+
+def _clear_persistence_key(table_name: str, region: str, persistence_key: str) -> int:
     names = json.dumps({"#id": "id", "#scope": "scope"}, separators=(",", ":"))
-    values = json.dumps({":id": {"S": user_id}}, separators=(",", ":"))
+    values = json.dumps({":id": {"S": persistence_key}}, separators=(",", ":"))
     keys: list[dict[str, Any]] = []
     last_key: dict[str, Any] | None = None
 
@@ -227,6 +246,24 @@ def _clear_listener_state(table_name: str, region: str, user_id: str) -> int:
     return len(keys)
 
 
+def _clear_listener_state(
+    table_name: str,
+    region: str,
+    user_id: str,
+    listener_id: str,
+) -> int:
+    stage = str(os.environ.get("STAGE") or "development").strip().lower()
+    persistence_keys = {
+        user_id,
+        f"listener:{stage}:{listener_id}",
+    }
+    return sum(
+        _clear_persistence_key(table_name, region, persistence_key)
+        for persistence_key in persistence_keys
+        if persistence_key
+    )
+
+
 def _assert_launch(
     client: AlexaSimulationClient,
     invocation_name: str,
@@ -236,8 +273,12 @@ def _assert_launch(
 ) -> None:
     probe = client.simulate(f"open {invocation_name}")
     user_id = _launch_user_id(probe)
-    removed = _clear_listener_state(table_name, region, user_id)
-    print(f"Reset Alexa simulation listener state ({removed} item(s))")
+    listener_id = _resolve_listener_id(user_id)
+    removed = _clear_listener_state(table_name, region, user_id, listener_id)
+    print(
+        "Reset Alexa simulation listener state "
+        f"across alias and canonical keys ({removed} item(s))"
+    )
 
     try:
         simulation = client.simulate(f"open {invocation_name}")
@@ -268,7 +309,7 @@ def _assert_launch(
 
         print("PASS first launch -> consent-first Hear Service onboarding")
     finally:
-        _clear_listener_state(table_name, region, user_id)
+        _clear_listener_state(table_name, region, user_id, listener_id)
 
 
 def _assert_case(
