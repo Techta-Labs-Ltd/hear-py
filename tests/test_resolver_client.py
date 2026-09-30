@@ -8,6 +8,7 @@ import pytest
 from src.clients.resolver import ResolverClient, ResolverOptions
 from src.models.confirmation import ConfirmationPolicy
 from src.models.resolver import ResolvedEntity, ResolverResult, ResolverUnavailable
+from src.models.resolver_workflow import ResolverWorkflow
 
 
 def _response(**overrides):
@@ -1466,3 +1467,94 @@ async def test_client_converts_network_failure_to_unavailable():
     )
     with pytest.raises(ResolverUnavailable):
         await client.resolve("sport")
+
+
+def test_organization_suppresses_overlapping_tag_projection():
+    payload = _response(intent="organization")
+    payload["slots"].update({"residualQuery": "", "latest": False})
+    payload["entities"] = [
+        {
+            "entityType": "organization",
+            "entityId": "org-scottish-farmer",
+            "canonicalValue": "The Scottish Farmer",
+            "originalText": "scottish farmer",
+            "confidence": 98,
+            "method": "bare_match",
+            "start": 4,
+            "end": 19,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+        {
+            "entityType": "tag",
+            "entityId": "scottish-farmer",
+            "canonicalValue": "#scottish-farmer",
+            "originalText": "scottish farmer",
+            "confidence": 100,
+            "method": "bare_match",
+            "start": 4,
+            "end": 19,
+            "latitude": None,
+            "longitude": None,
+            "countryCode": None,
+            "locationRole": None,
+        },
+    ]
+
+    result = ResolverResult.from_payload(payload).to_alexa_payload(
+        original_utterance="play scottish farmer"
+    )
+
+    assert result["searchPayload"]["filter"] == {
+        "organizationIds": ["org-scottish-farmer"]
+    }
+    assert [entity["entityType"] for entity in result["entities"]] == ["organization"]
+    assert "tags" not in result["slots"]
+
+
+def test_spoken_this_month_residual_becomes_catalog_date_filter():
+    result = {
+        "status": "resolved",
+        "intent": "search",
+        "entities": [
+            {
+                "entityType": "tag",
+                "entityId": "salmon",
+                "canonicalValue": "#salmon",
+                "originalText": "salmon",
+                "confidence": 100,
+                "method": "bare_match",
+                "start": 19,
+                "end": 25,
+            }
+        ],
+        "slots": {
+            "residualQuery": "this month",
+            "searchPlan": {
+                "query": "this month",
+                "filter": {"tags": ["salmon"]},
+            },
+        },
+        "searchPayload": {
+            "query": "this month",
+            "filter": {"tags": ["salmon"]},
+        },
+        "ambiguities": [],
+    }
+
+    constrained = ResolverWorkflow.apply_alexa_constraints(
+        result,
+        "SearchContentIntent",
+        {},
+        "find me this month salmon",
+    )
+
+    assert constrained["slots"]["residualQuery"] == ""
+    assert constrained["searchPayload"]["query"] == ""
+    assert constrained["searchPayload"]["filter"]["tags"] == ["salmon"]
+    assert constrained["searchPayload"]["filter"]["publishedFrom"] < (
+        constrained["searchPayload"]["filter"]["publishedTo"]
+    )
+    assert constrained["slots"]["temporalOriginal"] == "this month"

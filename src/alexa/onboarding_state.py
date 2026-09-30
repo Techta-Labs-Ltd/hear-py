@@ -77,6 +77,8 @@ class OnboardingState:
         changes = {
             "onboardingStage": OnboardingStage.ASK_TOWN,
             "onboardingTownAttempts": 0,
+            "pendingTownAmbiguity": None,
+            "pendingAmbiguity": None,
         }
         if reliable:
             changes["_requiresReliableSave"] = True
@@ -104,12 +106,36 @@ class OnboardingState:
     def reset_resolver_failures(self, handler_input) -> dict:
         return self._user.update(handler_input, {"onboardingTownResolverFailures": 0})
 
+    def await_town_ambiguity(
+        self,
+        handler_input,
+        phrase: str,
+        candidates: list[dict[str, Any]],
+    ) -> dict:
+        pending = {
+            "phrase": str(phrase or "").strip(),
+            "candidates": [dict(candidate) for candidate in candidates],
+        }
+        return self._apply(
+            handler_input,
+            {
+                "onboardingStage": OnboardingStage.ASK_TOWN,
+                "pendingTownAmbiguity": pending,
+                "_requiresReliableSave": True,
+            },
+            session={"onboardingStage": OnboardingStage.ASK_TOWN},
+        )
+
+    def clear_town_ambiguity(self, handler_input) -> dict:
+        return self._user.update(handler_input, {"pendingTownAmbiguity": None})
+
     def await_confirmation(
         self, handler_input, candidate: LocationCandidate, *, reset_attempts: bool
     ) -> dict:
         pending = candidate.to_store()
-        changes = {
+        changes: dict[str, Any] = {
             "pendingLocationConfirm": pending,
+            "pendingTownAmbiguity": None,
             "awaitingLocationConfirm": True,
             "onboardingStage": OnboardingStage.AWAIT_LOCATION_CONFIRMATION,
             "_requiresReliableSave": True,
@@ -157,6 +183,7 @@ class OnboardingState:
             "localityResolvedAt": int(time.time() * 1000),
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
+            "pendingTownAmbiguity": None,
             "_requiresReliableSave": True,
         }
         if candidate.city:
@@ -192,6 +219,7 @@ class OnboardingState:
             "onboardingComplete": True,
             "awaitingLocationConfirm": False,
             "pendingLocationConfirm": None,
+            "pendingTownAmbiguity": None,
         }
         if reliable:
             changes["_requiresReliableSave"] = True
@@ -204,7 +232,12 @@ class OnboardingState:
     def request_location_change(self, handler_input) -> dict:
         return self._user.update(
             handler_input,
-            {"onboardingStage": OnboardingStage.ASK_TOWN, "onboardingTownAttempts": 0},
+            {
+                "onboardingStage": OnboardingStage.ASK_TOWN,
+                "onboardingTownAttempts": 0,
+                "pendingTownAmbiguity": None,
+                "pendingAmbiguity": None,
+            },
         )
 
     def _apply(self, handler_input, changes: dict, *, session: dict | None = None) -> dict:
@@ -251,6 +284,14 @@ class OnboardingService:
 
     def reset_resolver_failures(self, handler_input) -> dict:
         return self._onboarding.reset_resolver_failures(handler_input)
+
+    def stage_town_ambiguity(
+        self, handler_input, phrase: str, candidates: list[dict[str, Any]]
+    ) -> dict:
+        return self._onboarding.await_town_ambiguity(handler_input, phrase, candidates)
+
+    def clear_town_ambiguity(self, handler_input) -> dict:
+        return self._onboarding.clear_town_ambiguity(handler_input)
 
     def record_resolver_failure(self, handler_input, current: dict) -> int:
         failures = int(current.get("onboardingTownResolverFailures") or 0) + 1

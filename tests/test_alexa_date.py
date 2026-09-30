@@ -41,3 +41,33 @@ def test_invalid_or_unbounded_alexa_date_is_ignored():
     assert AlexaDateRange.parse("PAST_REF", "Europe/London") == {}
     assert AlexaDateRange.parse("2026-W99", "Europe/London") == {}
     assert AlexaDateRange.parse("2026-09-04", "Invalid/Timezone") == {}
+
+
+def test_spoken_this_month_is_extracted_from_a_search_residual():
+    now = datetime(2026, 9, 28, 15, 30, tzinfo=ZoneInfo("Europe/London"))
+    result, remainder = AlexaDateRange.extract_spoken(
+        "this month",
+        "Europe/London",
+        now=now,
+    )
+    assert remainder == ""
+    assert result == {
+        "publishedFrom": int(
+            datetime(2026, 9, 1, tzinfo=ZoneInfo("Europe/London")).timestamp()
+        ),
+        "publishedTo": int(
+            datetime(2026, 10, 1, tzinfo=ZoneInfo("Europe/London")).timestamp()
+        ),
+        "temporalOriginal": "this month",
+    }
+
+
+def test_spoken_period_is_removed_without_losing_the_remaining_query():
+    now = datetime(2026, 9, 28, 15, 30, tzinfo=ZoneInfo("Europe/London"))
+    result, remainder = AlexaDateRange.extract_spoken(
+        "this month bible study",
+        "Europe/London",
+        now=now,
+    )
+    assert result["temporalOriginal"] == "this month"
+    assert remainder == "bible study"

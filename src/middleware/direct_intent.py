@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ask_sdk_core.dispatch_components import AbstractRequestInterceptor
 
-from src.alexa.dialog import DialogStateManager
+from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.phrase_router import PhraseRoute, PhraseRouter
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
@@ -141,6 +141,27 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
                 self._record_route(source_intent, help_response, "help_response")
                 return
         if active_dialog or store.get("pendingAmbiguity"):
+            ambiguity = (
+                store.get("pendingAmbiguity")
+                if isinstance(store.get("pendingAmbiguity"), dict)
+                else active_dialog.get("context")
+                if active_dialog.get("type") == "ambiguity"
+                else None
+            )
+            if isinstance(ambiguity, dict):
+                for slot_name, phrase in slot_phrases:
+                    if DialogSelection.match_pending_candidate(
+                        handler_input, ambiguity, phrase
+                    ):
+                        route = PhraseRoute(
+                            "ClarifySelectionIntent",
+                            (("selection", phrase),),
+                            "ambiguity",
+                            "active_choice",
+                        )
+                        self._set(intent, route)
+                        self._record_route(source_intent, route, slot_name)
+                        return
             match = self._route(
                 slot_phrases, allowed_controls=PhraseRouter.INTERRUPT_CONTROL_INTENTS
             )

@@ -111,7 +111,7 @@ async def test_feedback_prompt_is_restored_without_replacing_its_dialog(
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
     assert "created by Jane Smith" in spoken
-    assert "Did you enjoy Local history?" in spoken
+    assert "Did you enjoy Blackpool Gazette?" in spoken
     assert store["activeDialog"]["type"] == "feedback"
     assert store["awaitingFeedback"] is True
     controls.pause_active.assert_not_awaited()

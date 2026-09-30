@@ -29,7 +29,7 @@ class Speech:
         "I can't check that city right now. Please try the city name again."
     )
     TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
-    CITY_SETUP_GUIDANCE = "I still couldn't identify that location. I've saved the other details Alexa provided. You can set your location later by saying set my location. What would you like to listen to?"
+    CITY_SETUP_GUIDANCE = "I still couldn't identify that location. You can set your location later by saying set my location. What would you like to listen to?"
     REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
     REPROMPT_ASK_TOWN = "Say my city is followed by your city. You can also say skip."
     ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which city are you in?"
@@ -105,10 +105,10 @@ class Speech:
     FEEDBACK_NOT_ENJOYED = "Sorry to hear that. If you feel the content was inappropriate, say report this content and we'll flag it for review. Otherwise say skip to carry on."
     FEEDBACK_SKIP_INTRO = "Ok. What would you like to listen to next?"
     FEEDBACK_AWAITING_REPROMPT = (
-        "Did you enjoy that track? Say enjoyed, it was okay, not enjoyed, or skip."
+        "Did you enjoy that content? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
     )
     RATE_CONTENT_PROMPT = (
-        "Did you enjoy this? Say enjoyed, it was okay, not enjoyed, or skip."
+        "Did you enjoy this? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
     )
     RATE_CONTENT_NOTHING = "There isn't any content to rate right now."
     RATE_CONTENT_SAVED_RESUMING = "Thanks for the feedback. Resuming."
@@ -141,7 +141,7 @@ class Speech:
     CONSENT_CARD_THANKS = "Thanks — you're all set. What would you like to listen to?"
     LOCATION_DECLINED = "Ok. What would you like to listen to?"
     LOCATION_RETRY = "Ok. Which city should I set instead?"
-    WELCOME_RETURN_GENERIC = f"Welcome back to Hear. {WELCOME_REPROMPT}"
+    WELCOME_RETURN_GENERIC = f"Welcome back to Hear Service. {WELCOME_REPROMPT}"
     LATEST_SOURCE_DECLINED = f"Ok. {WELCOME_REPROMPT}"
 
     @staticmethod
@@ -200,23 +200,19 @@ class Speech:
             if user_name
             else "Welcome back to Hear. Before we continue"
         )
-        return f"{greeting} — did you enjoy {title} by {creator}? You can say enjoyed, it was okay, or not enjoyed. Say skip if you'd rather not rate it."
+        return f"{greeting} — did you enjoy content from {creator}? You can say I enjoyed it, it was okay, or I did not enjoy it. Say skip if you'd rather not rate it."
 
     @staticmethod
     def _build_enjoyed_following(title, creator_name) -> str:
-        safe_title = (
-            Speech.escape_ssml_lite(title)
-            if title and (not Speech.is_bad_credit(title))
-            else "that"
-        )
+        del title
         safe_creator = (
             Speech.escape_ssml_lite(creator_name)
             if creator_name and (not Speech.is_bad_credit(creator_name))
             else None
         )
         if safe_creator:
-            return f"Thanks for your feedback on {safe_title} by {safe_creator}. What would you like to listen to next?"
-        return f"Thanks for your feedback on {safe_title}. What would you like to listen to next?"
+            return f"Thanks for your feedback on {safe_creator}. What would you like to listen to next?"
+        return "Thanks for your feedback. What would you like to listen to next?"
 
     @staticmethod
     def _build_community_intro(locality, total_hits) -> str:
@@ -266,27 +262,19 @@ class Speech:
         return ContentUtils.is_bad_credit_name(value)
 
     @staticmethod
-    def WELCOME_FIRST_ASK_TOWN(name):
-        return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. Say my city is followed by your city."
-            if name
-            else "Hello, welcome to Hear. Say my city is followed by your city."
-        )
-
-    @staticmethod
     def WELCOME_FIRST_HAS_CITY(name, city=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
             if name
-            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            else f"Welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
     def WELCOME_FIRST(name=None):
         return (
-            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            f"Hello {Speech.escape_ssml_lite(name)}, welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
             if name
-            else f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
+            else f"Welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
         )
 
     @staticmethod
@@ -383,15 +371,15 @@ class Speech:
 
     @staticmethod
     def WELCOME_RETURN_NAMED(user_name, city=None):
-        return f"Welcome back to Hear, {Speech.escape_ssml_lite(user_name)}. {Speech.WELCOME_REPROMPT}"
+        return f"Welcome back to Hear Service, {Speech.escape_ssml_lite(user_name)}. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def WELCOME_RETURN_CITY(city=None):
-        return f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
+        return f"Welcome back to Hear Service. {Speech.WELCOME_REPROMPT}"
 
     @staticmethod
     def LATEST_SOURCE_OFFER(source):
-        return f"Welcome back to Hear. Would you like to hear the latest from {Speech.escape_ssml_lite(source)}?"
+        return f"Welcome back to Hear Service. Would you like to hear the latest from {Speech.escape_ssml_lite(source)}?"
 
     @staticmethod
     def LATEST_SOURCE_REPROMPT(source):

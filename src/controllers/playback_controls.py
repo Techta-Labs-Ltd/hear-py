@@ -7,7 +7,6 @@ from config import settings
 from src.alexa.dialog import DialogStateManager
 from src.alexa.playback_controls import PlaybackControls
 from src.alexa.playback_speech import PlaybackSpeech
-from src.alexa.playback_workflow import Playback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
 from src.constants.playback import PlaybackConstants
@@ -33,7 +32,7 @@ class SetPlaybackSpeedHandler(AbstractRequestHandler):
             else PlaybackUtils.normalise_speed(AlexaRequest.get_resolved_slot_value(slot))
         )
         if speed is None:
-            return Playback.open_queue_response(handler_input, PlaybackSpeech.SPEED_INVALID)
+            return await self._controls.invalid_speed(handler_input)
         return await self._controls.apply_speed(handler_input, speed)
 
 

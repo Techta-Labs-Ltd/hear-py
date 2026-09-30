@@ -523,7 +523,7 @@ async def test_increase_speed_after_resume_decline_does_not_restart_abandoned_tr
     )
     state = _stored_state(persistence)
     response = result["response"]
-    assert state["playbackSpeed"] == 1.5
+    assert state["playbackSpeed"] == 1.25
     assert state["activePlayback"]["status"] == "abandoned"
     assert state["playbackQueue"]["currentIndex"] == 0
     assert response.get("directives") is None
@@ -654,7 +654,8 @@ async def test_rate_this_content_opens_short_feedback_prompt_for_active_audio():
 
     response = result["response"]
     state = persistence._store[USER_ID]
-    assert "Did you enjoy Sheffield monthly bulletin?" in response["outputSpeech"]["ssml"]
+    assert "Did you enjoy Sheffield Talking Newspaper?" in response["outputSpeech"]["ssml"]
+    assert "Sheffield monthly bulletin" not in response["outputSpeech"]["ssml"]
     assert response["shouldEndSession"] is False
     assert response["directives"][0] == {"type": "AudioPlayer.Stop"}
     dynamic_feedback = response["directives"][1]
@@ -1456,6 +1457,7 @@ async def test_new_completion_replaces_old_feedback_before_relaunch():
     state = persistence._store[USER_ID]
     assert state["pendingFeedback"]["contentId"] == pendle_id
     speech = launch["response"]["outputSpeech"]["ssml"]
-    assert "Pendle weekly update" in speech
+    assert "Pendle Voice" in speech
+    assert "Pendle weekly update" not in speech
     assert "Pendle Voice" in speech
     assert "029_Car_park" not in speech

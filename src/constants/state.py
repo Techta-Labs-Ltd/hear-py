@@ -104,6 +104,7 @@ class StateSchema:
         "onboardingTownAttempts": (0, CORE_SCOPE),
         "onboardingTownResolverFailures": (0, CORE_SCOPE),
         "pendingLocationConfirm": (None, DIALOG_SCOPE),
+        "pendingTownAmbiguity": (None, DIALOG_SCOPE),
         "awaitingLocationConfirm": (False, DIALOG_SCOPE),
         "awaitingCommunityPlayback": (False, DIALOG_SCOPE),
         "awaitingProfilePermission": (False, DIALOG_SCOPE),

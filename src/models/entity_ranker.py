@@ -124,6 +124,15 @@ class EntityRanker:
                 for organization in organizations
             )
         ]
+        candidates = [
+            entity
+            for entity in candidates
+            if entity.entity_type not in {"tag", "category"}
+            or not any(
+                cls._overlaps(entity, organization)
+                for organization in organizations
+            )
+        ]
         accepted: list[ResolvedEntity] = []
         for candidate in candidates:
             if candidate.entity_type == "tag" and any(

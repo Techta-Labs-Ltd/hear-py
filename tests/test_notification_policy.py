@@ -52,6 +52,16 @@ class TestNotificationPolicy:
             ).kind
             == "fetch"
         )
+        assert (
+            NotificationPolicy.offer(
+                explicit=False,
+                request_type="IntentRequest",
+                listener_id="listener-1",
+                api_enabled=True,
+                followup=True,
+            ).kind
+            == "fetch"
+        )
 
     def test_dialog_item_keeps_only_persisted_dialogue_fields(self) -> None:
         item = NotificationPolicy.dialog_item(

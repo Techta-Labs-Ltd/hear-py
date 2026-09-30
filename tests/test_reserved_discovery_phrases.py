@@ -399,7 +399,7 @@ async def test_carrierless_town_reply_respects_active_onboarding(
     resolve.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
-    assert nlp["slots"] == {"townName": "Swindon", "placeName": "Swindon"}
+    assert nlp["slots"] == {"location": "Swindon"}
 
 
 @pytest.mark.asyncio

@@ -124,6 +124,76 @@ async def test_global_interceptor_routes_every_declared_locked_phrase(
         assert ResolverWorkflowRunner._request(mock_intent_request) is None
 
 
+@pytest.mark.parametrize(
+    ("phrase", "target", "slot_name", "slot_value"),
+    (
+        ("setuo my account", "SetUpAccountIntent", None, None),
+        ("recomend something", "PlayRecommendationIntent", None, None),
+        ("recomend sport", "PlayRecommendationIntent", "recommendationQuery", "sport"),
+        ("what this abot", "WhatsThisAboutIntent", None, None),
+        ("whats trendng", "WhatsTrendingIntent", None, None),
+        ("what is trendng in sport", "WhatsTrendingIntent", "topic", "sport"),
+        ("set playbak speed to first", "SetPlaybackSpeedIntent", "speed", "first"),
+        ("increament spede", "IncreaseSpeedIntent", None, None),
+        ("decrese spede", "DecreaseSpeedIntent", None, None),
+        ("chec my notifications", "HearNotificationsIntent", None, None),
+        ("enable notifcations", "EnableNotificationsIntent", None, None),
+        ("disable notifcations", "DisableNotificationsIntent", None, None),
+        ("rate ths content", "RateContentIntent", None, None),
+        ("skp feedback", "SkipFeedbackIntent", None, None),
+        ("who is cretor", "WhoIsCreatorIntent", None, None),
+        ("folow this creator", "FollowCreatorIntent", None, None),
+        ("unfolow this creator", "UnfollowCreatorIntent", None, None),
+        ("repot this content", "ReportContentIntent", None, None),
+        ("repot this creator", "ReportCreatorIntent", None, None),
+        ("set my locaton to southampton", "SearchLocationIntent", "location", "southampton"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_global_interceptor_fuzzy_routes_protected_commands(
+    mock_intent_request, phrase, target, slot_name, slot_value
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == target
+    if slot_name:
+        assert intent["slots"][slot_name]["value"] == slot_value
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    (
+        "flower gardening",
+        "creator news",
+        "accounting news",
+        "speedway racing",
+        "notification technology",
+        "report from london",
+    ),
+)
+@pytest.mark.asyncio
+async def test_global_interceptor_does_not_fuzzy_route_unrelated_content(
+    mock_intent_request, phrase
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SearchContentIntent"
+
+
 @pytest.mark.asyncio
 async def test_global_interceptor_finds_a_direct_command_in_a_secondary_slot(
     mock_intent_request,
@@ -409,7 +479,7 @@ async def test_global_interceptor_preserves_a_specific_source_search(mock_intent
         (
             "change my location to Dorking",
             "SearchLocationIntent",
-            {"searchQuery": "dorking"},
+            {"location": "dorking"},
             False,
         ),
         (
@@ -447,6 +517,28 @@ async def test_global_interceptor_recovers_protected_phrases_from_a_wrong_intent
 
 
 @pytest.mark.asyncio
+async def test_open_discovery_location_command_recovers_location_slot(mock_intent_request):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "OpenDiscoveryIntent"
+    intent["slots"] = {
+        "searchQuery": {
+            "name": "searchQuery",
+            "value": "set my location to Southampton",
+        }
+    }
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SearchLocationIntent"
+    assert intent["slots"] == {
+        "location": {"name": "location", "value": "southampton"}
+    }
+
+
+@pytest.mark.asyncio
 async def test_global_interceptor_logs_route_metadata_without_slot_text(
     mock_intent_request, caplog
 ):
@@ -466,3 +558,31 @@ async def test_global_interceptor_logs_route_metadata_without_slot_text(
     assert "routeRule=trending" in caplog.text
     assert "slot=searchQuery" in caplog.text
     assert "what is trending in sport" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_active_ambiguity_ordinal_beats_bare_speed_route(mock_intent_request):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    candidates = [
+        {"id": "swindon-1", "name": "Swindon, Wiltshire", "type": "location"},
+        {"id": "swindon-2", "name": "Swindon, Gloucestershire", "type": "location"},
+    ]
+    pending = {
+        "candidates": candidates,
+        "choiceCandidates": candidates,
+        "displayedCandidates": candidates,
+    }
+    DialogStateManager.activate(mock_intent_request, "ambiguity", context=pending)
+
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SetPlaybackSpeedIntent"
+    intent["slots"] = {"speed": {"name": "speed", "value": "first"}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "ClarifySelectionIntent"
+    assert intent["slots"] == {
+        "selection": {"name": "selection", "value": "first"}
+    }

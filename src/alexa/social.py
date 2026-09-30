@@ -26,11 +26,14 @@ class CreatorIdentity:
 class FollowCreator:
     """Alexa request/state/response adapter around the pure follow transition."""
 
-    def __init__(self, user, feedback, events, play_followed) -> None:
+    def __init__(
+        self, user, feedback, events, play_followed, notifications=None
+    ) -> None:
         self._user = user
         self._feedback = feedback
         self._events = events
         self._play_followed = play_followed
+        self._notifications = notifications
 
     async def execute(self, request: RequestContext):
         handler_input = request.handler_input
@@ -40,6 +43,7 @@ class FollowCreator:
         except Exception:
             pass
         store = self._user.snapshot(handler_input)
+        was_awaiting_follow = bool(store.get("awaitingFollow"))
         source = Social._follow_source(store) or {}
         creator_id = source.get("id")
         creator_name = source.get("name")
@@ -51,8 +55,14 @@ class FollowCreator:
         if not creator_id or not creator_name or Speech.is_bad_credit(creator_name):
             return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
         if FollowingManager.is_following(store, creator_id, source_type):
-            if store.get("awaitingFollow"):
+            if was_awaiting_follow:
                 await self._feedback.clear(handler_input)
+                if self._notifications is not None:
+                    notification_response = await self._notifications.offer(
+                        handler_input, followup=True
+                    )
+                    if notification_response is not None:
+                        return notification_response
             else:
                 audio_ctx = PlaybackContext.read_audio_player_context(handler_input)
                 if not PlaybackContext.is_audio_player_active(audio_ctx):
@@ -77,8 +87,14 @@ class FollowCreator:
                     listener_id=store.get("listenerId"),
                     source=receipt.command.event_source(),
                 )
-            if store.get("awaitingFollow"):
+            if was_awaiting_follow:
                 await self._feedback.clear(handler_input)
+                if self._notifications is not None:
+                    notification_response = await self._notifications.offer(
+                        handler_input, followup=True
+                    )
+                    if notification_response is not None:
+                        return notification_response
             return AlexaResponse.present_idle_next(
                 handler_input,
                 Speech.FOLLOW_CREATOR(creator_name),

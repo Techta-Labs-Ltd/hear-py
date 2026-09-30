@@ -312,7 +312,7 @@ class TestIsNewUser:
         assert "Comprehensive coverage" not in speech
         assert "Independent Creator" not in speech
 
-    def test_resume_prompt_uses_title_without_discovery_context_or_summary(self):
+    def test_resume_prompt_does_not_use_track_title_without_source_context(self):
         hi = _build_handler_input(
             store_override={
                 "activePlayback": {
@@ -331,10 +331,34 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        assert "You were listening to Community news roundup." in speech
+        assert "You were listening to a recording." in speech
+        assert "Community news roundup" not in speech
         assert "A detailed description" not in speech
 
-    def test_resume_prompt_uses_title_when_trending_result_has_no_description(self):
+    def test_resume_prompt_prefers_organization_for_location_playback(self):
+        hi = _build_handler_input(
+            store_override={
+                "activePlayback": {
+                    "contentId": "content-1",
+                    "title": "Track__001",
+                    "organizationName": "Sound On",
+                    "discoverySource": "search",
+                    "discoveryContext": {"kind": "location", "name": "Ipswich"},
+                    "audioUrl": "https://cdn.hear.media/content-1.mp3",
+                    "status": "paused",
+                }
+            }
+        )
+
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to Sound On." in speech
+        assert "Track__001" not in speech
+
+    def test_resume_prompt_keeps_trending_context_instead_of_track_title(self):
         hi = _build_handler_input(
             store_override={
                 "activePlayback": {
@@ -352,9 +376,9 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        assert "You were listening to Community news roundup." in speech
+        assert "You were listening to what's trending." in speech
+        assert "Community news roundup" not in speech
         assert "Would you like to continue?" in speech
-        assert "from what" not in speech
 
     def test_resume_prompt_always_says_what_the_listener_was_doing(self):
         hi = _build_handler_input(
@@ -429,7 +453,10 @@ class TestIsNewUser:
 
 class TestSpeechStrings:
     def test_onboarding_ask_permission(self):
-        assert "address saved in your Alexa account" in Speech.ONBOARDING_ASK_PERMISSION
+        speech = Speech.ONBOARDING_ASK_PERMISSION
+        assert speech.startswith("Welcome to Hear Service.")
+        assert "address saved in your Alexa account" in speech
+        assert "my city is" not in speech.casefold()
 
     def test_welcome_return_named_is_lambda(self):
         result = Speech.WELCOME_RETURN_NAMED("John", "London")
@@ -438,15 +465,15 @@ class TestSpeechStrings:
 
     def test_welcome_return_city_is_lambda(self):
         result = Speech.WELCOME_RETURN_CITY("London")
-        assert result == f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
+        assert result == f"Welcome back to Hear Service. {Speech.WELCOME_REPROMPT}"
 
     def test_welcome_return_generic(self):
         assert Speech.WELCOME_RETURN_GENERIC == (
-            f"Welcome back to Hear. {Speech.WELCOME_REPROMPT}"
+            f"Welcome back to Hear Service. {Speech.WELCOME_REPROMPT}"
         )
 
     def test_guest_first_welcome_is_concise(self):
-        expected = f"Welcome to Hear. {Speech.WELCOME_REPROMPT}"
+        expected = f"Welcome to Hear Service. {Speech.WELCOME_REPROMPT}"
         assert Speech.WELCOME_FIRST() == expected
         assert Speech.WELCOME_FIRST_HAS_CITY(None, "London") == expected
 
@@ -466,7 +493,8 @@ class TestLaunchSimulation:
         await ApplicationContainer().build_request_launch_workflow(hi).execute(hi)
 
         store = User.snapshot(hi)
-        assert store["onboardingStage"] == "confirm_town_for_community"
+        assert store["onboardingStage"] is None
+        assert store["activeDialog"] is None
         assert hi.response_builder.speak.called
 
     @pytest.mark.asyncio
@@ -709,3 +737,40 @@ class TestLaunchSimulation:
         speech = _speak_text(hi)
         print("\n=== RETURNING (still listening?) ===")
         print(f"  Speech: {speech}")
+
+
+def test_returning_launch_repairs_stale_town_stage_without_active_dialog():
+    hi = _build_handler_input(
+        store_override={
+            "onboardingComplete": True,
+            "onboardingStage": "ask_town",
+            "awaitingProfileTown": True,
+            "profileSetupActive": True,
+            "awaitingCommunityPlayback": True,
+            "activeDialog": None,
+        }
+    )
+    workflow = ApplicationContainer().build_request_launch_workflow(hi)
+
+    store = workflow._repair_stale_returning_setup(hi)
+
+    assert store["onboardingStage"] is None
+    assert store["awaitingProfileTown"] is False
+    assert store["profileSetupActive"] is False
+    assert store["awaitingCommunityPlayback"] is False
+    assert store["activeDialog"] is None
+
+
+@pytest.mark.asyncio
+async def test_true_first_launch_uses_full_hear_service_onboarding_not_town_capture():
+    hi = _build_handler_input()
+    gate = ApplicationContainer().build_onboarding_gate(hi)
+
+    assert gate.can_handle(hi) is True
+    await gate.handle(hi)
+
+    speech = _speak_text(hi) or ""
+    assert "Welcome to Hear Service." in speech
+    assert "may I check the address saved in your Alexa account?" in speech
+    assert "my city is" not in speech.casefold()
+    assert User.snapshot(hi)["onboardingStage"] == "ask_permission"

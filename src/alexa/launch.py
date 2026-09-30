@@ -30,14 +30,12 @@ class LaunchWorkflow:
         playback,
         listener_profile,
         listener_sync,
-        start_town_capture,
     ) -> None:
         self._user = user
         self._notifications = notifications
         self._playback = playback
         self._listener_profile = listener_profile
         self._listener_sync = listener_sync
-        self._start_town_capture = start_town_capture
 
     async def execute(self, handler_input: HandlerInput):
         store = self._initial_store(handler_input)
@@ -50,9 +48,6 @@ class LaunchWorkflow:
         except Exception:
             pass
         store = await self._sync_listener_for_launch(handler_input, store)
-        notification_response = await self._notifications.offer(handler_input)
-        if notification_response is not None:
-            return notification_response
         store = self._user.snapshot(handler_input)
         pending_response = await self._pending_response(
             handler_input,
@@ -61,25 +56,69 @@ class LaunchWorkflow:
         )
         if pending_response is not None:
             return pending_response
+        notification_response = await self._notifications.offer(handler_input)
+        if notification_response is not None:
+            return notification_response
+        store = self._user.snapshot(handler_input)
         self._schedule_launch_background_work(handler_input, store)
         return self._welcome_response(handler_input, store)
 
     def _initial_store(self, handler_input: HandlerInput) -> dict:
         store = self._user.snapshot(handler_input)
         DialogStateManager.clear_transient_discovery(handler_input)
-        store = self._user.snapshot(handler_input)
+        store = self._repair_stale_returning_setup(handler_input)
         launch = LaunchTracker.record(AlexaRequest.get_user_id(handler_input) or "", store)
         if launch.get("save"):
             self._user.update(handler_input, launch["save"])
             return self._user.snapshot(handler_input)
         return store
 
+    def _repair_stale_returning_setup(self, handler_input: HandlerInput) -> dict:
+        store = self._user.snapshot(handler_input)
+        if not store.get("onboardingComplete"):
+            return store
+        active = store.get("activeDialog")
+        active_onboarding = (
+            isinstance(active, dict) and active.get("type") == "onboarding"
+        )
+        has_stale_setup = bool(
+            active_onboarding
+            or store.get("onboardingStage")
+            or store.get("awaitingProfilePermission")
+            or store.get("awaitingProfileSetupConsent")
+            or store.get("awaitingProfileTown")
+            or store.get("profileSetupActive")
+            or store.get("awaitingLocationConfirm")
+            or store.get("pendingLocationConfirm")
+        )
+        if not has_stale_setup:
+            return store
+        self._user.update(
+            handler_input,
+            {
+                "activeDialog": None,
+                "onboardingStage": None,
+                "onboardingTownAttempts": 0,
+                "onboardingTownResolverFailures": 0,
+                "awaitingLocationConfirm": False,
+                "pendingLocationConfirm": None,
+                "awaitingProfilePermission": False,
+                "awaitingProfileSetupConsent": False,
+                "awaitingProfileTown": False,
+                "profileSetupActive": False,
+                "awaitingCommunityPlayback": False,
+                "_requiresReliableSave": True,
+            },
+        )
+        ApplicationLog.warning(
+            "Hear: cleared returning profile/onboarding state on launch"
+        )
+        return self._user.snapshot(handler_input)
+
     def _protected_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
         decision = LaunchPolicy.protected(store)
-        if decision.kind == "town_capture":
-            return self._start_town_capture(handler_input, store, user_name)
         if decision.kind == "continue_after_flag":
             subject = store.get("activePlayback") or store.get("reportContext") or {}
             question = AlexaFeedback.keep_listening_question(subject, store)
@@ -122,9 +161,14 @@ class LaunchWorkflow:
     async def _feedback_response(
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
-        title = Speech.humanize_spoken_title(store.get("feedbackContentTitle")) or "that track"
-        creator = Speech.escape_ssml_lite(store.get("feedbackCreator") or "the creator")
-        prompt = Speech.LAUNCH_PENDING_FEEDBACK(title, creator, user_name)
+        pending = dict(store.get("pendingFeedback") or {})
+        subject = AlexaFeedback.subject_title(pending, store)
+        greeting = (
+            f"Welcome back, {Speech.escape_ssml_lite(user_name)}. Before we continue. "
+            if user_name
+            else "Welcome back to Hear Service. Before we continue. "
+        )
+        prompt = f"{greeting}{AlexaFeedback.feedback_question(subject)}"
         return (
             handler_input.response_builder.speak(Ssml.ssml(prompt))
             .reprompt(Ssml.ssml(Speech.FEEDBACK_AWAITING_REPROMPT))

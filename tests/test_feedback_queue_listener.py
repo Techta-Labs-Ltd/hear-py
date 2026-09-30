@@ -447,7 +447,8 @@ async def test_enjoyed_feedback_uses_the_prompted_candidate_for_speech_and_sync(
         ApplicationContainer().build_request_enjoyed_feedback(mock_handler_input)
     ).handle(mock_handler_input)
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "feedback on TRACK115 by Tynedale Talking Magazine" in spoken
+    assert "feedback on Tynedale Talking Magazine" in spoken
+    assert "TRACK115" not in spoken
     assert "WhatsApp Ptt" not in spoken
     assert (
         mock_handler_input.attributes_manager.request_attributes["_store"]["pendingFeedback"]
@@ -495,13 +496,23 @@ def test_feedback_subject_uses_discovery_context_when_track_title_is_missing():
     assert AlexaFeedback.subject_title(subject, {}) == "York Talking News"
 
 
-def test_feedback_subject_uses_track_title_for_trending_content():
+def test_feedback_subject_prefers_organization_over_internal_track_title():
+    subject = {
+        "title": "Track__001",
+        "organizationName": "Sound On",
+        "discoveryContext": {"kind": "location", "name": "Ipswich"},
+    }
+
+    assert AlexaFeedback.subject_title(subject, {}) == "Sound On"
+
+
+def test_feedback_subject_uses_trending_context_instead_of_track_title():
     subject = {
         "title": "Community news roundup",
         "discoveryContext": {"kind": "trending", "name": "what's trending"},
     }
 
-    assert AlexaFeedback.subject_title(subject, {}) == "Community news roundup"
+    assert AlexaFeedback.subject_title(subject, {}) == "what's trending"
 
 
 def test_feedback_subject_names_trending_when_the_track_title_is_missing():
@@ -510,7 +521,7 @@ def test_feedback_subject_names_trending_when_the_track_title_is_missing():
         "discoveryContext": {"kind": "trending", "name": "what's trending"},
     }
 
-    assert AlexaFeedback.subject_title(subject, {}) == "this trending recording"
+    assert AlexaFeedback.subject_title(subject, {}) == "what's trending"
 
 
 def test_newest_feedback_replaces_and_discards_older_pending_item(mock_handler_input):

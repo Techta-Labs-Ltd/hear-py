@@ -459,16 +459,23 @@ class ApplicationContainer:
             self.feedback,
             self.events,
             play_followed_creators,
+            self.notifications,
         )
 
     def build_request_enjoyed_feedback(self, handler_input):
         return EnjoyedFeedback(
-            self.feedback, self.build_playback_controls(handler_input), self.user
+            self.feedback,
+            self.build_playback_controls(handler_input),
+            self.user,
+            self.notifications,
         )
 
     def build_request_somewhat_feedback(self, handler_input):
         return SomewhatFeedback(
-            self.feedback, self.build_playback_controls(handler_input), self.user
+            self.feedback,
+            self.build_playback_controls(handler_input),
+            self.user,
+            self.notifications,
         )
 
     def build_request_not_enjoyed_feedback(self, handler_input):
@@ -477,7 +484,10 @@ class ApplicationContainer:
 
     def build_request_skip_feedback(self, handler_input):
         return SkipFeedback(
-            self.feedback, self.build_playback_controls(handler_input), self.user
+            self.feedback,
+            self.build_playback_controls(handler_input),
+            self.user,
+            self.notifications,
         )
 
     def build_onboarding_gate(self, handler_input):
@@ -542,18 +552,12 @@ class ApplicationContainer:
         return SetLocation(self.user, self.onboarding, self.stage_town_confirmation)
 
     def build_request_launch_workflow(self, handler_input):
-        def start_town_capture(handler_input, store, user_name):
-            return Onboarding.start_town_capture(
-                handler_input, store, user_name, self.onboarding
-            )
-
         return LaunchWorkflow(
             user=self.user,
             notifications=self.build_request_notifications(handler_input),
             playback=self.playback,
             listener_profile=self.listener_profile,
             listener_sync=self.listener_sync,
-            start_town_capture=start_town_capture,
         )
 
     def build_request_affirmative(self, handler_input):

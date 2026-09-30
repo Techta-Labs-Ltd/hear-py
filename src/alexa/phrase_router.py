@@ -33,6 +33,31 @@ class PhraseRouter:
     _SLOT_MARKER = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)\}")
     _MODEL_PATH = Path(__file__).resolve().parents[2] / "en-GB.json"
     DECLARED_LOCKED_INTENTS = DirectIntentPolicy.BYPASS_RESOLVER_INTENTS | {"PlayLocalIntent"}
+    FUZZY_COMMAND_INTENTS = frozenset(
+        {
+            "SearchLocationIntent",
+            "PlayRecommendationIntent",
+            "WhatsThisAboutIntent",
+            "WhatsTrendingIntent",
+            "SetPlaybackSpeedIntent",
+            "IncreaseSpeedIntent",
+            "DecreaseSpeedIntent",
+            "HearNotificationsIntent",
+            "EnableNotificationsIntent",
+            "DisableNotificationsIntent",
+            "RateContentIntent",
+            "SkipFeedbackIntent",
+            "WhoIsCreatorIntent",
+            "FollowCreatorIntent",
+            "UnfollowCreatorIntent",
+            "ReportContentIntent",
+            "ReportCreatorIntent",
+            "SetUpAccountIntent",
+        }
+    )
+    _FUZZY_COMMAND_MIN_SCORE = 0.83
+    _FUZZY_COMMAND_SINGLE_TOKEN_MIN_SCORE = 0.90
+    _FUZZY_COMMAND_MIN_MARGIN = 0.04
     _FUZZY_CONTROL_LEXICON = (
         (
             "IncreaseSpeedIntent",
@@ -152,6 +177,156 @@ class PhraseRouter:
         return tuple(routes)
 
     @classmethod
+    @cache
+    def _declared_fuzzy_command_routes(
+        cls,
+    ) -> tuple[tuple[str, str | None, str, str, str], ...]:
+        model = json.loads(cls._MODEL_PATH.read_text(encoding="utf-8"))
+        routes: list[tuple[str, str | None, str, str, str]] = []
+        for intent in model["interactionModel"]["languageModel"]["intents"]:
+            intent_name = str(intent.get("name") or "")
+            if intent_name not in cls.FUZZY_COMMAND_INTENTS:
+                continue
+            for sample in intent.get("samples") or ():
+                value = str(sample)
+                markers = list(cls._SLOT_MARKER.finditer(value))
+                if not markers:
+                    normalized = cls.normalize(value)
+                    if normalized:
+                        routes.append((intent_name, None, normalized, "", ""))
+                    continue
+                if len(markers) != 1:
+                    continue
+                marker = markers[0]
+                prefix = cls.normalize(value[: marker.start()])
+                suffix = cls.normalize(value[marker.end() :])
+                if not prefix and not suffix:
+                    continue
+                routes.append(
+                    (
+                        intent_name,
+                        marker.group(1),
+                        "",
+                        prefix,
+                        suffix,
+                    )
+                )
+        return tuple(routes)
+
+    @staticmethod
+    def _phrase_similarity(left: str, right: str) -> float:
+        if not left or not right:
+            return 0.0
+        spaced = SequenceMatcher(None, left, right).ratio()
+        compact = SequenceMatcher(
+            None,
+            left.replace(" ", ""),
+            right.replace(" ", ""),
+        ).ratio()
+        return max(spaced, compact)
+
+    @classmethod
+    def _fuzzy_template_match(
+        cls,
+        normalized: str,
+        slot_name: str | None,
+        literal: str,
+        prefix: str,
+        suffix: str,
+    ) -> tuple[float, tuple[tuple[str, str], ...]] | None:
+        if slot_name is None:
+            score = cls._phrase_similarity(normalized, literal)
+            return score, ()
+        tokens = normalized.split()
+        if len(tokens) < 2:
+            return None
+        best_score = 0.0
+        best_value = ""
+        if prefix and not suffix:
+            for split in range(1, len(tokens)):
+                carrier = " ".join(tokens[:split])
+                value = " ".join(tokens[split:]).strip()
+                score = cls._phrase_similarity(carrier, prefix)
+                if value and score > best_score:
+                    best_score, best_value = score, value
+        elif suffix and not prefix:
+            for split in range(1, len(tokens)):
+                value = " ".join(tokens[:split]).strip()
+                carrier = " ".join(tokens[split:])
+                score = cls._phrase_similarity(carrier, suffix)
+                if value and score > best_score:
+                    best_score, best_value = score, value
+        else:
+            for left in range(1, len(tokens) - 1):
+                for right in range(left + 1, len(tokens)):
+                    left_phrase = " ".join(tokens[:left])
+                    value = " ".join(tokens[left:right]).strip()
+                    right_phrase = " ".join(tokens[right:])
+                    prefix_score = cls._phrase_similarity(left_phrase, prefix)
+                    suffix_score = cls._phrase_similarity(right_phrase, suffix)
+                    score = (
+                        prefix_score * max(len(prefix), 1)
+                        + suffix_score * max(len(suffix), 1)
+                    ) / (max(len(prefix), 1) + max(len(suffix), 1))
+                    if value and min(prefix_score, suffix_score) >= 0.72 and score > best_score:
+                        best_score, best_value = score, value
+        if not best_value:
+            return None
+        if slot_name == "speed" and PlaybackUtils.normalise_speed(best_value) is None:
+            return None
+        return best_score, ((slot_name, best_value),)
+
+    @classmethod
+    def _fuzzy_command_route(
+        cls, normalized: str, allowed: frozenset[str] | None = None
+    ) -> PhraseRoute | None:
+        best_by_intent: dict[str, tuple[float, tuple[tuple[str, str], ...]]] = {}
+        for intent_name, slot_name, literal, prefix, suffix in cls._declared_fuzzy_command_routes():
+            if allowed is not None and intent_name not in allowed:
+                continue
+            matched = cls._fuzzy_template_match(
+                normalized,
+                slot_name,
+                literal,
+                prefix,
+                suffix,
+            )
+            if not matched:
+                continue
+            score, slots = matched
+            current = best_by_intent.get(intent_name)
+            if current is None or score > current[0]:
+                best_by_intent[intent_name] = (score, slots)
+        if not best_by_intent:
+            return None
+        ranked = sorted(
+            (
+                (score, intent_name, slots)
+                for intent_name, (score, slots) in best_by_intent.items()
+            ),
+            reverse=True,
+        )
+        best_score, intent_name, slots = ranked[0]
+        next_score = ranked[1][0] if len(ranked) > 1 else 0.0
+        single_token = len(normalized.split()) == 1
+        minimum = (
+            cls._FUZZY_COMMAND_SINGLE_TOKEN_MIN_SCORE
+            if single_token
+            else cls._FUZZY_COMMAND_MIN_SCORE
+        )
+        if best_score < minimum or best_score - next_score < cls._FUZZY_COMMAND_MIN_MARGIN:
+            return None
+        family = next(
+            (
+                rule.family
+                for rule in INTENT_ROUTE_RULES
+                if rule.intent_name == intent_name
+            ),
+            "fuzzy_command",
+        )
+        return PhraseRoute(intent_name, slots, family, "fuzzy_model")
+
+    @classmethod
     def _declared_locked_route(cls, normalized: str, *, templates: bool) -> PhraseRoute | None:
         for intent_name, expression, captures, is_template in cls._declared_locked_routes():
             if is_template != templates:
@@ -188,7 +363,11 @@ class PhraseRouter:
             )
             available.remove(index)
             scores.append(score)
-        return 0.0 if min(scores) < 0.72 else sum(scores) / len(scores)
+        if min(scores) < 0.72:
+            return 0.0
+        if len(alias) == 1 and len(tokens) > 1 and scores[0] < 0.90:
+            return 0.0
+        return sum(scores) / len(scores)
 
     @classmethod
     def _fuzzy_control_route(
@@ -261,8 +440,10 @@ class PhraseRouter:
         normalized = cls.normalize(phrase)
         if not normalized:
             return None
-        return cls._semantic_route(normalized, allowed) or cls._fuzzy_control_route(
-            normalized, allowed
+        return (
+            cls._semantic_route(normalized, allowed)
+            or cls._fuzzy_command_route(normalized, allowed)
+            or cls._fuzzy_control_route(normalized, allowed)
         )
 
     @classmethod
@@ -299,4 +480,4 @@ class PhraseRouter:
         for templates in (False, True):
             if route := cls._declared_locked_route(normalized, templates=templates):
                 return route
-        return cls._fuzzy_control_route(normalized)
+        return cls._fuzzy_command_route(normalized) or cls._fuzzy_control_route(normalized)

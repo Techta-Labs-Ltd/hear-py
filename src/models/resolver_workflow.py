@@ -41,7 +41,6 @@ class ResolverWorkflow:
         "AMAZON.CancelIntent",
         "AMAZON.StopIntent",
         "AMAZON.HelpIntent",
-        "AMAZON.FallbackIntent",
         "AMAZON.NextIntent",
         "AMAZON.PreviousIntent",
         "ShowMoreBrowseIntent",
@@ -175,6 +174,64 @@ class ResolverWorkflow:
         return constrained
 
     @staticmethod
+    def _apply_spoken_date_constraint(result: dict) -> dict:
+        slots = dict(result.get("slots") or {})
+        payload = dict(result.get("searchPayload") or {})
+        search_plan = dict(slots.get("searchPlan") or {})
+        filters = dict(payload.get("filter") or {})
+        plan_filters = dict(search_plan.get("filter") or {})
+
+        if any(
+            value is not None
+            for value in (
+                filters.get("publishedFrom"),
+                filters.get("publishedTo"),
+                plan_filters.get("publishedFrom"),
+                plan_filters.get("publishedTo"),
+                slots.get("publishedFrom"),
+                slots.get("publishedTo"),
+            )
+        ):
+            return result
+
+        residual = str(
+            slots.get("residualQuery")
+            or payload.get("query")
+            or search_plan.get("query")
+            or ""
+        ).strip()
+        date_range, remainder = AlexaDateRange.extract_spoken(
+            residual,
+            settings.HEAR_RESOLVER_TIMEZONE,
+        )
+        if not date_range:
+            return result
+
+        date_filters = {
+            key: date_range[key]
+            for key in ("publishedFrom", "publishedTo")
+        }
+        payload.update({"query": remainder, "filter": {**filters, **date_filters}})
+        search_plan.update(
+            {
+                "query": remainder,
+                "filter": {**plan_filters, **date_filters},
+            }
+        )
+        slots.update(
+            {
+                "residualQuery": remainder,
+                "publishedFrom": date_range["publishedFrom"],
+                "publishedTo": date_range["publishedTo"],
+                "temporalOriginal": date_range["temporalOriginal"],
+                "searchPlan": search_plan,
+            }
+        )
+        constrained = dict(result)
+        constrained.update({"slots": slots, "searchPayload": payload})
+        return constrained
+
+    @staticmethod
     def _resolved_source_names(result: dict) -> list[str]:
         slots = result.get("slots") or {}
         names = [
@@ -275,6 +332,7 @@ class ResolverWorkflow:
         original_utterance: str = "",
     ) -> dict:
         constrained = ResolverWorkflow._apply_date_constraint(result, intent_slots)
+        constrained = ResolverWorkflow._apply_spoken_date_constraint(constrained)
         constrained = TemporalFilterGuard.apply(constrained, original_utterance)
         constrained = ResolverWorkflow._reject_implausible_search_query_source(
             constrained, alexa_intent, intent_slots

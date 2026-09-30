@@ -8,7 +8,6 @@ from typing import Literal
 class LaunchDecision:
     kind: Literal[
         "none",
-        "town_capture",
         "continue_after_flag",
         "unfinished_playback",
         "pending_feedback",

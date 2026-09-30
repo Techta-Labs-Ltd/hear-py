@@ -76,7 +76,15 @@ def _town_request(mock_handler_input, value: str):
             },
         }
     )
-    store = {**StateSchema.DEFAULT_STORE, "onboardingStage": "ask_town"}
+    store = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
     mock_handler_input.attributes_manager.request_attributes["_store"] = store
     return mock_handler_input
 
@@ -716,6 +724,11 @@ async def test_active_location_change_owns_city_misclassified_as_local_search(
         **StateSchema.DEFAULT_STORE,
         "onboardingComplete": True,
         "onboardingStage": "ask_town",
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
     }
 
     await container.build_resolver_interceptor().process(handler_input)
@@ -723,7 +736,7 @@ async def test_active_location_change_owns_city_misclassified_as_local_search(
     resolver.resolve_utterance.assert_not_awaited()
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
-    assert nlp["slots"] == {"townName": "Swindon", "placeName": "Swindon"}
+    assert nlp["slots"] == {"location": "Swindon"}
     assert _town_capture_handler(container).can_handle(handler_input) is True
 
 
@@ -750,7 +763,7 @@ async def test_explicit_one_turn_location_change_keeps_mutation_route(mock_handl
     handler_input = _intent_request(
         mock_handler_input,
         "SearchLocationIntent",
-        {"searchQuery": {"name": "searchQuery", "value": "Swindon"}},
+        {"location": {"name": "location", "value": "Swindon"}},
     )
     handler_input.attributes_manager.request_attributes["_store"] = {
         **StateSchema.DEFAULT_STORE,
@@ -762,7 +775,7 @@ async def test_explicit_one_turn_location_change_keeps_mutation_route(mock_handl
     resolver.resolve_utterance.assert_not_awaited()
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "location_set"
-    assert nlp["slots"] == {"townName": "Swindon"}
+    assert nlp["slots"] == {"location": "Swindon"}
 
 
 @pytest.mark.asyncio
@@ -818,11 +831,10 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
     await ApplicationContainer().build_resolver_interceptor().process(handler_input)
     await _town_capture_handler(ApplicationContainer()).handle(handler_input)
     assert handler_input.attributes_manager.request_attributes["_nlp"]["slots"] == {
-        "townName": "Herne Bay",
-        "placeName": "Herne Bay",
+        "location": "Herne Bay",
     }
     resolve.assert_awaited_once()
-    assert resolve.await_args.args == ("Herne Bay",)
+    assert resolve.await_args.args == ("my city is Herne Bay",)
     assert resolve.await_args.kwargs == {
         "alexa_user_id": "amzn1.ask.account.TEST",
         "prefer_location": True,
@@ -865,13 +877,13 @@ async def test_unknown_city_search_query_reaches_the_location_resolver(mock_hand
 
     nlp = handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
-    assert nlp["slots"] == {"townName": "dorking", "placeName": "dorking"}
+    assert nlp["slots"] == {"location": "dorking"}
     assert _town_capture_handler(container).can_handle(handler_input) is True
 
     await _town_capture_handler(container).handle(handler_input)
 
     resolver.resolve_utterance.assert_awaited_once_with(
-        "dorking",
+        "my city is dorking",
         alexa_user_id="amzn1.ask.account.TEST",
         prefer_location=True,
         timeout_ms=5000,
@@ -972,7 +984,7 @@ async def test_onboarding_treats_creator_misclassification_as_town(monkeypatch, 
     await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
     assert nlp["intent"] == "town_capture"
-    assert nlp["slots"]["townName"] == "Gloucester"
+    assert nlp["slots"]["location"] == "Gloucester"
     assert _town_capture_handler(ApplicationContainer()).can_handle(mock_handler_input)
     await _town_capture_handler(ApplicationContainer()).handle(mock_handler_input)
     store = User.snapshot(mock_handler_input)
@@ -980,7 +992,7 @@ async def test_onboarding_treats_creator_misclassification_as_town(monkeypatch, 
     assert store["pendingLocationConfirm"]["city"] == "Gloucester"
     assert store["onboardingTownAttempts"] == 0
     resolve.assert_awaited_once_with(
-        "Gloucester",
+        "my city is Gloucester",
         alexa_user_id="amzn1.ask.account.TEST",
         prefer_location=True,
         timeout_ms=5000,
@@ -1074,10 +1086,137 @@ async def test_unknown_city_names_city_and_keeps_session_open(monkeypatch, mock_
     assert "couldn't find nottinghamshire place as a city" in speech.casefold()
     retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
     retry_builder.add_directive.assert_called_once_with(
-        {"type": "Dialog.ElicitSlot", "slotToElicit": "townName"}
+        {"type": "Dialog.ElicitSlot", "slotToElicit": "location"}
     )
     retry_builder.add_directive.return_value.set_should_end_session.assert_called_once_with(False)
     assert User.snapshot(handler_input)["onboardingStage"] == "ask_town"
+
+
+@pytest.mark.asyncio
+async def test_profile_town_uses_spoken_york_instead_of_organization_canonical(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "search",
+                "entities": [],
+                "slots": {},
+                "ambiguities": [],
+                "resolution": {
+                    "match": {
+                        "city": "York",
+                        "locality": "York",
+                        "countryCode": "gb",
+                        "latitude": 53.959,
+                        "longitude": -1.082,
+                    },
+                    "candidates": [],
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "PlayByOrganizationIntent",
+        {
+            "organizationQuery": {
+                "name": "organizationQuery",
+                "value": "york",
+                "resolutions": {
+                    "resolutionsPerAuthority": [
+                        {
+                            "status": {"code": "ER_SUCCESS_MATCH"},
+                            "values": [
+                                {
+                                    "value": {
+                                        "name": "York Talking News",
+                                        "id": "org-york",
+                                    }
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        },
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"]["location"] == "york"
+
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is york",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    assert "Did you say York" in response["outputSpeech"]["ssml"]
+    assert "York Talking News" not in response["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
+async def test_profile_town_set_location_without_slot_reopens_town_capture(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    container = ApplicationContainer()
+    handler_input = _intent_request(
+        mock_handler_input,
+        "SetLocationIntent",
+        {},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"] == {}
+
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    speech = response["outputSpeech"]["ssml"]
+    assert "Sure. Which city are you in now?" not in speech
+    directives = response["directives"]
+    assert directives[0]["type"] == "Dialog.ElicitSlot"
+    assert directives[0]["slotToElicit"] == "location"
+    assert directives[0]["updatedIntent"]["name"] == "TownCaptureIntent"
 
 
 @pytest.mark.asyncio
@@ -1115,7 +1254,7 @@ async def test_town_resolver_failure_retries_once_without_closing_session(
     assert "try the city name again" in speech
     retry_builder = handler_input.response_builder.speak.return_value.reprompt.return_value
     retry_builder.add_directive.assert_called_once_with(
-        {"type": "Dialog.ElicitSlot", "slotToElicit": "townName"}
+        {"type": "Dialog.ElicitSlot", "slotToElicit": "location"}
     )
     retry_builder.add_directive.return_value.set_should_end_session.assert_called_once_with(False)
     assert store["onboardingStage"] == "ask_town"
@@ -4441,3 +4580,228 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
     availability.assert_awaited_once()
     discover.assert_not_awaited()
     play.assert_not_awaited()
+
+
+
+@pytest.mark.asyncio
+async def test_profile_town_ambiguity_stays_in_location_flow_without_spending_retry(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    candidates = [
+        {"type": "location", "id": "location-1826876670", "name": "Chelmsford"},
+        {"type": "location", "id": "location-1826660998", "name": "Chalford"},
+        {"type": "location", "id": "location-1826304042", "name": "Chelford"},
+    ]
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "ambiguous",
+                "intent": "search",
+                "entities": [],
+                "slots": {
+                    "residualQuery": "",
+                    "ambiguousReferences": [
+                        {"phrase": "chelmsford", "candidates": candidates}
+                    ],
+                },
+                "ambiguities": [
+                    {"phrase": "chelmsford", "candidates": candidates}
+                ],
+                "resolution": {"match": None, "candidates": []},
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {"location": {"name": "location", "value": "chelmsford"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is chelmsford",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    speech = response["outputSpeech"]["ssml"]
+    assert "Chelmsford" in speech
+    assert "Chalford" in speech
+    assert "Chelford" in speech
+    store = User.snapshot(handler_input)
+    assert store["onboardingStage"] == "ask_town"
+    assert store["onboardingTownAttempts"] == 0
+    assert [
+        candidate["name"]
+        for candidate in store["pendingTownAmbiguity"]["candidates"]
+    ] == ["Chelmsford", "Chalford", "Chelford"]
+
+
+@pytest.mark.asyncio
+async def test_profile_town_ambiguity_ordinal_selects_location_and_confirms(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "ambiguous",
+                "intent": "search",
+                "entities": [],
+                "slots": {},
+                "ambiguities": [],
+                "resolution": {"match": None, "candidates": []},
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {"location": {"name": "location", "value": "first"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "pendingTownAmbiguity": {
+            "phrase": "chelmsford",
+            "candidates": [
+                {
+                    "type": "location",
+                    "id": "location-1826876670",
+                    "name": "Chelmsford",
+                },
+                {
+                    "type": "location",
+                    "id": "location-1826660998",
+                    "name": "Chalford",
+                },
+                {
+                    "type": "location",
+                    "id": "location-1826304042",
+                    "name": "Chelford",
+                },
+            ],
+        },
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is Chelmsford",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    assert "Chelmsford" in response["outputSpeech"]["ssml"]
+    store = User.snapshot(handler_input)
+    assert store["onboardingStage"] == "await_location_confirm"
+    assert store["pendingLocationConfirm"]["city"] == "Chelmsford"
+    assert store["pendingTownAmbiguity"] is None
+    assert store["onboardingTownAttempts"] == 0
+
+
+@pytest.mark.asyncio
+async def test_profile_town_stage_without_active_dialog_still_owns_scottish_farmer_turn(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "organization",
+                "entities": [
+                    {
+                        "entityType": "organization",
+                        "entityId": "org-scottish-farmer",
+                        "canonicalValue": "The Scottish Farmer",
+                        "originalText": "scotish farmer",
+                        "confidence": 98,
+                        "method": "fuzzy",
+                        "start": 5,
+                        "end": 19,
+                    }
+                ],
+                "slots": {
+                    "organizationIds": ["org-scottish-farmer"],
+                    "organizationName": "The Scottish Farmer",
+                    "residualQuery": "",
+                },
+                "searchPayload": {
+                    "query": "",
+                    "filter": {"organizationIds": ["org-scottish-farmer"]},
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {"townName": {"name": "townName", "value": "scotish farmer"}},
+    )
+    mock_handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": None,
+    }
+
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    await container.build_resolver_interceptor().process(mock_handler_input)
+
+    resolver.resolve_utterance.assert_not_awaited()
+    nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"]["location"] == "scotish farmer"
+    assert nlp["alexaRawIntent"] == "TownCaptureIntent"
+    assert nlp["needsRedirect"] is True
+    handler = _town_capture_handler(container)
+    assert handler.can_handle(mock_handler_input) is True
+
+    response = await handler.handle(mock_handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is scotish farmer",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    assert "city" in response["outputSpeech"]["ssml"].casefold()
+    store = User.snapshot(mock_handler_input)
+    assert store["onboardingStage"] == "ask_town"
+    assert store["onboardingTownAttempts"] == 1

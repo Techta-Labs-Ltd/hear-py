@@ -810,3 +810,47 @@ def test_feedback_service_owns_pending_feedback_policy():
         handler_input, attributes.request_attributes["_store"]
     )
     assert response["shouldEndSession"] is False
+
+
+def test_development_issue_verifier_role_is_least_privilege():
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "template.yaml").read_text(encoding="utf-8")
+    workflow = (root / ".github" / "workflows" / "deploy-develop.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "IssueReportVerifierRole:" in template
+    assert "Condition: IsDevelopment" in template
+    assert "repo:Techta-Labs-Ltd/hear-py:environment:development" in template
+    assert "dynamodb:Query" in template
+    assert "dynamodb:GetItem" in template
+    assert "dynamodb:PutItem" in template
+    assert "dynamodb:DeleteItem" in template
+    assert "dynamodb:BatchWriteItem" in template
+    assert "lambda:InvokeFunction" in template
+    assert "IssueReportVerifierRoleArn:" in template
+
+    verifier_block = template.split("IssueReportVerifierRole:", 1)[1].split(
+        "ProactiveNotificationDeadLetterQueue:", 1
+    )[0]
+    assert 'Resource: "*"' not in verifier_block
+    assert "dynamodb:*" not in verifier_block
+    assert "lambda:*" not in verifier_block
+
+    assert "Configure AWS credentials for stateful Lambda verification" in workflow
+    assert "steps.verifier_resources.outputs.role_arn" in workflow
+    assert "unset-current-credentials: true" in workflow
+    assert "Restore development deploy credentials" in workflow
+
+
+def test_stateful_issue_verifier_uses_real_alexa_intent_request_envelope():
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "scripts" / "verify_issue_report_lambda.py").read_text(
+        encoding="utf-8"
+    )
+    idle_speed = source.split("def verify_idle_speed", 1)[1].split(
+        "def verify_active_invalid_speed_continues", 1
+    )[0]
+    assert '"type": "IntentRequest"' in idle_speed
+    assert '"type": "IncreaseSpeedIntent"' not in idle_speed
+    assert '"type": "DecreaseSpeedIntent"' not in idle_speed
