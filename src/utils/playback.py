@@ -106,11 +106,39 @@ class PlaybackUtils:
 
     @staticmethod
     def parse_duration_ms(duration: str | None) -> int | None:
-        match = re.match("PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?", duration or "")
-        if not match:
+        raw = str(duration or "").strip().casefold()
+        if not raw:
             return None
-        hours, minutes, seconds = (int(value or 0) for value in match.groups())
-        return (hours * 3600 + minutes * 60 + seconds) * 1000
+        iso = re.fullmatch(r"pt(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", raw)
+        if iso:
+            hours, minutes, seconds = (int(value or 0) for value in iso.groups())
+            total = hours * 3600 + minutes * 60 + seconds
+            return total * 1000 if total > 0 else None
+        units = {
+            "h": 3600,
+            "hr": 3600,
+            "hrs": 3600,
+            "hour": 3600,
+            "hours": 3600,
+            "m": 60,
+            "min": 60,
+            "mins": 60,
+            "minute": 60,
+            "minutes": 60,
+            "s": 1,
+            "sec": 1,
+            "secs": 1,
+            "second": 1,
+            "seconds": 1,
+        }
+        parts = re.findall(
+            r"(\d+)\s*(hours?|hrs?|h|minutes?|mins?|min|m|seconds?|secs?|sec|s)\b",
+            raw,
+        )
+        if not parts:
+            return None
+        total = sum(int(value) * units[unit] for value, unit in parts)
+        return total * 1000 if total > 0 else None
 
     @staticmethod
     def hours(milliseconds) -> float:
