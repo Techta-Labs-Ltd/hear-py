@@ -214,9 +214,15 @@ def _assert_case(
                 f"{case.response_contains!r}: {speech!r}"
             )
 
+    populated = {
+        name: str((slot or {}).get("value") or "").strip()
+        for name, slot in (intent.get("slots") or {}).items()
+        if str((slot or {}).get("value") or "").strip()
+    }
     print(
         f"PASS {case.utterance!r} -> {actual_intent}"
         + (f".{case.expected_slot}" if case.expected_slot else "")
+        + (f" slots={populated}" if populated else "")
     )
 
 
@@ -246,6 +252,16 @@ def main() -> None:
         ),
         SmokeCase("change my location", "SetLocationIntent"),
         SmokeCase("increase speed", "IncreaseSpeedIntent"),
+        SmokeCase(
+            "my city is chelmsford",
+            ("TownCaptureIntent", "SetLocationIntent", "OpenDiscoveryIntent", "CarrierlessDiscoveryIntent"),
+            ("location", "searchQuery", "discoveryQuery"),
+        ),
+        SmokeCase(
+            "my city is york",
+            ("TownCaptureIntent", "SetLocationIntent", "OpenDiscoveryIntent", "CarrierlessDiscoveryIntent"),
+            ("location", "searchQuery", "discoveryQuery"),
+        ),
         SmokeCase("forward", "FastForwardIntent"),
         SmokeCase("fast forward 30 seconds", "FastForwardIntent", ("time", "number")),
         SmokeCase("rewind 15 seconds", "RewindIntent", ("time", "number")),
