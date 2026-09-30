@@ -245,7 +245,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "HEAR_LOCATION"
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
@@ -1321,7 +1321,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "HEAR_LOCATION",
+              "type": "AMAZON.SearchQuery",
               "samples": [
                 "{location}"
               ]
@@ -1338,15 +1338,7 @@
         },
         {
           "name": "SetLocationIntent",
-          "slots": [
-            {
-              "name": "location",
-              "type": "HEAR_LOCATION",
-              "samples": [
-                "{location}"
-              ]
-            }
-          ],
+          "slots": [],
           "samples": [
             "change my location",
             "change my town",
@@ -1363,12 +1355,7 @@
             "my location has changed",
             "change where I am",
             "update where I live",
-            "set my area",
-            "my city is {location}",
-            "my town is {location}",
-            "I am in {location}",
-            "I live in {location}",
-            "my area is {location}"
+            "set my area"
           ]
         },
         {
@@ -1949,7 +1936,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "HEAR_LOCATION",
+              "type": "AMAZON.SearchQuery",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {
