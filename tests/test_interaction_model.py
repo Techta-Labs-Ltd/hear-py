@@ -67,9 +67,9 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "topic": "HEAR_TOPIC",
             "discoveryQuery": "HEAR_DISCOVERY",
         },
-        "TownCaptureIntent": {"location": "HEAR_LOCATION"},
-        "SetLocationIntent": {"location": "HEAR_LOCATION"},
-        "SearchLocationIntent": {"location": "HEAR_LOCATION"},
+        "TownCaptureIntent": {"location": "AMAZON.SearchQuery"},
+        "SetLocationIntent": {},
+        "SearchLocationIntent": {"location": "AMAZON.SearchQuery"},
         "PlayContentIntent": {
             "topic": "HEAR_TOPIC",
             "format": "ContentFormat",
@@ -121,7 +121,7 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert "SearchContentIntent" not in dialog_intents
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "location",
-        "type": "HEAR_LOCATION",
+        "type": "AMAZON.SearchQuery",
         "confirmationRequired": False,
         "elicitationRequired": True,
         "prompts": {"elicitation": "Elicit.TownCaptureIntent.location"},
@@ -192,21 +192,19 @@ def test_existing_domain_slots_accept_bare_discovery_requests():
         "my area is {location}",
     }
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
-    assert intents["TownCaptureIntent"]["slots"][0]["samples"] == ["{location}"]
-    assert intents["SetLocationIntent"]["slots"] == [
+    assert intents["TownCaptureIntent"]["slots"][0] == {
+        "name": "location",
+        "type": "AMAZON.SearchQuery",
+        "samples": ["{location}"],
+    }
+    assert intents["SetLocationIntent"]["slots"] == []
+    assert all("{location}" not in sample for sample in intents["SetLocationIntent"]["samples"])
+    assert intents["SearchLocationIntent"]["slots"] == [
         {
             "name": "location",
-            "type": "HEAR_LOCATION",
-            "samples": ["{location}"],
+            "type": "AMAZON.SearchQuery",
         }
     ]
-    assert {
-        "my city is {location}",
-        "my town is {location}",
-        "I am in {location}",
-        "I live in {location}",
-        "my area is {location}",
-    }.issubset(set(intents["SetLocationIntent"]["samples"]))
     assert "id" not in herne_bay
     assert "arn bay" in herne_bay["name"]["synonyms"]
     assert "swidon" in swindon["name"]["synonyms"]
