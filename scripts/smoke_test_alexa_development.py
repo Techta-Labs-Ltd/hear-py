@@ -254,13 +254,13 @@ def main() -> None:
         SmokeCase("increase speed", "IncreaseSpeedIntent"),
         SmokeCase(
             "my city is chelmsford",
-            ("TownCaptureIntent", "SetLocationIntent", "OpenDiscoveryIntent", "CarrierlessDiscoveryIntent"),
-            ("location", "searchQuery", "discoveryQuery"),
+            "TownCaptureIntent",
+            "location",
         ),
         SmokeCase(
             "my city is york",
-            ("TownCaptureIntent", "SetLocationIntent", "OpenDiscoveryIntent", "CarrierlessDiscoveryIntent"),
-            ("location", "searchQuery", "discoveryQuery"),
+            "TownCaptureIntent",
+            "location",
         ),
         SmokeCase("forward", "FastForwardIntent"),
         SmokeCase("fast forward 30 seconds", "FastForwardIntent", ("time", "number")),
