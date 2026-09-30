@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import os
 import subprocess
@@ -11,8 +10,6 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-
-from src.clients.hear import HearApiClient
 
 
 @dataclass(frozen=True)
@@ -176,12 +173,29 @@ def _aws_json(*args: str) -> dict[str, Any]:
 
 
 def _resolve_listener_id(user_id: str) -> str:
-    result = asyncio.run(
-        HearApiClient().resolve_listener_identity(
-            {"alexaUserId": user_id},
-            timeout_ms=5000,
-        )
+    base_url = str(os.environ.get("HEAR_API_URL") or "").strip().rstrip("/")
+    api_key = str(os.environ.get("HEAR_API_KEY") or "").strip()
+    if not base_url or not api_key:
+        raise RuntimeError("Hear API URL/key are required for launch verification")
+
+    request = Request(
+        f"{base_url}/listeners/resolve",
+        data=json.dumps({"alexaUserId": user_id}, separators=(",", ":")).encode(),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-Api-Key": api_key,
+        },
+        method="POST",
     )
+    try:
+        with urlopen(request, timeout=10) as response:
+            raw = response.read().decode()
+    except HTTPError as error:
+        detail = error.read().decode()
+        raise RuntimeError(f"Hear API {error.code}: {detail}") from error
+
+    result = json.loads(raw) if raw else {}
     listener_id = str((result or {}).get("listenerId") or "").strip()
     if not listener_id:
         raise RuntimeError(
