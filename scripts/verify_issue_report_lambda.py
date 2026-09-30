@@ -833,8 +833,10 @@ class IssueReportLambdaVerifier:
             )
         return f"retry={misclassified_speech} | york={york_speech}"
 
-    def verify_profile_town_setup_chelmsford(self) -> str:
-        user_id = self.user("profile-town-chelmsford")
+    def _verify_profile_town_setup_city(self, city: str) -> str:
+        normalized = city.casefold()
+        label = normalized.replace(" ", "-")
+        user_id = self.user(f"profile-town-{label}")
         self.clear_user(user_id)
 
         setup = self.invoke(
@@ -889,7 +891,7 @@ class IssueReportLambdaVerifier:
                     "slots": {
                         "location": {
                             "name": "location",
-                            "value": "chelmsford",
+                            "value": city,
                             "confirmationStatus": "NONE",
                         }
                     },
@@ -897,25 +899,25 @@ class IssueReportLambdaVerifier:
             },
         )
         town_speech = self.speech(town)
-        if "chelmsford" not in town_speech.casefold():
-            raise AssertionError(f"Chelmsford was not recognised by live Lambda: {town_speech!r}")
+        if normalized not in town_speech.casefold():
+            raise AssertionError(f"{city} was not recognised by live Lambda: {town_speech!r}")
         if "couldn't identify" in town_speech.casefold():
-            raise AssertionError(f"live Lambda rejected Chelmsford: {town_speech!r}")
+            raise AssertionError(f"live Lambda rejected {city}: {town_speech!r}")
 
         dialog = self.read_scope(user_id, "DIALOG")
         core = self.read_scope(user_id, "CORE")
         pending = dialog.get("pendingLocationConfirm") or {}
-        if str(pending.get("city") or "").casefold() != "chelmsford":
+        if str(pending.get("city") or "").casefold() != normalized:
             raise AssertionError(
-                f"Chelmsford was not staged for confirmation: DIALOG={dialog!r}"
+                f"{city} was not staged for confirmation: DIALOG={dialog!r}"
             )
         if core.get("onboardingStage") != "await_location_confirm":
             raise AssertionError(
-                f"expected await_location_confirm after Chelmsford: CORE={core!r}"
+                f"expected await_location_confirm after {city}: CORE={core!r}"
             )
         if int(core.get("onboardingTownAttempts") or 0) != 0:
             raise AssertionError(
-                f"Chelmsford incorrectly consumed a town retry: CORE={core!r}"
+                f"{city} incorrectly consumed a town retry: CORE={core!r}"
             )
 
         confirmed = self.invoke(
@@ -932,8 +934,8 @@ class IssueReportLambdaVerifier:
         confirmed_speech = self.speech(confirmed)
         core = self.read_scope(user_id, "CORE")
         dialog = self.read_scope(user_id, "DIALOG")
-        if str(core.get("userCity") or "").casefold() != "chelmsford":
-            raise AssertionError(f"Chelmsford was not saved to CORE state: {core!r}")
+        if str(core.get("userCity") or "").casefold() != normalized:
+            raise AssertionError(f"{city} was not saved to CORE state: {core!r}")
         if core.get("onboardingStage") is not None:
             raise AssertionError(f"onboarding stage did not clear: {core!r}")
         if dialog.get("profileSetupActive") or dialog.get("awaitingProfileTown"):
@@ -942,8 +944,14 @@ class IssueReportLambdaVerifier:
             raise AssertionError(f"pending location was not cleared: {dialog!r}")
 
         return (
-            f"setup={setup_speech} | permission={permission_speech} | "
+            f"city={city} setup={setup_speech} | permission={permission_speech} | "
             f"town={town_speech} | confirmed={confirmed_speech}"
+        )
+
+    def verify_profile_town_setup_locations(self) -> str:
+        return " || ".join(
+            self._verify_profile_town_setup_city(city)
+            for city in ("Chelmsford", "York")
         )
 
     def verify_notification_decline_releases_stale_town_state(self) -> str:
@@ -1086,8 +1094,8 @@ class IssueReportLambdaVerifier:
                 self.verify_profile_town_priority_york,
             )
             self.run(
-                "profile setup captures Chelmsford from live Lambda",
-                self.verify_profile_town_setup_chelmsford,
+                "profile setup captures Chelmsford and York from live Lambda",
+                self.verify_profile_town_setup_locations,
             )
             self.run(
                 "notification decline releases stale town state",
