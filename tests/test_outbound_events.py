@@ -11,7 +11,7 @@ from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback_state import PlaybackQueue, PlaybackState
 from src.alexa.playback_workflow import Playback
 from src.clients.alexa import AlexaClient
-from src.clients.events import SqsEventClient, WebhookEventClient
+from src.clients.events import BackendEventEnvelope, SqsEventClient, WebhookEventClient
 from src.clients.pool import HttpCircuitOpen
 from src.container import ApplicationContainer
 from src.controllers.report import _stage_report_event
@@ -76,6 +76,19 @@ class OpenCircuitPoolStub:
         raise HttpCircuitOpen("HTTP dependency circuit is open")
 
 
+class RejectedWebhookResponse:
+    status_code = 422
+    text = '{"detail":"notification events require timestamp"}'
+
+
+class RejectedWebhookPoolStub:
+    def get(self):
+        return self
+
+    async def post(self, url, **kwargs):
+        return RejectedWebhookResponse()
+
+
 def test_sqs_client_sends_one_canonical_envelope():
     sqs = SqsStub()
     client = SqsEventClient(
@@ -110,6 +123,32 @@ async def test_webhook_open_circuit_is_a_deferred_delivery_without_exception_log
     assert delivered is False
     assert "reason=circuit_open" in caplog.text
     assert all(record.exc_info is None for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_webhook_rejection_logs_event_id_status_and_backend_detail(caplog):
+    event_id = "notifications:listener-1:enabled:123"
+    client = WebhookEventClient(
+        url="https://backend.hear.media/events",
+        secret="secret",
+        api_key="api-key",
+        pool=RejectedWebhookPoolStub(),
+    )
+
+    with caplog.at_level(logging.ERROR, logger="hear"):
+        delivered = await client.send(
+            {
+                "event": "notifications.enabled",
+                "eventId": event_id,
+                "data": {},
+            }
+        )
+
+    assert delivered is False
+    assert "event=notifications.enabled" in caplog.text
+    assert f"event_id={event_id}" in caplog.text
+    assert "status=422" in caplog.text
+    assert "notification events require timestamp" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -347,6 +386,36 @@ def test_notification_preference_event_is_backend_owned_and_repeatable():
     assert envelope["data"]["enabled"] is False
     assert envelope["data"]["permissionGranted"] is True
     assert envelope["data"]["clientEventId"].startswith("notifications:listener-1:disabled:")
+
+
+def test_notification_enabled_event_matches_backend_v3_contract():
+    producer = EventProducerStub()
+    service = OutboundEventService(producer=producer)
+
+    assert service.notification_preference(
+        enabled=True,
+        permission_granted=True,
+        alexa_user_id="alexa-user-1",
+        listener_id="listener-1",
+    )
+
+    envelope = producer.envelopes[0]
+    validated = BackendEventEnvelope.model_validate(envelope)
+    assert validated.event == "notifications.enabled"
+    assert envelope["eventId"] == envelope["data"]["clientEventId"]
+    assert set(envelope) == {"event", "schemaVersion", "eventId", "timestamp", "data"}
+    assert set(envelope["data"]) == {
+        "action",
+        "alexaUserId",
+        "listenerId",
+        "enabled",
+        "permissionGranted",
+        "timestamp",
+        "clientEventId",
+    }
+    assert envelope["data"]["action"] == "alexa"
+    assert envelope["data"]["enabled"] is True
+    assert envelope["data"]["permissionGranted"] is True
 
 
 @pytest.mark.asyncio
