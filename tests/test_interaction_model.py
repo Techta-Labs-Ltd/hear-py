@@ -212,6 +212,22 @@ def test_existing_domain_slots_accept_bare_discovery_requests():
     assert "swidon" in swindon["name"]["synonyms"]
 
 
+def test_fast_forward_owns_bare_forward_phrases():
+    intents = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    samples = set(intents["FastForwardIntent"]["samples"])
+    assert {
+        "forward",
+        "go forward",
+        "move forward",
+        "forward a bit",
+        "move forward a bit",
+        "skip forward",
+    }.issubset(samples)
+
+
 def test_content_discovery_intents_accept_date_constraints():
     intents = {
         item["name"]: item for item in _model()["interactionModel"]["languageModel"]["intents"]
