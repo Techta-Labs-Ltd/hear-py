@@ -1093,6 +1093,133 @@ async def test_unknown_city_names_city_and_keeps_session_open(monkeypatch, mock_
 
 
 @pytest.mark.asyncio
+async def test_profile_town_uses_spoken_york_instead_of_organization_canonical(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "resolved",
+                "intent": "search",
+                "entities": [],
+                "slots": {},
+                "ambiguities": [],
+                "resolution": {
+                    "match": {
+                        "city": "York",
+                        "locality": "York",
+                        "countryCode": "gb",
+                        "latitude": 53.959,
+                        "longitude": -1.082,
+                    },
+                    "candidates": [],
+                },
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "PlayByOrganizationIntent",
+        {
+            "organizationQuery": {
+                "name": "organizationQuery",
+                "value": "york",
+                "resolutions": {
+                    "resolutionsPerAuthority": [
+                        {
+                            "status": {"code": "ER_SUCCESS_MATCH"},
+                            "values": [
+                                {
+                                    "value": {
+                                        "name": "York Talking News",
+                                        "id": "org-york",
+                                    }
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        },
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"]["location"] == "york"
+
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is york",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    assert "Did you say York" in response["outputSpeech"]["ssml"]
+    assert "York Talking News" not in response["outputSpeech"]["ssml"]
+
+
+@pytest.mark.asyncio
+async def test_profile_town_set_location_without_slot_reopens_town_capture(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    container = ApplicationContainer()
+    handler_input = _intent_request(
+        mock_handler_input,
+        "SetLocationIntent",
+        {},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"] == {}
+
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    speech = response["outputSpeech"]["ssml"]
+    assert "Sure. Which city are you in now?" not in speech
+    directives = response["directives"]
+    assert directives[0]["type"] == "Dialog.ElicitSlot"
+    assert directives[0]["slotToElicit"] == "location"
+    assert directives[0]["updatedIntent"]["name"] == "TownCaptureIntent"
+
+
+@pytest.mark.asyncio
 async def test_town_slot_fallback_resolves_without_nlp_attrs(monkeypatch, mock_handler_input):
     monkeypatch.setattr(
         ResolverClient,
