@@ -409,7 +409,7 @@ async def test_global_interceptor_preserves_a_specific_source_search(mock_intent
         (
             "change my location to Dorking",
             "SearchLocationIntent",
-            {"searchQuery": "dorking"},
+            {"location": "dorking"},
             False,
         ),
         (
@@ -444,6 +444,28 @@ async def test_global_interceptor_recovers_protected_phrases_from_a_wrong_intent
     assert intent["name"] == target
     assert {name: value["value"] for name, value in intent["slots"].items()} == slots
     assert (ResolverWorkflowRunner._request(mock_intent_request) is None) is bypasses_resolver
+
+
+@pytest.mark.asyncio
+async def test_open_discovery_location_command_recovers_location_slot(mock_intent_request):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "OpenDiscoveryIntent"
+    intent["slots"] = {
+        "searchQuery": {
+            "name": "searchQuery",
+            "value": "set my location to Southampton",
+        }
+    }
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SearchLocationIntent"
+    assert intent["slots"] == {
+        "location": {"name": "location", "value": "southampton"}
+    }
 
 
 @pytest.mark.asyncio
