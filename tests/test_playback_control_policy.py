@@ -39,7 +39,34 @@ class TestPlaybackControlPolicy:
         )
 
         assert at_limit.kind == "limit"
-        assert (seek.kind, seek.offset_ms, seek.moved_ms) == ("restart", 59_000, 500)
+        assert (seek.kind, seek.offset_ms, seek.moved_ms) == ("boundary", 59_500, 0)
+
+    def test_seek_direction_never_reverses(self) -> None:
+        forward = PlaybackControlPolicy.seek(
+            {"offsetMs": 120_000, "durationMs": 300_000}, 1, 15_000
+        )
+        rewind = PlaybackControlPolicy.seek(
+            {"offsetMs": 120_000, "durationMs": 300_000}, -1, 15_000
+        )
+        start = PlaybackControlPolicy.seek(
+            {"offsetMs": 5_000, "durationMs": 300_000}, -1, 15_000
+        )
+
+        assert (forward.kind, forward.offset_ms, forward.moved_ms) == (
+            "restart",
+            135_000,
+            15_000,
+        )
+        assert (rewind.kind, rewind.offset_ms, rewind.moved_ms) == (
+            "restart",
+            105_000,
+            15_000,
+        )
+        assert (start.kind, start.offset_ms, start.moved_ms) == (
+            "restart",
+            0,
+            5_000,
+        )
 
     def test_idle_step_speed_changes_listener_default_without_track_variants(self) -> None:
         faster = PlaybackControlPolicy.step_speed(
