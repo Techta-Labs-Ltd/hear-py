@@ -254,6 +254,73 @@ class IssueReportLambdaVerifier:
             raise AssertionError("fell through to generic discovery")
         return speech
 
+    def verify_seek_uses_live_audio_position(self) -> str:
+        results = []
+        for label, intent_name, expected_offset, expected_speech in (
+            ("forward", "FastForwardIntent", 135000, "Skipping ahead 15 seconds."),
+            ("rewind", "RewindIntent", 105000, "Going back 15 seconds."),
+        ):
+            user_id = self.user(f"seek-{label}")
+            token = f"seek-{label}"
+            audio_url = f"https://cdn.hear.media/{token}.mp3"
+            self.seed(
+                user_id,
+                "PLAYBACK",
+                {
+                    "activePlayback": {
+                        "contentId": token,
+                        "token": token,
+                        "title": "Playback test",
+                        "audioUrl": audio_url,
+                        "durationMs": 300000,
+                        "offsetMs": 30000,
+                        "listenedMs": 30000,
+                        "status": "playing",
+                        "startedAt": 1,
+                        "updatedAt": 1,
+                    }
+                },
+            )
+            response = self.invoke(
+                user_id,
+                {
+                    "type": "IntentRequest",
+                    "intent": {
+                        "name": intent_name,
+                        "confirmationStatus": "NONE",
+                        "slots": {},
+                    },
+                },
+                audio_player={
+                    "playerActivity": "PLAYING",
+                    "token": token,
+                    "offsetInMilliseconds": 120000,
+                },
+            )
+            speech = self.speech(response)
+            if expected_speech not in speech:
+                raise AssertionError(
+                    f"{label} seek wording was not natural: {speech!r}"
+                )
+            directives = (response.get("response") or {}).get("directives") or []
+            play = next(
+                (
+                    directive
+                    for directive in directives
+                    if isinstance(directive, dict)
+                    and directive.get("type") == "AudioPlayer.Play"
+                ),
+                None,
+            )
+            stream = ((play or {}).get("audioItem") or {}).get("stream") or {}
+            offset = stream.get("offsetInMilliseconds")
+            if offset != expected_offset:
+                raise AssertionError(
+                    f"{label} seek used offset {offset!r}, expected {expected_offset}"
+                )
+            results.append(f"{label}={offset}")
+        return ", ".join(results)
+
     def verify_feedback_source(self) -> str:
         user_id = self.user("feedback-source")
         self.seed(
@@ -789,6 +856,10 @@ class IssueReportLambdaVerifier:
             self.run(
                 "active invalid speed keeps playback context",
                 self.verify_active_invalid_speed_continues,
+            )
+            self.run(
+                "rewind and fast forward use live Alexa position",
+                self.verify_seek_uses_live_audio_position,
             )
             self.run(
                 "feedback prefers organization and says I enjoyed it",
