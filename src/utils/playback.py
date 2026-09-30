@@ -106,11 +106,106 @@ class PlaybackUtils:
 
     @staticmethod
     def parse_duration_ms(duration: str | None) -> int | None:
-        match = re.match("PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?", duration or "")
-        if not match:
+        raw = str(duration or "").strip().casefold()
+        if not raw:
             return None
-        hours, minutes, seconds = (int(value or 0) for value in match.groups())
-        return (hours * 3600 + minutes * 60 + seconds) * 1000
+        iso = re.fullmatch(r"pt(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", raw)
+        if iso:
+            hours, minutes, seconds = (int(value or 0) for value in iso.groups())
+            total = hours * 3600 + minutes * 60 + seconds
+            return total * 1000 if total > 0 else None
+        units = {
+            "h": 3600,
+            "hr": 3600,
+            "hrs": 3600,
+            "hour": 3600,
+            "hours": 3600,
+            "m": 60,
+            "min": 60,
+            "mins": 60,
+            "minute": 60,
+            "minutes": 60,
+            "s": 1,
+            "sec": 1,
+            "secs": 1,
+            "second": 1,
+            "seconds": 1,
+        }
+        parts = re.findall(
+            r"(\d+)\s*(hours?|hrs?|h|minutes?|mins?|min|m|seconds?|secs?|sec|s)\b",
+            raw,
+        )
+        total = sum(int(value) * units[unit] for value, unit in parts)
+        if total > 0:
+            return total * 1000
+        ones = {
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+            "thirteen": 13,
+            "fourteen": 14,
+            "fifteen": 15,
+            "sixteen": 16,
+            "seventeen": 17,
+            "eighteen": 18,
+            "nineteen": 19,
+        }
+        tens = {
+            "twenty": 20,
+            "thirty": 30,
+            "forty": 40,
+            "fifty": 50,
+            "sixty": 60,
+            "seventy": 70,
+            "eighty": 80,
+            "ninety": 90,
+        }
+
+        def number_value(value: str) -> int | None:
+            tokens = value.replace("-", " ").split()
+            if not tokens:
+                return None
+            current = 0
+            for token in tokens:
+                if token in ones:
+                    current += ones[token]
+                elif token in tens:
+                    current += tens[token]
+                elif token in {"a", "an"}:
+                    current += 1
+                elif token == "hundred":
+                    current = max(1, current) * 100
+                elif token == "and":
+                    continue
+                else:
+                    return None
+            return current or None
+
+        unit_pattern = r"(hours?|hrs?|h|minutes?|mins?|min|m|seconds?|secs?|sec|s)"
+        word_pattern = (
+            r"((?:a|an|and|hundred|one|two|three|four|five|six|seven|eight|nine|ten|"
+            r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
+            r"nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
+            r"(?:[\s-]+(?:and|hundred|one|two|three|four|five|six|seven|eight|nine|"
+            r"ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
+            r"nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety))*)"
+            rf"\s*{unit_pattern}\b"
+        )
+        spoken_total = 0
+        for value, unit in re.findall(word_pattern, raw):
+            parsed = number_value(value)
+            if parsed:
+                spoken_total += parsed * units[unit]
+        return spoken_total * 1000 if spoken_total > 0 else None
 
     @staticmethod
     def hours(milliseconds) -> float:

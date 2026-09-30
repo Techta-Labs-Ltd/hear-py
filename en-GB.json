@@ -1020,7 +1020,13 @@
             "go ahead {time}",
             "skip {time} ahead",
             "jump ahead",
-            "jump ahead {time}"
+            "jump ahead {time}",
+            "forward",
+            "go forward",
+            "move forward",
+            "forward a bit",
+            "move forward a bit",
+            "skip forward"
           ]
         },
         {

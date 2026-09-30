@@ -120,7 +120,9 @@ class Settings(BaseSettings):
     HEAR_FEEDBACK_TRIGGER_MS: int = 90000
     HEAR_PLAYBACK_SPEEDS: str = "0.75,1.0,1.25,1.5,2.0"
     HEAR_DEFAULT_PLAYBACK_SPEED: float = 1.0
-    HEAR_SEEK_STEP_MS: int = 30000
+    HEAR_SEEK_STEP_MS: int = 15000
+    HEAR_REWIND_STEP_MS: int = 15000
+    HEAR_FAST_FORWARD_STEP_MS: int = 15000
     HEAR_MAX_HISTORY: int = 20
 
     @cached_property
@@ -156,6 +158,14 @@ class Settings(BaseSettings):
     @cached_property
     def seek_step_ms(self) -> int:
         return max(self.HEAR_SEEK_STEP_MS, 1000)
+
+    @cached_property
+    def rewind_step_ms(self) -> int:
+        return max(self.HEAR_REWIND_STEP_MS, 1000)
+
+    @cached_property
+    def fast_forward_step_ms(self) -> int:
+        return max(self.HEAR_FAST_FORWARD_STEP_MS, 1000)
 
     @cached_property
     def max_history(self) -> int:

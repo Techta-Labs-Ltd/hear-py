@@ -254,6 +254,265 @@ class IssueReportLambdaVerifier:
             raise AssertionError("fell through to generic discovery")
         return speech
 
+    def verify_seek_uses_live_audio_position(self) -> str:
+        results = []
+        for label, intent_name, expected_offset, expected_speech in (
+            ("forward", "FastForwardIntent", 135000, "Skipping ahead 15 seconds."),
+            ("rewind", "RewindIntent", 105000, "Going back 15 seconds."),
+        ):
+            user_id = self.user(f"seek-{label}")
+            token = f"seek-{label}"
+            audio_url = f"https://cdn.hear.media/{token}.mp3"
+            self.seed(
+                user_id,
+                "PLAYBACK",
+                {
+                    "activePlayback": {
+                        "contentId": token,
+                        "token": token,
+                        "title": "Playback test",
+                        "audioUrl": audio_url,
+                        "durationMs": 300000,
+                        "offsetMs": 30000,
+                        "listenedMs": 30000,
+                        "status": "playing",
+                        "startedAt": 1,
+                        "updatedAt": 1,
+                    }
+                },
+            )
+            response = self.invoke(
+                user_id,
+                {
+                    "type": "IntentRequest",
+                    "intent": {
+                        "name": intent_name,
+                        "confirmationStatus": "NONE",
+                        "slots": {},
+                    },
+                },
+                audio_player={
+                    "playerActivity": "PLAYING",
+                    "token": token,
+                    "offsetInMilliseconds": 120000,
+                },
+            )
+            speech = self.speech(response)
+            if expected_speech not in speech:
+                raise AssertionError(
+                    f"{label} seek wording was not natural: {speech!r}"
+                )
+            directives = (response.get("response") or {}).get("directives") or []
+            play = next(
+                (
+                    directive
+                    for directive in directives
+                    if isinstance(directive, dict)
+                    and directive.get("type") == "AudioPlayer.Play"
+                ),
+                None,
+            )
+            stream = ((play or {}).get("audioItem") or {}).get("stream") or {}
+            offset = stream.get("offsetInMilliseconds")
+            if offset != expected_offset:
+                raise AssertionError(
+                    f"{label} seek used offset {offset!r}, expected {expected_offset}"
+                )
+            results.append(f"{label}={offset}")
+        return ", ".join(results)
+
+    def verify_timed_seek_phrases(self) -> str:
+        cases = (
+            ("forward-15", "FastForwardIntent", {}, 135000, "Skipping ahead 15 seconds."),
+            (
+                "forward-30",
+                "FastForwardIntent",
+                {"time": {"name": "time", "value": "PT30S", "confirmationStatus": "NONE"}},
+                150000,
+                "Skipping ahead 30 seconds.",
+            ),
+            (
+                "rewind-30",
+                "RewindIntent",
+                {"time": {"name": "time", "value": "PT30S", "confirmationStatus": "NONE"}},
+                90000,
+                "Going back 30 seconds.",
+            ),
+            (
+                "fuzzy-forward-30",
+                "SearchContentIntent",
+                {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "fast foward 30 seconds",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+                150000,
+                "Skipping ahead 30 seconds.",
+            ),
+            (
+                "fuzzy-rewind-15",
+                "SearchContentIntent",
+                {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "go bak 15 seconds",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+                105000,
+                "Going back 15 seconds.",
+            ),
+        )
+        results = []
+        for label, intent_name, slots, expected_offset, expected_speech in cases:
+            user_id = self.user(f"timed-seek-{label}")
+            token = f"timed-seek-{label}"
+            audio_url = f"https://cdn.hear.media/{token}.mp3"
+            self.seed(
+                user_id,
+                "PLAYBACK",
+                {
+                    "activePlayback": {
+                        "contentId": token,
+                        "token": token,
+                        "title": "Playback test",
+                        "audioUrl": audio_url,
+                        "durationMs": 300000,
+                        "offsetMs": 30000,
+                        "listenedMs": 30000,
+                        "status": "playing",
+                        "startedAt": 1,
+                        "updatedAt": 1,
+                    }
+                },
+            )
+            response = self.invoke(
+                user_id,
+                {
+                    "type": "IntentRequest",
+                    "intent": {
+                        "name": intent_name,
+                        "confirmationStatus": "NONE",
+                        "slots": slots,
+                    },
+                },
+                audio_player={
+                    "playerActivity": "PLAYING",
+                    "token": token,
+                    "offsetInMilliseconds": 120000,
+                },
+            )
+            speech = self.speech(response)
+            if expected_speech not in speech:
+                raise AssertionError(
+                    f"{label} wording mismatch: {speech!r}"
+                )
+            directives = (response.get("response") or {}).get("directives") or []
+            play = next(
+                (
+                    directive
+                    for directive in directives
+                    if isinstance(directive, dict)
+                    and directive.get("type") == "AudioPlayer.Play"
+                ),
+                None,
+            )
+            stream = ((play or {}).get("audioItem") or {}).get("stream") or {}
+            offset = stream.get("offsetInMilliseconds")
+            if offset != expected_offset:
+                raise AssertionError(
+                    f"{label} used offset {offset!r}, expected {expected_offset}"
+                )
+            results.append(f"{label}={offset}")
+        return ", ".join(results)
+
+    def verify_seek_overrun_feedback(self) -> str:
+        results = []
+        for label, intent_name, slot_value, expected_offset, expected_speech in (
+            (
+                "forward-30-minutes",
+                "FastForwardIntent",
+                "PT30M",
+                299000,
+                "This recording only has 3 minutes left, so I'll skip to the end.",
+            ),
+            (
+                "rewind-30-minutes",
+                "RewindIntent",
+                "PT30M",
+                0,
+                "You're only 2 minutes into this recording, so I'll go back to the beginning.",
+            ),
+        ):
+            user_id = self.user(f"seek-overrun-{label}")
+            token = f"seek-overrun-{label}"
+            audio_url = f"https://cdn.hear.media/{token}.mp3"
+            self.seed(
+                user_id,
+                "PLAYBACK",
+                {
+                    "activePlayback": {
+                        "contentId": token,
+                        "token": token,
+                        "title": "Playback test",
+                        "audioUrl": audio_url,
+                        "durationMs": 300000,
+                        "offsetMs": 30000,
+                        "listenedMs": 30000,
+                        "status": "playing",
+                        "startedAt": 1,
+                        "updatedAt": 1,
+                    }
+                },
+            )
+            response = self.invoke(
+                user_id,
+                {
+                    "type": "IntentRequest",
+                    "intent": {
+                        "name": intent_name,
+                        "confirmationStatus": "NONE",
+                        "slots": {
+                            "time": {
+                                "name": "time",
+                                "value": slot_value,
+                                "confirmationStatus": "NONE",
+                            }
+                        },
+                    },
+                },
+                audio_player={
+                    "playerActivity": "PLAYING",
+                    "token": token,
+                    "offsetInMilliseconds": 120000,
+                },
+            )
+            speech = self.speech(response)
+            if expected_speech not in speech:
+                raise AssertionError(
+                    f"{label} did not explain the track limit: {speech!r}"
+                )
+            directives = (response.get("response") or {}).get("directives") or []
+            play = next(
+                (
+                    directive
+                    for directive in directives
+                    if isinstance(directive, dict)
+                    and directive.get("type") == "AudioPlayer.Play"
+                ),
+                None,
+            )
+            stream = ((play or {}).get("audioItem") or {}).get("stream") or {}
+            offset = stream.get("offsetInMilliseconds")
+            if offset != expected_offset:
+                raise AssertionError(
+                    f"{label} used offset {offset!r}, expected {expected_offset}"
+                )
+            results.append(f"{label}={offset}")
+        return ", ".join(results)
+
     def verify_feedback_source(self) -> str:
         user_id = self.user("feedback-source")
         self.seed(
@@ -789,6 +1048,18 @@ class IssueReportLambdaVerifier:
             self.run(
                 "active invalid speed keeps playback context",
                 self.verify_active_invalid_speed_continues,
+            )
+            self.run(
+                "rewind and fast forward use live Alexa position",
+                self.verify_seek_uses_live_audio_position,
+            )
+            self.run(
+                "timed and fuzzy seek phrases preserve requested duration",
+                self.verify_timed_seek_phrases,
+            )
+            self.run(
+                "seek overruns explain the track boundary",
+                self.verify_seek_overrun_feedback,
             )
             self.run(
                 "feedback prefers organization and says I enjoyed it",

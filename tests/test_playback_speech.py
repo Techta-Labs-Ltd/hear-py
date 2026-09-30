@@ -27,14 +27,40 @@ def test_playback_guide_covers_every_supported_control():
 
 
 def test_seek_speech_uses_natural_uk_english_durations():
-    assert PlaybackSpeech.seek(-1, 30_000, 20_000) == "Rewound 30 seconds."
-    assert PlaybackSpeech.seek(1, 120_000, 150_000) == "Skipped forward 2 minutes."
-    assert PlaybackSpeech.seek(-1, 1_000, 0) == "Rewound 1 second."
+    assert PlaybackSpeech.seek(-1, 30_000, 20_000) == "Going back 30 seconds."
+    assert PlaybackSpeech.seek(1, 120_000, 150_000) == "Skipping ahead 2 minutes."
+    assert PlaybackSpeech.seek(-1, 1_000, 0) == "Going back 1 second."
+
+
+def test_seek_speech_explains_requested_jump_beyond_track():
+    assert PlaybackSpeech.seek(
+        1,
+        179_000,
+        299_000,
+        300_000,
+        requested_ms=1_800_000,
+        available_ms=180_000,
+        limited=True,
+    ) == "This recording only has 3 minutes left, so I'll skip to the end."
+    assert PlaybackSpeech.seek(
+        -1,
+        120_000,
+        0,
+        300_000,
+        requested_ms=1_800_000,
+        available_ms=120_000,
+        limited=True,
+    ) == "You're only 2 minutes into this recording, so I'll go back to the beginning."
+
+
+def test_seek_duration_speaks_mixed_units_naturally():
+    assert PlaybackSpeech.duration(179_000) == "2 minutes and 59 seconds"
+    assert PlaybackSpeech.duration(3_661_000) == "1 hour, 1 minute and 1 second"
 
 
 def test_seek_speech_explains_playback_boundaries():
-    assert PlaybackSpeech.seek(-1, 0, 0) == "You are already at the beginning."
-    assert PlaybackSpeech.seek(1, 0, 59_000, 60_000) == "You are already at the end."
+    assert PlaybackSpeech.seek(-1, 0, 0) == "You're already at the beginning."
+    assert PlaybackSpeech.seek(1, 0, 59_000, 60_000) == "You're already at the end."
 
 
 def test_development_mid_session_commands_use_the_development_invocation():

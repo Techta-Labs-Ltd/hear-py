@@ -198,7 +198,7 @@ class Speech:
         greeting = (
             f"Welcome back, {Speech.escape_ssml_lite(user_name)}. Before we continue"
             if user_name
-            else "Welcome back to Hear. Before we continue"
+            else "Welcome back to Hear Service. Before we continue"
         )
         return f"{greeting} — did you enjoy content from {creator}? You can say I enjoyed it, it was okay, or I did not enjoy it. Say skip if you'd rather not rate it."
 

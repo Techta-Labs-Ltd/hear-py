@@ -288,14 +288,27 @@ jobs:
             local payload_file="$2"
             local response_file="$3"
             shift 3
-            local meta
+            local meta=""
             local speech
-            meta=$(aws lambda invoke \
-              --function-name "$FUNCTION_NAME" "$@" --region "$AWS_REGION" \
-              --cli-binary-format raw-in-base64-out \
-              --log-type Tail \
-              --payload "fileb://$payload_file" \
-              "$response_file")
+            local attempt
+            for attempt in 1 2 3; do
+              if meta=$(aws lambda invoke \
+                --function-name "$FUNCTION_NAME" "$@" --region "$AWS_REGION" \
+                --cli-binary-format raw-in-base64-out \
+                --log-type Tail \
+                --payload "fileb://$payload_file" \
+                "$response_file"); then
+                if echo "$meta" | jq -e 'has("FunctionError") | not' >/dev/null; then
+                  break
+                fi
+              fi
+              if [[ "$attempt" -eq 3 ]]; then
+                echo "$label Lambda invocation failed after $attempt attempts" >&2
+                echo "$meta" >&2
+                exit 1
+              fi
+              sleep "$attempt"
+            done
             echo "$meta" | jq -e 'has("FunctionError") | not'
             echo "$meta" | jq -r '.LogResult // empty' | base64 -d > "$RUNNER_TEMP/lambda-$label.log"
 
@@ -400,6 +413,8 @@ jobs:
           resolve_case() {
             local utterance="$1"
             curl --fail --silent --show-error \
+              --retry 3 --retry-all-errors --retry-delay 1 \
+              --connect-timeout 5 --max-time 20 \
               https://resolver.hear.media/resolve \
               -H "Content-Type: application/json" \
               -H "X-Api-Key: $HEAR_API_KEY" \
@@ -422,7 +437,19 @@ jobs:
             }'
           }
 
-          THIS_MONTH=$(resolve_case "find me this month salmon" || echo '{"transportError":true}')
+          THIS_MONTH='{}'
+          for attempt in 1 2 3; do
+            THIS_MONTH=$(resolve_case "find me this month salmon" || echo '{"transportError":true}')
+            if echo "$THIS_MONTH" | jq -e '
+              .status == "resolved"
+              and .slots.publishedFrom != null
+              and .slots.publishedTo != null
+              and ((.slots.residualQuery // "" | ascii_downcase | contains("this month")) | not)
+            ' >/dev/null; then
+              break
+            fi
+            sleep "$attempt"
+          done
           echo "RESULT this_month=$(echo "$THIS_MONTH" | show_result 2>/dev/null || echo "$THIS_MONTH")"
           if echo "$THIS_MONTH" | jq -e '
             .status == "resolved"
