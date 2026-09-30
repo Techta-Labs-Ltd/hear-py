@@ -508,24 +508,6 @@ jobs:
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
-      - name: Load Hear API key for Alexa launch verification
-        if: steps.cloudformation.outcome == 'success'
-        run: |
-          set -euo pipefail
-          HEAR_API_KEY=$(aws ssm get-parameter \
-            --name "$SSM_PARAMETER_PREFIX/HEAR_API_KEY" \
-            --with-decryption --region "$AWS_REGION" \
-            --query 'Parameter.Value' --output text)
-          echo "::add-mask::$HEAR_API_KEY"
-          printf 'HEAR_API_KEY=%s\n' "$HEAR_API_KEY" >> "$GITHUB_ENV"
-      - name: Configure AWS credentials for Alexa launch verification
-        if: steps.cloudformation.outcome == 'success'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ steps.verifier_resources.outputs.role_arn }}
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: HearAlexaLaunchVerifier
-          unset-current-credentials: true
       - name: Smoke test development Alexa routing and Lambda
         if: steps.cloudformation.outcome == 'success'
         env:
@@ -533,14 +515,12 @@ jobs:
           ALEXA_LWA_CLIENT_SECRET: ${{ secrets.ALEXA_LWA_CLIENT_SECRET_DEV }}
           ALEXA_REFRESH_TOKEN: ${{ secrets.ALEXA_REFRESH_TOKEN_DEV }}
         run: |
-          PYTHONPATH=. python scripts/smoke_test_alexa_development.py \
+          python scripts/smoke_test_alexa_development.py \
             --skill-id "$ALEXA_SKILL_ID" \
             --invocation-name "test development" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
-            --refresh-token "$ALEXA_REFRESH_TOKEN" \
-            --table-name "${{ steps.verifier_resources.outputs.table_name }}" \
-            --region "$AWS_REGION"
+            --refresh-token "$ALEXA_REFRESH_TOKEN"
       - name: Fail reported issue verification
         if: steps.lambda_report.outcome == 'failure' || steps.resolver_report.outcome == 'failure'
         run: |
