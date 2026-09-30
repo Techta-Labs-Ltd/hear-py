@@ -260,11 +260,7 @@ class Onboarding(OnboardingService):
             "SetLocationIntent": "location",
             "SearchLocationIntent": "location",
         }.get(intent_name) if intent_name else None
-        if slot_name:
-            builder = builder.add_directive(
-                {"type": "Dialog.ElicitSlot", "slotToElicit": slot_name}
-            )
-        elif capture_profile_town:
+        if capture_profile_town and intent_name != "TownCaptureIntent":
             builder = builder.add_directive(
                 {
                     "type": "Dialog.ElicitSlot",
@@ -280,6 +276,10 @@ class Onboarding(OnboardingService):
                         },
                     },
                 }
+            )
+        elif slot_name:
+            builder = builder.add_directive(
+                {"type": "Dialog.ElicitSlot", "slotToElicit": slot_name}
             )
         return builder.set_should_end_session(False).response
 
@@ -426,7 +426,14 @@ class Onboarding(OnboardingService):
             speech = Speech.CITY_NOT_FOUND(attempted_city)
         else:
             speech = Speech.TOWN_NOT_UNDERSTOOD
-        return Onboarding._town_retry_response(handler_input, speech, Speech.REPROMPT_ASK_TOWN)
+        return Onboarding._town_retry_response(
+            handler_input,
+            speech,
+            Speech.REPROMPT_ASK_TOWN,
+            capture_profile_town=bool(
+                store.get("profileSetupActive") or store.get("awaitingProfileTown")
+            ),
+        )
 
     @staticmethod
     def handle_town_resolver_unavailable(
@@ -447,6 +454,9 @@ class Onboarding(OnboardingService):
                 handler_input,
                 Speech.TOWN_LOOKUP_UNAVAILABLE_RETRY,
                 Speech.REPROMPT_ASK_TOWN,
+                capture_profile_town=bool(
+                    store.get("profileSetupActive") or store.get("awaitingProfileTown")
+                ),
             )
         onboarding.complete_without_location(handler_input, reliable=False)
         DialogStateManager.clear(handler_input, "onboarding")
