@@ -321,6 +321,113 @@ class IssueReportLambdaVerifier:
             results.append(f"{label}={offset}")
         return ", ".join(results)
 
+    def verify_timed_seek_phrases(self) -> str:
+        cases = (
+            ("forward-15", "FastForwardIntent", {}, 135000, "Skipping ahead 15 seconds."),
+            (
+                "forward-30",
+                "FastForwardIntent",
+                {"time": {"name": "time", "value": "PT30S", "confirmationStatus": "NONE"}},
+                150000,
+                "Skipping ahead 30 seconds.",
+            ),
+            (
+                "rewind-30",
+                "RewindIntent",
+                {"time": {"name": "time", "value": "PT30S", "confirmationStatus": "NONE"}},
+                90000,
+                "Going back 30 seconds.",
+            ),
+            (
+                "fuzzy-forward-30",
+                "SearchContentIntent",
+                {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "fast foward 30 seconds",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+                150000,
+                "Skipping ahead 30 seconds.",
+            ),
+            (
+                "fuzzy-rewind-15",
+                "SearchContentIntent",
+                {
+                    "searchQuery": {
+                        "name": "searchQuery",
+                        "value": "go bak 15 seconds",
+                        "confirmationStatus": "NONE",
+                    }
+                },
+                105000,
+                "Going back 15 seconds.",
+            ),
+        )
+        results = []
+        for label, intent_name, slots, expected_offset, expected_speech in cases:
+            user_id = self.user(f"timed-seek-{label}")
+            token = f"timed-seek-{label}"
+            audio_url = f"https://cdn.hear.media/{token}.mp3"
+            self.seed(
+                user_id,
+                "PLAYBACK",
+                {
+                    "activePlayback": {
+                        "contentId": token,
+                        "token": token,
+                        "title": "Playback test",
+                        "audioUrl": audio_url,
+                        "durationMs": 300000,
+                        "offsetMs": 30000,
+                        "listenedMs": 30000,
+                        "status": "playing",
+                        "startedAt": 1,
+                        "updatedAt": 1,
+                    }
+                },
+            )
+            response = self.invoke(
+                user_id,
+                {
+                    "type": "IntentRequest",
+                    "intent": {
+                        "name": intent_name,
+                        "confirmationStatus": "NONE",
+                        "slots": slots,
+                    },
+                },
+                audio_player={
+                    "playerActivity": "PLAYING",
+                    "token": token,
+                    "offsetInMilliseconds": 120000,
+                },
+            )
+            speech = self.speech(response)
+            if expected_speech not in speech:
+                raise AssertionError(
+                    f"{label} wording mismatch: {speech!r}"
+                )
+            directives = (response.get("response") or {}).get("directives") or []
+            play = next(
+                (
+                    directive
+                    for directive in directives
+                    if isinstance(directive, dict)
+                    and directive.get("type") == "AudioPlayer.Play"
+                ),
+                None,
+            )
+            stream = ((play or {}).get("audioItem") or {}).get("stream") or {}
+            offset = stream.get("offsetInMilliseconds")
+            if offset != expected_offset:
+                raise AssertionError(
+                    f"{label} used offset {offset!r}, expected {expected_offset}"
+                )
+            results.append(f"{label}={offset}")
+        return ", ".join(results)
+
     def verify_feedback_source(self) -> str:
         user_id = self.user("feedback-source")
         self.seed(
@@ -860,6 +967,10 @@ class IssueReportLambdaVerifier:
             self.run(
                 "rewind and fast forward use live Alexa position",
                 self.verify_seek_uses_live_audio_position,
+            )
+            self.run(
+                "timed and fuzzy seek phrases preserve requested duration",
+                self.verify_timed_seek_phrases,
             )
             self.run(
                 "feedback prefers organization and says I enjoyed it",
