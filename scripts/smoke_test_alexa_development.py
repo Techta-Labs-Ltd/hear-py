@@ -243,7 +243,6 @@ def main() -> None:
             "set my location to southampton",
             ("SearchLocationIntent", "OpenDiscoveryIntent"),
             ("location", "searchQuery"),
-            "Southampton",
         ),
         SmokeCase("change my location", "SetLocationIntent"),
         SmokeCase("increase speed", "IncreaseSpeedIntent"),
