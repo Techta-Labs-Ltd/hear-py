@@ -184,7 +184,6 @@ def test_existing_domain_slots_accept_bare_discovery_requests():
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
     swindon = next((item for item in city_type["values"] if item["name"]["value"] == "Swindon"))
     assert set(intents["TownCaptureIntent"]["samples"]) == {
-        "{location}",
         "my city is {location}",
         "my town is {location}",
         "I am in {location}",
@@ -195,7 +194,6 @@ def test_existing_domain_slots_accept_bare_discovery_requests():
     assert intents["TownCaptureIntent"]["slots"][0] == {
         "name": "location",
         "type": "AMAZON.SearchQuery",
-        "samples": ["{location}"],
     }
     assert intents["SetLocationIntent"]["slots"] == []
     assert all("{location}" not in sample for sample in intents["SetLocationIntent"]["samples"])
@@ -328,7 +326,6 @@ def test_elicited_slots_have_reply_samples_and_dialog_contracts():
         "PlayByOrganizationIntent": "organizationQuery",
         "PlayPublicationIntent": "publicationSourceQuery",
         "ClarifySelectionIntent": "selection",
-        "TownCaptureIntent": "location",
     }.items():
         slot = next(item for item in intents[intent_name]["slots"] if item["name"] == slot_name)
         assert slot.get("samples"), f"{intent_name}.{slot_name} needs reply samples"
