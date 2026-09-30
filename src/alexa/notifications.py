@@ -233,14 +233,53 @@ class AlexaNotificationAdapter:
         )
 
     def _clear_dialog(self, handler_input) -> None:
-        self._user.update(
-            handler_input,
-            {
-                "awaitingNotificationChoice": False,
-                "pendingNotification": None,
-                "_requiresReliableSave": True,
-            },
+        store = self._user.snapshot(handler_input)
+        active_dialog = DialogStateManager.get_active(handler_input) or {}
+        clear_stale_profile_setup = bool(
+            active_dialog.get("type") == "notification"
+            and store.get("onboardingComplete")
+            and (
+                store.get("onboardingStage")
+                or store.get("awaitingProfilePermission")
+                or store.get("awaitingProfileSetupConsent")
+                or store.get("awaitingProfileTown")
+                or store.get("profileSetupActive")
+                or store.get("awaitingLocationConfirm")
+                or store.get("pendingLocationConfirm")
+                or store.get("pendingTownAmbiguity")
+            )
         )
+        updates: dict[str, object] = {
+            "awaitingNotificationChoice": False,
+            "pendingNotification": None,
+            "_requiresReliableSave": True,
+        }
+        if clear_stale_profile_setup:
+            updates.update(
+                {
+                    "onboardingStage": None,
+                    "onboardingTownAttempts": 0,
+                    "onboardingTownResolverFailures": 0,
+                    "awaitingLocationConfirm": False,
+                    "pendingLocationConfirm": None,
+                    "pendingTownAmbiguity": None,
+                    "awaitingProfilePermission": False,
+                    "awaitingProfileSetupConsent": False,
+                    "awaitingProfileTown": False,
+                    "profileSetupActive": False,
+                    "awaitingCommunityPlayback": False,
+                }
+            )
+            session = dict(RequestContext.session(handler_input) or {})
+            for field in (
+                "onboardingStage",
+                "awaitingLocationConfirm",
+                "pendingLocationConfirm",
+                "awaitingCommunityPlayback",
+            ):
+                session.pop(field, None)
+            RequestContext.replace_session(handler_input, session)
+        self._user.update(handler_input, updates)
         DialogStateManager.clear(handler_input, "notification")
 
     def _publish_preference(self, handler_input, enabled: bool) -> None:

@@ -224,23 +224,23 @@ class ResolverWorkflowRunner:
 
     @staticmethod
     def _location_capture_active(context: dict) -> bool:
+        dialog = context.get("dialog") or {}
+        if dialog:
+            if dialog.get("type") != "onboarding":
+                return False
+            dialog_context = dialog.get("context") or {}
+            stage = dialog_context.get("stage")
+            return stage in {
+                OnboardingConstants.ASK_PERMISSION,
+                OnboardingConstants.ASK_TOWN,
+                OnboardingConstants.AWAIT_LOCATION_CONFIRMATION,
+            }
         store = context.get("store") or {}
-        if (
+        return bool(
             store.get("profileSetupActive")
             and store.get("awaitingProfileTown")
             and store.get("onboardingStage") == OnboardingConstants.ASK_TOWN
-        ):
-            return True
-        dialog = context.get("dialog") or {}
-        if dialog.get("type") != "onboarding":
-            return False
-        dialog_context = dialog.get("context") or {}
-        stage = dialog_context.get("stage")
-        return stage in {
-            OnboardingConstants.ASK_PERMISSION,
-            OnboardingConstants.ASK_TOWN,
-            OnboardingConstants.AWAIT_LOCATION_CONFIRMATION,
-        }
+        )
 
     @staticmethod
     def _capture_location(handler_input, context: dict) -> bool:

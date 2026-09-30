@@ -66,12 +66,13 @@ class TownCaptureHandler(AbstractRequestHandler):
         profile_town_active = bool(
             store.get("profileSetupActive") and store.get("awaitingProfileTown")
         )
-        if active_dialog and active_dialog.get("type") == "onboarding":
+        if active_dialog:
+            if active_dialog.get("type") != "onboarding":
+                return False
             dialog_context = active_dialog.get("context") or {}
             if (
                 dialog_context.get("stage")
                 != OnboardingConstants.ONBOARDING_ASK_TOWN
-                and not profile_town_active
             ):
                 return False
         elif not profile_town_active:

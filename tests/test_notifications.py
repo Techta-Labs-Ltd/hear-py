@@ -8,10 +8,12 @@ import pytest
 
 from src.alexa.launch import LaunchWorkflow
 from src.alexa.onboarding import LaunchTracker
+from src.alexa.runtime import ResponseBuilder
 from src.alexa.search import Search
 from src.clients.proactive import ProactiveEventPayload, ProactiveEventsClient
 from src.constants.state import StateSchema
 from src.container import ApplicationContainer
+from src.controllers.launch import TownCaptureHandler
 from src.models.user import User
 from src.services.notification_delivery import NotificationDeliveryService
 
@@ -811,6 +813,64 @@ async def test_auto_notification_does_not_overlay_active_onboarding_dialog(
     store = User.snapshot(mock_handler_input)
     assert store["awaitingNotificationChoice"] is False
     assert store["activeDialog"]["type"] == "onboarding"
+
+
+
+@pytest.mark.asyncio
+async def test_notification_decline_owns_turn_and_clears_stale_profile_town_state(
+    mock_handler_input,
+):
+    NotificationTestSupport.prepare(
+        mock_handler_input,
+        {
+            "onboardingComplete": True,
+            "playCount": 1,
+            "onboardingStage": "ask_town",
+            "awaitingProfileTown": True,
+            "profileSetupActive": True,
+            "pendingTownAmbiguity": {
+                "phrase": "chelmsford",
+                "candidates": [
+                    {
+                        "type": "location",
+                        "id": "location-1826876670",
+                        "name": "Chelmsford",
+                    }
+                ],
+            },
+            "awaitingNotificationChoice": True,
+            "pendingNotification": None,
+            "activeDialog": {
+                "type": "notification",
+                "context": {"question": "Would you like to listen?"},
+                "expiresAt": 4102444800,
+            },
+        },
+    )
+    mock_handler_input.request_envelope["request"] = {
+        "type": "IntentRequest",
+        "intent": {"name": "AMAZON.NoIntent", "slots": {}},
+    }
+    mock_handler_input.response_builder = ResponseBuilder()
+    deps = ApplicationContainer(notification_api=FakeHearApi(items=[]))
+
+    assert deps.build_resolver_interceptor() is not None
+    await deps.build_resolver_interceptor().process(mock_handler_input)
+    town_handler = TownCaptureHandler(deps.build_town_capture(), deps.user)
+    assert town_handler.can_handle(mock_handler_input) is False
+
+    response = await deps.build_request_decline(mock_handler_input).execute(
+        mock_handler_input
+    )
+
+    assert "leave that update for now" in response["outputSpeech"]["ssml"].casefold()
+    store = User.snapshot(mock_handler_input)
+    assert store["activeDialog"] is None
+    assert store["awaitingNotificationChoice"] is False
+    assert store["onboardingStage"] is None
+    assert store["awaitingProfileTown"] is False
+    assert store["profileSetupActive"] is False
+    assert store["pendingTownAmbiguity"] is None
 
 
 @pytest.mark.asyncio
