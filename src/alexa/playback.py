@@ -21,16 +21,18 @@ class PlayDirective:
 
 class AlexaPlayback:
     @staticmethod
-    def resolve_seek_ms(handler_input) -> int:
+    def resolve_seek_ms(handler_input, direction: int) -> int:
         duration = AlexaRequest.get_slot_value(handler_input, "time")
         parsed = PlaybackUtils.parse_duration_ms(duration)
         if parsed:
             return parsed
         number = AlexaRequest.get_slot_value(handler_input, "number")
         try:
-            return int(number) * 1000 if number is not None else settings.seek_step_ms
+            if number is not None:
+                return int(number) * 1000
         except (TypeError, ValueError):
-            return settings.seek_step_ms
+            pass
+        return settings.rewind_step_ms if direction < 0 else settings.fast_forward_step_ms
 
     @staticmethod
     def feedback_trigger_ms(duration_secs) -> int | None:
