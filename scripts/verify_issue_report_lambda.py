@@ -833,7 +833,9 @@ class IssueReportLambdaVerifier:
             )
         return f"retry={misclassified_speech} | york={york_speech}"
 
-    def _verify_profile_town_setup_city(self, city: str) -> str:
+    def _verify_profile_town_setup_city(
+        self, city: str, intent_name: str, slot_name: str
+    ) -> str:
         normalized = city.casefold()
         label = normalized.replace(" ", "-")
         user_id = self.user(f"profile-town-{label}")
@@ -886,11 +888,11 @@ class IssueReportLambdaVerifier:
             {
                 "type": "IntentRequest",
                 "intent": {
-                    "name": "TownCaptureIntent",
+                    "name": intent_name,
                     "confirmationStatus": "NONE",
                     "slots": {
-                        "location": {
-                            "name": "location",
+                        slot_name: {
+                            "name": slot_name,
                             "value": city,
                             "confirmationStatus": "NONE",
                         }
@@ -949,9 +951,14 @@ class IssueReportLambdaVerifier:
         )
 
     def verify_profile_town_setup_locations(self) -> str:
+        cases = (
+            ("Herne Bay", "TownCaptureIntent", "location"),
+            ("Chelmsford", "TownCaptureFallbackIntent", "locationQuery"),
+            ("York", "TownCaptureFallbackIntent", "locationQuery"),
+        )
         return " || ".join(
-            self._verify_profile_town_setup_city(city)
-            for city in ("Chelmsford", "York")
+            self._verify_profile_town_setup_city(city, intent_name, slot_name)
+            for city, intent_name, slot_name in cases
         )
 
     def verify_notification_decline_releases_stale_town_state(self) -> str:
@@ -1094,7 +1101,7 @@ class IssueReportLambdaVerifier:
                 self.verify_profile_town_priority_york,
             )
             self.run(
-                "profile setup captures Chelmsford and York from live Lambda",
+                "profile setup covers location slot primary and fallback",
                 self.verify_profile_town_setup_locations,
             )
             self.run(
