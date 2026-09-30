@@ -432,6 +432,119 @@ class IssueReportLambdaVerifier:
                 )
         return speech or "ambiguity consumed"
 
+    def verify_profile_town_setup_chelmsford(self) -> str:
+        user_id = self.user("profile-town-chelmsford")
+        self.clear_user(user_id)
+
+        setup = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "SetUpAccountIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {},
+                },
+            },
+        )
+        setup_speech = self.speech(setup)
+        if "listener profile" not in setup_speech.casefold() or "yes or no" not in setup_speech.casefold():
+            raise AssertionError(f"profile setup offer was not returned: {setup_speech!r}")
+
+        permission_yes = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "AMAZON.YesIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {},
+                },
+            },
+        )
+        permission_speech = self.speech(permission_yes)
+        if "which town or city" not in permission_speech.casefold():
+            raise AssertionError(
+                f"manual town capture was not started after permission fallback: {permission_speech!r}"
+            )
+
+        dialog = self.read_scope(user_id, "DIALOG")
+        core = self.read_scope(user_id, "CORE")
+        if not dialog.get("profileSetupActive") or not dialog.get("awaitingProfileTown"):
+            raise AssertionError(f"profile town flags were not persisted: {dialog!r}")
+        if core.get("onboardingStage") != "ask_town":
+            raise AssertionError(f"expected ask_town stage, got CORE={core!r}")
+        active = dialog.get("activeDialog") or {}
+        if active.get("type") != "onboarding":
+            raise AssertionError(f"onboarding dialog was not active: {active!r}")
+
+        town = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "TownCaptureIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {
+                        "location": {
+                            "name": "location",
+                            "value": "chelmsford",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        )
+        town_speech = self.speech(town)
+        if "chelmsford" not in town_speech.casefold():
+            raise AssertionError(f"Chelmsford was not recognised by live Lambda: {town_speech!r}")
+        if "couldn't identify" in town_speech.casefold():
+            raise AssertionError(f"live Lambda rejected Chelmsford: {town_speech!r}")
+
+        dialog = self.read_scope(user_id, "DIALOG")
+        core = self.read_scope(user_id, "CORE")
+        pending = dialog.get("pendingLocationConfirm") or {}
+        if str(pending.get("city") or "").casefold() != "chelmsford":
+            raise AssertionError(
+                f"Chelmsford was not staged for confirmation: DIALOG={dialog!r}"
+            )
+        if core.get("onboardingStage") != "await_location_confirm":
+            raise AssertionError(
+                f"expected await_location_confirm after Chelmsford: CORE={core!r}"
+            )
+        if int(core.get("onboardingTownAttempts") or 0) != 0:
+            raise AssertionError(
+                f"Chelmsford incorrectly consumed a town retry: CORE={core!r}"
+            )
+
+        confirmed = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "AMAZON.YesIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {},
+                },
+            },
+        )
+        confirmed_speech = self.speech(confirmed)
+        core = self.read_scope(user_id, "CORE")
+        dialog = self.read_scope(user_id, "DIALOG")
+        if str(core.get("userCity") or "").casefold() != "chelmsford":
+            raise AssertionError(f"Chelmsford was not saved to CORE state: {core!r}")
+        if core.get("onboardingStage") is not None:
+            raise AssertionError(f"onboarding stage did not clear: {core!r}")
+        if dialog.get("profileSetupActive") or dialog.get("awaitingProfileTown"):
+            raise AssertionError(f"profile town flags did not clear: {dialog!r}")
+        if dialog.get("pendingLocationConfirm") is not None:
+            raise AssertionError(f"pending location was not cleared: {dialog!r}")
+
+        return (
+            f"setup={setup_speech} | permission={permission_speech} | "
+            f"town={town_speech} | confirmed={confirmed_speech}"
+        )
+
     def verify_notification_decline_releases_stale_town_state(self) -> str:
         user_id = self.user("notification-town-state")
         now = int(time.time())
@@ -550,6 +663,10 @@ class IssueReportLambdaVerifier:
             self.run(
                 "number 1 consumes ambiguity",
                 self.verify_ambiguity_number_one,
+            )
+            self.run(
+                "profile setup captures Chelmsford from live Lambda",
+                self.verify_profile_town_setup_chelmsford,
             )
             self.run(
                 "notification decline releases stale town state",
