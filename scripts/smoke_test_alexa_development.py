@@ -247,18 +247,18 @@ def main() -> None:
     cases = (
         SmokeCase(
             "my city is herne bay",
-            "TownCaptureIntent",
-            "location",
+            ("TownCaptureIntent", "OpenDiscoveryIntent"),
+            ("location", "searchQuery"),
         ),
         SmokeCase(
             "my city is chelmsford",
-            ("TownCaptureIntent", "TownCaptureFallbackIntent"),
-            ("location", "locationQuery"),
+            "TownCaptureFallbackIntent",
+            "locationQuery",
         ),
         SmokeCase(
             "my city is york",
-            ("TownCaptureIntent", "TownCaptureFallbackIntent"),
-            ("location", "locationQuery"),
+            "TownCaptureFallbackIntent",
+            "locationQuery",
         ),
         SmokeCase(
             "set my location to herne bay",
