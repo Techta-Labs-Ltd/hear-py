@@ -178,24 +178,40 @@ def _resolve_listener_id(user_id: str) -> str:
     if not base_url or not api_key:
         raise RuntimeError("Hear API URL/key are required for launch verification")
 
-    request = Request(
-        f"{base_url}/listeners/resolve",
-        data=json.dumps({"alexaUserId": user_id}, separators=(",", ":")).encode(),
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "X-Api-Key": api_key,
-        },
-        method="POST",
-    )
+    payload = json.dumps({"alexaUserId": user_id}, separators=(",", ":"))
     try:
-        with urlopen(request, timeout=10) as response:
-            raw = response.read().decode()
-    except HTTPError as error:
-        detail = error.read().decode()
-        raise RuntimeError(f"Hear API {error.code}: {detail}") from error
+        completed = subprocess.run(
+            [
+                "curl",
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--max-time",
+                "10",
+                "--user-agent",
+                "HearAlexaLaunchVerifier/1.0",
+                "--request",
+                "POST",
+                f"{base_url}/listeners/resolve",
+                "--header",
+                "Accept: application/json",
+                "--header",
+                "Content-Type: application/json",
+                "--header",
+                f"X-Api-Key: {api_key}",
+                "--data-binary",
+                "@-",
+            ],
+            input=payload,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or error.stdout or "").strip()
+        raise RuntimeError(f"Hear API request failed: {detail}") from error
 
-    result = json.loads(raw) if raw else {}
+    result = json.loads(completed.stdout) if completed.stdout else {}
     listener_id = str((result or {}).get("listenerId") or "").strip()
     if not listener_id:
         raise RuntimeError(
