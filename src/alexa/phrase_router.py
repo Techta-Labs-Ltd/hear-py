@@ -42,6 +42,8 @@ class PhraseRouter:
             "SetPlaybackSpeedIntent",
             "IncreaseSpeedIntent",
             "DecreaseSpeedIntent",
+            "RewindIntent",
+            "FastForwardIntent",
             "HearNotificationsIntent",
             "EnableNotificationsIntent",
             "DisableNotificationsIntent",
