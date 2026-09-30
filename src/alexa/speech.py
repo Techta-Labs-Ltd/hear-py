@@ -29,7 +29,7 @@ class Speech:
         "I can't check that city right now. Please try the city name again."
     )
     TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
-    CITY_SETUP_GUIDANCE = "I still couldn't identify that location. I've saved the other details Alexa provided. You can set your location later by saying set my location. What would you like to listen to?"
+    CITY_SETUP_GUIDANCE = "I still couldn't identify that location. You can set your location later by saying set my location. What would you like to listen to?"
     REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
     REPROMPT_ASK_TOWN = "Say my city is followed by your city. You can also say skip."
     ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which city are you in?"

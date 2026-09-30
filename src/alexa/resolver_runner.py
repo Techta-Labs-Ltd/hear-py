@@ -224,6 +224,13 @@ class ResolverWorkflowRunner:
 
     @staticmethod
     def _location_capture_active(context: dict) -> bool:
+        store = context.get("store") or {}
+        if (
+            store.get("profileSetupActive")
+            and store.get("awaitingProfileTown")
+            and store.get("onboardingStage") == OnboardingConstants.ASK_TOWN
+        ):
+            return True
         dialog = context.get("dialog") or {}
         if dialog.get("type") != "onboarding":
             return False
@@ -524,7 +531,7 @@ class ResolverWorkflowRunner:
             return False
         alexa_intent = context["alexa_intent"]
         if (
-            store.get("onboardingStage") == "ask_town"
+            store.get("onboardingStage") == OnboardingConstants.ASK_TOWN
             and ResolverWorkflowRunner._location_capture_active(context)
         ):
             ResolverWorkflowRunner._set_nlp(

@@ -834,7 +834,7 @@ async def test_city_entity_resolution_sends_canonical_town_to_resolver(
         "location": "Herne Bay",
     }
     resolve.assert_awaited_once()
-    assert resolve.await_args.args == ("Herne Bay",)
+    assert resolve.await_args.args == ("my city is Herne Bay",)
     assert resolve.await_args.kwargs == {
         "alexa_user_id": "amzn1.ask.account.TEST",
         "prefer_location": True,
@@ -883,7 +883,7 @@ async def test_unknown_city_search_query_reaches_the_location_resolver(mock_hand
     await _town_capture_handler(container).handle(handler_input)
 
     resolver.resolve_utterance.assert_awaited_once_with(
-        "dorking",
+        "my city is dorking",
         alexa_user_id="amzn1.ask.account.TEST",
         prefer_location=True,
         timeout_ms=5000,
@@ -992,7 +992,7 @@ async def test_onboarding_treats_creator_misclassification_as_town(monkeypatch, 
     assert store["pendingLocationConfirm"]["city"] == "Gloucester"
     assert store["onboardingTownAttempts"] == 0
     resolve.assert_awaited_once_with(
-        "Gloucester",
+        "my city is Gloucester",
         alexa_user_id="amzn1.ask.account.TEST",
         prefer_location=True,
         timeout_ms=5000,
@@ -4455,10 +4455,159 @@ async def test_location_follow_up_survives_missing_persistence_in_same_session(
     play.assert_not_awaited()
 
 
+
 @pytest.mark.asyncio
-async def test_stale_town_stage_without_active_dialog_cannot_capture_scottish_farmer(
+async def test_profile_town_ambiguity_stays_in_location_flow_without_spending_retry(
     mock_handler_input,
 ):
+    mock_handler_input.response_builder = ResponseBuilder()
+    candidates = [
+        {"type": "location", "id": "location-1826876670", "name": "Chelmsford"},
+        {"type": "location", "id": "location-1826660998", "name": "Chalford"},
+        {"type": "location", "id": "location-1826304042", "name": "Chelford"},
+    ]
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "ambiguous",
+                "intent": "search",
+                "entities": [],
+                "slots": {
+                    "residualQuery": "",
+                    "ambiguousReferences": [
+                        {"phrase": "chelmsford", "candidates": candidates}
+                    ],
+                },
+                "ambiguities": [
+                    {"phrase": "chelmsford", "candidates": candidates}
+                ],
+                "resolution": {"match": None, "candidates": []},
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {"location": {"name": "location", "value": "chelmsford"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is chelmsford",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    speech = response["outputSpeech"]["ssml"]
+    assert "Chelmsford" in speech
+    assert "Chalford" in speech
+    assert "Chelford" in speech
+    store = User.snapshot(handler_input)
+    assert store["onboardingStage"] == "ask_town"
+    assert store["onboardingTownAttempts"] == 0
+    assert [
+        candidate["name"]
+        for candidate in store["pendingTownAmbiguity"]["candidates"]
+    ] == ["Chelmsford", "Chalford", "Chelford"]
+
+
+@pytest.mark.asyncio
+async def test_profile_town_ambiguity_ordinal_selects_location_and_confirms(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
+    resolver = SimpleNamespace(
+        resolve_utterance=AsyncMock(
+            return_value={
+                "status": "ambiguous",
+                "intent": "search",
+                "entities": [],
+                "slots": {},
+                "ambiguities": [],
+                "resolution": {"match": None, "candidates": []},
+            }
+        )
+    )
+    progressive = SimpleNamespace(send=AsyncMock(return_value=True))
+    container = ApplicationContainer(resolver=resolver, progressive=progressive)
+    handler_input = _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {"location": {"name": "location", "value": "first"}},
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "pendingTownAmbiguity": {
+            "phrase": "chelmsford",
+            "candidates": [
+                {
+                    "type": "location",
+                    "id": "location-1826876670",
+                    "name": "Chelmsford",
+                },
+                {
+                    "type": "location",
+                    "id": "location-1826660998",
+                    "name": "Chalford",
+                },
+                {
+                    "type": "location",
+                    "id": "location-1826304042",
+                    "name": "Chelford",
+                },
+            ],
+        },
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+    response = await _town_capture_handler(container).handle(handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is Chelmsford",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    assert "Chelmsford" in response["outputSpeech"]["ssml"]
+    store = User.snapshot(handler_input)
+    assert store["onboardingStage"] == "await_location_confirm"
+    assert store["pendingLocationConfirm"]["city"] == "Chelmsford"
+    assert store["pendingTownAmbiguity"] is None
+    assert store["onboardingTownAttempts"] == 0
+
+
+@pytest.mark.asyncio
+async def test_profile_town_stage_without_active_dialog_still_owns_scottish_farmer_turn(
+    mock_handler_input,
+):
+    mock_handler_input.response_builder = ResponseBuilder()
     resolver = SimpleNamespace(
         resolve_utterance=AsyncMock(
             return_value={
@@ -4507,10 +4656,25 @@ async def test_stale_town_stage_without_active_dialog_cannot_capture_scottish_fa
     container = ApplicationContainer(resolver=resolver, progressive=progressive)
     await container.build_resolver_interceptor().process(mock_handler_input)
 
-    resolver.resolve_utterance.assert_awaited_once()
-    assert resolver.resolve_utterance.await_args.args == ("play scotish farmer",)
+    resolver.resolve_utterance.assert_not_awaited()
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
-    assert nlp["intent"] == "organization"
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"]["location"] == "scotish farmer"
     assert nlp["alexaRawIntent"] == "TownCaptureIntent"
     assert nlp["needsRedirect"] is True
-    assert _town_capture_handler(container).can_handle(mock_handler_input) is False
+    handler = _town_capture_handler(container)
+    assert handler.can_handle(mock_handler_input) is True
+
+    response = await handler.handle(mock_handler_input)
+
+    resolver.resolve_utterance.assert_awaited_once_with(
+        "my city is scotish farmer",
+        alexa_user_id="amzn1.ask.account.TEST",
+        listener_id="listener-1",
+        prefer_location=True,
+        timeout_ms=5000,
+    )
+    assert "city" in response["outputSpeech"]["ssml"].casefold()
+    store = User.snapshot(mock_handler_input)
+    assert store["onboardingStage"] == "ask_town"
+    assert store["onboardingTownAttempts"] == 1
