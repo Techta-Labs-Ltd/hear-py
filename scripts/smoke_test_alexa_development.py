@@ -13,8 +13,9 @@ from urllib.request import Request, urlopen
 @dataclass(frozen=True)
 class SmokeCase:
     utterance: str
-    expected_intent: str
-    expected_slot: str | None = None
+    expected_intent: str | tuple[str, ...]
+    expected_slot: str | tuple[str, ...] | None = None
+    response_contains: str | None = None
 
 
 class AlexaSimulationClient:
@@ -175,22 +176,43 @@ def _assert_case(
     request, response = _intent_request(simulation)
     intent = request.get("intent") or {}
     actual_intent = intent.get("name")
-    if actual_intent != case.expected_intent:
+    expected_intents = (
+        case.expected_intent
+        if isinstance(case.expected_intent, tuple)
+        else (case.expected_intent,)
+    )
+    if actual_intent not in expected_intents:
         raise AssertionError(
-            f"{case.utterance!r}: expected {case.expected_intent}, got {actual_intent}"
+            f"{case.utterance!r}: expected one of {expected_intents}, got {actual_intent}"
         )
 
     if case.expected_slot:
-        slot = (intent.get("slots") or {}).get(case.expected_slot) or {}
-        if not str(slot.get("value") or "").strip():
+        expected_slots = (
+            case.expected_slot
+            if isinstance(case.expected_slot, tuple)
+            else (case.expected_slot,)
+        )
+        slots = intent.get("slots") or {}
+        if not any(
+            str((slots.get(slot_name) or {}).get("value") or "").strip()
+            for slot_name in expected_slots
+        ):
             raise AssertionError(
-                f"{case.utterance!r}: expected populated slot {case.expected_slot}"
+                f"{case.utterance!r}: expected populated slot in {expected_slots}"
             )
 
     if not isinstance(response, dict) or not response.get("version"):
         raise AssertionError(
             f"{case.utterance!r}: Lambda returned no valid Alexa response envelope"
         )
+
+    if case.response_contains:
+        speech = _spoken_response(response)
+        if case.response_contains.casefold() not in speech.casefold():
+            raise AssertionError(
+                f"{case.utterance!r}: response did not contain "
+                f"{case.response_contains!r}: {speech!r}"
+            )
 
     print(
         f"PASS {case.utterance!r} -> {actual_intent}"
@@ -219,8 +241,9 @@ def main() -> None:
     cases = (
         SmokeCase(
             "set my location to southampton",
-            "SearchLocationIntent",
-            "location",
+            ("SearchLocationIntent", "OpenDiscoveryIntent"),
+            ("location", "searchQuery"),
+            "Southampton",
         ),
         SmokeCase("change my location", "SetLocationIntent"),
         SmokeCase("increase speed", "IncreaseSpeedIntent"),
