@@ -162,6 +162,7 @@ class DiscoveryConstants:
         "SelectPublicationSourceIntent": "publication",
         "SearchPublicationIntent": "publication",
         "SearchLocationIntent": "location_set",
+        "SearchLocationFallbackIntent": "location_set",
         "WhatsTrendingIntent": "trending",
         "PlayRecommendationIntent": "trending",
         "PlayLocalIntent": "local",
@@ -169,6 +170,7 @@ class DiscoveryConstants:
         "ShowMoreBrowseIntent": "show_more",
         "SetLocationIntent": "location_set",
         "TownCaptureIntent": "town_capture",
+        "TownCaptureFallbackIntent": "town_capture",
         "ClarifySelectionIntent": "general",
         "AMAZON.FallbackIntent": "general",
     }
