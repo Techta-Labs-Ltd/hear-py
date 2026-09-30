@@ -137,6 +137,7 @@ async def test_global_interceptor_routes_every_declared_locked_phrase(
         ("increament spede", "IncreaseSpeedIntent", None, None),
         ("decrese spede", "DecreaseSpeedIntent", None, None),
         ("fast foward 30 seconds", "FastForwardIntent", "time", "30 seconds"),
+        ("fast foward thirty minutes", "FastForwardIntent", "time", "thirty minutes"),
         ("fastforward 15 secs", "FastForwardIntent", "time", "15 secs"),
         ("go bak 30 seconds", "RewindIntent", "time", "30 seconds"),
         ("rewnd 15 seconds", "RewindIntent", "time", "15 seconds"),
