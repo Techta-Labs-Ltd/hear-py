@@ -78,8 +78,8 @@ def test_phrase_router_preserves_meaningful_searches(phrase):
     ("phrase", "intent_name", "slots"),
     (
         ("change my location", "SetLocationIntent", {}),
-        ("change my location to Dorking", "SearchLocationIntent", {"searchQuery": "dorking"}),
-        ("i have moved to Dorking", "SearchLocationIntent", {"searchQuery": "dorking"}),
+        ("change my location to Dorking", "SearchLocationIntent", {"location": "dorking"}),
+        ("i have moved to Dorking", "SearchLocationIntent", {"location": "dorking"}),
         ("play content in Dorking", "PlayLocalIntent", {"localQuery": "play content in dorking"}),
         ("turn on notifications", "EnableNotificationsIntent", {}),
         ("turn off notifications", "DisableNotificationsIntent", {}),
