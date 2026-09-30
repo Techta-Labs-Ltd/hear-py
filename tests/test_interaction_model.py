@@ -163,7 +163,6 @@ def test_generic_discovery_dialog_uses_the_combined_hear_slot():
             {
                 "name": "searchQuery",
                 "type": "AMAZON.SearchQuery",
-                "samples": ["{searchQuery}"],
             }
         ],
         "samples": ["search the Hear catalogue for {searchQuery}"],
