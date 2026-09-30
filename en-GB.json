@@ -1321,14 +1321,10 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.SearchQuery",
-              "samples": [
-                "{location}"
-              ]
+              "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "{location}",
             "my city is {location}",
             "my town is {location}",
             "I am in {location}",
