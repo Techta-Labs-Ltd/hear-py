@@ -36,6 +36,8 @@ def test_runtime_flags_are_loaded_through_settings():
         HEAR_PLAYBACK_SPEEDS="0.75,1.0,1.5",
         HEAR_DEFAULT_PLAYBACK_SPEED=1.5,
         HEAR_SEEK_STEP_MS=15000,
+        HEAR_REWIND_STEP_MS=10000,
+        HEAR_FAST_FORWARD_STEP_MS=20000,
         HEAR_MAX_HISTORY=12,
         HEAR_LOGGING_ENABLED=False,
     )
@@ -45,6 +47,8 @@ def test_runtime_flags_are_loaded_through_settings():
     assert configured.speeds == [0.75, 1.0, 1.5]
     assert configured.default_speed == 1.5
     assert configured.seek_step_ms == 15000
+    assert configured.rewind_step_ms == 10000
+    assert configured.fast_forward_step_ms == 20000
     assert configured.max_history == 12
     assert configured.HEAR_LOGGING_ENABLED is False
 
