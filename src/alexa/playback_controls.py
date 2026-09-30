@@ -120,10 +120,21 @@ class PlaybackControls:
 
     async def seek(self, handler_input: HandlerInput, direction: int):
         state = self._playback.state.current(handler_input)
+        audio = PlaybackContext.read_audio_player_context(handler_input)
+        if state and PlaybackContext.is_audio_player_active(audio):
+            active_token = str(state.get("token") or state.get("contentId") or "")
+            audio_token = str((audio or {}).get("token") or "")
+            if active_token and audio_token and active_token != audio_token:
+                state = None
+            elif audio is not None:
+                state = {
+                    **state,
+                    "offsetMs": PlaybackUtils.integer(audio.get("offsetMs")),
+                }
         decision = PlaybackControlPolicy.seek(
             state,
             direction,
-            AlexaPlayback.resolve_seek_ms(handler_input),
+            AlexaPlayback.resolve_seek_ms(handler_input, direction),
         )
         if decision.kind == "cannot_seek":
             return Playback.open_queue_response(handler_input, PlaybackSpeech.CANNOT_SEEK)
@@ -134,6 +145,8 @@ class PlaybackControls:
             offset_ms,
             decision.duration_ms,
         )
+        if decision.kind == "boundary":
+            return Playback.open_queue_response(handler_input, speech)
         return await self.restart_active(handler_input, offset_ms=offset_ms, speech=speech)
 
     async def play_queue_delta(
