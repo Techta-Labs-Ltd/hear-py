@@ -1093,6 +1093,96 @@ async def test_unknown_city_names_city_and_keeps_session_open(monkeypatch, mock_
 
 
 @pytest.mark.asyncio
+async def test_profile_town_fallback_intent_routes_to_town_capture(
+    mock_handler_input,
+):
+    container = ApplicationContainer()
+    handler_input = _intent_request(
+        mock_handler_input,
+        "TownCaptureFallbackIntent",
+        {
+            "locationQuery": {
+                "name": "locationQuery",
+                "value": "chelmsford",
+            }
+        },
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"]["location"] == "chelmsford"
+    assert nlp["alexaRawIntent"] == "TownCaptureFallbackIntent"
+    assert _town_capture_handler(container).can_handle(handler_input) is True
+
+
+@pytest.mark.asyncio
+async def test_known_profile_town_prefers_hear_location_canonical(
+    mock_handler_input,
+):
+    container = ApplicationContainer()
+    handler_input = _intent_request(
+        mock_handler_input,
+        "TownCaptureIntent",
+        {
+            "location": {
+                "name": "location",
+                "value": "arn bay",
+                "resolutions": {
+                    "resolutionsPerAuthority": [
+                        {
+                            "status": {"code": "ER_SUCCESS_MATCH"},
+                            "values": [
+                                {
+                                    "value": {
+                                        "name": "Herne Bay",
+                                        "id": "herne-bay",
+                                    }
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        },
+    )
+    handler_input.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+        "listenerId": "listener-1",
+        "onboardingStage": "ask_town",
+        "awaitingProfileTown": True,
+        "profileSetupActive": True,
+        "activeDialog": {
+            "type": "onboarding",
+            "context": {"stage": "ask_town"},
+            "expiresAt": 4102444800,
+        },
+    }
+
+    await container.build_resolver_interceptor().process(handler_input)
+
+    nlp = handler_input.attributes_manager.request_attributes["_nlp"]
+    assert nlp["intent"] == "town_capture"
+    assert nlp["slots"]["location"] == "Herne Bay"
+    assert nlp["alexaRawIntent"] == "TownCaptureIntent"
+
+
+@pytest.mark.asyncio
 async def test_profile_town_uses_spoken_york_instead_of_organization_canonical(
     mock_handler_input,
 ):
