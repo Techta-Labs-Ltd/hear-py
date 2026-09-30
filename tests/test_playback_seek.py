@@ -94,6 +94,10 @@ def test_seek_defaults_are_short_and_directional(mock_handler_input):
         ("15 seconds", 15000),
         ("30 secs", 30000),
         ("2 minutes", 120000),
+        ("30minutes", 1800000),
+        ("thirty minutes", 1800000),
+        ("one minute thirty seconds", 90000),
+        ("two hours", 7200000),
         ("1 minute 30 seconds", 90000),
     ),
 )
