@@ -111,7 +111,7 @@ INTENT_ROUTE_RULES = tuple(
                 "transport",
                 "fast_forward",
                 1200,
-                r"(?:fast forward|skip ahead|go forward)",
+                r"(?:fast forward|forward|forward a bit|skip ahead|skip forward|go forward|move forward|move forward a bit)",
             ),
             _rule(
                 "SetPlaybackSpeedIntent",
