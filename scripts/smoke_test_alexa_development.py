@@ -246,6 +246,8 @@ def main() -> None:
         ),
         SmokeCase("change my location", "SetLocationIntent"),
         SmokeCase("increase speed", "IncreaseSpeedIntent"),
+        SmokeCase("fast forward 30 seconds", "FastForwardIntent", ("time", "number")),
+        SmokeCase("rewind 15 seconds", "RewindIntent", ("time", "number")),
         SmokeCase("set speed to first", "SetPlaybackSpeedIntent", "speed"),
         SmokeCase("find this month salmon", "SearchContentIntent", "searchQuery"),
         SmokeCase("I enjoyed it", "FeedbackResponseIntent", "feedback"),
