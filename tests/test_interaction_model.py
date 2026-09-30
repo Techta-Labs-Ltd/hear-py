@@ -67,9 +67,11 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "topic": "HEAR_TOPIC",
             "discoveryQuery": "HEAR_DISCOVERY",
         },
-        "TownCaptureIntent": {"location": "AMAZON.SearchQuery"},
+        "TownCaptureIntent": {"location": "HEAR_LOCATION"},
+        "TownCaptureFallbackIntent": {"locationQuery": "AMAZON.SearchQuery"},
         "SetLocationIntent": {},
-        "SearchLocationIntent": {"location": "AMAZON.SearchQuery"},
+        "SearchLocationIntent": {"location": "HEAR_LOCATION"},
+        "SearchLocationFallbackIntent": {"locationQuery": "AMAZON.SearchQuery"},
         "PlayContentIntent": {
             "topic": "HEAR_TOPIC",
             "format": "ContentFormat",
@@ -121,7 +123,7 @@ def test_location_dialogs_elicit_bare_town_replies():
     assert "SearchContentIntent" not in dialog_intents
     assert dialog_intents["TownCaptureIntent"]["slots"][0] == {
         "name": "location",
-        "type": "AMAZON.SearchQuery",
+        "type": "HEAR_LOCATION",
         "confirmationRequired": False,
         "elicitationRequired": True,
         "prompts": {"elicitation": "Elicit.TownCaptureIntent.location"},
@@ -184,22 +186,40 @@ def test_existing_domain_slots_accept_bare_discovery_requests():
     herne_bay = next((item for item in city_type["values"] if item["name"]["value"] == "Herne Bay"))
     swindon = next((item for item in city_type["values"] if item["name"]["value"] == "Swindon"))
     assert set(intents["TownCaptureIntent"]["samples"]) == {
+        "{location}",
         "my city is {location}",
         "my town is {location}",
         "I am in {location}",
         "I live in {location}",
         "my area is {location}",
     }
+    assert set(intents["TownCaptureFallbackIntent"]["samples"]) == {
+        "my city is {locationQuery}",
+        "my town is {locationQuery}",
+        "I am in {locationQuery}",
+        "I live in {locationQuery}",
+        "my area is {locationQuery}",
+    }
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     assert intents["TownCaptureIntent"]["slots"][0] == {
         "name": "location",
-        "type": "AMAZON.SearchQuery",
+        "type": "HEAR_LOCATION",
+        "samples": ["{location}"],
     }
+    assert intents["TownCaptureFallbackIntent"]["slots"] == [
+        {"name": "locationQuery", "type": "AMAZON.SearchQuery"}
+    ]
     assert intents["SetLocationIntent"]["slots"] == []
     assert all("{location}" not in sample for sample in intents["SetLocationIntent"]["samples"])
     assert intents["SearchLocationIntent"]["slots"] == [
         {
             "name": "location",
+            "type": "HEAR_LOCATION",
+        }
+    ]
+    assert intents["SearchLocationFallbackIntent"]["slots"] == [
+        {
+            "name": "locationQuery",
             "type": "AMAZON.SearchQuery",
         }
     ]
@@ -366,10 +386,16 @@ def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
 
     location = intents["SearchLocationIntent"]
     assert [(slot["name"], slot["type"]) for slot in location["slots"]] == [
-        ("location", "AMAZON.SearchQuery")
+        ("location", "HEAR_LOCATION")
     ]
     assert "change my location to {location}" in location["samples"]
     assert all(value.endswith("{location}") for value in location["samples"])
+    fallback = intents["SearchLocationFallbackIntent"]
+    assert [(slot["name"], slot["type"]) for slot in fallback["slots"]] == [
+        ("locationQuery", "AMAZON.SearchQuery")
+    ]
+    assert "change my location to {locationQuery}" in fallback["samples"]
+    assert all(value.endswith("{locationQuery}") for value in fallback["samples"])
 
 
 def test_talking_newspaper_language_model_has_safe_source_phrases_and_synonyms():
