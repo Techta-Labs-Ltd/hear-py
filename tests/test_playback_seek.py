@@ -85,10 +85,24 @@ def test_seek_defaults_are_short_and_directional(mock_handler_input):
     assert AlexaPlayback.resolve_seek_ms(rewind, -1) == 15000
 
 
-def test_explicit_seek_duration_overrides_default(mock_handler_input):
+@pytest.mark.parametrize(
+    ("value", "expected_ms"),
+    (
+        ("PT15S", 15000),
+        ("PT30S", 30000),
+        ("PT1M", 60000),
+        ("15 seconds", 15000),
+        ("30 secs", 30000),
+        ("2 minutes", 120000),
+        ("1 minute 30 seconds", 90000),
+    ),
+)
+def test_explicit_seek_duration_overrides_default(
+    mock_handler_input, value, expected_ms
+):
     handler_input = _intent(
         mock_handler_input,
         "FastForwardIntent",
-        {"time": {"name": "time", "value": "PT1M"}},
+        {"time": {"name": "time", "value": value}},
     )
-    assert AlexaPlayback.resolve_seek_ms(handler_input, 1) == 60000
+    assert AlexaPlayback.resolve_seek_ms(handler_input, 1) == expected_ms
