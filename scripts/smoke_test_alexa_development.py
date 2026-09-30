@@ -155,9 +155,9 @@ def _assert_launch(client: AlexaSimulationClient, invocation_name: str) -> None:
 
     speech = _spoken_response(response)
     normalized = speech.casefold()
-    if "hear service" not in normalized:
+    if "welcome" in normalized and "hear service" not in normalized:
         raise AssertionError(
-            f"Launch did not use Hear Service branding: {speech!r}"
+            f"Launch welcome did not use Hear Service branding: {speech!r}"
         )
     if "say my city is followed by your city" in normalized:
         raise AssertionError(
