@@ -124,6 +124,76 @@ async def test_global_interceptor_routes_every_declared_locked_phrase(
         assert ResolverWorkflowRunner._request(mock_intent_request) is None
 
 
+@pytest.mark.parametrize(
+    ("phrase", "target", "slot_name", "slot_value"),
+    (
+        ("setuo my account", "SetUpAccountIntent", None, None),
+        ("recomend something", "PlayRecommendationIntent", None, None),
+        ("recomend sport", "PlayRecommendationIntent", "recommendationQuery", "sport"),
+        ("what this abot", "WhatsThisAboutIntent", None, None),
+        ("whats trendng", "WhatsTrendingIntent", None, None),
+        ("what is trendng in sport", "WhatsTrendingIntent", "topic", "sport"),
+        ("set playbak speed to first", "SetPlaybackSpeedIntent", "speed", "first"),
+        ("increament spede", "IncreaseSpeedIntent", None, None),
+        ("decrese spede", "DecreaseSpeedIntent", None, None),
+        ("chec my notifications", "HearNotificationsIntent", None, None),
+        ("enable notifcations", "EnableNotificationsIntent", None, None),
+        ("disable notifcations", "DisableNotificationsIntent", None, None),
+        ("rate ths content", "RateContentIntent", None, None),
+        ("skp feedback", "SkipFeedbackIntent", None, None),
+        ("who is cretor", "WhoIsCreatorIntent", None, None),
+        ("folow this creator", "FollowCreatorIntent", None, None),
+        ("unfolow this creator", "UnfollowCreatorIntent", None, None),
+        ("repot this content", "ReportContentIntent", None, None),
+        ("repot this creator", "ReportCreatorIntent", None, None),
+        ("set my locaton to southampton", "SearchLocationIntent", "location", "southampton"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_global_interceptor_fuzzy_routes_protected_commands(
+    mock_intent_request, phrase, target, slot_name, slot_value
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == target
+    if slot_name:
+        assert intent["slots"][slot_name]["value"] == slot_value
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    (
+        "flower gardening",
+        "creator news",
+        "accounting news",
+        "speedway racing",
+        "notification technology",
+        "report from london",
+    ),
+)
+@pytest.mark.asyncio
+async def test_global_interceptor_does_not_fuzzy_route_unrelated_content(
+    mock_intent_request, phrase
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        "onboardingComplete": True
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {"searchQuery": {"name": "searchQuery", "value": phrase}}
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SearchContentIntent"
+
+
 @pytest.mark.asyncio
 async def test_global_interceptor_finds_a_direct_command_in_a_secondary_slot(
     mock_intent_request,

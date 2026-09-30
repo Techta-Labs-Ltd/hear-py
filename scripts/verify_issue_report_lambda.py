@@ -432,6 +432,38 @@ class IssueReportLambdaVerifier:
                 )
         return speech or "ambiguity consumed"
 
+    def verify_fuzzy_account_setup_typo(self) -> str:
+        user_id = self.user("fuzzy-account-setup")
+        self.clear_user(user_id)
+        response = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "SearchContentIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {
+                        "searchQuery": {
+                            "name": "searchQuery",
+                            "value": "setuo my account",
+                            "confirmationStatus": "NONE",
+                        }
+                    },
+                },
+            },
+        )
+        speech = self.speech(response)
+        if "listener profile" not in speech.casefold() or "yes or no" not in speech.casefold():
+            raise AssertionError(
+                f"fuzzy account setup did not override content search: {speech!r}"
+            )
+        dialog = self.read_scope(user_id, "DIALOG")
+        if not dialog.get("awaitingProfileSetupConsent"):
+            raise AssertionError(
+                f"account setup consent state was not persisted: {dialog!r}"
+            )
+        return speech
+
     def verify_profile_town_setup_chelmsford(self) -> str:
         user_id = self.user("profile-town-chelmsford")
         self.clear_user(user_id)
@@ -663,6 +695,10 @@ class IssueReportLambdaVerifier:
             self.run(
                 "number 1 consumes ambiguity",
                 self.verify_ambiguity_number_one,
+            )
+            self.run(
+                "fuzzy account setup typo routes on live Lambda",
+                self.verify_fuzzy_account_setup_typo,
             )
             self.run(
                 "profile setup captures Chelmsford from live Lambda",
