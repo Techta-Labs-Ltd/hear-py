@@ -287,7 +287,10 @@
           "slots": [
             {
               "name": "searchQuery",
-              "type": "AMAZON.SearchQuery"
+              "type": "AMAZON.SearchQuery",
+              "samples": [
+                "{searchQuery}"
+              ]
             }
           ],
           "samples": [
