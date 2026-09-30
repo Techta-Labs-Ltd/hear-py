@@ -428,6 +428,91 @@ class IssueReportLambdaVerifier:
             results.append(f"{label}={offset}")
         return ", ".join(results)
 
+    def verify_seek_overrun_feedback(self) -> str:
+        results = []
+        for label, intent_name, slot_value, expected_offset, expected_speech in (
+            (
+                "forward-30-minutes",
+                "FastForwardIntent",
+                "PT30M",
+                299000,
+                "This recording only has 3 minutes left, so I'll skip to the end.",
+            ),
+            (
+                "rewind-30-minutes",
+                "RewindIntent",
+                "PT30M",
+                0,
+                "You're only 2 minutes into this recording, so I'll go back to the beginning.",
+            ),
+        ):
+            user_id = self.user(f"seek-overrun-{label}")
+            token = f"seek-overrun-{label}"
+            audio_url = f"https://cdn.hear.media/{token}.mp3"
+            self.seed(
+                user_id,
+                "PLAYBACK",
+                {
+                    "activePlayback": {
+                        "contentId": token,
+                        "token": token,
+                        "title": "Playback test",
+                        "audioUrl": audio_url,
+                        "durationMs": 300000,
+                        "offsetMs": 30000,
+                        "listenedMs": 30000,
+                        "status": "playing",
+                        "startedAt": 1,
+                        "updatedAt": 1,
+                    }
+                },
+            )
+            response = self.invoke(
+                user_id,
+                {
+                    "type": "IntentRequest",
+                    "intent": {
+                        "name": intent_name,
+                        "confirmationStatus": "NONE",
+                        "slots": {
+                            "time": {
+                                "name": "time",
+                                "value": slot_value,
+                                "confirmationStatus": "NONE",
+                            }
+                        },
+                    },
+                },
+                audio_player={
+                    "playerActivity": "PLAYING",
+                    "token": token,
+                    "offsetInMilliseconds": 120000,
+                },
+            )
+            speech = self.speech(response)
+            if expected_speech not in speech:
+                raise AssertionError(
+                    f"{label} did not explain the track limit: {speech!r}"
+                )
+            directives = (response.get("response") or {}).get("directives") or []
+            play = next(
+                (
+                    directive
+                    for directive in directives
+                    if isinstance(directive, dict)
+                    and directive.get("type") == "AudioPlayer.Play"
+                ),
+                None,
+            )
+            stream = ((play or {}).get("audioItem") or {}).get("stream") or {}
+            offset = stream.get("offsetInMilliseconds")
+            if offset != expected_offset:
+                raise AssertionError(
+                    f"{label} used offset {offset!r}, expected {expected_offset}"
+                )
+            results.append(f"{label}={offset}")
+        return ", ".join(results)
+
     def verify_feedback_source(self) -> str:
         user_id = self.user("feedback-source")
         self.seed(
@@ -971,6 +1056,10 @@ class IssueReportLambdaVerifier:
             self.run(
                 "timed and fuzzy seek phrases preserve requested duration",
                 self.verify_timed_seek_phrases,
+            )
+            self.run(
+                "seek overruns explain the track boundary",
+                self.verify_seek_overrun_feedback,
             )
             self.run(
                 "feedback prefers organization and says I enjoyed it",
