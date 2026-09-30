@@ -872,6 +872,23 @@ class IssueReportLambdaVerifier:
             raise AssertionError(
                 f"manual town capture was not started after permission fallback: {permission_speech!r}"
             )
+        permission_directives = (permission_yes.get("response") or {}).get("directives") or []
+        town_elicit = next(
+            (
+                directive
+                for directive in permission_directives
+                if isinstance(directive, dict)
+                and directive.get("type") == "Dialog.ElicitSlot"
+                and directive.get("slotToElicit") == "location"
+                and (directive.get("updatedIntent") or {}).get("name")
+                == "TownCaptureIntent"
+            ),
+            None,
+        )
+        if not town_elicit:
+            raise AssertionError(
+                f"profile setup did not elicit TownCaptureIntent.location: {permission_directives!r}"
+            )
 
         dialog = self.read_scope(user_id, "DIALOG")
         core = self.read_scope(user_id, "CORE")
