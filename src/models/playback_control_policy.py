@@ -18,7 +18,7 @@ class PlaybackSpeedDecision:
 
 @dataclass(frozen=True, slots=True)
 class PlaybackSeekDecision:
-    kind: Literal["cannot_seek", "restart"]
+    kind: Literal["cannot_seek", "restart", "boundary"]
     offset_ms: int | None = None
     moved_ms: int = 0
     duration_ms: int | float | None = None
@@ -98,13 +98,19 @@ class PlaybackControlPolicy:
         if not state:
             return PlaybackSeekDecision("cannot_seek")
         current = max(0, int(state.get("offsetMs", 0)))
-        target = max(0, current + direction * max(1, int(amount_ms)))
+        amount = max(1, int(amount_ms))
         duration = state.get("durationMs")
-        if isinstance(duration, (int, float)):
-            target = min(target, max(0, int(duration) - 1000))
+        if direction < 0:
+            target = max(0, current - amount)
+        else:
+            target = current + amount
+            if isinstance(duration, (int, float)):
+                ceiling = max(0, int(duration) - 1000)
+                target = current if current >= ceiling else min(target, ceiling)
+        moved = abs(target - current)
         return PlaybackSeekDecision(
-            "restart",
+            "boundary" if moved == 0 else "restart",
             offset_ms=target,
-            moved_ms=abs(target - current),
+            moved_ms=moved,
             duration_ms=duration,
         )
