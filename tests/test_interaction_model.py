@@ -369,7 +369,7 @@ def test_arbitrary_search_query_fallbacks_preserve_source_meaning():
 
     location = intents["SearchLocationIntent"]
     assert [(slot["name"], slot["type"]) for slot in location["slots"]] == [
-        ("location", "HEAR_LOCATION")
+        ("location", "AMAZON.SearchQuery")
     ]
     assert "change my location to {location}" in location["samples"]
     assert all(value.endswith("{location}") for value in location["samples"])
