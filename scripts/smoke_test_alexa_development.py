@@ -192,7 +192,7 @@ def _resolve_listener_id(user_id: str) -> str:
                 "HearAlexaLaunchVerifier/1.0",
                 "--request",
                 "POST",
-                f"{base_url}/listeners/resolve",
+                f"{base_url}/alexa/listeners/resolve",
                 "--header",
                 "Accept: application/json",
                 "--header",
