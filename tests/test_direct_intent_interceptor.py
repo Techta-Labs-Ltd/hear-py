@@ -136,6 +136,8 @@ async def test_global_interceptor_routes_every_declared_locked_phrase(
         ("set playbak speed to first", "SetPlaybackSpeedIntent", "speed", "first"),
         ("increament spede", "IncreaseSpeedIntent", None, None),
         ("decrese spede", "DecreaseSpeedIntent", None, None),
+        ("forward", "FastForwardIntent", None, None),
+        ("move forward", "FastForwardIntent", None, None),
         ("fast foward 30 seconds", "FastForwardIntent", "time", "30 seconds"),
         ("fast foward thirty minutes", "FastForwardIntent", "time", "thirty minutes"),
         ("fastforward 15 secs", "FastForwardIntent", "time", "15 secs"),
