@@ -60,6 +60,21 @@ class ResolverWorkflowRunner:
         RequestContext.replace_request(handler_input, attrs)
 
     @staticmethod
+    def _town_capture_value(slots: dict) -> str | None:
+        for slot_name in ("location", "townName", "city", "cityQuery", "localQuery"):
+            value = AlexaRequest.get_resolved_slot_value(slots.get(slot_name))
+            if value and value.strip():
+                return value.strip()
+        return next(
+            (
+                value.strip()
+                for slot in slots.values()
+                if (value := AlexaRequest.get_spoken_slot_value(slot)) and value.strip()
+            ),
+            None,
+        )
+
+    @staticmethod
     def _extract_raw_utterance(handler_input, alexa_intent: str | None) -> str | None:
         slots = intent_slots(handler_input)
         if not slots:
@@ -68,20 +83,21 @@ class ResolverWorkflowRunner:
             spoken = AlexaRequest.get_spoken_slot_value(slots.get("discoveryQuery"))
             if spoken:
                 return spoken
+        store = User.snapshot(handler_input)
         active_dialog = DialogStateManager.get_active(handler_input) or {}
         active_context = active_dialog.get("context") or {}
-        if (
+        profile_town_active = bool(
+            not active_dialog
+            and store.get("onboardingStage") == OnboardingConstants.ASK_TOWN
+            and store.get("profileSetupActive")
+            and store.get("awaitingProfileTown")
+        )
+        onboarding_town_active = bool(
             active_dialog.get("type") == "onboarding"
             and active_context.get("stage") == OnboardingConstants.ASK_TOWN
-        ):
-            return next(
-                (
-                    value.strip()
-                    for slot in slots.values()
-                    if (value := AlexaRequest.get_resolved_slot_value(slot)) and value.strip()
-                ),
-                None,
-            )
+        )
+        if profile_town_active or onboarding_town_active:
+            return ResolverWorkflowRunner._town_capture_value(slots)
         if alexa_intent == "PlayLatestContentIntent":
             topic = AlexaRequest.get_resolved_slot_value(slots.get("topic"))
             content_format = AlexaRequest.get_resolved_slot_value(slots.get("format"))
@@ -245,6 +261,27 @@ class ResolverWorkflowRunner:
     @staticmethod
     def _capture_location(handler_input, context: dict) -> bool:
         alexa_intent = context["alexa_intent"]
+        store = context.get("store") or {}
+        if (
+            store.get("onboardingStage") == OnboardingConstants.ASK_TOWN
+            and ResolverWorkflowRunner._location_capture_active(context)
+            and not context["ambiguity_active"]
+        ):
+            town = ResolverWorkflowRunner._town_capture_value(context["slots"])
+            ResolverWorkflowRunner._set_nlp(
+                handler_input,
+                {
+                    "intent": "town_capture",
+                    "alexaIntent": "town_capture",
+                    "alexaRawIntent": alexa_intent,
+                    "nlpMatchesAlexa": alexa_intent == "TownCaptureIntent",
+                    "needsRedirect": alexa_intent != "TownCaptureIntent",
+                    "confidence": "high",
+                    "slots": {"location": town} if town else {},
+                    "localResolved": bool(town),
+                },
+            )
+            return True
         if (
             alexa_intent
             in {
