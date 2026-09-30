@@ -123,23 +123,48 @@ class PlaybackSpeech:
         return f"{message} What would you like to listen to next?" if idle else message
 
     @staticmethod
-    def seek(direction: int, moved_ms: int, target_ms: int, duration_ms=None) -> str:
+    def seek(
+        direction: int,
+        moved_ms: int,
+        target_ms: int,
+        duration_ms=None,
+        *,
+        requested_ms: int | None = None,
+        available_ms: int | None = None,
+        limited: bool = False,
+    ) -> str:
         if moved_ms <= 0:
             if direction < 0 and target_ms == 0:
                 return "You're already at the beginning."
             if direction > 0 and isinstance(duration_ms, (int, float)):
                 return "You're already at the end."
             return "I couldn't move the playback position."
+        if limited and available_ms is not None:
+            available = PlaybackSpeech.duration(available_ms)
+            if direction < 0:
+                return (
+                    f"You're only {available} into this recording, "
+                    "so I'll go back to the beginning."
+                )
+            return (
+                f"This recording only has {available} left, "
+                "so I'll skip to the end."
+            )
         amount = PlaybackSpeech.duration(moved_ms)
         return f"Going back {amount}." if direction < 0 else f"Skipping ahead {amount}."
 
     @staticmethod
     def duration(milliseconds: int) -> str:
         seconds = max(1, round(milliseconds / 1000))
-        if seconds % 3600 == 0:
-            hours = seconds // 3600
-            return f"{hours} {'hour' if hours == 1 else 'hours'}"
-        if seconds % 60 == 0:
-            minutes = seconds // 60
-            return f"{minutes} {'minute' if minutes == 1 else 'minutes'}"
-        return f"{seconds} {'second' if seconds == 1 else 'seconds'}"
+        hours, remainder = divmod(seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
+        parts = []
+        if hours:
+            parts.append(f"{hours} {'hour' if hours == 1 else 'hours'}")
+        if minutes:
+            parts.append(f"{minutes} {'minute' if minutes == 1 else 'minutes'}")
+        if secs:
+            parts.append(f"{secs} {'second' if secs == 1 else 'seconds'}")
+        if len(parts) <= 1:
+            return parts[0]
+        return ", ".join(parts[:-1]) + f" and {parts[-1]}"
