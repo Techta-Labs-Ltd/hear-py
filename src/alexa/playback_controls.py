@@ -144,6 +144,9 @@ class PlaybackControls:
             decision.moved_ms,
             offset_ms,
             decision.duration_ms,
+            requested_ms=decision.requested_ms,
+            available_ms=decision.available_ms,
+            limited=decision.limited,
         )
         if decision.kind == "boundary":
             return Playback.open_queue_response(handler_input, speech)
