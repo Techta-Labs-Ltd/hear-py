@@ -464,6 +464,116 @@ class IssueReportLambdaVerifier:
             )
         return speech
 
+    def verify_profile_town_priority_york(self) -> str:
+        user_id = self.user("profile-town-priority-york")
+        self.clear_user(user_id)
+
+        self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "SetUpAccountIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {},
+                },
+            },
+        )
+        self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "AMAZON.YesIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {},
+                },
+            },
+        )
+
+        misclassified = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "SetLocationIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {},
+                },
+            },
+        )
+        misclassified_speech = self.speech(misclassified)
+        if "sure. which city are you in now" in misclassified_speech.casefold():
+            raise AssertionError(
+                f"profile town escaped to SetLocation: {misclassified_speech!r}"
+            )
+        directives = (misclassified.get("response") or {}).get("directives") or []
+        town_directive = next(
+            (
+                directive
+                for directive in directives
+                if isinstance(directive, dict)
+                and directive.get("type") == "Dialog.ElicitSlot"
+                and (directive.get("updatedIntent") or {}).get("name")
+                == "TownCaptureIntent"
+            ),
+            None,
+        )
+        if not town_directive:
+            raise AssertionError(
+                f"profile town did not reopen TownCaptureIntent: {directives!r}"
+            )
+
+        york = self.invoke(
+            user_id,
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "PlayByOrganizationIntent",
+                    "confirmationStatus": "NONE",
+                    "slots": {
+                        "organizationQuery": {
+                            "name": "organizationQuery",
+                            "value": "york",
+                            "confirmationStatus": "NONE",
+                            "resolutions": {
+                                "resolutionsPerAuthority": [
+                                    {
+                                        "status": {"code": "ER_SUCCESS_MATCH"},
+                                        "values": [
+                                            {
+                                                "value": {
+                                                    "name": "York Talking News",
+                                                    "id": "org-york",
+                                                }
+                                            }
+                                        ],
+                                    }
+                                ]
+                            },
+                        }
+                    },
+                },
+            },
+        )
+        york_speech = self.speech(york)
+        if "did you say york" not in york_speech.casefold():
+            raise AssertionError(
+                f"spoken York was not treated as location first: {york_speech!r}"
+            )
+        if "york talking news" in york_speech.casefold():
+            raise AssertionError(
+                f"organization canonical leaked into town setup: {york_speech!r}"
+            )
+
+        dialog = self.read_scope(user_id, "DIALOG")
+        pending = dialog.get("pendingLocationConfirm") or {}
+        if str(pending.get("city") or "").casefold() != "york":
+            raise AssertionError(
+                f"York was not staged as profile location: {dialog!r}"
+            )
+        return f"retry={misclassified_speech} | york={york_speech}"
+
     def verify_profile_town_setup_chelmsford(self) -> str:
         user_id = self.user("profile-town-chelmsford")
         self.clear_user(user_id)
@@ -699,6 +809,10 @@ class IssueReportLambdaVerifier:
             self.run(
                 "fuzzy account setup typo routes on live Lambda",
                 self.verify_fuzzy_account_setup_typo,
+            )
+            self.run(
+                "profile town keeps York ahead of organization routing",
+                self.verify_profile_town_priority_york,
             )
             self.run(
                 "profile setup captures Chelmsford from live Lambda",
