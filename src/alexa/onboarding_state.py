@@ -133,7 +133,7 @@ class OnboardingState:
         self, handler_input, candidate: LocationCandidate, *, reset_attempts: bool
     ) -> dict:
         pending = candidate.to_store()
-        changes = {
+        changes: dict[str, Any] = {
             "pendingLocationConfirm": pending,
             "pendingTownAmbiguity": None,
             "awaitingLocationConfirm": True,
