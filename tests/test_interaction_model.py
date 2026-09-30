@@ -68,7 +68,7 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
             "discoveryQuery": "HEAR_DISCOVERY",
         },
         "TownCaptureIntent": {"location": "HEAR_LOCATION"},
-        "SetLocationIntent": {},
+        "SetLocationIntent": {"location": "HEAR_LOCATION"},
         "SearchLocationIntent": {"location": "HEAR_LOCATION"},
         "PlayContentIntent": {
             "topic": "HEAR_TOPIC",
@@ -193,8 +193,20 @@ def test_existing_domain_slots_accept_bare_discovery_requests():
     }
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
     assert intents["TownCaptureIntent"]["slots"][0]["samples"] == ["{location}"]
-    assert intents["SetLocationIntent"]["slots"] == []
-    assert all("{" not in sample for sample in intents["SetLocationIntent"]["samples"])
+    assert intents["SetLocationIntent"]["slots"] == [
+        {
+            "name": "location",
+            "type": "HEAR_LOCATION",
+            "samples": ["{location}"],
+        }
+    ]
+    assert {
+        "my city is {location}",
+        "my town is {location}",
+        "I am in {location}",
+        "I live in {location}",
+        "my area is {location}",
+    }.issubset(set(intents["SetLocationIntent"]["samples"]))
     assert "id" not in herne_bay
     assert "arn bay" in herne_bay["name"]["synonyms"]
     assert "swidon" in swindon["name"]["synonyms"]
