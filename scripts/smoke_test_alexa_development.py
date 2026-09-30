@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import subprocess
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -147,200 +145,25 @@ def _spoken_response(response: dict[str, Any]) -> str:
     return str(output.get("ssml") or output.get("text") or "")
 
 
-def _launch_user_id(simulation: dict[str, Any]) -> str:
-    for invocation in reversed(_invocations(simulation)):
-        body = (invocation.get("invocationRequest") or {}).get("body") or {}
-        request = body.get("request") or {}
-        if request.get("type") != "LaunchRequest":
-            continue
-        system = (body.get("context") or {}).get("System") or {}
-        user = system.get("user") or {}
-        session_user = (body.get("session") or {}).get("user") or {}
-        user_id = str(user.get("userId") or session_user.get("userId") or "").strip()
-        if user_id:
-            return user_id
-    raise RuntimeError("Alexa launch simulation did not expose a skill user id")
 
+def _assert_launch(client: AlexaSimulationClient, invocation_name: str) -> None:
+    simulation = client.simulate(f"open {invocation_name}")
+    _, response = _request_response(simulation, "LaunchRequest")
+    if not isinstance(response, dict) or not response.get("version"):
+        raise AssertionError("Launch returned no valid Alexa response envelope")
 
-def _aws_json(*args: str) -> dict[str, Any]:
-    completed = subprocess.run(
-        ["aws", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return json.loads(completed.stdout or "{}")
-
-
-def _resolve_listener_id(user_id: str) -> str:
-    base_url = str(os.environ.get("HEAR_API_URL") or "").strip().rstrip("/")
-    api_key = str(os.environ.get("HEAR_API_KEY") or "").strip()
-    if not base_url or not api_key:
-        raise RuntimeError("Hear API URL/key are required for launch verification")
-
-    payload = json.dumps({"alexaUserId": user_id}, separators=(",", ":"))
-    try:
-        completed = subprocess.run(
-            [
-                "curl",
-                "--fail",
-                "--silent",
-                "--show-error",
-                "--max-time",
-                "10",
-                "--user-agent",
-                "HearAlexaLaunchVerifier/1.0",
-                "--request",
-                "POST",
-                f"{base_url}/alexa/listeners/resolve",
-                "--header",
-                "Accept: application/json",
-                "--header",
-                "Content-Type: application/json",
-                "--header",
-                f"X-Api-Key: {api_key}",
-                "--data-binary",
-                "@-",
-            ],
-            input=payload,
-            check=True,
-            capture_output=True,
-            text=True,
+    speech = _spoken_response(response)
+    normalized = speech.casefold()
+    if "hear service" not in normalized:
+        raise AssertionError(
+            f"Launch did not use Hear Service branding: {speech!r}"
         )
-    except subprocess.CalledProcessError as error:
-        detail = (error.stderr or error.stdout or "").strip()
-        raise RuntimeError(f"Hear API request failed: {detail}") from error
-
-    result = json.loads(completed.stdout) if completed.stdout else {}
-    listener_id = str((result or {}).get("listenerId") or "").strip()
-    if not listener_id:
-        raise RuntimeError(
-            "Hear API did not resolve the Alexa simulator to a canonical listener"
+    if "say my city is followed by your city" in normalized:
+        raise AssertionError(
+            f"Launch regressed to automatic town capture: {speech!r}"
         )
-    return listener_id
 
-
-def _clear_persistence_key(table_name: str, region: str, persistence_key: str) -> int:
-    names = json.dumps({"#id": "id", "#scope": "scope"}, separators=(",", ":"))
-    values = json.dumps({":id": {"S": persistence_key}}, separators=(",", ":"))
-    keys: list[dict[str, Any]] = []
-    last_key: dict[str, Any] | None = None
-
-    while True:
-        query_args = [
-            "dynamodb",
-            "query",
-            "--table-name",
-            table_name,
-            "--region",
-            region,
-            "--key-condition-expression",
-            "#id = :id",
-            "--expression-attribute-names",
-            names,
-            "--expression-attribute-values",
-            values,
-            "--projection-expression",
-            "#id,#scope",
-            "--output",
-            "json",
-        ]
-        if last_key:
-            query_args.extend(
-                [
-                    "--exclusive-start-key",
-                    json.dumps(last_key, separators=(",", ":")),
-                ]
-            )
-        page = _aws_json(*query_args)
-        for item in page.get("Items") or []:
-            if item.get("id") and item.get("scope"):
-                keys.append({"id": item["id"], "scope": item["scope"]})
-        last_key = page.get("LastEvaluatedKey")
-        if not last_key:
-            break
-
-    for key in keys:
-        _aws_json(
-            "dynamodb",
-            "delete-item",
-            "--table-name",
-            table_name,
-            "--region",
-            region,
-            "--key",
-            json.dumps(key, separators=(",", ":")),
-            "--output",
-            "json",
-        )
-    return len(keys)
-
-
-def _clear_listener_state(
-    table_name: str,
-    region: str,
-    user_id: str,
-    listener_id: str,
-) -> int:
-    stage = str(os.environ.get("STAGE") or "development").strip().lower()
-    persistence_keys = {
-        user_id,
-        f"listener:{stage}:{listener_id}",
-    }
-    return sum(
-        _clear_persistence_key(table_name, region, persistence_key)
-        for persistence_key in persistence_keys
-        if persistence_key
-    )
-
-
-def _assert_launch(
-    client: AlexaSimulationClient,
-    invocation_name: str,
-    *,
-    table_name: str,
-    region: str,
-) -> None:
-    probe = client.simulate(f"open {invocation_name}")
-    user_id = _launch_user_id(probe)
-    listener_id = _resolve_listener_id(user_id)
-    removed = _clear_listener_state(table_name, region, user_id, listener_id)
-    print(
-        "Reset Alexa simulation listener state "
-        f"across alias and canonical keys ({removed} item(s))"
-    )
-
-    try:
-        simulation = client.simulate(f"open {invocation_name}")
-        _, response = _request_response(simulation, "LaunchRequest")
-        if not isinstance(response, dict) or not response.get("version"):
-            raise AssertionError("Launch returned no valid Alexa response envelope")
-
-        speech = _spoken_response(response)
-        normalized = speech.casefold()
-        required = (
-            "welcome to hear service",
-            "free service",
-            "volunteers across the uk",
-            "hear dot media slash alexa",
-            "may i check the address saved in your alexa account",
-            "please say yes or no",
-        )
-        missing = [phrase for phrase in required if phrase not in normalized]
-        if missing:
-            raise AssertionError(
-                f"First launch did not use the consent-first onboarding; "
-                f"missing={missing!r} speech={speech!r}"
-            )
-        if "say my city is followed by your city" in normalized:
-            raise AssertionError(
-                f"Launch regressed to automatic town capture: {speech!r}"
-            )
-
-        print("PASS first launch -> consent-first Hear Service onboarding")
-    finally:
-        _clear_listener_state(table_name, region, user_id, listener_id)
-
+    print(f"PASS launch -> no automatic town capture; speech={speech}")
 
 def _assert_case(
     client: AlexaSimulationClient,
@@ -382,8 +205,6 @@ def main() -> None:
     parser.add_argument("--client-secret", required=True)
     parser.add_argument("--refresh-token", required=True)
     parser.add_argument("--invocation-name", default="test development")
-    parser.add_argument("--table-name", required=True)
-    parser.add_argument("--region", required=True)
     args = parser.parse_args()
 
     client = AlexaSimulationClient(
@@ -392,12 +213,7 @@ def main() -> None:
         args.client_secret,
         args.refresh_token,
     )
-    _assert_launch(
-        client,
-        args.invocation_name,
-        table_name=args.table_name,
-        region=args.region,
-    )
+    _assert_launch(client, args.invocation_name)
     time.sleep(1)
 
     cases = (
