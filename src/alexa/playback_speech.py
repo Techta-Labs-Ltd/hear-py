@@ -7,8 +7,8 @@ class PlaybackSpeech:
     GUIDE = (
         "While a recording is playing, say pause to keep your place, then resume to carry on. "
         "Say next or skip for the next recording, previous for the one before it, repeat or "
-        "start over to return to the beginning, rewind 30 seconds, or fast forward 2 minutes. "
-        "If you do not give a time, rewind and fast forward move by the standard step. You can "
+        "start over to return to the beginning. Say rewind or go back to move back 15 seconds, "
+        "or fast forward or skip ahead to move forward 15 seconds. You can also give a time. "
         "say faster, slower, or normal speed. You can also choose first through fifth speed: "
         "first for 0.75 times, second for normal speed, third for 1.25, fourth for 1.5, "
         "or fifth for 2 times speed. Available speeds may vary by recording. Say stop when you want to "
@@ -17,7 +17,8 @@ class PlaybackSpeech:
     HELP_GUIDE = (
         "While a recording is playing, say pause to keep your place, then resume to carry on. "
         "Say next or skip for the next recording, previous for the one before it, repeat, or "
-        "start over to return to the beginning. To change speed, say play faster, play slower, "
+        "start over to return to the beginning. Say go back or skip ahead to move 15 seconds. "
+        "To change speed, say play faster, play slower, "
         "increase speed, reduce speed, or normal speed. Say stop when you want to finish "
         "listening."
     )
@@ -26,8 +27,9 @@ class PlaybackSpeech:
         "- Pause (keeps your place) / Resume.\n"
         "- Next or Skip / Previous.\n"
         "- Repeat / Start over.\n"
-        "- Rewind 30 seconds / Fast forward 2 minutes.\n"
-        "- Rewind / Fast forward (uses the standard step).\n"
+        "- Rewind or Go back: 15 seconds.\n"
+        "- Fast forward or Skip ahead: 15 seconds.\n"
+        "- Add a time to choose a different jump.\n"
         "- Faster / Slower / Normal speed.\n"
         "- First through fifth speed: 0.75x, 1x, 1.25x, 1.5x or 2x.\n"
         "- Stop (finishes listening).\n"
@@ -38,6 +40,7 @@ class PlaybackSpeech:
         "- Pause (keeps your place) / Resume.\n"
         "- Next or Skip / Previous.\n"
         "- Repeat / Start over.\n"
+        "- Go back / Skip ahead: 15 seconds.\n"
         "- Play faster / Play slower / Increase speed / Reduce speed / Normal speed.\n"
         "- Stop (finishes listening)."
     )
@@ -123,12 +126,12 @@ class PlaybackSpeech:
     def seek(direction: int, moved_ms: int, target_ms: int, duration_ms=None) -> str:
         if moved_ms <= 0:
             if direction < 0 and target_ms == 0:
-                return "You are already at the beginning."
+                return "You're already at the beginning."
             if direction > 0 and isinstance(duration_ms, (int, float)):
-                return "You are already at the end."
+                return "You're already at the end."
             return "I couldn't move the playback position."
         amount = PlaybackSpeech.duration(moved_ms)
-        return f"Rewound {amount}." if direction < 0 else f"Skipped forward {amount}."
+        return f"Going back {amount}." if direction < 0 else f"Skipping ahead {amount}."
 
     @staticmethod
     def duration(milliseconds: int) -> str:
