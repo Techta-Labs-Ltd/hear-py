@@ -7,11 +7,12 @@ from src.alexa.playback_state import PlaybackState
 from src.alexa.resume_speech import ResumeSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
+from src.models.social import Social
 from src.models.user import User
 
 
 class PlaybackDetails:
-    """Present details for the active, unfinished playback item only."""
+    """Present active playback details and retain recent source identity context."""
 
     NO_ACTIVE_CONTENT = (
         "There isn't anything playing right now. Play something first, then ask "
@@ -35,6 +36,17 @@ class PlaybackDetails:
     async def _respond(self, handler_input, *, kind: str):
         store = self._user.snapshot(handler_input)
         if not self._state.has_unfinished(store):
+            if kind == "creator":
+                source = Social._follow_source(store)
+                if source:
+                    return (
+                        handler_input.response_builder.speak(
+                            Ssml.ssml(self._source_identity_speech(source))
+                        )
+                        .reprompt(Ssml.ssml(Speech.IDLE_DO_NEXT_REPROMPT))
+                        .set_should_end_session(False)
+                        .response
+                    )
             return (
                 handler_input.response_builder.speak(Ssml.ssml(self.NO_ACTIVE_CONTENT))
                 .reprompt(Ssml.ssml(self.NO_ACTIVE_CONTENT))
@@ -86,6 +98,16 @@ class PlaybackDetails:
             None,
             creator,
         )
+
+    @staticmethod
+    def _source_identity_speech(source: dict) -> str:
+        name = source.get("name")
+        if not name or Speech.is_bad_credit(name):
+            return Speech.CREATOR_CREDIT_UNKNOWN
+        escaped = Speech.escape_ssml_lite(name)
+        if (source.get("kind") or source.get("type")) == "organization":
+            return f"This content is from {escaped}."
+        return f"The creator is {escaped}."
 
     @staticmethod
     def _is_publication(active: dict) -> bool:

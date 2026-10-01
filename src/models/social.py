@@ -145,4 +145,18 @@ class Social:
                 or store.get("feedbackCreator"),
             }
         )
-        return source
+        if source:
+            return source
+        completed = store.get("lastCompletedSource") or {}
+        if not isinstance(completed, dict):
+            return None
+        source = ContentUtils.pick_content_source(completed)
+        if source:
+            return source
+        if completed.get("sourceId") and completed.get("sourceName"):
+            return {
+                "id": completed["sourceId"],
+                "name": completed["sourceName"],
+                "kind": completed.get("sourceKind") or "creator",
+            }
+        return None

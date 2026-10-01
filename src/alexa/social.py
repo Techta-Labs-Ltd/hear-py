@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Literal
 
 from src.alexa.context import RequestContext
-from src.alexa.playback_context import PlaybackContext
 from src.alexa.playback_details import PlaybackDetails
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
@@ -11,6 +10,33 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.social import FollowCommand, FollowingManager, Social
 from src.services.logging_control import ApplicationLog
+
+
+def _session_followed_projection(request: RequestContext, store: dict) -> tuple[list[dict], bool]:
+    try:
+        session = request.session_attributes
+    except Exception:
+        session = {}
+    if isinstance(session, dict) and "followedCreators" in session:
+        items = session.get("followedCreators")
+        return (
+            [dict(item) for item in items if isinstance(item, dict)]
+            if isinstance(items, list)
+            else []
+        ), True
+    items = store.get("followedCreators")
+    return (
+        [dict(item) for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+    ), False
+
+
+def _write_session_followed_projection(request: RequestContext, followed: list[dict]) -> None:
+    try:
+        session = dict(request.session_attributes or {})
+        session["followedCreators"] = [dict(item) for item in followed if isinstance(item, dict)]
+        request.session_attributes = session
+    except Exception:
+        return
 
 
 class CreatorIdentity:
@@ -54,7 +80,10 @@ class FollowCreator:
         )
         if not creator_id or not creator_name or Speech.is_bad_credit(creator_name):
             return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
-        if FollowingManager.is_following(store, creator_id, source_type):
+        followed_projection, projection_known = _session_followed_projection(request, store)
+        if projection_known and FollowingManager.is_following(
+            {"followedCreators": followed_projection}, creator_id, source_type
+        ):
             if was_awaiting_follow:
                 await self._feedback.clear(handler_input)
                 if self._notifications is not None:
@@ -63,10 +92,6 @@ class FollowCreator:
                     )
                     if notification_response is not None:
                         return notification_response
-            else:
-                audio_ctx = PlaybackContext.read_audio_player_context(handler_input)
-                if not PlaybackContext.is_audio_player_active(audio_ctx):
-                    return await self._play_followed(handler_input)
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml(Speech.ALREADY_FOLLOWING(creator_name))
@@ -77,8 +102,9 @@ class FollowCreator:
             )
         try:
             command = FollowCommand(creator_id, creator_name, source_type)
-            followed, receipt = FollowingManager.add(store.get("followedCreators"), command)
+            followed, receipt = FollowingManager.add(followed_projection, command)
             self._user.update(handler_input, {"followedCreators": followed})
+            _write_session_followed_projection(request, followed)
             if request.alexa_user_id:
                 self._events.following(
                     handler_input=handler_input,
@@ -130,12 +156,16 @@ class UnfollowCreator:
         )
         if not creator_id or not creator_name:
             return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
-        if not FollowingManager.is_following(store, creator_id, source_type):
+        followed_projection, projection_known = _session_followed_projection(request, store)
+        if projection_known and not FollowingManager.is_following(
+            {"followedCreators": followed_projection}, creator_id, source_type
+        ):
             return handler_input.response_builder.speak(Speech.NOT_FOLLOWING(creator_name)).response
         try:
             command = FollowCommand(creator_id, creator_name, source_type)
-            followed, receipt = FollowingManager.remove(store.get("followedCreators"), command)
+            followed, receipt = FollowingManager.remove(followed_projection, command)
             self._user.update(handler_input, {"followedCreators": followed})
+            _write_session_followed_projection(request, followed)
             if request.alexa_user_id:
                 self._events.following(
                     handler_input=handler_input,

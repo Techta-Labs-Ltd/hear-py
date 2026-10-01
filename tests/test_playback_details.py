@@ -145,3 +145,31 @@ async def test_publication_continuation_prompt_is_restored(mock_handler_input):
     assert store["activeDialog"]["type"] == "feedback_continuation"
     assert store["awaitingFeedbackContinuation"] is True
     controls.pause_active.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_creator_identity_survives_declined_resume_for_last_organization(
+    mock_handler_input,
+):
+    details, controls = _details()
+    User.update(
+        mock_handler_input,
+        {
+            "activePlayback": _active_playback(
+                status="abandoned",
+                organizationId="org-1",
+                organizationName="Longeaton and District Talking Newspaper",
+            ),
+            "lastCompletedSource": {
+                "organizationId": "org-1",
+                "organizationName": "Longeaton and District Talking Newspaper",
+            },
+        },
+    )
+
+    await details.creator(mock_handler_input)
+
+    spoken = mock_handler_input.response_builder.speak.call_args.args[0]
+    assert "This content is from Longeaton and District Talking Newspaper." in spoken
+    assert PlaybackDetails.NO_ACTIVE_CONTENT not in spoken
+    controls.pause_active.assert_not_awaited()
