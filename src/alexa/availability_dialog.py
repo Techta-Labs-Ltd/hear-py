@@ -48,11 +48,15 @@ class AvailabilityDialog:
         if candidate.get("id") == "track":
             return await self._availability._begin_tracks(handler_input, context)
         publications = list(context.get("publicationCandidates") or [])
+        pagination = dict(context.get("publicationPagination") or {})
         publication_context = {
             **context,
             "kind": AvailabilityConstants.PUBLICATION_KIND,
             "candidates": publications,
             "offset": 0,
+            "apiPage": max(0, int(pagination.get("apiPage") or 0)),
+            "totalPages": max(0, int(pagination.get("totalPages") or 0)),
+            "hasMore": bool(pagination.get("hasMore")),
         }
         if len(publications) == 1 and int(context.get("publicationCount") or 0) == 1:
             return await self._availability._play_selected(
@@ -229,6 +233,28 @@ class AvailabilityDialog:
                 handler_input,
                 Speech.CHOICES_DISMISSED,
                 Speech.WELCOME_REPROMPT,
+            )
+        if (
+            context.get("kind") == AvailabilityConstants.FORMAT_KIND
+            and intent_name
+            in AvailabilityConstants.MORE_INTENTS | AvailabilityConstants.PREVIOUS_INTENTS
+        ):
+            displayed = AvailabilityData.displayed(context)
+            speech = AvailabilitySpeech.choice_retry(
+                AvailabilityConstants.FORMAT_KIND,
+                displayed,
+            )
+            self._availability._activate(handler_input, context)
+            return self._availability._response(
+                handler_input,
+                speech,
+                AvailabilitySpeech.choice_reprompt(
+                    AvailabilityConstants.FORMAT_KIND,
+                    len(displayed),
+                    False,
+                    False,
+                ),
+                displayed,
             )
         if intent_name in AvailabilityConstants.MORE_INTENTS:
             return await self._more(handler_input, context)
