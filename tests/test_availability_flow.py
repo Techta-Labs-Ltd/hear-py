@@ -1616,8 +1616,16 @@ async def test_availability_publication_choice_survives_alexa_intent_variants(
 
     assert response == {"shouldEndSession": True}
     sent = deps.heara.search.await_args.args[0]
-    assert sent["filter"] == {"publicationIds": ["publication-1"]}
+    assert sent["filter"] == {
+        "publicationIds": ["publication-1"],
+        "isPublication": True,
+    }
     deps.playback.start.assert_awaited_once()
+    started = deps.playback.start.await_args.args[1]
+    assert started["publicationId"] == "publication-1"
+    assert started["publicationTitle"] == "Pendle Voice Dalesman"
+    assert started["creatorId"] == "creator-1"
+    assert started["creatorName"] == "Pendle Voice"
     assert DialogStateManager.get_active(handler_input) is None
 
 
