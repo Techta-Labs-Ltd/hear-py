@@ -93,6 +93,7 @@ class FollowCreator:
                 source_id=creator_id,
                 source_type=source_type,
                 followed=True,
+                source_name=creator_name,
             )
             if was_awaiting_follow:
                 await self._feedback.clear(handler_input)
@@ -161,6 +162,7 @@ class UnfollowCreator:
                 source_id=creator_id,
                 source_type=source_type,
                 followed=False,
+                source_name=creator_name,
             )
             return (
                 handler_input.response_builder.speak(
