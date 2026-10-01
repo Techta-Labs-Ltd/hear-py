@@ -9,10 +9,39 @@ from src.container import ApplicationContainer
 from src.middleware.persistence import SavePersistenceInterceptor
 from src.models.playback_history import PlaybackHistory
 from src.models.social import FollowCommand, FollowingManager
-from src.models.user import User
+from src.models.user import EssentialPersistenceError, User
 
 
 class TestPersistence:
+    def test_staged_outbox_event_requires_reliable_persistence(self, mock_handler_input):
+        User.hydrate(mock_handler_input, {})
+        assert User.stage_outbox_event(
+            mock_handler_input,
+            {
+                "eventId": "follow:event-1",
+                "event": "user.followed_creator",
+            },
+        )
+
+        assert User.requires_reliable_save(mock_handler_input) is True
+
+    @pytest.mark.asyncio
+    async def test_outbox_only_request_fails_closed_when_persistence_is_unavailable(
+        self,
+        mock_handler_input,
+    ):
+        User.hydrate_unavailable(mock_handler_input)
+        assert User.stage_outbox_event(
+            mock_handler_input,
+            {
+                "eventId": "follow:event-1",
+                "event": "user.followed_creator",
+            },
+        )
+
+        with pytest.raises(EssentialPersistenceError):
+            await SavePersistenceInterceptor().process(mock_handler_input)
+
     def test_playback_history_transition_has_no_request_dependency(self):
         source = (Path(__file__).parents[1] / "src/models/playback_history.py").read_text(
             encoding="utf-8"
