@@ -110,7 +110,7 @@ class AvailabilitySpeech:
         kind: str, count: int, has_more: bool, has_previous: bool = False
     ) -> str:
         if kind == AvailabilityConstants.FORMAT_KIND:
-            return f"Say publication, track, first, or second. {Speech.CHOICE_EXIT_INSTRUCTION}"
+            return "Please say publications or tracks."
         nouns = {
             "source": ("source", "sources"),
             "publication": ("publication", "publications"),
@@ -297,12 +297,7 @@ class AvailabilitySpeech:
         has_previous: bool = False,
     ) -> str:
         if kind == AvailabilityConstants.FORMAT_KIND:
-            choices = AvailabilitySpeech._numbered_choices(candidates)
-            return (
-                f"I didn't match that to one of the choices. {choices} "
-                "You can say publication, track, first, or second. "
-                f"{Speech.CHOICE_EXIT_INSTRUCTION}"
-            )
+            return "Please say publications or tracks."
         noun = "source" if kind == "source" else kind
         choices = AvailabilitySpeech._numbered_choices(candidates)
         instruction = AvailabilitySpeech._choice_instruction(
