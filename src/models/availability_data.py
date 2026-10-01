@@ -258,13 +258,17 @@ class AvailabilityData:
             candidate = AvailabilityData.mapping(item)
             title = str(candidate.get("name") or "").strip()
             published_value = candidate.get("publishedAt")
-            try:
-                published = datetime.fromtimestamp(
-                    float(published_value) if isinstance(published_value, (str, int, float)) else 0,
-                    ZoneInfo(settings.HEAR_RESOLVER_TIMEZONE),
-                )
-            except (OSError, OverflowError, TypeError, ValueError):
-                published = None
+            published = None
+            if isinstance(published_value, (str, int, float)) and str(published_value).strip():
+                try:
+                    timestamp = float(published_value)
+                    if timestamp > 0:
+                        published = datetime.fromtimestamp(
+                            timestamp,
+                            ZoneInfo(settings.HEAR_RESOLVER_TIMEZONE),
+                        )
+                except (OSError, OverflowError, TypeError, ValueError):
+                    published = None
             if published and published.strftime("%B").casefold() not in title.casefold():
                 title = (
                     f"{title} for the {AvailabilityData.day_label(published.day)} "
