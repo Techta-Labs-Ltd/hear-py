@@ -393,6 +393,17 @@ class PlaybackQueue:
             "publicationId": str(publication_id),
             "publicationTitle": content.get("publicationTitle")
             or queue.get("publicationTitle"),
+            "creatorId": content.get("creatorId") or queue.get("creatorId"),
+            "creatorName": content.get("creatorName")
+            or content.get("creator")
+            or queue.get("creatorName"),
+            "creator": content.get("creator")
+            or content.get("creatorName")
+            or queue.get("creatorName"),
+            "organizationId": content.get("organizationId")
+            or queue.get("organizationId"),
+            "organizationName": content.get("organizationName")
+            or queue.get("organizationName"),
             "isPublication": True,
             "type": "publication_track",
             "subjectType": "publication",
@@ -467,6 +478,26 @@ class PlaybackQueue:
         publication_items = [
             item for item in items or [] if isinstance(item, dict) and item.get("publicationId")
         ]
+        organization_ids = {
+            str(item.get("organizationId"))
+            for item in publication_items
+            if item.get("organizationId")
+        }
+        organization_names = {
+            str(item.get("organizationName"))
+            for item in publication_items
+            if item.get("organizationName")
+        }
+        creator_ids = {
+            str(item.get("creatorId"))
+            for item in publication_items
+            if item.get("creatorId")
+        }
+        creator_names = {
+            str(item.get("creatorName") or item.get("creator"))
+            for item in publication_items
+            if item.get("creatorName") or item.get("creator")
+        }
         publication_track_count = None
         publication_total_duration_ms = None
         if len(publication_ids) == 1:
@@ -506,6 +537,26 @@ class PlaybackQueue:
             "source": source or "search",
             "publicationId": next(iter(publication_ids)) if len(publication_ids) == 1 else None,
             "publicationTitle": publication_title if len(publication_ids) == 1 else None,
+            "organizationId": (
+                next(iter(organization_ids))
+                if len(publication_ids) == 1 and len(organization_ids) == 1
+                else None
+            ),
+            "organizationName": (
+                next(iter(organization_names))
+                if len(publication_ids) == 1 and len(organization_names) == 1
+                else None
+            ),
+            "creatorId": (
+                next(iter(creator_ids))
+                if len(publication_ids) == 1 and len(creator_ids) == 1
+                else None
+            ),
+            "creatorName": (
+                next(iter(creator_names))
+                if len(publication_ids) == 1 and len(creator_names) == 1
+                else None
+            ),
             "publicationTrackCount": publication_track_count,
             "publicationTotalDurationMs": publication_total_duration_ms,
             "orderedContentIds": content_ids,
