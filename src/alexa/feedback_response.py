@@ -4,6 +4,7 @@ from src.alexa.context import RequestContext
 from src.alexa.dialog import DeferredIntentManager, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.feedback_service import FeedbackService
+from src.alexa.following_state import FollowingSessionState
 from src.alexa.playback_controls import PlaybackControls
 from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.playback_state import PlaybackQueue
@@ -215,6 +216,10 @@ class EnjoyedFeedback:
             creator_id
             and creator_name
             and (not Speech.is_bad_credit(creator_name))
+            and (
+                FollowingSessionState.status(handler_input, creator_id, source_type)
+                is not True
+            )
             and (not FollowingManager.is_following(updated_store, creator_id, source_type))
         ):
             self._user.update(

@@ -573,7 +573,9 @@ async def test_playback_event_keeps_standalone_content_as_subject(mock_handler_i
 
 
 @pytest.mark.asyncio
-async def test_follow_action_sends_source_event_after_local_update(mock_handler_input):
+async def test_follow_action_sends_source_event_without_owning_durable_follow_state(
+    mock_handler_input,
+):
     producer = EventProducerStub()
     events = OutboundEventService(producer=producer)
     deps = ApplicationContainer(events=events)
@@ -594,13 +596,7 @@ async def test_follow_action_sends_source_event_after_local_update(mock_handler_
     assert envelope["event"] == "user.followed_organization"
     assert envelope["data"]["sourceId"] == "organization-1"
     assert envelope["data"]["notificationSubjectType"] == "publication"
-    assert User.snapshot(mock_handler_input)["followedCreators"] == [
-        {
-            "id": "organization-1",
-            "name": "York Talking News",
-            "type": "organization",
-        }
-    ]
+    assert User.snapshot(mock_handler_input)["followedCreators"] == []
 
 
 @pytest.mark.asyncio

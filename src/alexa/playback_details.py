@@ -3,11 +3,12 @@ from __future__ import annotations
 from src.alexa.dialog import DialogStateManager
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.playback_controls import PlaybackControls
-from src.alexa.playback_state import PlaybackState
+from src.alexa.playback_state import PlaybackState, PlaybackStatus
 from src.alexa.resume_speech import ResumeSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.user import User
+from src.utils.content import ContentUtils
 
 
 class PlaybackDetails:
@@ -35,6 +36,21 @@ class PlaybackDetails:
     async def _respond(self, handler_input, *, kind: str):
         store = self._user.snapshot(handler_input)
         if not self._state.has_unfinished(store):
+            active = self._state.from_store(store) or {}
+            if (
+                kind == "creator"
+                and active.get("status") == PlaybackStatus.ABANDONED.value
+            ):
+                source = ContentUtils.pick_content_source(active)
+                if source:
+                    return (
+                        handler_input.response_builder.speak(
+                            Ssml.ssml(self._source_identity_speech(source))
+                        )
+                        .reprompt(Ssml.ssml(Speech.IDLE_DO_NEXT_REPROMPT))
+                        .set_should_end_session(False)
+                        .response
+                    )
             return (
                 handler_input.response_builder.speak(Ssml.ssml(self.NO_ACTIVE_CONTENT))
                 .reprompt(Ssml.ssml(self.NO_ACTIVE_CONTENT))
@@ -86,6 +102,16 @@ class PlaybackDetails:
             None,
             creator,
         )
+
+    @staticmethod
+    def _source_identity_speech(source: dict) -> str:
+        name = source.get("name")
+        if not name or Speech.is_bad_credit(name):
+            return Speech.CREATOR_CREDIT_UNKNOWN
+        escaped = Speech.escape_ssml_lite(name)
+        if (source.get("kind") or source.get("type")) == "organization":
+            return f"This content is from {escaped}."
+        return f"The creator is {escaped}."
 
     @staticmethod
     def _is_publication(active: dict) -> bool:
