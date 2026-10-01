@@ -85,8 +85,10 @@ class TownCaptureHandler(AbstractRequestHandler):
             return self._is_residual_location(handler_input, nlp)
         return AlexaRequest.get_intent_name(handler_input) in {
             "TownCaptureIntent",
+            "TownCaptureFallbackIntent",
             "SetLocationIntent",
             "SearchLocationIntent",
+            "SearchLocationFallbackIntent",
             "AMAZON.NoIntent",
             "SkipFeedbackIntent",
             "AMAZON.NextIntent",
@@ -101,7 +103,13 @@ class TownCaptureHandler(AbstractRequestHandler):
             and not (nlp.get("entities") or [])
             and (nlp.get("slots") or {}).get("residualQuery")
             and AlexaRequest.get_intent_name(handler_input)
-            in {"TownCaptureIntent", "SetLocationIntent"}
+            in {
+                "TownCaptureIntent",
+                "TownCaptureFallbackIntent",
+                "SetLocationIntent",
+                "SearchLocationIntent",
+                "SearchLocationFallbackIntent",
+            }
         )
 
     async def handle(self, handler_input: HandlerInput):

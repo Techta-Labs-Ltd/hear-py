@@ -245,7 +245,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_LOCATION"
             }
           ],
           "samples": [
@@ -259,6 +259,27 @@
             "change my town to {location}",
             "change my city to {location}",
             "update my town to {location}"
+          ]
+        },
+        {
+          "name": "SearchLocationFallbackIntent",
+          "slots": [
+            {
+              "name": "locationQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "set my location to {locationQuery}",
+            "set my town to {locationQuery}",
+            "change my location to {locationQuery}",
+            "update my location to {locationQuery}",
+            "I've moved to {locationQuery}",
+            "I moved to {locationQuery}",
+            "I now live in {locationQuery}",
+            "change my town to {locationQuery}",
+            "change my city to {locationQuery}",
+            "update my town to {locationQuery}"
           ]
         },
         {
@@ -1321,15 +1342,35 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.SearchQuery"
+              "type": "HEAR_LOCATION",
+              "samples": [
+                "{location}"
+              ]
             }
           ],
           "samples": [
+            "{location}",
             "my city is {location}",
             "my town is {location}",
             "I am in {location}",
             "I live in {location}",
             "my area is {location}"
+          ]
+        },
+        {
+          "name": "TownCaptureFallbackIntent",
+          "slots": [
+            {
+              "name": "locationQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "my city is {locationQuery}",
+            "my town is {locationQuery}",
+            "I am in {locationQuery}",
+            "I live in {locationQuery}",
+            "my area is {locationQuery}"
           ]
         },
         {
@@ -1932,7 +1973,7 @@
           "slots": [
             {
               "name": "location",
-              "type": "AMAZON.SearchQuery",
+              "type": "HEAR_LOCATION",
               "confirmationRequired": false,
               "elicitationRequired": true,
               "prompts": {

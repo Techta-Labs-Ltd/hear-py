@@ -287,25 +287,29 @@ class ResolverWorkflowRunner:
             in {
                 "SetLocationIntent",
                 "SearchLocationIntent",
+                "SearchLocationFallbackIntent",
             }
             and not context["ambiguity_active"]
         ):
-            town = AlexaRequest.get_resolved_slot_value(context["slots"].get("location"))
+            town = ResolverWorkflowRunner._town_capture_value(context["slots"])
             ResolverWorkflowRunner._set_nlp(
                 handler_input,
                 {
                     "intent": "location_set",
                     "alexaIntent": "location_set",
                     "alexaRawIntent": alexa_intent,
-                    "nlpMatchesAlexa": True,
-                    "needsRedirect": False,
+                    "nlpMatchesAlexa": alexa_intent != "SearchLocationFallbackIntent",
+                    "needsRedirect": alexa_intent == "SearchLocationFallbackIntent",
                     "confidence": "high",
                     "slots": {"location": town} if town else {},
                     "localResolved": bool(town),
                 },
             )
             return True
-        if alexa_intent != "TownCaptureIntent" or context["ambiguity_active"]:
+        if (
+            alexa_intent not in {"TownCaptureIntent", "TownCaptureFallbackIntent"}
+            or context["ambiguity_active"]
+        ):
             return False
         if not ResolverWorkflowRunner._location_capture_active(context):
             ResolverWorkflowRunner._set_nlp(
@@ -321,18 +325,15 @@ class ResolverWorkflowRunner:
                 },
             )
             return True
-        town = (
-            AlexaRequest.get_resolved_slot_value(context["slots"].get("location"))
-            or AlexaRequest.get_resolved_slot_value(context["slots"].get("townName"))
-        )
+        town = ResolverWorkflowRunner._town_capture_value(context["slots"])
         ResolverWorkflowRunner._set_nlp(
             handler_input,
             {
                 "intent": "town_capture",
                 "alexaIntent": "town_capture",
                 "alexaRawIntent": alexa_intent,
-                "nlpMatchesAlexa": True,
-                "needsRedirect": False,
+                "nlpMatchesAlexa": alexa_intent == "TownCaptureIntent",
+                "needsRedirect": alexa_intent == "TownCaptureFallbackIntent",
                 "confidence": "high",
                 "slots": {"location": town} if town else {},
             },
@@ -367,7 +368,14 @@ class ResolverWorkflowRunner:
         await self._progressive.send(
             handler_input,
             Speech.LOCATION_RESOLUTION_PROGRESSIVE
-            if alexa_intent in {"SearchLocationIntent", "SetLocationIntent", "TownCaptureIntent"}
+            if alexa_intent
+            in {
+                "SearchLocationIntent",
+                "SearchLocationFallbackIntent",
+                "SetLocationIntent",
+                "TownCaptureIntent",
+                "TownCaptureFallbackIntent",
+            }
             else Speech.RESOLVER_PROGRESSIVE,
         )
         timeout_ms = DeadlineBudget.resolver_timeout_ms(handler_input)
