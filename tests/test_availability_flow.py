@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -14,6 +14,7 @@ from src.alexa.dialog import DialogStateManager
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AttrDict, ResponseBuilder
 from src.alexa.speech import Speech
+from src.constants.availability import AvailabilityConstants
 from src.constants.state import StateSchema
 from src.models.availability_data import AvailabilityData
 from src.models.user import User
@@ -360,7 +361,7 @@ async def test_location_and_one_organization_preserves_both_availability_filters
 
 
 @pytest.mark.asyncio
-async def test_publication_from_one_organization_uses_availability_and_autoplays(
+async def test_publication_from_one_organization_uses_full_track_queue_and_keeps_identity(
     mock_handler_input, caplog
 ):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
@@ -369,25 +370,30 @@ async def test_publication_from_one_organization_uses_availability_and_autoplays
         "filter": {"organizationIds": ["org-1"], "isPublication": True},
     }
     publication = {"type": "publication", "id": "pub-1", "name": "April News"}
+    tracks = [
+        {
+            "contentId": f"track-{index}",
+            "title": f"April News track {index}",
+            "audioUrl": f"https://cdn.hear.media/track-{index}.mp3",
+        }
+        for index in range(1, 5)
+    ]
     deps = AvailabilityTestSupport.dependencies(
         {
             "failed": False,
             "publication_count": 1,
-            "standalone_track_count": 4,
+            "standalone_track_count": 0,
             "publications": [publication],
         },
         {
             "failed": False,
-            "results": [
-                {
-                    "contentId": "track-1",
-                    "title": "April News track one",
-                    "audioUrl": "https://cdn.hear.media/track-1.mp3",
-                }
-            ],
-            "total_hits": 1,
+            "results": tracks,
+            "total_hits": 4,
+            "total_pages": 1,
+            "page": 0,
         },
     )
+    deps.playback.queue.initialize = MagicMock()
 
     with caplog.at_level(logging.INFO, logger="hear"):
         response = await AvailabilityTestSupport.action(deps).handle_resolution(
@@ -408,10 +414,28 @@ async def test_publication_from_one_organization_uses_availability_and_autoplays
         )
 
     assert response == {"shouldEndSession": True}
-    assert deps.heara.availability.await_args.args[0]["filter"] == {
-        "organizationId": "org-1"
-    }
-    assert deps.heara.search.await_args.args[0]["filter"] == {"publicationIds": ["pub-1"]}
+    search_payload = deps.heara.search.await_args.args[0]
+    assert search_payload["filter"] == {"publicationIds": ["pub-1"]}
+    assert search_payload["limit"] == AvailabilityConstants.PUBLICATION_PLAYBACK_PAGE_SIZE
+
+    queue_items = deps.playback.queue.initialize.call_args.args[1]
+    assert [item["contentId"] for item in queue_items] == [
+        "track-1",
+        "track-2",
+        "track-3",
+        "track-4",
+    ]
+    assert [item["trackIndex"] for item in queue_items] == [0, 1, 2, 3]
+    assert all(item["trackCount"] == 4 for item in queue_items)
+    assert all(item["publicationId"] == "pub-1" for item in queue_items)
+    assert all(item["publicationTitle"] == "April News" for item in queue_items)
+    assert all(item["organizationId"] == "org-1" for item in queue_items)
+    assert all(item["organizationName"] == "York Talking News" for item in queue_items)
+
+    first_played = deps.playback.start.await_args.args[1]
+    assert first_played["publicationId"] == "pub-1"
+    assert first_played["publicationTitle"] == "April News"
+    assert first_played["organizationName"] == "York Talking News"
     assert DialogStateManager.get_active(handler_input) is None
     assert "availability request filter={'organizationId': 'org-1'}" in caplog.text
     assert "availability catalogue search filter={'publicationIds': ['pub-1']}" in caplog.text
