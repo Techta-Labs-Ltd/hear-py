@@ -3,31 +3,20 @@ from __future__ import annotations
 import time
 from dataclasses import replace
 
-import config.permission_scopes as permission_scopes
 from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.following_state import FollowingSessionState
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
-from src.clients.alexa_settings import AlexaSettingsClient
 from src.clients.hear import HearApiClient
 from src.models.listener import IdentityContext
 from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 
-class ListenerIdentitySupport:
-
-    @staticmethod
-    def normalize_email(value: object) -> str | None:
-        email = str(value or "").strip().casefold()
-        return email if "@" in email and not email.startswith("@") else None
-
-
 class ListenerIdentityService:
     __slots__ = (
         "_hear_api",
-        "_settings",
         "_enabled",
         "_timeout_ms",
         "_cache",
@@ -38,13 +27,11 @@ class ListenerIdentityService:
     def __init__(
         self,
         hear_api: HearApiClient,
-        settings_client: AlexaSettingsClient | None = None,
         *,
         enabled: bool = True,
         timeout_ms: int | None = None,
     ) -> None:
         self._hear_api = hear_api
-        self._settings = settings_client
         self._enabled = enabled
         self._timeout_ms = max(timeout_ms or settings.identity_timeout_ms, 100)
         self._cache: dict[
@@ -101,31 +88,6 @@ class ListenerIdentityService:
         attrs["_listenerProjectionResolved"] = True
         RequestContext.replace_request(handler_input, attrs)
         return followed
-
-    async def _with_profile_email(
-        self, handler_input, identity: IdentityContext
-    ) -> IdentityContext:
-        if self._settings is None or not RequestContext.has_permission(
-            handler_input, permission_scopes.PROFILE_EMAIL_READ
-        ):
-            return identity
-        try:
-            result = await self._settings.get_profile_setting(
-                handler_input,
-                "Profile.email",
-                label="Profile.email",
-            )
-        except Exception as exc:
-            ApplicationLog.warning(
-                "Hear: identity email lookup failed error=%s",
-                type(exc).__name__,
-            )
-            return identity
-        email = ListenerIdentitySupport.normalize_email((result or {}).get("value"))
-        if not email:
-            return identity
-        AlexaMetrics.increment("CanonicalIdentityEmailAvailable")
-        return replace(identity, user_email=email)
 
     async def resolve(self, handler_input, identity: IdentityContext) -> IdentityContext:
         if (
