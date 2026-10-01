@@ -157,7 +157,6 @@ class ApplicationContainer:
         self.notification_api = notification_api or NotificationApiClient()
         self.listener_identity = listener_identity or ListenerIdentityService(
             self.heara,
-            settings_client,
             enabled=settings.HEAR_CANONICAL_IDENTITY_ENABLED,
             timeout_ms=settings.identity_timeout_ms,
         )

@@ -6,6 +6,7 @@ import time
 
 from ask_sdk_core.handler_input import HandlerInput
 
+from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogStateManager
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.onboarding import LaunchTracker, Onboarding
@@ -212,6 +213,9 @@ class LaunchWorkflow:
         try:
             if not self._listener_data_is_cached(store):
                 enriched = await self._listener_profile.apply_listener_profile(handler_input)
+                attrs = RequestContext.request(handler_input)
+                attrs["_listenerProfileRefreshed"] = True
+                RequestContext.replace_request(handler_input, attrs)
                 ApplicationLog.info("Hear: launch enrichment done")
                 return enriched
         except Exception as err:
@@ -219,6 +223,15 @@ class LaunchWorkflow:
         return store
 
     async def _sync_listener_for_launch(self, handler_input: HandlerInput, store: dict) -> dict:
+        attrs = RequestContext.request(handler_input)
+        if (
+            attrs.get("_listenerProjectionResolved")
+            and not attrs.get("_listenerProfileRefreshed")
+        ):
+            ApplicationLog.info(
+                "Hear: listener launch sync skipped projectionResolved=true profileRefreshed=false"
+            )
+            return store
         try:
             await self._listener_sync.sync_for_launch(handler_input)
             return self._user.snapshot(handler_input)

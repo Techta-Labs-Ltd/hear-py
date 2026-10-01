@@ -3,30 +3,20 @@ from __future__ import annotations
 import time
 from dataclasses import replace
 
-import config.permission_scopes as permission_scopes
 from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.following_state import FollowingSessionState
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
-from src.clients.alexa_settings import AlexaSettingsClient
 from src.clients.hear import HearApiClient
 from src.models.listener import IdentityContext
 from src.services.logging_control import ApplicationLog
 from src.utils.deadline import DeadlineBudget
 
 
-class ListenerIdentitySupport:
-
-    @staticmethod
-    def normalize_email(value: object) -> str | None:
-        email = str(value or "").strip().casefold()
-        return email if "@" in email and not email.startswith("@") else None
-
-
 class ListenerIdentityService:
     __slots__ = (
         "_hear_api",
-        "_settings",
         "_enabled",
         "_timeout_ms",
         "_cache",
@@ -37,16 +27,17 @@ class ListenerIdentityService:
     def __init__(
         self,
         hear_api: HearApiClient,
-        settings_client: AlexaSettingsClient | None = None,
         *,
         enabled: bool = True,
         timeout_ms: int | None = None,
     ) -> None:
         self._hear_api = hear_api
-        self._settings = settings_client
         self._enabled = enabled
         self._timeout_ms = max(timeout_ms or settings.identity_timeout_ms, 100)
-        self._cache: dict[tuple[str, str, str, str], tuple[float, str]] = {}
+        self._cache: dict[
+            tuple[str, str, str, str],
+            tuple[float, str, list[dict] | None],
+        ] = {}
         self._ttl_seconds = max(settings.HEAR_IDENTITY_CACHE_TTL_MS, 0) / 1000.0
         self._max_items = max(settings.HEAR_IDENTITY_CACHE_MAX_ITEMS, 1)
 
@@ -59,17 +50,24 @@ class ListenerIdentityService:
             settings.STAGE,
         )
 
-    def _cached(self, identity: IdentityContext) -> str | None:
+    def _cached(
+        self, identity: IdentityContext
+    ) -> tuple[str, list[dict] | None] | None:
         cached = self._cache.get(self._cache_key(identity))
         if cached is None:
             return None
-        expires_at, listener_id = cached
+        expires_at, listener_id, followed = cached
         if expires_at <= time.monotonic():
             self._cache.pop(self._cache_key(identity), None)
             return None
-        return listener_id
+        return listener_id, followed
 
-    def _remember(self, identity: IdentityContext, listener_id: str) -> None:
+    def _remember(
+        self,
+        identity: IdentityContext,
+        listener_id: str,
+        followed: list[dict] | None,
+    ) -> None:
         if self._ttl_seconds <= 0:
             return
         if len(self._cache) >= self._max_items:
@@ -78,32 +76,18 @@ class ListenerIdentityService:
         self._cache[self._cache_key(identity)] = (
             time.monotonic() + self._ttl_seconds,
             listener_id,
+            followed,
         )
 
-    async def _with_profile_email(
-        self, handler_input, identity: IdentityContext
-    ) -> IdentityContext:
-        if self._settings is None or not RequestContext.has_permission(
-            handler_input, permission_scopes.PROFILE_EMAIL_READ
-        ):
-            return identity
-        try:
-            result = await self._settings.get_profile_setting(
-                handler_input,
-                "Profile.email",
-                label="Profile.email",
-            )
-        except Exception as exc:
-            ApplicationLog.warning(
-                "Hear: identity email lookup failed error=%s",
-                type(exc).__name__,
-            )
-            return identity
-        email = ListenerIdentitySupport.normalize_email((result or {}).get("value"))
-        if not email:
-            return identity
-        AlexaMetrics.increment("CanonicalIdentityEmailAvailable")
-        return replace(identity, user_email=email)
+    @staticmethod
+    def _hydrate_following(handler_input, value: object) -> list[dict] | None:
+        if not isinstance(value, list):
+            return None
+        followed = FollowingSessionState.replace_snapshot(handler_input, value)
+        attrs = RequestContext.request(handler_input)
+        attrs["_listenerProjectionResolved"] = True
+        RequestContext.replace_request(handler_input, attrs)
+        return followed
 
     async def resolve(self, handler_input, identity: IdentityContext) -> IdentityContext:
         if (
@@ -114,9 +98,11 @@ class ListenerIdentityService:
             return identity
         cached = self._cached(identity)
         if cached:
+            listener_id, followed = cached
+            if followed is not None:
+                self._hydrate_following(handler_input, followed)
             AlexaMetrics.increment("CanonicalIdentityCacheHit")
-            return replace(identity, listener_id=cached)
-        identity = await self._with_profile_email(handler_input, identity)
+            return replace(identity, listener_id=listener_id)
         remaining_ms = DeadlineBudget.get_lambda_remaining_ms(handler_input)
         timeout_ms = self._timeout_ms
         if isinstance(remaining_ms, (int, float)) and remaining_ms > 0:
@@ -127,12 +113,19 @@ class ListenerIdentityService:
         )
         listener_id = str((result or {}).get("listenerId") or "").strip()
         if not listener_id:
+            # Email reconciliation is intentionally not on the normal Alexa hot
+            # path. Launch/profile setup already performs explicit backend sync
+            # when profile data is refreshed, which can claim a changed alias.
             AlexaMetrics.increment("CanonicalIdentityFallback")
             ApplicationLog.warning(
                 "Hear: canonical listener resolution unavailable fallback=alexa_alias"
             )
             return identity
-        self._remember(identity, listener_id)
+        followed = self._hydrate_following(
+            handler_input,
+            (result or {}).get("followedCreators"),
+        )
+        self._remember(identity, listener_id, followed)
         AlexaMetrics.increment("CanonicalIdentityResolved")
         ApplicationLog.info(
             "Hear: canonical listener resolved principalType=%s",

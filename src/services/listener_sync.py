@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from config import settings
 from src.alexa.following_state import FollowingSessionState
 from src.clients.hear import HearApiClient
 from src.models.user import User
 from src.services.listener_repository import Listener
+from src.utils.deadline import DeadlineBudget
 from src.utils.listener_payload import ListenerPayload
 
 
@@ -45,7 +47,14 @@ class ListenerSyncService:
         profile = ListenerSyncPayload.build(handler_input, store)
         if not profile:
             return False
-        result = await self._hear_api.sync_listener(profile, timeout_ms=2500)
+        timeout_ms = DeadlineBudget.outbound_timeout_ms(
+            handler_input,
+            settings.HEAR_LISTENER_SYNC_TIMEOUT_MS,
+            reserve_ms=700,
+        )
+        if timeout_ms <= 0:
+            return False
+        result = await self._hear_api.sync_listener(profile, timeout_ms=timeout_ms)
         if not result:
             return False
         listener_id = str(result.get("listenerId") or "").strip()

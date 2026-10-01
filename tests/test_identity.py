@@ -160,23 +160,13 @@ async def test_identity_classifies_a_recognized_person(
 async def test_listener_identity_service_resolves_and_caches_canonical_listener(
     mock_handler_input,
 ):
-    mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
-    mock_handler_input.request_envelope.context.System.user.permissions.scopes = {
-        permission_scopes.PROFILE_EMAIL_READ: {"status": "GRANTED"}
-    }
     hear_api = SimpleNamespace(
         resolve_listener_identity=AsyncMock(return_value={"listenerId": "listener-1"})
     )
-    settings_client = SimpleNamespace(
-        get_profile_setting=AsyncMock(
-            return_value={"value": " Alex@Example.COM ", "status": 200}
-        )
-    )
     service = ListenerIdentityService(
         hear_api,
-        settings_client,
         enabled=True,
-        timeout_ms=500,
+        timeout_ms=350,
     )
     identity = IdentityContext(
         principal_type=PrincipalType.SKILL_USER,
@@ -188,47 +178,12 @@ async def test_listener_identity_service_resolves_and_caches_canonical_listener(
     second = await service.resolve(mock_handler_input, identity)
 
     assert first.listener_id == "listener-1"
-    assert first.user_email == "alex@example.com"
+    assert first.user_email is None
     assert second.listener_id == "listener-1"
     hear_api.resolve_listener_identity.assert_awaited_once()
-    settings_client.get_profile_setting.assert_awaited_once_with(
-        mock_handler_input,
-        "Profile.email",
-        label="Profile.email",
-    )
     request = hear_api.resolve_listener_identity.await_args.args[0]
-    assert request["alexaUserId"] == "alexa-1"
-    assert request["userEmail"] == "alex@example.com"
-    assert set(request) == {"alexaUserId", "userEmail"}
-
-
-@pytest.mark.asyncio
-async def test_listener_identity_service_omits_email_without_permission(
-    mock_handler_input,
-):
-    hear_api = SimpleNamespace(
-        resolve_listener_identity=AsyncMock(return_value={"listenerId": "listener-1"})
-    )
-    settings_client = SimpleNamespace(get_profile_setting=AsyncMock())
-    service = ListenerIdentityService(
-        hear_api,
-        settings_client,
-        enabled=True,
-        timeout_ms=500,
-    )
-    identity = IdentityContext(
-        principal_type=PrincipalType.SKILL_USER,
-        alexa_user_id="alexa-1",
-        skill_id="skill-1",
-    )
-
-    resolved = await service.resolve(mock_handler_input, identity)
-
-    assert resolved.listener_id == "listener-1"
-    assert resolved.user_email is None
-    settings_client.get_profile_setting.assert_not_awaited()
-    request = hear_api.resolve_listener_identity.await_args.args[0]
-    assert "userEmail" not in request
+    assert request == {"alexaUserId": "alexa-1"}
+    assert hear_api.resolve_listener_identity.await_args.kwargs["timeout_ms"] <= 350
 
 
 @pytest.mark.asyncio
