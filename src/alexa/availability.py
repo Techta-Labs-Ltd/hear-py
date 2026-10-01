@@ -526,10 +526,20 @@ class Availability:
             },
         ]
         context = {
-            **publication_context,
             "kind": AvailabilityConstants.FORMAT_KIND,
+            "source": source,
             "candidates": format_candidates,
             "publicationCandidates": publications,
+            "publicationCount": publication_count,
+            "trackCount": track_count,
+            "availabilityFilter": requested_filter,
+            "baseSearchPayload": base_payload,
+            "publicationPagination": {
+                "apiPage": publication_context.get("apiPage", 0),
+                "totalPages": publication_context.get("totalPages", 0),
+                "hasMore": publication_context.get("hasMore", False),
+            },
+            "offset": 0,
         }
         self._activate(handler_input, context)
         publication_name = (
