@@ -43,11 +43,14 @@ class LaunchWorkflow:
         protected_response = self._protected_response(handler_input, store, user_name)
         if protected_response is not None:
             return protected_response
+        profile_resolved_at = store.get("listenerProfileResolvedAt")
         try:
             store = await self._ensure_listener_data_for_launch(handler_input, store)
         except Exception:
             pass
-        store = await self._sync_listener_for_launch(handler_input, store)
+        profile_refreshed = store.get("listenerProfileResolvedAt") != profile_resolved_at
+        if profile_refreshed or not store.get("listenerId"):
+            store = await self._sync_listener_for_launch(handler_input, store)
         store = self._user.snapshot(handler_input)
         pending_response = await self._pending_response(
             handler_input,
