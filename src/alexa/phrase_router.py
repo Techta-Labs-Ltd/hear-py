@@ -60,6 +60,28 @@ class PhraseRouter:
     _FUZZY_COMMAND_MIN_SCORE = 0.83
     _FUZZY_COMMAND_SINGLE_TOKEN_MIN_SCORE = 0.90
     _FUZZY_COMMAND_MIN_MARGIN = 0.04
+    _FUZZY_SOCIAL_LEXICON = (
+        (
+            "FollowCreatorIntent",
+            (
+                ("follow",),
+                ("follow", "creator"),
+                ("subscribe", "creator"),
+                ("save", "creator"),
+                ("remember", "creator"),
+            ),
+        ),
+        (
+            "UnfollowCreatorIntent",
+            (
+                ("unfollow",),
+                ("unfollow", "creator"),
+                ("unsubscribe", "creator"),
+                ("stop", "following"),
+                ("remove", "creator"),
+            ),
+        ),
+    )
     _FUZZY_CONTROL_LEXICON = (
         (
             "IncreaseSpeedIntent",
@@ -372,6 +394,30 @@ class PhraseRouter:
         return sum(scores) / len(scores)
 
     @classmethod
+    def _fuzzy_social_route(
+        cls, normalized: str, allowed: frozenset[str] | None = None
+    ) -> PhraseRoute | None:
+        tokens = normalized.split()
+        if not tokens:
+            return None
+        scores: list[tuple[float, str]] = []
+        for intent_name, aliases in cls._FUZZY_SOCIAL_LEXICON:
+            if allowed is not None and intent_name not in allowed:
+                continue
+            score = max(cls._alias_score(tokens, alias) for alias in aliases)
+            if score:
+                scores.append((score, intent_name))
+        if not scores:
+            return None
+        scores.sort(reverse=True)
+        best_score, intent_name = scores[0]
+        next_score = scores[1][0] if len(scores) > 1 else 0.0
+        minimum = 0.90 if len(tokens) == 1 else 0.76
+        if best_score < minimum or best_score - next_score < 0.08:
+            return None
+        return PhraseRoute(intent_name, family="social", rule_name="fuzzy_social")
+
+    @classmethod
     def _fuzzy_control_route(
         cls, normalized: str, allowed: frozenset[str] | None = None
     ) -> PhraseRoute | None:
@@ -445,6 +491,7 @@ class PhraseRouter:
         return (
             cls._semantic_route(normalized, allowed)
             or cls._fuzzy_command_route(normalized, allowed)
+            or cls._fuzzy_social_route(normalized, allowed)
             or cls._fuzzy_control_route(normalized, allowed)
         )
 
@@ -482,4 +529,8 @@ class PhraseRouter:
         for templates in (False, True):
             if route := cls._declared_locked_route(normalized, templates=templates):
                 return route
-        return cls._fuzzy_command_route(normalized) or cls._fuzzy_control_route(normalized)
+        return (
+            cls._fuzzy_command_route(normalized)
+            or cls._fuzzy_social_route(normalized)
+            or cls._fuzzy_control_route(normalized)
+        )
