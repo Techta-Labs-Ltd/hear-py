@@ -78,6 +78,12 @@ jobs:
           : "${STACK_NAME:?Set the STACK_NAME_DEV variable}"
           : "${SHORT_STAGE:?Set the SHORT_STAGE_DEV variable}"
           : "${ALEXA_SKILL_ID:?Set the ALEXA_SKILL_ID_DEV variable}"
+          case "$HEAR_API_URL" in
+            *alexa.hear.media*) echo "Development HEAR_API_URL must not target production"; exit 1 ;;
+          esac
+          case "$WEBHOOK_OUTBOUND_URL" in
+            *alexa.hear.media*) echo "Development WEBHOOK_OUTBOUND_URL must not target production"; exit 1 ;;
+          esac
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
