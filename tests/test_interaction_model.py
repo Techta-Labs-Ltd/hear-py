@@ -598,8 +598,12 @@ def test_carrierless_discovery_uses_topic_and_combined_hear_slots():
         },
     ]
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
+
+    creator_city_slot = intents["SelectCreatorCityIntent"]["slots"][0]
+    assert creator_city_slot["name"] == "cityQuery"
+    assert "{cityQuery}" in creator_city_slot["samples"]
+
     for intent_name, bare_sample in {
-        "SelectCreatorCityIntent": "{cityQuery}",
         "SelectOrganizationIntent": "{organizationQuery}",
         "SelectPublicationSourceIntent": "{publicationSourceQuery}",
     }.items():
