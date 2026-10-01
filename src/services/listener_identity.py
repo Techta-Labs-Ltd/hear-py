@@ -6,6 +6,7 @@ from dataclasses import replace
 import config.permission_scopes as permission_scopes
 from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.following_state import FollowingSessionState
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
 from src.clients.alexa_settings import AlexaSettingsClient
@@ -59,17 +60,24 @@ class ListenerIdentityService:
             settings.STAGE,
         )
 
-    def _cached(self, identity: IdentityContext) -> str | None:
+    def _cached(
+        self, identity: IdentityContext
+    ) -> tuple[str, list[dict] | None] | None:
         cached = self._cache.get(self._cache_key(identity))
         if cached is None:
             return None
-        expires_at, listener_id = cached
+        expires_at, listener_id, followed = cached
         if expires_at <= time.monotonic():
             self._cache.pop(self._cache_key(identity), None)
             return None
-        return listener_id
+        return listener_id, followed
 
-    def _remember(self, identity: IdentityContext, listener_id: str) -> None:
+    def _remember(
+        self,
+        identity: IdentityContext,
+        listener_id: str,
+        followed: list[dict] | None,
+    ) -> None:
         if self._ttl_seconds <= 0:
             return
         if len(self._cache) >= self._max_items:
@@ -78,7 +86,14 @@ class ListenerIdentityService:
         self._cache[self._cache_key(identity)] = (
             time.monotonic() + self._ttl_seconds,
             listener_id,
+            followed,
         )
+
+    @staticmethod
+    def _hydrate_following(handler_input, value: object) -> list[dict] | None:
+        if not isinstance(value, list):
+            return None
+        return FollowingSessionState.replace_snapshot(handler_input, value)
 
     async def _with_profile_email(
         self, handler_input, identity: IdentityContext
@@ -114,8 +129,11 @@ class ListenerIdentityService:
             return identity
         cached = self._cached(identity)
         if cached:
+            listener_id, followed = cached
+            if followed is not None:
+                FollowingSessionState.replace_snapshot(handler_input, followed)
             AlexaMetrics.increment("CanonicalIdentityCacheHit")
-            return replace(identity, listener_id=cached)
+            return replace(identity, listener_id=listener_id)
         identity = await self._with_profile_email(handler_input, identity)
         remaining_ms = DeadlineBudget.get_lambda_remaining_ms(handler_input)
         timeout_ms = self._timeout_ms
@@ -132,7 +150,11 @@ class ListenerIdentityService:
                 "Hear: canonical listener resolution unavailable fallback=alexa_alias"
             )
             return identity
-        self._remember(identity, listener_id)
+        followed = self._hydrate_following(
+            handler_input,
+            (result or {}).get("followedCreators"),
+        )
+        self._remember(identity, listener_id, followed)
         AlexaMetrics.increment("CanonicalIdentityResolved")
         ApplicationLog.info(
             "Hear: canonical listener resolved principalType=%s",
