@@ -556,7 +556,7 @@ class Search:
                 start_index=i,
             )
             content = PlaybackQueue.apply_publication_context(
-                user.snapshot(handler_input),
+                User.snapshot(handler_input),
                 content,
                 queue_index=i,
             )
