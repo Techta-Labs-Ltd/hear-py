@@ -58,6 +58,49 @@ def test_search_queue_retains_exact_organization_discovery_context(mock_handler_
     }
 
 
+def test_publication_queue_retains_publisher_context_for_later_tracks(mock_handler_input):
+    queues = PlaybackQueue(User())
+    queues.initialize(
+        mock_handler_input,
+        [
+            {
+                "contentId": "content-1",
+                "publicationId": "publication-1",
+                "publicationTitle": "The Gazette",
+                "organizationId": "org-1",
+                "organizationName": "York Talking News",
+                "trackIndex": 0,
+                "trackCount": 4,
+            }
+        ],
+        source="publication",
+        discovery_label="The Gazette",
+    )
+
+    store = User.snapshot(mock_handler_input)
+    queue = PlaybackQueue.read(store)
+    assert queue["publicationId"] == "publication-1"
+    assert queue["publicationTitle"] == "The Gazette"
+    assert queue["organizationId"] == "org-1"
+    assert queue["organizationName"] == "York Talking News"
+
+    contextualized = PlaybackQueue.apply_publication_context(
+        store,
+        {
+            "contentId": "content-2",
+            "title": "Second story",
+            "audioUrl": "https://cdn.hear.media/content-2.mp3",
+        },
+        queue_index=1,
+    )
+    assert contextualized["publicationId"] == "publication-1"
+    assert contextualized["publicationTitle"] == "The Gazette"
+    assert contextualized["organizationId"] == "org-1"
+    assert contextualized["organizationName"] == "York Talking News"
+    assert contextualized["trackIndex"] == 1
+    assert contextualized["trackCount"] == 4
+
+
 def test_search_queue_retains_location_as_location_context(mock_handler_input):
     payload = {"query": "", "filter": {"city": "York", "isLocal": True}}
     PlaybackQueue(User()).initialize(
