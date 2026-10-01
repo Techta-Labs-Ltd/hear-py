@@ -7,7 +7,6 @@ import pytest
 from config import settings
 from src.alexa.following_state import FollowingSessionState
 from src.models.listener import IdentityContext, PrincipalType
-from src.models.user import User
 from src.services.listener_identity import ListenerIdentityService
 from src.services.listener_repository import Listener
 from src.services.listener_sync import ListenerSyncService
