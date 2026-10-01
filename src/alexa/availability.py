@@ -692,6 +692,45 @@ class Availability:
             playback=self._playback,
         )
 
+    @staticmethod
+    def _apply_selected_publication_context(
+        result: dict,
+        candidate: dict,
+        source: dict,
+    ) -> dict:
+        """Attach the selected publication/source identity to every returned track."""
+        if candidate.get("type") != "publication" or not isinstance(result.get("results"), list):
+            return result
+        publication_id = str(candidate.get("id") or "").strip()
+        publication_title = str(candidate.get("name") or "").strip()
+        source_type = str(source.get("type") or "").strip()
+        source_id = str(source.get("id") or "").strip()
+        source_name = str(source.get("name") or "").strip()
+        contextualized = []
+        for item in result["results"]:
+            if not isinstance(item, dict):
+                continue
+            content = dict(item)
+            if publication_id:
+                content["publicationId"] = content.get("publicationId") or publication_id
+            if publication_title:
+                content["publicationTitle"] = (
+                    content.get("publicationTitle") or publication_title
+                )
+            content["isPublication"] = True
+            content["type"] = "publication_track"
+            if source_type == "organization":
+                content["organizationId"] = content.get("organizationId") or source_id or None
+                content["organizationName"] = (
+                    content.get("organizationName") or source_name or None
+                )
+            elif source_type == "creator":
+                content["creatorId"] = content.get("creatorId") or source_id or None
+                content["creatorName"] = content.get("creatorName") or source_name or None
+                content["creator"] = content.get("creator") or source_name or None
+            contextualized.append(content)
+        return {**result, "results": contextualized}
+
     async def _play_selected(
         self,
         handler_input,
@@ -729,6 +768,7 @@ class Availability:
         )
         result.setdefault("_search_payload", payload)
         result.setdefault("_request_label", candidate.get("name"))
+        result = self._apply_selected_publication_context(result, candidate, source)
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
         DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
