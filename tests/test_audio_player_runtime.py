@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.alexa.playback_events import PlaybackEventCommand
+from src.alexa.search import Search
 from src.alexa.speech import Speech
 from src.application import Application
 from src.clients.hear import HearApiClient
@@ -1051,6 +1052,189 @@ async def test_playback_nearly_finished_syncs_without_a_queue(monkeypatch):
     )
     emit.assert_awaited_once()
     assert emit.await_args.args[1] == "nearly_finished"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "discovery_intent",
+        "query",
+        "filters",
+        "metadata",
+        "expected_kind",
+        "expected_name",
+    ),
+    [
+        (
+            "PlayContentIntent",
+            "sport",
+            {},
+            {
+                "organizationId": "org-sport",
+                "organizationName": "Sport Talking News",
+            },
+            "topic",
+            "sport",
+        ),
+        (
+            "creator",
+            "",
+            {"creatorIds": ["creator-david"]},
+            {
+                "creatorId": "creator-david",
+                "creatorName": "David Beard",
+                "creator": "David Beard",
+            },
+            "creator",
+            "David Beard",
+        ),
+        (
+            "organization",
+            "",
+            {"organizationIds": ["org-york"]},
+            {
+                "organizationId": "org-york",
+                "organizationName": "York Talking News",
+            },
+            "organization",
+            "York Talking News",
+        ),
+    ],
+)
+async def test_non_publication_search_queues_survive_persistence_and_auto_enqueue(
+    monkeypatch,
+    mock_handler_input,
+    discovery_intent,
+    query,
+    filters,
+    metadata,
+    expected_kind,
+    expected_name,
+):
+    tracks = [
+        {
+            "contentId": CONTENT_ID,
+            "title": "First recording",
+            "spokenTitle": "First recording",
+            "audioUrl": "https://cdn.hear.media/audio/non-publication-1.mp3",
+            "durationMs": 180000,
+            **metadata,
+        },
+        {
+            "contentId": SECOND_CONTENT_ID,
+            "title": "Second recording",
+            "spokenTitle": "Second recording",
+            "audioUrl": "https://cdn.hear.media/audio/non-publication-2.mp3",
+            "durationMs": 180000,
+            **metadata,
+        },
+    ]
+    search_result = {
+        "failed": False,
+        "results": tracks,
+        "total_hits": 2,
+        "total_pages": 1,
+        "page": 0,
+        "_request_label": expected_name if expected_kind != "topic" else query,
+        "_search_payload": {
+            "query": query,
+            "filter": filters,
+            "page": 0,
+            "limit": 3,
+        },
+    }
+
+    initial_container = ApplicationContainer(
+        progressive=ProgressiveResponseClient(enabled=False),
+    )
+    await Search.auto_play_first_from_search(
+        mock_handler_input,
+        search_result,
+        {
+            "discoveryIntent": discovery_intent,
+            "q": query,
+        },
+        user=initial_container.user,
+        browse=initial_container.browse,
+        playback=initial_container.playback,
+    )
+
+    initial_store = User.snapshot(mock_handler_input)
+    queue = initial_store["playbackQueue"]
+    assert queue["orderedContentIds"] == [CONTENT_ID, SECOND_CONTENT_ID]
+    assert queue["publicationId"] is None
+    assert queue["contentCache"][SECOND_CONTENT_ID]["audioUrl"] == (
+        "https://cdn.hear.media/audio/non-publication-2.mp3"
+    )
+    assert queue["discoveryContext"]["kind"] == expected_kind
+    assert queue["discoveryContext"]["name"] == expected_name
+
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        **User.persisted_snapshot(initial_store),
+    }
+
+    backend_search = AsyncMock()
+    monkeypatch.setattr(HearApiClient, "search", backend_search)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    skill = Application.build_skill(
+        persistence,
+        container=ApplicationContainer(
+            progressive=ProgressiveResponseClient(enabled=False),
+        ),
+    )
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStarted",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 0,
+            }
+        ),
+        None,
+    )
+    enqueued = await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackNearlyFinished",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 170000,
+            }
+        ),
+        None,
+    )
+
+    directive = enqueued["response"]["directives"][0]
+    stream = directive["audioItem"]["stream"]
+    assert directive["playBehavior"] == "ENQUEUE"
+    assert stream["token"] == SECOND_CONTENT_ID
+    assert stream["expectedPreviousToken"] == CONTENT_ID
+    assert stream["url"] == "https://cdn.hear.media/audio/non-publication-2.mp3"
+    backend_search.assert_not_awaited()
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStarted",
+                "token": SECOND_CONTENT_ID,
+                "offsetInMilliseconds": 0,
+            }
+        ),
+        None,
+    )
+
+    stored = _stored_state(persistence)
+    assert stored["playbackQueue"]["currentIndex"] == 1
+    assert stored["activePlayback"]["contentId"] == SECOND_CONTENT_ID
+    assert stored["activePlayback"]["publicationId"] is None
+    assert stored["activePlayback"]["discoveryContext"]["kind"] == expected_kind
+    assert stored["activePlayback"]["discoveryContext"]["name"] == expected_name
+    for key, value in metadata.items():
+        if key == "creator":
+            continue
+        assert stored["activePlayback"].get(key) == value
 
 
 @pytest.mark.asyncio
