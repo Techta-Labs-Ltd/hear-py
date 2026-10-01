@@ -10,6 +10,7 @@ from config import settings
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.entities import AlexaEntities
+from src.alexa.following_state import FollowingSessionState
 from src.alexa.playback_state import PlaybackQueue
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
@@ -573,7 +574,9 @@ class Search:
         store = user.snapshot(handler_input)
         if store.get("awaitingFollow"):
             user.update(handler_input, {"awaitingFollow": False})
-        followed = store.get("followedCreators") or []
+        followed = FollowingSessionState.followed_sources(handler_input)
+        if followed is None:
+            followed = store.get("followedCreators") or []
         if not followed:
             return (
                 handler_input.response_builder.speak(Ssml.ssml(Speech.NO_FOLLOWED_CREATORS_TO_PLAY))
