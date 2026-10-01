@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 import config.permission_scopes as permission_scopes
+from src.alexa.following_state import FollowingSessionState
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.clients.events import SqsEventClient
@@ -17,6 +18,16 @@ from src.models.user import User
 from src.services.alexa_profile import ListenerProfileService
 from src.services.listener_identity import ListenerIdentityService
 from src.services.listener_repository import Listener
+
+
+def _bind_session(handler_input, session: dict) -> None:
+    handler_input.attributes_manager.get_session_attributes = lambda: session
+
+    def set_session(value: dict) -> None:
+        session.clear()
+        session.update(value)
+
+    handler_input.attributes_manager.set_session_attributes = set_session
 
 
 @pytest.mark.asyncio
@@ -160,12 +171,21 @@ async def test_identity_classifies_a_recognized_person(
 async def test_listener_identity_service_resolves_and_caches_canonical_listener(
     mock_handler_input,
 ):
+    session: dict = {}
+    _bind_session(mock_handler_input, session)
     mock_handler_input.request_envelope = AttrDict(mock_handler_input.request_envelope)
     mock_handler_input.request_envelope.context.System.user.permissions.scopes = {
         permission_scopes.PROFILE_EMAIL_READ: {"status": "GRANTED"}
     }
     hear_api = SimpleNamespace(
-        resolve_listener_identity=AsyncMock(return_value={"listenerId": "listener-1"})
+        resolve_listener_identity=AsyncMock(
+            return_value={
+                "listenerId": "listener-1",
+                "followedCreators": [
+                    {"id": "creator-1", "name": "Reader", "type": "creator"}
+                ],
+            }
+        )
     )
     settings_client = SimpleNamespace(
         get_profile_setting=AsyncMock(
@@ -190,6 +210,9 @@ async def test_listener_identity_service_resolves_and_caches_canonical_listener(
     assert first.listener_id == "listener-1"
     assert first.user_email == "alex@example.com"
     assert second.listener_id == "listener-1"
+    assert FollowingSessionState.followed_sources(mock_handler_input) == [
+        {"id": "creator-1", "name": "Reader", "type": "creator"}
+    ]
     hear_api.resolve_listener_identity.assert_awaited_once()
     settings_client.get_profile_setting.assert_awaited_once_with(
         mock_handler_input,
@@ -200,6 +223,64 @@ async def test_listener_identity_service_resolves_and_caches_canonical_listener(
     assert request["alexaUserId"] == "alexa-1"
     assert request["userEmail"] == "alex@example.com"
     assert set(request) == {"alexaUserId", "userEmail"}
+
+
+@pytest.mark.asyncio
+async def test_cached_identity_refreshes_only_follow_projection_for_new_session(
+    mock_handler_input,
+):
+    session: dict = {}
+    _bind_session(mock_handler_input, session)
+    hear_api = SimpleNamespace(
+        resolve_listener_identity=AsyncMock(
+            side_effect=[
+                {
+                    "listenerId": "listener-1",
+                    "followedCreators": [
+                        {"id": "creator-1", "name": "Reader", "type": "creator"}
+                    ],
+                },
+                {
+                    "listenerId": "listener-1",
+                    "followedCreators": [
+                        {
+                            "id": "org-1",
+                            "name": "York Talking News",
+                            "type": "organization",
+                        }
+                    ],
+                },
+            ]
+        )
+    )
+    service = ListenerIdentityService(
+        hear_api,
+        None,
+        enabled=True,
+        timeout_ms=500,
+    )
+    identity = IdentityContext(
+        principal_type=PrincipalType.SKILL_USER,
+        alexa_user_id="alexa-1",
+        skill_id="skill-1",
+    )
+
+    await service.resolve(mock_handler_input, identity)
+    session.clear()
+    resolved = await service.resolve(mock_handler_input, identity)
+
+    assert resolved.listener_id == "listener-1"
+    assert hear_api.resolve_listener_identity.await_count == 2
+    refresh = hear_api.resolve_listener_identity.await_args_list[1]
+    assert refresh.args[0] == {"listenerId": "listener-1"}
+    assert refresh.kwargs["timeout_ms"] <= 350
+    assert FollowingSessionState.followed_sources(mock_handler_input) == [
+        {
+            "id": "org-1",
+            "name": "York Talking News",
+            "type": "organization",
+        }
+    ]
 
 
 @pytest.mark.asyncio

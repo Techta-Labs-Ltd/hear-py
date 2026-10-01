@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.alexa.following_state import FollowingSessionState
 from src.clients.hear import HearApiClient
 from src.models.user import User
 from src.services.listener_repository import Listener
@@ -51,4 +52,8 @@ class ListenerSyncService:
         identity = Listener.identity(handler_input)
         if listener_id and identity is not None:
             Listener.set_identity(handler_input, identity.with_listener_id(listener_id))
+        followed = result.get("followedCreators")
+        if isinstance(followed, list):
+            snapshot = FollowingSessionState.replace_snapshot(handler_input, followed)
+            User.update(handler_input, {"followedCreators": snapshot})
         return True

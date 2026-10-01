@@ -2,6 +2,10 @@ from __future__ import annotations
 
 
 class AvailabilityConstants:
+    # Publication playback is not a three-choice voice list. Load a large
+    # ordered track page so Alexa can enqueue the full edition continuously;
+    # PlaybackQueue still lazy-loads further pages when a publication exceeds this cap.
+    PUBLICATION_PLAYBACK_PAGE_SIZE = 100
     DIALOG_TYPE = "availability"
     SOURCE_KIND = "source"
     LOCATION_KIND = "location"

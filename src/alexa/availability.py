@@ -692,6 +692,75 @@ class Availability:
             playback=self._playback,
         )
 
+    @staticmethod
+    def _selected_publication_results(
+        result: dict,
+        candidate: dict,
+        source: dict,
+    ) -> dict:
+        """Attach the selected publication/source identity to every playable track."""
+        if candidate.get("type") != "publication" or not isinstance(result, dict):
+            return result
+        publication_id = str(candidate.get("id") or "").strip()
+        publication_title = str(candidate.get("name") or "").strip()
+        if not publication_id:
+            return result
+
+        raw_items = result.get("results")
+        if not isinstance(raw_items, list):
+            return result
+        try:
+            total_tracks = max(0, int(result.get("total_hits") or len(raw_items)))
+        except (TypeError, ValueError):
+            total_tracks = len(raw_items)
+        try:
+            page = max(0, int(result.get("page") or 0))
+        except (TypeError, ValueError):
+            page = 0
+        search_payload = result.get("_search_payload")
+        try:
+            limit = max(
+                1,
+                int(
+                    search_payload.get("limit")
+                    if isinstance(search_payload, dict)
+                    else len(raw_items) or 1
+                ),
+            )
+        except (TypeError, ValueError):
+            limit = max(1, len(raw_items) or 1)
+
+        source_type = str(source.get("type") or "").strip().casefold()
+        source_id = source.get("id")
+        source_name = source.get("name")
+        enriched = []
+        for index, raw in enumerate(raw_items):
+            if not isinstance(raw, dict):
+                continue
+            item = dict(raw)
+            item["publicationId"] = publication_id
+            if publication_title:
+                item["publicationTitle"] = publication_title
+            item["isPublication"] = True
+            item["type"] = "publication_track"
+            item["subjectType"] = "publication"
+            item["subjectId"] = publication_id
+            item["trackContentId"] = item.get("contentId")
+            if item.get("trackIndex") is None:
+                item["trackIndex"] = page * limit + index
+            if not item.get("trackCount") and total_tracks:
+                item["trackCount"] = total_tracks
+            if source_type == "organization":
+                item["organizationId"] = item.get("organizationId") or source_id
+                item["organizationName"] = item.get("organizationName") or source_name
+            elif source_type == "creator":
+                item["creatorId"] = item.get("creatorId") or source_id
+                item["creatorName"] = item.get("creatorName") or source_name
+                item["creator"] = item.get("creator") or source_name
+            enriched.append(item)
+        result["results"] = enriched
+        return result
+
     async def _play_selected(
         self,
         handler_input,
@@ -704,7 +773,7 @@ class Availability:
             payload = SearchPayload.for_publication(
                 base_payload or {},
                 [candidate.get("id")],
-                DiscoveryConstants.CHOICE_PAGE_SIZE,
+                AvailabilityConstants.PUBLICATION_PLAYBACK_PAGE_SIZE,
             )
         else:
             payload = {
@@ -729,6 +798,7 @@ class Availability:
         )
         result.setdefault("_search_payload", payload)
         result.setdefault("_request_label", candidate.get("name"))
+        result = self._selected_publication_results(result, candidate, source)
         if not result.get("results"):
             return Search._build_search_outcome_response(handler_input, result)
         DialogStateManager.clear(handler_input, AvailabilityConstants.DIALOG_TYPE)
