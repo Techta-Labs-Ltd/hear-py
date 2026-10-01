@@ -141,7 +141,6 @@ class ListenerIdentityService:
                 self._hydrate_following(handler_input, followed)
             AlexaMetrics.increment("CanonicalIdentityCacheHit")
             return replace(identity, listener_id=listener_id)
-        identity = await self._with_profile_email(handler_input, identity)
         remaining_ms = DeadlineBudget.get_lambda_remaining_ms(handler_input)
         timeout_ms = self._timeout_ms
         if isinstance(remaining_ms, (int, float)) and remaining_ms > 0:
@@ -152,6 +151,9 @@ class ListenerIdentityService:
         )
         listener_id = str((result or {}).get("listenerId") or "").strip()
         if not listener_id:
+            # Email reconciliation is intentionally not on the normal Alexa hot
+            # path. Launch/profile setup already performs explicit backend sync
+            # when profile data is refreshed, which can claim a changed alias.
             AlexaMetrics.increment("CanonicalIdentityFallback")
             ApplicationLog.warning(
                 "Hear: canonical listener resolution unavailable fallback=alexa_alias"
