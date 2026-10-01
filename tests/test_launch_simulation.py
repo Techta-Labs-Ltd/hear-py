@@ -482,6 +482,30 @@ class TestSpeechStrings:
 
 
 class TestLaunchSimulation:
+    def test_listener_sync_policy_skips_unchanged_known_listener(self):
+        workflow = ApplicationContainer().build_request_launch_workflow(
+            _build_handler_input()
+        )
+
+        assert workflow._listener_sync_required(
+            {
+                "listenerId": "listener-1",
+                "listenerProfileResolvedAt": 123,
+            },
+            123,
+        ) is False
+        assert workflow._listener_sync_required(
+            {
+                "listenerId": "listener-1",
+                "listenerProfileResolvedAt": 456,
+            },
+            123,
+        ) is True
+        assert workflow._listener_sync_required(
+            {"listenerProfileResolvedAt": 123},
+            123,
+        ) is True
+
     @pytest.mark.asyncio
     async def test_launch_does_not_restart_removed_community_town_capture(self):
         hi = _build_handler_input(
