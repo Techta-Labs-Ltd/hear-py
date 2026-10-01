@@ -922,7 +922,7 @@ async def test_launch_listener_sync_uses_documented_profile(monkeypatch, mock_ha
         "email": "alex@example.com",
         "city": "Manchester",
     }
-    assert sync.await_args.kwargs["timeout_ms"] == 2500
+    assert sync.await_args.kwargs["timeout_ms"] == 250
 
 def _feedback_gate(container: ApplicationContainer) -> FeedbackGateHandler:
     return FeedbackGateHandler(container.feedback, container.user)
