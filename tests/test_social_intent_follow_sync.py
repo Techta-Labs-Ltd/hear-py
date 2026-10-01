@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.alexa.following_state import FollowingSessionState
-from src.alexa.phrase_router import PhraseRouter
 from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.alexa.search import Search
 from src.constants.state import StateSchema
