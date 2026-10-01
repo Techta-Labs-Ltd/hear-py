@@ -41,7 +41,6 @@ async def test_warm_identity_cache_rehydrates_follow_snapshot_without_second_htt
     )
     service = ListenerIdentityService(
         hear_api,
-        settings_client=None,
         enabled=True,
         timeout_ms=350,
     )
