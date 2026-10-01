@@ -209,7 +209,10 @@ class SearchPayload:
             return normalized
         selected = {
             "query": "",
-            "filter": {"publicationIds": values},
+            # A selected publication must resolve the publication container.
+            # The backend expands that container into its ordered tracks and
+            # paginates those tracks for continuous AudioPlayer playback.
+            "filter": {"publicationIds": values, "isPublication": True},
             "limit": normalized["limit"],
             "page": 0,
         }
