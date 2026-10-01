@@ -355,9 +355,44 @@ class PlaybackQueue:
         return index
 
     @staticmethod
+    def _cache_item(item: dict) -> dict | None:
+        if not isinstance(item, dict) or not ContentNormalizer.is_playable_content_item(item):
+            return None
+        fields = (
+            "contentId",
+            "title",
+            "displayTitle",
+            "spokenTitle",
+            "summary",
+            "creatorId",
+            "creatorName",
+            "creator",
+            "organizationId",
+            "organizationName",
+            "publicationId",
+            "publicationTitle",
+            "type",
+            "isPublication",
+            "trackIndex",
+            "trackCount",
+            "category",
+            "audioUrl",
+            "playbackSpeeds",
+            "durationMs",
+            "publishedAt",
+        )
+        return {key: item[key] for key in fields if item.get(key) is not None}
+
+    @staticmethod
     def cached_content(store: dict, content_id: str) -> dict | None:
         if not isinstance(store, dict) or not content_id:
             return None
+        queue = PlaybackQueue.read(store)
+        durable_cache = queue.get("contentCache") if isinstance(queue, dict) else None
+        if isinstance(durable_cache, dict):
+            cached = durable_cache.get(str(content_id))
+            if isinstance(cached, dict) and ContentNormalizer.is_playable_content_item(cached):
+                return dict(cached)
         sources = [
             (store.get("browseCatalog") or {}).get("items"),
             store.get("pendingBrowseItems"),
@@ -530,6 +565,11 @@ class PlaybackQueue:
             for item in publication_items
             if item.get("creatorName") or item.get("creator")
         }
+        content_cache = {}
+        for item in items or []:
+            cached = PlaybackQueue._cache_item(item) if isinstance(item, dict) else None
+            if cached and cached.get("contentId"):
+                content_cache[str(cached["contentId"])] = cached
         queue = {
             "queueId": uuid.uuid4().hex,
             "source": source or "search",
@@ -537,6 +577,7 @@ class PlaybackQueue:
             "publicationTitle": publication_title if len(publication_ids) == 1 else None,
             "publicationTrackCount": publication_track_count,
             "publicationTotalDurationMs": publication_total_duration_ms,
+            "contentCache": content_cache,
             "organizationId": next(iter(organization_ids))
             if len(organization_ids) == 1
             else None,
@@ -607,12 +648,18 @@ class PlaybackQueue:
         content_ids = list(queue["orderedContentIds"])
         previous_count = len(content_ids)
         seen = set(content_ids)
+        content_cache = dict(queue.get("contentCache") or {})
         for item in result.get("results") or []:
             content_id = item.get("contentId") or item.get("id") if isinstance(item, dict) else None
+            if isinstance(item, dict):
+                cached = PlaybackQueue._cache_item(item)
+                if cached and cached.get("contentId"):
+                    content_cache[str(cached["contentId"])] = cached
             if content_id and str(content_id) not in seen:
                 seen.add(str(content_id))
                 content_ids.append(str(content_id))
         queue["orderedContentIds"] = content_ids
+        queue["contentCache"] = content_cache
         pagination["currentPage"] = int(result.get("page") or next_page)
         if isinstance(result.get("total_pages"), (int, float)):
             pagination["totalPages"] = int(result["total_pages"])

@@ -8,6 +8,8 @@ from src.alexa.playback_events import PlaybackEventCommand
 from src.alexa.speech import Speech
 from src.application import Application
 from src.clients.hear import HearApiClient
+from src.clients.progressive import ProgressiveResponseClient
+from src.constants.availability import AvailabilityConstants
 from src.container import ApplicationContainer
 from src.database.persistence import MemoryPersistenceAdapter
 from src.models.user import User
@@ -1049,6 +1051,200 @@ async def test_playback_nearly_finished_syncs_without_a_queue(monkeypatch):
     )
     emit.assert_awaited_once()
     assert emit.await_args.args[1] == "nearly_finished"
+
+
+@pytest.mark.asyncio
+async def test_tnf_selected_publication_automatically_enqueues_all_tracks(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    publication_id = "publication-tnf"
+    publication_title = "TNF Weekly Edition"
+    publication = {
+        "type": "publication",
+        "id": publication_id,
+        "name": publication_title,
+    }
+    tracks = [
+        {
+            "contentId": CONTENT_ID,
+            "title": "TNF bulletin",
+            "spokenTitle": "TNF bulletin",
+            "audioUrl": "https://cdn.hear.media/audio/tnf-track-1.mp3",
+            "durationMs": 180000,
+        },
+        {
+            "contentId": SECOND_CONTENT_ID,
+            "title": "TNF bulletin",
+            "spokenTitle": "TNF bulletin",
+            "audioUrl": "https://cdn.hear.media/audio/tnf-track-2.mp3",
+            "durationMs": 180000,
+        },
+        {
+            "contentId": THIRD_CONTENT_ID,
+            "title": "TNF bulletin",
+            "spokenTitle": "TNF bulletin",
+            "audioUrl": "https://cdn.hear.media/audio/tnf-track-3.mp3",
+            "durationMs": 180000,
+        },
+    ]
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activeDialog": {
+            "type": "availability",
+            "context": {
+                "kind": "publication",
+                "source": {
+                    "type": "organization",
+                    "id": "org-tnf",
+                    "name": "Talking News Federation",
+                },
+                "candidates": [publication],
+                "choiceCandidates": [publication],
+                "displayedCandidates": [publication],
+                "offset": 0,
+                "publicationCount": 1,
+                "trackCount": 3,
+                "baseSearchPayload": {
+                    "query": "",
+                    "filter": {
+                        "organizationIds": ["org-tnf"],
+                        "isPublication": True,
+                    },
+                    "page": 0,
+                    "limit": 3,
+                },
+            },
+            "expiresAt": 4102444800,
+        },
+    }
+
+    search = AsyncMock(
+        return_value={
+            "failed": False,
+            "results": tracks,
+            "total_hits": 3,
+            "total_pages": 1,
+            "page": 0,
+        }
+    )
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    container = ApplicationContainer(
+        progressive=ProgressiveResponseClient(enabled=False),
+    )
+    skill = Application.build_skill(persistence, container=container)
+
+    selected = await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "ClarifySelectionIntent",
+                    "slots": {
+                        "selection": {
+                            "name": "selection",
+                            "value": "first",
+                        }
+                    },
+                },
+            }
+        ),
+        None,
+    )
+
+    first_directive = selected["response"]["directives"][0]
+    first_stream = first_directive["audioItem"]["stream"]
+    assert first_directive["playBehavior"] == "REPLACE_ALL"
+    assert first_stream["token"] == CONTENT_ID
+
+    publication_search = search.await_args_list[0].args[0]
+    assert publication_search["filter"] == {"publicationIds": [publication_id]}
+    assert publication_search["page"] == 0
+    assert (
+        publication_search["limit"]
+        == AvailabilityConstants.PUBLICATION_PLAYBACK_PAGE_SIZE
+    )
+
+    stored = _stored_state(persistence)
+    assert stored["playbackQueue"]["orderedContentIds"] == [
+        CONTENT_ID,
+        SECOND_CONTENT_ID,
+        THIRD_CONTENT_ID,
+    ]
+    assert stored["playbackQueue"]["publicationId"] == publication_id
+    assert stored["playbackQueue"]["publicationTitle"] == publication_title
+    assert stored["playbackQueue"]["organizationId"] == "org-tnf"
+    assert stored["playbackQueue"]["organizationName"] == "Talking News Federation"
+    content_cache = stored["playbackQueue"]["contentCache"]
+    assert list(content_cache) == [CONTENT_ID, SECOND_CONTENT_ID, THIRD_CONTENT_ID]
+    assert (
+        content_cache[SECOND_CONTENT_ID]["audioUrl"]
+        == "https://cdn.hear.media/audio/tnf-track-2.mp3"
+    )
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStarted",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 0,
+            }
+        ),
+        None,
+    )
+    second_enqueued = await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackNearlyFinished",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 170000,
+            }
+        ),
+        None,
+    )
+
+    second_directive = second_enqueued["response"]["directives"][0]
+    second_stream = second_directive["audioItem"]["stream"]
+    assert second_directive["playBehavior"] == "ENQUEUE"
+    assert second_stream["token"] == SECOND_CONTENT_ID
+    assert second_stream["expectedPreviousToken"] == CONTENT_ID
+    assert second_stream["url"] == "https://cdn.hear.media/audio/tnf-track-2.mp3"
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStarted",
+                "token": SECOND_CONTENT_ID,
+                "offsetInMilliseconds": 0,
+            }
+        ),
+        None,
+    )
+    stored = _stored_state(persistence)
+    assert stored["playbackQueue"]["currentIndex"] == 1
+    assert stored["activePlayback"]["contentId"] == SECOND_CONTENT_ID
+    assert stored["activePlayback"]["publicationId"] == publication_id
+    assert stored["activePlayback"]["publicationTitle"] == publication_title
+    assert stored["activePlayback"]["organizationName"] == "Talking News Federation"
+
+    third_enqueued = await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackNearlyFinished",
+                "token": SECOND_CONTENT_ID,
+                "offsetInMilliseconds": 170000,
+            }
+        ),
+        None,
+    )
+
+    third_directive = third_enqueued["response"]["directives"][0]
+    third_stream = third_directive["audioItem"]["stream"]
+    assert third_directive["playBehavior"] == "ENQUEUE"
+    assert third_stream["token"] == THIRD_CONTENT_ID
+    assert third_stream["expectedPreviousToken"] == SECOND_CONTENT_ID
+    assert third_stream["url"] == "https://cdn.hear.media/audio/tnf-track-3.mp3"
+
+    assert search.await_count == 1
 
 
 @pytest.mark.asyncio

@@ -368,6 +368,8 @@ async def test_publication_from_one_organization_uses_full_track_queue_and_keeps
     payload = {
         "query": "",
         "filter": {"organizationIds": ["org-1"], "isPublication": True},
+        "page": 0,
+        "limit": 3,
     }
     publication = {"type": "publication", "id": "pub-1", "name": "April News"}
     tracks = [

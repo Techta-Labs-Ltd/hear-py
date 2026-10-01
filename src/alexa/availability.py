@@ -786,6 +786,11 @@ class Availability:
                 [candidate.get("id")],
                 AvailabilityConstants.PUBLICATION_PLAYBACK_PAGE_SIZE,
             )
+            # A spoken publication choice may have come from a three-item choice
+            # page. Playback must not inherit that menu limit: load the publication
+            # tracks as a playback queue instead.
+            payload["page"] = 0
+            payload["limit"] = AvailabilityConstants.PUBLICATION_PLAYBACK_PAGE_SIZE
         else:
             payload = {
                 "query": "",
