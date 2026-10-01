@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import Literal
 
 from src.alexa.context import RequestContext
-from src.alexa.playback_context import PlaybackContext
+from src.alexa.following_state import FollowingSessionState
 from src.alexa.playback_details import PlaybackDetails
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.social import FollowCommand, FollowingManager, Social
+from src.models.social import FollowCommand, Social
 from src.services.logging_control import ApplicationLog
 
 
@@ -54,7 +54,10 @@ class FollowCreator:
         )
         if not creator_id or not creator_name or Speech.is_bad_credit(creator_name):
             return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
-        if FollowingManager.is_following(store, creator_id, source_type):
+        session_status = FollowingSessionState.status(
+            handler_input, creator_id, source_type
+        )
+        if session_status is True:
             if was_awaiting_follow:
                 await self._feedback.clear(handler_input)
                 if self._notifications is not None:
@@ -63,10 +66,6 @@ class FollowCreator:
                     )
                     if notification_response is not None:
                         return notification_response
-            else:
-                audio_ctx = PlaybackContext.read_audio_player_context(handler_input)
-                if not PlaybackContext.is_audio_player_active(audio_ctx):
-                    return await self._play_followed(handler_input)
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml(Speech.ALREADY_FOLLOWING(creator_name))
@@ -77,16 +76,24 @@ class FollowCreator:
             )
         try:
             command = FollowCommand(creator_id, creator_name, source_type)
-            followed, receipt = FollowingManager.add(store.get("followedCreators"), command)
-            self._user.update(handler_input, {"followedCreators": followed})
-            if request.alexa_user_id:
-                self._events.following(
+            staged = bool(
+                request.alexa_user_id
+                and self._events.following(
                     handler_input=handler_input,
                     followed=True,
                     alexa_user_id=request.alexa_user_id,
                     listener_id=store.get("listenerId"),
-                    source=receipt.command.event_source(),
+                    source=command.event_source(),
                 )
+            )
+            if not staged:
+                raise RuntimeError("follow_event_not_staged")
+            FollowingSessionState.record(
+                handler_input,
+                source_id=creator_id,
+                source_type=source_type,
+                followed=True,
+            )
             if was_awaiting_follow:
                 await self._feedback.clear(handler_input)
                 if self._notifications is not None:
@@ -130,20 +137,31 @@ class UnfollowCreator:
         )
         if not creator_id or not creator_name:
             return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
-        if not FollowingManager.is_following(store, creator_id, source_type):
+        session_status = FollowingSessionState.status(
+            handler_input, creator_id, source_type
+        )
+        if session_status is False:
             return handler_input.response_builder.speak(Speech.NOT_FOLLOWING(creator_name)).response
         try:
             command = FollowCommand(creator_id, creator_name, source_type)
-            followed, receipt = FollowingManager.remove(store.get("followedCreators"), command)
-            self._user.update(handler_input, {"followedCreators": followed})
-            if request.alexa_user_id:
-                self._events.following(
+            staged = bool(
+                request.alexa_user_id
+                and self._events.following(
                     handler_input=handler_input,
                     followed=False,
                     alexa_user_id=request.alexa_user_id,
                     listener_id=store.get("listenerId"),
-                    source=receipt.command.event_source(),
+                    source=command.event_source(),
                 )
+            )
+            if not staged:
+                raise RuntimeError("unfollow_event_not_staged")
+            FollowingSessionState.record(
+                handler_input,
+                source_id=creator_id,
+                source_type=source_type,
+                followed=False,
+            )
             return (
                 handler_input.response_builder.speak(
                     Ssml.ssml(Speech.UNFOLLOW_CREATOR(creator_name))
