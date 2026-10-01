@@ -411,10 +411,16 @@ async def test_publication_from_one_organization_uses_availability_and_autoplays
     assert deps.heara.availability.await_args.args[0]["filter"] == {
         "organizationId": "org-1"
     }
-    assert deps.heara.search.await_args.args[0]["filter"] == {"publicationIds": ["pub-1"]}
+    assert deps.heara.search.await_args.args[0]["filter"] == {
+        "publicationIds": ["pub-1"],
+        "isPublication": True,
+    }
     assert DialogStateManager.get_active(handler_input) is None
     assert "availability request filter={'organizationId': 'org-1'}" in caplog.text
-    assert "availability catalogue search filter={'publicationIds': ['pub-1']}" in caplog.text
+    assert (
+        "availability catalogue search filter={'publicationIds': ['pub-1'], "
+        "'isPublication': True}" in caplog.text
+    )
 
 
 @pytest.mark.asyncio
@@ -1284,7 +1290,8 @@ async def test_selecting_first_publication_speaks_publication_not_organization(
 
     assert response == {"shouldEndSession": True}
     assert deps.heara.search.await_args.args[0]["filter"] == {
-        "publicationIds": ["publication-test"]
+        "publicationIds": ["publication-test"],
+        "isPublication": True,
     }
     options = deps.playback.start.await_args.args
     assert options[2] == "Playing Test Pub for the seventh of September."
