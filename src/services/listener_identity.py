@@ -93,7 +93,11 @@ class ListenerIdentityService:
     def _hydrate_following(handler_input, value: object) -> list[dict] | None:
         if not isinstance(value, list):
             return None
-        return FollowingSessionState.replace_snapshot(handler_input, value)
+        followed = FollowingSessionState.replace_snapshot(handler_input, value)
+        attrs = RequestContext.request(handler_input)
+        attrs["_listenerProjectionResolved"] = True
+        RequestContext.replace_request(handler_input, attrs)
+        return followed
 
     async def _with_profile_email(
         self, handler_input, identity: IdentityContext
@@ -131,7 +135,7 @@ class ListenerIdentityService:
         if cached:
             listener_id, followed = cached
             if followed is not None:
-                FollowingSessionState.replace_snapshot(handler_input, followed)
+                self._hydrate_following(handler_input, followed)
             AlexaMetrics.increment("CanonicalIdentityCacheHit")
             return replace(identity, listener_id=listener_id)
         identity = await self._with_profile_email(handler_input, identity)
