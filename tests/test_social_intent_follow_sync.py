@@ -9,6 +9,7 @@ from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.alexa.search import Search
 from src.constants.state import StateSchema
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
+from src.middleware.listener_sync import ListenerSessionSyncInterceptor
 from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
 from src.services.listener_repository import Listener
@@ -30,8 +31,10 @@ def _bind_session(handler_input, session: dict) -> None:
     ("phrase", "target"),
     (
         ("folw ths cretr", "FollowCreatorIntent"),
+        ("flw crtr", "FollowCreatorIntent"),
         ("subscrbe ths cretr", "FollowCreatorIntent"),
         ("unfolw ths cretr", "UnfollowCreatorIntent"),
+        ("unflw crtr", "UnfollowCreatorIntent"),
         ("stop folowing ths cretr", "UnfollowCreatorIntent"),
     ),
 )
@@ -56,9 +59,29 @@ async def test_noisy_social_commands_are_rerouted_before_search(
     assert ResolverWorkflowRunner._request(mock_intent_request) is None
 
 
-def test_social_fuzzy_guard_does_not_steal_unrelated_searches():
-    assert PhraseRouter.classify("flower gardening") is None
-    assert PhraseRouter.classify("creator news") is None
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "phrase",
+    ("flower gardening", "creator news", "football creator"),
+)
+async def test_social_fuzzy_guard_does_not_steal_unrelated_searches(
+    mock_intent_request,
+    phrase,
+):
+    mock_intent_request.attributes_manager.request_attributes["_store"] = {
+        **StateSchema.DEFAULT_STORE,
+        "onboardingComplete": True,
+    }
+    intent = mock_intent_request.request_envelope["request"]["intent"]
+    intent["name"] = "SearchContentIntent"
+    intent["slots"] = {
+        "searchQuery": {"name": "searchQuery", "value": phrase},
+    }
+
+    await DirectIntentPhraseInterceptor().process(mock_intent_request)
+
+    assert intent["name"] == "SearchContentIntent"
+    assert ResolverWorkflowRunner._request(mock_intent_request) is not None
 
 
 @pytest.mark.asyncio
@@ -201,3 +224,31 @@ def test_session_follow_override_updates_synced_snapshot(mock_handler_input):
     assert FollowingSessionState.followed_sources(mock_handler_input) == [
         {"id": "creator-1", "name": "News Reader", "type": "creator"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_direct_new_intent_session_syncs_follow_state_before_routing(
+    mock_intent_request,
+):
+    session_attrs: dict = {}
+    _bind_session(mock_intent_request, session_attrs)
+    mock_intent_request.request_envelope["session"] = {"new": True}
+    sync = SimpleNamespace(sync_for_launch=AsyncMock(return_value=True))
+
+    await ListenerSessionSyncInterceptor(sync).process(mock_intent_request)
+
+    sync.sync_for_launch.assert_awaited_once_with(mock_intent_request)
+
+
+@pytest.mark.asyncio
+async def test_existing_intent_session_does_not_resync_follow_state(
+    mock_intent_request,
+):
+    session_attrs: dict = {}
+    _bind_session(mock_intent_request, session_attrs)
+    mock_intent_request.request_envelope["session"] = {"new": False}
+    sync = SimpleNamespace(sync_for_launch=AsyncMock(return_value=True))
+
+    await ListenerSessionSyncInterceptor(sync).process(mock_intent_request)
+
+    sync.sync_for_launch.assert_not_awaited()
