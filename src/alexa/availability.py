@@ -699,7 +699,9 @@ class Availability:
         source: dict,
     ) -> dict:
         """Attach the selected publication/source identity to every returned track."""
-        if candidate.get("type") != "publication" or not isinstance(result.get("results"), list):
+        if candidate.get("type") != "publication" or not isinstance(
+            result.get("results"), list
+        ):
             return result
         publication_id = str(candidate.get("id") or "").strip()
         publication_title = str(candidate.get("name") or "").strip()
@@ -720,13 +722,17 @@ class Availability:
             content["isPublication"] = True
             content["type"] = "publication_track"
             if source_type == "organization":
-                content["organizationId"] = content.get("organizationId") or source_id or None
+                content["organizationId"] = (
+                    content.get("organizationId") or source_id or None
+                )
                 content["organizationName"] = (
                     content.get("organizationName") or source_name or None
                 )
             elif source_type == "creator":
                 content["creatorId"] = content.get("creatorId") or source_id or None
-                content["creatorName"] = content.get("creatorName") or source_name or None
+                content["creatorName"] = (
+                    content.get("creatorName") or source_name or None
+                )
                 content["creator"] = content.get("creator") or source_name or None
             contextualized.append(content)
         return {**result, "results": contextualized}
