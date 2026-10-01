@@ -93,11 +93,20 @@ class ResumeSpeech:
             or active.get("subjectType") == "publication"
         )
         if is_publication:
+            queue = saved.get("playbackQueue") or {}
             publication = cls._safe_label(
-                active.get("publicationTitle") or active.get("subjectTitle")
+                active.get("publicationTitle")
+                or active.get("subjectTitle")
+                or queue.get("publicationTitle")
             )
-            publisher = cls._safe_label(active.get("organizationName"), credit=True)
-            publisher = publisher or cls._safe_label(active.get("creatorName"), credit=True)
+            publisher = cls._safe_label(
+                active.get("organizationName") or queue.get("organizationName"),
+                credit=True,
+            )
+            publisher = publisher or cls._safe_label(
+                active.get("creatorName") or queue.get("creatorName"),
+                credit=True,
+            )
             if publication and publisher and publication.casefold() != publisher.casefold():
                 return cls._question(
                     f"You were listening to {publication}, from {publisher}"
