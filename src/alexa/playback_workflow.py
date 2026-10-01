@@ -439,8 +439,11 @@ class Playback:
             "audioUrl": audio_url,
             "creatorId": state.get("creatorId"),
             "creatorName": state.get("creatorName"),
+            "organizationId": state.get("organizationId"),
+            "organizationName": state.get("organizationName"),
             "publicationId": state.get("publicationId"),
             "publicationTitle": state.get("publicationTitle"),
+            "isPublication": bool(state.get("publicationId")),
             "durationMs": state.get("durationMs"),
             "playbackSpeeds": state.get("playbackSpeeds")
             or User.snapshot(handler_input).get("currentPlaybackSpeeds")

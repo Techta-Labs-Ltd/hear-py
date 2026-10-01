@@ -1248,6 +1248,150 @@ async def test_tnf_selected_publication_automatically_enqueues_all_tracks(monkey
 
 
 @pytest.mark.asyncio
+async def test_creator_publication_queue_keeps_publication_and_creator_identity(monkeypatch):
+    persistence = MemoryPersistenceAdapter()
+    publication_id = "publication-creator"
+    publication_title = "David's Weekly Edition"
+    publication = {
+        "type": "publication",
+        "id": publication_id,
+        "name": publication_title,
+    }
+    tracks = [
+        {
+            "contentId": CONTENT_ID,
+            "title": "Creator track 1",
+            "audioUrl": "https://cdn.hear.media/audio/creator-track-1.mp3",
+            "durationMs": 180000,
+        },
+        {
+            "contentId": SECOND_CONTENT_ID,
+            "title": "Creator track 2",
+            "audioUrl": "https://cdn.hear.media/audio/creator-track-2.mp3",
+            "durationMs": 180000,
+        },
+    ]
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "activeDialog": {
+            "type": "availability",
+            "context": {
+                "kind": "publication",
+                "source": {
+                    "type": "creator",
+                    "id": "creator-david",
+                    "name": "David Beard",
+                },
+                "candidates": [publication],
+                "choiceCandidates": [publication],
+                "displayedCandidates": [publication],
+                "offset": 0,
+                "publicationCount": 1,
+                "trackCount": 2,
+                "baseSearchPayload": {
+                    "query": "",
+                    "filter": {
+                        "creatorIds": ["creator-david"],
+                        "isPublication": True,
+                    },
+                    "page": 0,
+                    "limit": 3,
+                },
+            },
+            "expiresAt": 4102444800,
+        },
+    }
+
+    search = AsyncMock(
+        return_value={
+            "failed": False,
+            "results": tracks,
+            "total_hits": 2,
+            "total_pages": 1,
+            "page": 0,
+        }
+    )
+    monkeypatch.setattr(HearApiClient, "search", search)
+    monkeypatch.setattr("src.alexa.playback_workflow.Playback.emit", AsyncMock())
+    skill = Application.build_skill(
+        persistence,
+        container=ApplicationContainer(
+            progressive=ProgressiveResponseClient(enabled=False),
+        ),
+    )
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "IntentRequest",
+                "intent": {
+                    "name": "ClarifySelectionIntent",
+                    "slots": {
+                        "selection": {
+                            "name": "selection",
+                            "value": "first",
+                        }
+                    },
+                },
+            }
+        ),
+        None,
+    )
+
+    stored = _stored_state(persistence)
+    queue = stored["playbackQueue"]
+    assert queue["publicationId"] == publication_id
+    assert queue["publicationTitle"] == publication_title
+    assert queue["creatorId"] == "creator-david"
+    assert queue["creatorName"] == "David Beard"
+    assert queue["contentCache"][SECOND_CONTENT_ID]["creatorName"] == "David Beard"
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStarted",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 0,
+            }
+        ),
+        None,
+    )
+    enqueued = await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackNearlyFinished",
+                "token": CONTENT_ID,
+                "offsetInMilliseconds": 170000,
+            }
+        ),
+        None,
+    )
+    stream = enqueued["response"]["directives"][0]["audioItem"]["stream"]
+    assert stream["token"] == SECOND_CONTENT_ID
+    assert stream["expectedPreviousToken"] == CONTENT_ID
+
+    await skill.invoke(
+        _event(
+            {
+                "type": "AudioPlayer.PlaybackStarted",
+                "token": SECOND_CONTENT_ID,
+                "offsetInMilliseconds": 0,
+            }
+        ),
+        None,
+    )
+
+    stored = _stored_state(persistence)
+    active = stored["activePlayback"]
+    assert active["contentId"] == SECOND_CONTENT_ID
+    assert active["publicationId"] == publication_id
+    assert active["publicationTitle"] == publication_title
+    assert active["creatorId"] == "creator-david"
+    assert active["creatorName"] == "David Beard"
+    assert active.get("organizationName") in (None, "")
+
+
+@pytest.mark.asyncio
 async def test_queue_enqueues_second_and_third_with_progress_reports(monkeypatch):
     persistence = MemoryPersistenceAdapter()
     second = _queued_content(SECOND_CONTENT_ID, "Second bulletin")

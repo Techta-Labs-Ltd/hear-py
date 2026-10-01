@@ -223,6 +223,74 @@ class TestIsNewUser:
         assert "that publication" not in speech
         assert "Independent Creator" not in speech
 
+    def test_resume_prompt_recovers_publication_and_organization_from_queue(self):
+        hi = _build_handler_input(
+            store_override={
+                "playbackQueue": {
+                    "queueId": "queue-tnf",
+                    "source": "publication",
+                    "publicationId": "publication-1",
+                    "publicationTitle": "TNF Weekly Edition",
+                    "organizationId": "org-tnf",
+                    "organizationName": "Talking News Federation",
+                    "orderedContentIds": ["track-1", "track-2"],
+                    "currentIndex": 1,
+                },
+                "activePlayback": {
+                    "contentId": "track-2",
+                    "publicationId": "publication-1",
+                    "publicationTitle": None,
+                    "organizationName": None,
+                    "subjectType": "publication",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                    "status": "paused",
+                },
+            }
+        )
+
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert (
+            "You were listening to TNF Weekly Edition, from Talking News Federation."
+            in speech
+        )
+
+    def test_resume_prompt_recovers_publication_and_creator_from_queue(self):
+        hi = _build_handler_input(
+            store_override={
+                "playbackQueue": {
+                    "queueId": "queue-creator",
+                    "source": "publication",
+                    "publicationId": "publication-creator",
+                    "publicationTitle": "David's Weekly Edition",
+                    "creatorId": "creator-david",
+                    "creatorName": "David Beard",
+                    "orderedContentIds": ["track-1", "track-2"],
+                    "currentIndex": 1,
+                },
+                "activePlayback": {
+                    "contentId": "track-2",
+                    "publicationId": "publication-creator",
+                    "publicationTitle": None,
+                    "creatorName": None,
+                    "subjectType": "publication",
+                    "audioUrl": "https://cdn.hear.media/track-2.mp3",
+                    "status": "paused",
+                },
+            }
+        )
+
+        ApplicationContainer().build_request_launch_workflow(hi)._unfinished_response(
+            hi, User.snapshot(hi)
+        )
+
+        speech = _speak_text(hi)
+        assert "You were listening to David's Weekly Edition, from David Beard." in speech
+
+
     def test_resume_prompt_without_publication_metadata_still_uses_listening_sentence(self):
         hi = _build_handler_input(
             store_override={
