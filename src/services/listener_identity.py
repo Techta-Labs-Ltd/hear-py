@@ -6,6 +6,7 @@ from dataclasses import replace
 import config.permission_scopes as permission_scopes
 from config import settings
 from src.alexa.context import RequestContext
+from src.alexa.following_state import FollowingSessionState
 from src.alexa.request import AlexaRequest
 from src.alexa.runtime import AlexaMetrics
 from src.clients.alexa_settings import AlexaSettingsClient
@@ -29,6 +30,7 @@ class ListenerIdentityService:
         "_settings",
         "_enabled",
         "_timeout_ms",
+        "_projection_timeout_ms",
         "_cache",
         "_ttl_seconds",
         "_max_items",
@@ -46,6 +48,10 @@ class ListenerIdentityService:
         self._settings = settings_client
         self._enabled = enabled
         self._timeout_ms = max(timeout_ms or settings.identity_timeout_ms, 100)
+        self._projection_timeout_ms = max(
+            settings.HEAR_IDENTITY_PROJECTION_TIMEOUT_MS,
+            100,
+        )
         self._cache: dict[tuple[str, str, str, str], tuple[float, str]] = {}
         self._ttl_seconds = max(settings.HEAR_IDENTITY_CACHE_TTL_MS, 0) / 1000.0
         self._max_items = max(settings.HEAR_IDENTITY_CACHE_MAX_ITEMS, 1)
@@ -105,6 +111,48 @@ class ListenerIdentityService:
         AlexaMetrics.increment("CanonicalIdentityEmailAvailable")
         return replace(identity, user_email=email)
 
+    @staticmethod
+    def _hydrate_follow_projection(handler_input, result: object) -> bool:
+        if not isinstance(result, dict):
+            return False
+        followed = result.get("followedCreators")
+        if not isinstance(followed, list):
+            return False
+        FollowingSessionState.replace_snapshot(handler_input, followed)
+        return True
+
+    def _bounded_timeout(self, handler_input, requested_ms: int) -> int:
+        remaining_ms = DeadlineBudget.get_lambda_remaining_ms(handler_input)
+        timeout_ms = max(requested_ms, 100)
+        if isinstance(remaining_ms, (int, float)) and remaining_ms > 0:
+            timeout_ms = min(timeout_ms, max(int(remaining_ms) - 250, 100))
+        return timeout_ms
+
+    async def _refresh_cached_projection(
+        self,
+        handler_input,
+        listener_id: str,
+    ) -> None:
+        if FollowingSessionState.followed_sources(handler_input) is not None:
+            AlexaMetrics.increment("CanonicalIdentityProjectionSessionHit")
+            return
+        try:
+            result = await self._hear_api.resolve_listener_identity(
+                {"listenerId": listener_id},
+                timeout_ms=self._bounded_timeout(
+                    handler_input,
+                    self._projection_timeout_ms,
+                ),
+            )
+        except Exception as exc:
+            ApplicationLog.warning(
+                "Hear: listener projection refresh failed error=%s",
+                type(exc).__name__,
+            )
+            return
+        if self._hydrate_follow_projection(handler_input, result):
+            AlexaMetrics.increment("CanonicalIdentityProjectionResolved")
+
     async def resolve(self, handler_input, identity: IdentityContext) -> IdentityContext:
         if (
             not self._enabled
@@ -115,15 +163,12 @@ class ListenerIdentityService:
         cached = self._cached(identity)
         if cached:
             AlexaMetrics.increment("CanonicalIdentityCacheHit")
+            await self._refresh_cached_projection(handler_input, cached)
             return replace(identity, listener_id=cached)
         identity = await self._with_profile_email(handler_input, identity)
-        remaining_ms = DeadlineBudget.get_lambda_remaining_ms(handler_input)
-        timeout_ms = self._timeout_ms
-        if isinstance(remaining_ms, (int, float)) and remaining_ms > 0:
-            timeout_ms = min(timeout_ms, max(int(remaining_ms) - 500, 100))
         result = await self._hear_api.resolve_listener_identity(
             identity.resolution_payload(),
-            timeout_ms=timeout_ms,
+            timeout_ms=self._bounded_timeout(handler_input, self._timeout_ms),
         )
         listener_id = str((result or {}).get("listenerId") or "").strip()
         if not listener_id:
@@ -133,6 +178,7 @@ class ListenerIdentityService:
             )
             return identity
         self._remember(identity, listener_id)
+        self._hydrate_follow_projection(handler_input, result)
         AlexaMetrics.increment("CanonicalIdentityResolved")
         ApplicationLog.info(
             "Hear: canonical listener resolved principalType=%s",
