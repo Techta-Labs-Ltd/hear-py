@@ -718,17 +718,18 @@ class Availability:
         except (TypeError, ValueError):
             page = 0
         search_payload = result.get("_search_payload")
-        try:
-            limit = max(
-                1,
-                int(
-                    search_payload.get("limit")
-                    if isinstance(search_payload, dict)
-                    else len(raw_items) or 1
-                ),
-            )
-        except (TypeError, ValueError):
-            limit = max(1, len(raw_items) or 1)
+        limit_value = (
+            search_payload.get("limit")
+            if isinstance(search_payload, dict)
+            else None
+        )
+        if isinstance(limit_value, (str, int, float)):
+            try:
+                limit = max(1, int(limit_value))
+            except (TypeError, ValueError):
+                limit = max(1, len(raw_items))
+        else:
+            limit = max(1, len(raw_items))
 
         source_type = str(source.get("type") or "").strip().casefold()
         source_id = source.get("id")

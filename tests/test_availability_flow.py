@@ -969,6 +969,22 @@ def test_source_candidates_keep_same_name_in_distinct_domains():
     ]
 
 
+def test_publication_candidates_without_date_keep_exact_title():
+    candidates = AvailabilityData.publication_candidates(
+        {
+            "publications": [
+                {
+                    "type": "publication",
+                    "id": "pub-no-date",
+                    "name": "April News",
+                }
+            ]
+        }
+    )
+
+    assert candidates[0]["name"] == "April News"
+
+
 def test_publication_candidates_keep_the_local_uk_calendar_day():
     published_at = int(datetime(2026, 9, 17, tzinfo=ZoneInfo("Europe/London")).timestamp())
 
