@@ -3,16 +3,16 @@ from __future__ import annotations
 from src.alexa.dialog import DialogStateManager
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.playback_controls import PlaybackControls
-from src.alexa.playback_state import PlaybackState
+from src.alexa.playback_state import PlaybackState, PlaybackStatus
 from src.alexa.resume_speech import ResumeSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
-from src.models.social import Social
 from src.models.user import User
+from src.utils.content import ContentUtils
 
 
 class PlaybackDetails:
-    """Present active playback details and retain recent source identity context."""
+    """Present details for the active, unfinished playback item only."""
 
     NO_ACTIVE_CONTENT = (
         "There isn't anything playing right now. Play something first, then ask "
@@ -36,8 +36,12 @@ class PlaybackDetails:
     async def _respond(self, handler_input, *, kind: str):
         store = self._user.snapshot(handler_input)
         if not self._state.has_unfinished(store):
-            if kind == "creator":
-                source = Social._follow_source(store)
+            active = self._state.from_store(store) or {}
+            if (
+                kind == "creator"
+                and active.get("status") == PlaybackStatus.ABANDONED.value
+            ):
+                source = ContentUtils.pick_content_source(active)
                 if source:
                     return (
                         handler_input.response_builder.speak(
