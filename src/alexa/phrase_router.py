@@ -60,6 +60,7 @@ class PhraseRouter:
     _FUZZY_COMMAND_MIN_SCORE = 0.83
     _FUZZY_COMMAND_SINGLE_TOKEN_MIN_SCORE = 0.90
     _FUZZY_COMMAND_MIN_MARGIN = 0.04
+    _SOCIAL_NON_COMMAND_HEADS = frozenset({"fellow", "flower", "flow"})
     _FUZZY_SOCIAL_LEXICON = (
         (
             "FollowCreatorIntent",
@@ -398,24 +399,25 @@ class PhraseRouter:
         cls, normalized: str, allowed: frozenset[str] | None = None
     ) -> PhraseRoute | None:
         tokens = normalized.split()
-        if not tokens:
+        if not tokens or tokens[0] in cls._SOCIAL_NON_COMMAND_HEADS:
             return None
-        scores: list[tuple[float, str]] = []
-        for intent_name, aliases in cls._FUZZY_SOCIAL_LEXICON:
-            if allowed is not None and intent_name not in allowed:
-                continue
-            score = max(cls._alias_score(tokens, alias) for alias in aliases)
-            if score:
-                scores.append((score, intent_name))
-        if not scores:
+        unfollow = (
+            tokens[0].startswith("un")
+            or tokens[0] in {"stop", "remove", "drop"}
+        )
+        target = "UnfollowCreatorIntent" if unfollow else "FollowCreatorIntent"
+        if allowed is not None and target not in allowed:
             return None
-        scores.sort(reverse=True)
-        best_score, intent_name = scores[0]
-        next_score = scores[1][0] if len(scores) > 1 else 0.0
+        aliases = next(
+            values
+            for intent_name, values in cls._FUZZY_SOCIAL_LEXICON
+            if intent_name == target
+        )
+        score = max(cls._alias_score(tokens, alias) for alias in aliases)
         minimum = 0.90 if len(tokens) == 1 else 0.76
-        if best_score < minimum or best_score - next_score < 0.08:
+        if score < minimum:
             return None
-        return PhraseRoute(intent_name, family="social", rule_name="fuzzy_social")
+        return PhraseRoute(target, family="social", rule_name="fuzzy_social")
 
     @classmethod
     def _fuzzy_control_route(
