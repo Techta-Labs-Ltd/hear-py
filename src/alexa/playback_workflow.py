@@ -439,6 +439,8 @@ class Playback:
             "audioUrl": audio_url,
             "creatorId": state.get("creatorId"),
             "creatorName": state.get("creatorName"),
+            "organizationId": state.get("organizationId"),
+            "organizationName": state.get("organizationName"),
             "publicationId": state.get("publicationId"),
             "publicationTitle": state.get("publicationTitle"),
             "durationMs": state.get("durationMs"),
