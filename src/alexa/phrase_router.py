@@ -60,6 +60,29 @@ class PhraseRouter:
     _FUZZY_COMMAND_MIN_SCORE = 0.83
     _FUZZY_COMMAND_SINGLE_TOKEN_MIN_SCORE = 0.90
     _FUZZY_COMMAND_MIN_MARGIN = 0.04
+    _SOCIAL_NON_COMMAND_HEADS = frozenset({"fellow", "flower", "flow"})
+    _FUZZY_SOCIAL_LEXICON = (
+        (
+            "FollowCreatorIntent",
+            (
+                ("follow",),
+                ("follow", "creator"),
+                ("subscribe", "creator"),
+                ("save", "creator"),
+                ("remember", "creator"),
+            ),
+        ),
+        (
+            "UnfollowCreatorIntent",
+            (
+                ("unfollow",),
+                ("unfollow", "creator"),
+                ("unsubscribe", "creator"),
+                ("stop", "following"),
+                ("remove", "creator"),
+            ),
+        ),
+    )
     _FUZZY_CONTROL_LEXICON = (
         (
             "IncreaseSpeedIntent",
@@ -372,6 +395,54 @@ class PhraseRouter:
         return sum(scores) / len(scores)
 
     @classmethod
+    def _fuzzy_social_route(
+        cls, normalized: str, allowed: frozenset[str] | None = None
+    ) -> PhraseRoute | None:
+        tokens = normalized.split()
+        if not tokens or tokens[0] in cls._SOCIAL_NON_COMMAND_HEADS:
+            return None
+        unfollow = (
+            tokens[0].startswith("un")
+            or tokens[0] in {"stop", "remove", "drop"}
+        )
+        target = "UnfollowCreatorIntent" if unfollow else "FollowCreatorIntent"
+        if allowed is not None and target not in allowed:
+            return None
+        aliases = next(
+            values
+            for intent_name, values in cls._FUZZY_SOCIAL_LEXICON
+            if intent_name == target
+        )
+        score = max(cls._alias_score(tokens, alias) for alias in aliases)
+        minimum = 0.90 if len(tokens) == 1 else 0.76
+        if score >= minimum:
+            return PhraseRoute(target, family="social", rule_name="fuzzy_social")
+        if len(tokens) < 2:
+            return None
+
+        action_words = (
+            ("unfollow", "unsubscribe", "stop", "remove", "drop")
+            if unfollow
+            else ("follow", "subscribe")
+        )
+        action_score = max(
+            cls._phrase_similarity(tokens[0], expected)
+            for expected in action_words
+        )
+        subject_score = max(
+            cls._phrase_similarity(token, "creator")
+            for token in tokens[1:]
+        )
+        compressed_score = (action_score + subject_score) / 2
+        if (
+            action_score < 0.64
+            or subject_score < 0.70
+            or compressed_score < 0.69
+        ):
+            return None
+        return PhraseRoute(target, family="social", rule_name="fuzzy_social")
+
+    @classmethod
     def _fuzzy_control_route(
         cls, normalized: str, allowed: frozenset[str] | None = None
     ) -> PhraseRoute | None:
@@ -445,6 +516,7 @@ class PhraseRouter:
         return (
             cls._semantic_route(normalized, allowed)
             or cls._fuzzy_command_route(normalized, allowed)
+            or cls._fuzzy_social_route(normalized, allowed)
             or cls._fuzzy_control_route(normalized, allowed)
         )
 
@@ -482,4 +554,8 @@ class PhraseRouter:
         for templates in (False, True):
             if route := cls._declared_locked_route(normalized, templates=templates):
                 return route
-        return cls._fuzzy_command_route(normalized) or cls._fuzzy_control_route(normalized)
+        return (
+            cls._fuzzy_command_route(normalized)
+            or cls._fuzzy_social_route(normalized)
+            or cls._fuzzy_control_route(normalized)
+        )
