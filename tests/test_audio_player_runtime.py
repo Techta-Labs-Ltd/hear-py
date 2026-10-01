@@ -9,8 +9,8 @@ from src.alexa.speech import Speech
 from src.application import Application
 from src.clients.hear import HearApiClient
 from src.clients.progressive import ProgressiveResponseClient
-from src.container import ApplicationContainer
 from src.constants.availability import AvailabilityConstants
+from src.container import ApplicationContainer
 from src.database.persistence import MemoryPersistenceAdapter
 from src.models.user import User
 
