@@ -116,6 +116,26 @@ def test_key_conversation_intents_have_the_expected_slot_contracts():
         } == slots
 
 
+def test_declarative_city_phrases_are_owned_by_town_capture():
+    intents = {
+        item["name"]: item
+        for item in _model()["interactionModel"]["languageModel"]["intents"]
+    }
+    town_samples = set(intents["TownCaptureIntent"]["samples"])
+    creator_city_samples = set(intents["SelectCreatorCityIntent"]["samples"])
+
+    assert "my city is {location}" in town_samples
+    assert "my town is {location}" in town_samples
+    assert creator_city_samples == {
+        "creators in {cityQuery}",
+        "find creators in {cityQuery}",
+    }
+    assert all(
+        not sample.startswith(("my city is ", "my town is ", "I live in "))
+        for sample in creator_city_samples
+    )
+
+
 def test_location_dialogs_elicit_bare_town_replies():
     dialog_intents = {
         item["name"]: item for item in _model()["interactionModel"]["dialog"]["intents"]
@@ -578,8 +598,12 @@ def test_carrierless_discovery_uses_topic_and_combined_hear_slots():
         },
     ]
     assert intents["CarrierlessDiscoveryIntent"]["samples"] == ["{topic}"]
+
+    creator_city_slot = intents["SelectCreatorCityIntent"]["slots"][0]
+    assert creator_city_slot["name"] == "cityQuery"
+    assert "{cityQuery}" in creator_city_slot["samples"]
+
     for intent_name, bare_sample in {
-        "SelectCreatorCityIntent": "{cityQuery}",
         "SelectOrganizationIntent": "{organizationQuery}",
         "SelectPublicationSourceIntent": "{publicationSourceQuery}",
     }.items():
