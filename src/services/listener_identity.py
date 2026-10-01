@@ -47,7 +47,10 @@ class ListenerIdentityService:
         self._settings = settings_client
         self._enabled = enabled
         self._timeout_ms = max(timeout_ms or settings.identity_timeout_ms, 100)
-        self._cache: dict[tuple[str, str, str, str], tuple[float, str]] = {}
+        self._cache: dict[
+            tuple[str, str, str, str],
+            tuple[float, str, list[dict] | None],
+        ] = {}
         self._ttl_seconds = max(settings.HEAR_IDENTITY_CACHE_TTL_MS, 0) / 1000.0
         self._max_items = max(settings.HEAR_IDENTITY_CACHE_MAX_ITEMS, 1)
 
