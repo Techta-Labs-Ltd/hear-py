@@ -1767,6 +1767,111 @@ def test_fallback_retries_active_source_choices_instead_of_returning_to_search(
 
 
 @pytest.mark.asyncio
+async def test_talking_news_federation_show_more_only_pages_publications(
+    mock_handler_input,
+):
+    handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.YesIntent")
+    first_page = {
+        "failed": False,
+        "page": 0,
+        "total_pages": 2,
+        "has_more": True,
+        "publication_count": 4,
+        "standalone_track_count": 7,
+        "publications": [
+            {
+                "type": "publication",
+                "id": f"tnf-publication-{index}",
+                "name": f"TNF Publication {index}",
+                "trackCount": 2,
+            }
+            for index in range(1, 4)
+        ],
+    }
+    second_page = {
+        "failed": False,
+        "page": 1,
+        "total_pages": 2,
+        "has_more": False,
+        "publication_count": 4,
+        "standalone_track_count": 7,
+        "publications": [
+            {
+                "type": "publication",
+                "id": "tnf-publication-4",
+                "name": "TNF Publication 4",
+                "trackCount": 2,
+            }
+        ],
+    }
+    deps = AvailabilityTestSupport.dependencies(first_page)
+    deps.heara.availability = AsyncMock(side_effect=[first_page, second_page])
+    availability = AvailabilityTestSupport.action(deps)
+    source = {
+        "type": "organization",
+        "id": "org-tnf",
+        "name": "Talking News Federation",
+    }
+    base_payload = {"query": "", "filter": {"organizationIds": ["org-tnf"]}}
+
+    response = await availability._begin_source(
+        handler_input,
+        source,
+        base_payload,
+    )
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "Talking News Federation has four publications and seven tracks." in speech
+    assert "Would you like to hear a publication, or choose a track?" in speech
+    assert "show more" not in speech.casefold()
+    assert "none of these" not in speech.casefold()
+    active = DialogStateManager.get_active(handler_input)["context"]
+    assert active["kind"] == "format"
+    assert active["publicationPagination"] == {
+        "apiPage": 0,
+        "totalPages": 2,
+        "hasMore": True,
+    }
+    assert active.get("hasMore") is None
+
+    AvailabilityTestSupport.intent(mock_handler_input, "ShowMoreBrowseIntent")
+    response = await availability.handle_dialog(mock_handler_input)
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "Please say publications or tracks." in speech
+    assert "show more" not in speech.casefold()
+    assert "none of these" not in speech.casefold()
+    assert deps.heara.availability.await_count == 1
+
+    AvailabilityTestSupport.intent(
+        mock_handler_input,
+        "ClarifySelectionIntent",
+        {"selection": {"name": "selection", "value": "publications"}},
+    )
+    response = await availability.handle_dialog(mock_handler_input)
+
+    speech = AvailabilityTestSupport.speech(response)
+    assert "First, TNF Publication 1." in speech
+    assert "Second, TNF Publication 2." in speech
+    assert "Third, TNF Publication 3." in speech
+    assert "show more or next" in speech.casefold()
+    active = DialogStateManager.get_active(mock_handler_input)["context"]
+    assert active["kind"] == "publication"
+    assert active["hasMore"] is True
+
+    AvailabilityTestSupport.intent(mock_handler_input, "ShowMoreBrowseIntent")
+    response = await availability.handle_dialog(mock_handler_input)
+
+    assert deps.heara.availability.await_count == 2
+    request = deps.heara.availability.await_args.args[0]
+    assert request["filter"] == {"organizationId": "org-tnf"}
+    assert request["page"] == 1
+    speech = AvailabilityTestSupport.speech(response)
+    assert "TNF Publication 4" in speech
+    assert "show more or next" not in speech.casefold()
+
+
+@pytest.mark.asyncio
 async def test_availability_format_choice_retry_on_fallback_intent(mock_handler_input):
     handler_input = AvailabilityTestSupport.intent(mock_handler_input, "AMAZON.FallbackIntent")
     context = {
@@ -1790,11 +1895,9 @@ async def test_availability_format_choice_retry_on_fallback_intent(mock_handler_
     response = await AvailabilityTestSupport.action(deps).handle_dialog(handler_input)
 
     speech = AvailabilityTestSupport.speech(response)
-    assert "I didn't match that to one of the choices." in speech
-    assert "First, publications." in speech
-    assert "Second, tracks." in speech
-    assert "You can say publication, track, first, or second." in speech
-    assert "Say no, none of these, or something else to return to search." in speech
+    assert "Please say publications or tracks." in speech
+    assert "show more" not in speech.casefold()
+    assert "none of these" not in speech.casefold()
     assert response["shouldEndSession"] is False
     assert DialogStateManager.get_active(handler_input)["type"] == "availability"
 
