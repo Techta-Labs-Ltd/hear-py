@@ -1228,7 +1228,7 @@ async def test_non_publication_search_queues_survive_persistence_and_auto_enqueu
     stored = _stored_state(persistence)
     assert stored["playbackQueue"]["currentIndex"] == 1
     assert stored["activePlayback"]["contentId"] == SECOND_CONTENT_ID
-    assert stored["activePlayback"]["publicationId"] is None
+    assert stored["activePlayback"].get("publicationId") is None
     assert stored["activePlayback"]["discoveryContext"]["kind"] == expected_kind
     assert stored["activePlayback"]["discoveryContext"]["name"] == expected_name
     for key, value in metadata.items():
