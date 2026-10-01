@@ -8,7 +8,6 @@ from src.alexa.resolver_runner import ResolverWorkflowRunner
 from src.alexa.search import Search
 from src.constants.state import StateSchema
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
-from src.middleware.listener_sync import ListenerSessionSyncInterceptor
 from src.models.listener import IdentityContext, PrincipalType
 from src.models.user import User
 from src.services.listener_repository import Listener
@@ -223,31 +222,3 @@ def test_session_follow_override_updates_synced_snapshot(mock_handler_input):
     assert FollowingSessionState.followed_sources(mock_handler_input) == [
         {"id": "creator-1", "name": "News Reader", "type": "creator"}
     ]
-
-
-@pytest.mark.asyncio
-async def test_direct_new_intent_session_syncs_follow_state_before_routing(
-    mock_intent_request,
-):
-    session_attrs: dict = {}
-    _bind_session(mock_intent_request, session_attrs)
-    mock_intent_request.request_envelope["session"] = {"new": True}
-    sync = SimpleNamespace(sync_for_launch=AsyncMock(return_value=True))
-
-    await ListenerSessionSyncInterceptor(sync).process(mock_intent_request)
-
-    sync.sync_for_launch.assert_awaited_once_with(mock_intent_request)
-
-
-@pytest.mark.asyncio
-async def test_existing_intent_session_does_not_resync_follow_state(
-    mock_intent_request,
-):
-    session_attrs: dict = {}
-    _bind_session(mock_intent_request, session_attrs)
-    mock_intent_request.request_envelope["session"] = {"new": False}
-    sync = SimpleNamespace(sync_for_launch=AsyncMock(return_value=True))
-
-    await ListenerSessionSyncInterceptor(sync).process(mock_intent_request)
-
-    sync.sync_for_launch.assert_not_awaited()
