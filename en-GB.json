@@ -841,10 +841,7 @@
             }
           ],
           "samples": [
-            "{cityQuery}",
-            "in {cityQuery}",
             "creators in {cityQuery}",
-            "my city is {cityQuery}",
             "find creators in {cityQuery}"
           ]
         },
