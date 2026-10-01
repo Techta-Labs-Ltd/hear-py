@@ -331,9 +331,14 @@ class User:
 
     @staticmethod
     def requires_reliable_save(handler_input) -> bool:
-        return bool(User.snapshot(handler_input).get("_requiresReliableSave")) or any(
-            StateSchema.scope_for(field) in {StateSchema.PLAYBACK_SCOPE, StateSchema.DIALOG_SCOPE}
-            for field in User.changed_fields(handler_input)
+        return (
+            bool(User.snapshot(handler_input).get("_requiresReliableSave"))
+            or bool(User.staged_outbox_events(handler_input))
+            or any(
+                StateSchema.scope_for(field)
+                in {StateSchema.PLAYBACK_SCOPE, StateSchema.DIALOG_SCOPE}
+                for field in User.changed_fields(handler_input)
+            )
         )
 
     @staticmethod
