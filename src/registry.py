@@ -84,7 +84,6 @@ from src.middleware.dialog_validation import (
 from src.middleware.direct_intent import DirectIntentPhraseInterceptor
 from src.middleware.feedback_gate import FeedbackGateHandler, FeedbackSkipGateHandler
 from src.middleware.identity import IdentityInterceptor
-from src.middleware.listener_sync import ListenerSessionSyncInterceptor
 from src.middleware.onboarding_gate import OnboardingGateHandler
 from src.middleware.persistence import (
     LoadPersistenceInterceptor,
@@ -110,7 +109,6 @@ class RouteRegistry:
         LambdaDeadlineInterceptor,
         IdentityInterceptor,
         LoadPersistenceInterceptor,
-        ListenerSessionSyncInterceptor,
         DirectIntentPhraseInterceptor,
         DialogValidationInterceptor,
         ResolverInterceptor,
@@ -205,7 +203,6 @@ class RouteRegistry:
                 AlexaNotificationRecipientDirectory(),
             ),
             LoadPersistenceInterceptor(),
-            ListenerSessionSyncInterceptor(container.listener_sync),
             DirectIntentPhraseInterceptor(),
             DialogValidationInterceptor(),
             container.build_resolver_interceptor(),
