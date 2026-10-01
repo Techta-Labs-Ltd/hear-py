@@ -415,28 +415,30 @@ class PhraseRouter:
         )
         score = max(cls._alias_score(tokens, alias) for alias in aliases)
         minimum = 0.90 if len(tokens) == 1 else 0.76
-        if score < minimum and len(tokens) >= 2:
-            action_words = (
-                ("unfollow", "unsubscribe", "stop", "remove", "drop")
-                if unfollow
-                else ("follow", "subscribe")
-            )
-            action_score = max(
-                cls._phrase_similarity(tokens[0], expected)
-                for expected in action_words
-            )
-            subject_score = max(
-                cls._phrase_similarity(token, "creator")
-                for token in tokens[1:]
-            )
-            compressed_score = (action_score + subject_score) / 2
-            if (
-                action_score >= 0.64
-                and subject_score >= 0.70
-                and compressed_score >= 0.69
-            ):
-                score = compressed_score
-        if score < (0.69 if len(tokens) >= 2 else minimum):
+        if score >= minimum:
+            return PhraseRoute(target, family="social", rule_name="fuzzy_social")
+        if len(tokens) < 2:
+            return None
+
+        action_words = (
+            ("unfollow", "unsubscribe", "stop", "remove", "drop")
+            if unfollow
+            else ("follow", "subscribe")
+        )
+        action_score = max(
+            cls._phrase_similarity(tokens[0], expected)
+            for expected in action_words
+        )
+        subject_score = max(
+            cls._phrase_similarity(token, "creator")
+            for token in tokens[1:]
+        )
+        compressed_score = (action_score + subject_score) / 2
+        if (
+            action_score < 0.64
+            or subject_score < 0.70
+            or compressed_score < 0.69
+        ):
             return None
         return PhraseRoute(target, family="social", rule_name="fuzzy_social")
 
