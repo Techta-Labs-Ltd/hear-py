@@ -1,10 +1,6 @@
 name: Deploy development
 
 on:
-  push:
-    branches: [develop]
-  pull_request:
-    branches: [develop]
   workflow_dispatch:
 
 permissions:
@@ -39,7 +35,7 @@ jobs:
         run: python -c "from src.application import Application; Application.build_skill(); print('main imports + skill builds OK')"
 
   deploy:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
     environment:
@@ -55,6 +51,7 @@ jobs:
       ECR_REPO: ${{ vars.ECR_REPO_DEV || 'hear-python' }}
       STACK_NAME: ${{ vars.STACK_NAME_DEV }}
       STAGE: development
+      NOTIFICATION_SOURCE_PROVISIONED: ${{ vars.ALEXA_SOURCE_INFRASTRUCTURE_ENABLED_DEV || 'false' }}
       NOTIFICATION_SOURCE_ENABLED: ${{ vars.ALEXA_SOURCE_PIPELINE_ENABLED_DEV || 'false' }}
       NOTIFICATION_EVENT_BUS_NAME: ${{ vars.ALEXA_EVENT_BUS_NAME_DEV || '' }}
       SHORT_STAGE: ${{ vars.SHORT_STAGE_DEV }}
@@ -87,15 +84,8 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Check EventBridge deployment access
-        run: |
-          BUS_NAME="${NOTIFICATION_EVENT_BUS_NAME:-hear-notifications-$SHORT_STAGE}"
-          if ! aws events describe-event-bus --name "$BUS_NAME" --region "$AWS_REGION" > /dev/null 2> "$RUNNER_TEMP/eventbridge-preflight.log"; then
-            if ! grep -q ResourceNotFoundException "$RUNNER_TEMP/eventbridge-preflight.log"; then
-              cat "$RUNNER_TEMP/eventbridge-preflight.log" >&2
-              exit 1
-            fi
-          fi
+      - name: Validate optional source infrastructure
+        run: python scripts/check_source_infrastructure.py
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -139,7 +129,7 @@ jobs:
             --region "$AWS_REGION" \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              NotificationSourceEnabled="$NOTIFICATION_SOURCE_ENABLED" NotificationEventBusName="$NOTIFICATION_EVENT_BUS_NAME" \
+              NotificationSourceProvisioned="$NOTIFICATION_SOURCE_PROVISIONED" NotificationSourceEnabled="$NOTIFICATION_SOURCE_ENABLED" NotificationEventBusName="$NOTIFICATION_EVENT_BUS_NAME" \
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \

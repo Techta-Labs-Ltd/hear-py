@@ -3,6 +3,11 @@ Transform: AWS::Serverless-2016-10-31
 Description: Hear Alexa skill (Python container image).
 
 Parameters:
+  NotificationSourceProvisioned:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Provision the Go source transport only after AWS deployment access is granted.
   NotificationSourceEnabled:
     Type: String
     Default: "false"
@@ -94,9 +99,23 @@ Parameters:
     MinValue: 1
     MaxValue: 100
 
+Rules:
+  SourceActivationRequiresInfrastructure:
+    Assertions:
+      - Assert: !Or
+          - !Equals [!Ref NotificationSourceEnabled, "false"]
+          - !Equals [!Ref NotificationSourceProvisioned, "true"]
+        AssertDescription: Source activation requires provisioned source infrastructure.
+
 Conditions:
-  SourcePipelineEnabled: !Equals [!Ref NotificationSourceEnabled, "true"]
+  SourceInfrastructureEnabled: !Equals [!Ref NotificationSourceProvisioned, "true"]
+  SourcePipelineEnabled: !And
+    - !Condition SourceInfrastructureEnabled
+    - !Equals [!Ref NotificationSourceEnabled, "true"]
   ManagedSourceBus: !Equals [!Ref NotificationEventBusName, ""]
+  ProvisionManagedSourceBus: !And
+    - !Condition SourceInfrastructureEnabled
+    - !Condition ManagedSourceBus
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
   HasProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
@@ -161,7 +180,7 @@ Globals:
 Resources:
   NotificationEventBus:
     Type: AWS::Events::EventBus
-    Condition: ManagedSourceBus
+    Condition: ProvisionManagedSourceBus
     Properties:
       Name: !Sub hear-notifications-${ShortStage}
       Tags:
@@ -170,6 +189,7 @@ Resources:
 
   NotificationSourceDeadLetterQueue:
     Type: AWS::SQS::Queue
+    Condition: SourceInfrastructureEnabled
     Properties:
       QueueName: !Sub hear-alexa-sources-${ShortStage}-dlq
       MessageRetentionPeriod: 1209600
@@ -177,6 +197,7 @@ Resources:
 
   NotificationSourceQueue:
     Type: AWS::SQS::Queue
+    Condition: SourceInfrastructureEnabled
     Properties:
       QueueName: !Sub hear-alexa-sources-${ShortStage}
       VisibilityTimeout: 180
@@ -188,6 +209,7 @@ Resources:
 
   NotificationSourceRule:
     Type: AWS::Events::Rule
+    Condition: SourceInfrastructureEnabled
     Properties:
       Name: !Sub hear-alexa-source-ready-${ShortStage}
       EventBusName: !If [ManagedSourceBus, !Ref NotificationEventBus, !Ref NotificationEventBusName]
@@ -206,6 +228,7 @@ Resources:
 
   NotificationSourceQueuePolicy:
     Type: AWS::SQS::QueuePolicy
+    Condition: SourceInfrastructureEnabled
     Properties:
       Queues: [!Ref NotificationSourceQueue, !Ref NotificationSourceDeadLetterQueue]
       PolicyDocument:
@@ -223,6 +246,7 @@ Resources:
 
   NotificationSourceFunction:
     Type: AWS::Serverless::Function
+    Condition: SourceInfrastructureEnabled
     Properties:
       FunctionName: !Sub Hear-Notification-Source-${ShortStage}
       PackageType: Image
@@ -260,6 +284,7 @@ Resources:
 
   GoSourceEventBridgePolicy:
     Type: AWS::IAM::ManagedPolicy
+    Condition: SourceInfrastructureEnabled
     Properties:
       Description: Go source signalling only; no Amazon proactive delivery or recipient SQS access.
       PolicyDocument:
@@ -277,6 +302,7 @@ Resources:
 
   NotificationSourceDeadLetterAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: SourceInfrastructureEnabled
     Properties:
       AlarmDescription: Alexa source planning or EventBridge target delivery failed.
       Namespace: AWS/SQS
@@ -774,15 +800,19 @@ Resources:
 
 Outputs:
   NotificationEventBusArn:
+    Condition: SourceInfrastructureEnabled
     Value: !If
       - ManagedSourceBus
       - !GetAtt NotificationEventBus.Arn
       - !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:event-bus/${NotificationEventBusName}
   NotificationSourceRuleName:
+    Condition: SourceInfrastructureEnabled
     Value: !Ref NotificationSourceRule
   NotificationSourceQueueArn:
+    Condition: SourceInfrastructureEnabled
     Value: !GetAtt NotificationSourceQueue.Arn
   GoSourceEventBridgePolicyArn:
+    Condition: SourceInfrastructureEnabled
     Value: !Ref GoSourceEventBridgePolicy
   PersistenceTableName:
     Description: DynamoDB table used for durable Alexa listener state.

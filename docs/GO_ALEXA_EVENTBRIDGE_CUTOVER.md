@@ -90,7 +90,15 @@ token needs an actual refreshing provider or a coordinated worker restart.
 3. Deploy the updated backend and verify all old Python Alexa source sweep,
    fanout and dispatch workers have drained/stopped. Other workers, listener
    webhooks and Firebase remain available. Existing source rows/read APIs remain.
-4. Deploy the hear-py stack with its new source resources disabled. Verify the
+4. Ordinary skill deployments keep NotificationSourceProvisioned=false until
+   AWS source infrastructure access is granted. The GitHub variable is
+   ALEXA_SOURCE_INFRASTRUCTURE_ENABLED_DEV or _PROD. This leaves the existing
+   skill, outbound and recipient Lambda deployments independent of EventBridge.
+   To create source resources, set NotificationSourceProvisioned=true while
+   keeping NotificationSourceEnabled=false. Once provisioned, keep provisioning
+   true to retain queues and policies; pause delivery with NotificationSourceEnabled.
+   The deployment guard rejects accidental removal of existing source resources.
+   Verify the
    source rule, source queue policy, SQS mapping, new source Lambda and existing
    recipient Lambda. Set the real Go bus/rule/target configuration and credentials.
 5. Set the singleton runtime row to owner=go and environment=development or
