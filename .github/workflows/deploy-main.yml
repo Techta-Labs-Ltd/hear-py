@@ -94,6 +94,15 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Check EventBridge deployment access
+        run: |
+          BUS_NAME="${NOTIFICATION_EVENT_BUS_NAME:-hear-notifications-$SHORT_STAGE}"
+          if ! aws events describe-event-bus --name "$BUS_NAME" --region "$AWS_REGION" > /dev/null 2> "$RUNNER_TEMP/eventbridge-preflight.log"; then
+            if ! grep -q ResourceNotFoundException "$RUNNER_TEMP/eventbridge-preflight.log"; then
+              cat "$RUNNER_TEMP/eventbridge-preflight.log" >&2
+              exit 1
+            fi
+          fi
       - name: Ensure production ECR repository
         run: |
           aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" >/dev/null 2>&1 || \

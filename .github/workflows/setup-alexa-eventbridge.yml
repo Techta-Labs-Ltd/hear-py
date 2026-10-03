@@ -2,7 +2,7 @@ name: Audit Alexa EventBridge setup
 
 on:
   push:
-    branches: [feat/eventbridge-source-planner]
+    branches: [main]
     paths:
       - .github/workflows/setup-alexa-eventbridge.yml
       - scripts/audit_alexa_eventbridge.py

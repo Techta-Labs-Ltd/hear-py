@@ -417,7 +417,7 @@ async def test_publication_from_one_organization_uses_full_track_queue_and_keeps
 
     assert response == {"shouldEndSession": True}
     search_payload = deps.heara.search.await_args.args[0]
-    assert search_payload["filter"] == {"publicationIds": ["pub-1"]}
+    assert search_payload["filter"] == {"publicationIds": ["pub-1"], "isPublication": True}
     assert search_payload["limit"] == AvailabilityConstants.PUBLICATION_PLAYBACK_PAGE_SIZE
 
     queue_items = deps.playback.queue.initialize.call_args.args[1]
@@ -440,7 +440,10 @@ async def test_publication_from_one_organization_uses_full_track_queue_and_keeps
     assert first_played["organizationName"] == "York Talking News"
     assert DialogStateManager.get_active(handler_input) is None
     assert "availability request filter={'organizationId': 'org-1'}" in caplog.text
-    assert "availability catalogue search filter={'publicationIds': ['pub-1']}" in caplog.text
+    assert (
+        "availability catalogue search filter={'publicationIds': ['pub-1'], "
+        "'isPublication': True}" in caplog.text
+    )
 
 
 @pytest.mark.asyncio
@@ -1326,7 +1329,8 @@ async def test_selecting_first_publication_speaks_publication_not_organization(
 
     assert response == {"shouldEndSession": True}
     assert deps.heara.search.await_args.args[0]["filter"] == {
-        "publicationIds": ["publication-test"]
+        "publicationIds": ["publication-test"],
+        "isPublication": True,
     }
     options = deps.playback.start.await_args.args
     assert options[2] == "Playing Test Pub for the seventh of September."
@@ -1658,8 +1662,16 @@ async def test_availability_publication_choice_survives_alexa_intent_variants(
 
     assert response == {"shouldEndSession": True}
     sent = deps.heara.search.await_args.args[0]
-    assert sent["filter"] == {"publicationIds": ["publication-1"]}
+    assert sent["filter"] == {
+        "publicationIds": ["publication-1"],
+        "isPublication": True,
+    }
     deps.playback.start.assert_awaited_once()
+    started = deps.playback.start.await_args.args[1]
+    assert started["publicationId"] == "publication-1"
+    assert started["publicationTitle"] == "Pendle Voice Dalesman"
+    assert started["creatorId"] == "creator-1"
+    assert started["creatorName"] == "Pendle Voice"
     assert DialogStateManager.get_active(handler_input) is None
 
 

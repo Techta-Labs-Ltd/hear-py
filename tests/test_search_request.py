@@ -50,6 +50,10 @@ def test_publication_payload_preserves_request_identity():
 
     assert payload["alexaUserId"] == "alexa-user"
     assert payload["listenerId"] == "listener-1"
+    assert payload["filter"] == {
+        "publicationIds": ["publication-1"],
+        "isPublication": True,
+    }
 
 
 def test_search_filter_owner_deduplicates_lists_and_preserves_false_and_zero():

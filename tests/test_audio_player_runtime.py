@@ -1341,7 +1341,7 @@ async def test_tnf_selected_publication_automatically_enqueues_all_tracks(monkey
     assert first_stream["token"] == CONTENT_ID
 
     publication_search = search.await_args_list[0].args[0]
-    assert publication_search["filter"] == {"publicationIds": [publication_id]}
+    assert publication_search["filter"] == {"publicationIds": [publication_id], "isPublication": True}
     assert publication_search["page"] == 0
     assert (
         publication_search["limit"]

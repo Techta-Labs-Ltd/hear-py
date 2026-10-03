@@ -209,7 +209,7 @@ class SearchPayload:
             return normalized
         selected = {
             "query": "",
-            "filter": {"publicationIds": values},
+            "filter": {"publicationIds": values, "isPublication": True},
             "limit": normalized["limit"],
             "page": 0,
         }
