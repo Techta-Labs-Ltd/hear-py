@@ -94,7 +94,10 @@
     {
       "Sid": "SsmSecrets",
       "Effect": "Allow",
-      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
       "Resource": "arn:aws:ssm:eu-west-1:692859951746:parameter/hear/*"
     },
     {
@@ -105,6 +108,43 @@
       "Condition": {
         "StringEquals": {
           "kms:ViaService": "ssm.eu-west-1.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "NotificationEventBridgeResources",
+      "Effect": "Allow",
+      "Action": "events:*",
+      "Resource": [
+        "arn:aws:events:eu-west-1:692859951746:event-bus/hear-notifications-*",
+        "arn:aws:events:eu-west-1:692859951746:rule/hear-notifications-*/hear-notification-source-ready-*",
+        "arn:aws:events:eu-west-1:692859951746:connection/hear-notification-planner-*/*",
+        "arn:aws:events:eu-west-1:692859951746:api-destination/hear-notification-planner-*/*"
+      ]
+    },
+    {
+      "Sid": "NotificationConnectionSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:eu-west-1:692859951746:secret:events!connection/hear-notification-planner-*"
+    },
+    {
+      "Sid": "EventBridgeDestinationServiceRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::692859951746:role/aws-service-role/apidestinations.events.amazonaws.com/AWSServiceRoleForAmazonEventBridgeApiDestinations",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": "apidestinations.events.amazonaws.com"
         }
       }
     }
