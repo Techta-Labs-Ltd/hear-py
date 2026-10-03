@@ -25,7 +25,7 @@ Parameters:
   HearApiKey:
     Type: String
     NoEcho: true
-    MinLength: 16
+    Default: ""
   WebhookOutboundUrl:
     Type: String
     Default: https://alexa.hear.media/api/v1/webhooks/event
@@ -147,100 +147,6 @@ Globals:
         HEAR_METRICS_NAMESPACE: HearAlexa
 
 Resources:
-  NotificationEventBus:
-    Type: AWS::Events::EventBus
-    Properties:
-      Name: !Sub hear-notifications-${Stage}
-
-  NotificationSourceConnection:
-    Type: AWS::Events::Connection
-    Properties:
-      Name: !Sub hear-notification-planner-${Stage}
-      AuthorizationType: API_KEY
-      AuthParameters:
-        ApiKeyAuthParameters:
-          ApiKeyName: x-api-key
-          ApiKeyValue: !Ref HearApiKey
-
-  NotificationSourceDestination:
-    Type: AWS::Events::ApiDestination
-    Properties:
-      Name: !Sub hear-notification-planner-${Stage}
-      ConnectionArn: !GetAtt NotificationSourceConnection.Arn
-      HttpMethod: POST
-      InvocationEndpoint: !Sub ${HearApiUrl}/${HearApiPathPrefix}/notification-source/ready
-      InvocationRateLimitPerSecond: 10
-
-  NotificationSourceInvocationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: InvokeNotificationPlanner
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: events:InvokeApiDestination
-                Resource: !GetAtt NotificationSourceDestination.Arn
-
-  NotificationSourceDeadLetterQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub hear-notification-sources-${Stage}-dlq
-      MessageRetentionPeriod: 1209600
-      SqsManagedSseEnabled: true
-
-  NotificationSourceReadyRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: !Sub hear-notification-source-ready-${Stage}
-      EventBusName: !Ref NotificationEventBus
-      State: ENABLED
-      EventPattern:
-        source: [hear.notifications]
-        detail-type: [AlexaNotificationSourceReady]
-        detail:
-          schemaVersion: [1]
-      Targets:
-        - Id: BackendNotificationPlanner
-          Arn: !GetAtt NotificationSourceDestination.Arn
-          RoleArn: !GetAtt NotificationSourceInvocationRole.Arn
-          HttpParameters:
-            HeaderParameters:
-              Content-Type: application/json
-          InputTransformer:
-            InputPathsMap:
-              notificationId: $.detail.notificationId
-            InputTemplate: '{"schemaVersion":1,"notificationId":<notificationId>}'
-          RetryPolicy:
-            MaximumEventAgeInSeconds: 86400
-            MaximumRetryAttempts: 185
-          DeadLetterConfig:
-            Arn: !GetAtt NotificationSourceDeadLetterQueue.Arn
-
-  NotificationSourceDeadLetterPolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues: [!Ref NotificationSourceDeadLetterQueue]
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sqs:SendMessage
-            Resource: !GetAtt NotificationSourceDeadLetterQueue.Arn
-            Condition:
-              ArnEquals:
-                aws:SourceArn: !GetAtt NotificationSourceReadyRule.Arn
-
   HearListenerStateTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
@@ -722,17 +628,6 @@ Resources:
       EventSourceToken: !Ref AlexaSkillId
 
 Outputs:
-  NotificationEventBusName:
-    Description: Backend ALEXA_NOTIFICATION_EVENT_BUS_NAME for this environment.
-    Value: !Ref NotificationEventBus
-  NotificationEventBusArn:
-    Description: Backend publisher needs events:PutEvents on this resource.
-    Value: !GetAtt NotificationEventBus.Arn
-  NotificationAwsRegion:
-    Description: Backend ALEXA_NOTIFICATION_AWS_REGION for this environment.
-    Value: !Ref AWS::Region
-  NotificationSourceDeadLetterQueueUrl:
-    Value: !Ref NotificationSourceDeadLetterQueue
   PersistenceTableName:
     Description: DynamoDB table used for durable Alexa listener state.
     Value: !Ref HearListenerStateTable
