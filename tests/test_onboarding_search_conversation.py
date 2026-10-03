@@ -2571,7 +2571,10 @@ async def test_yes_searches_selected_publication_with_minimal_filter(
     search.assert_awaited_once_with(
         {
             "query": "",
-            "filter": {"publicationIds": [publication_id]},
+            "filter": {
+                "publicationIds": [publication_id],
+                "isPublication": True,
+            },
             "limit": 3,
             "page": 0,
             "alexaUserId": "amzn1.ask.account.TEST",
@@ -3029,7 +3032,10 @@ async def test_show_more_fetches_next_publication_page_and_selection_uses_page_z
     mock_handler_input.response_builder = ResponseBuilder()
     await ApplicationContainer().build_resolver_interceptor().process(mock_handler_input)
     nlp = mock_handler_input.attributes_manager.request_attributes["_nlp"]
-    assert nlp["searchPayload"]["filter"] == {"publicationIds": ["publication-5"]}
+    assert nlp["searchPayload"]["filter"] == {
+        "publicationIds": ["publication-5"],
+        "isPublication": True,
+    }
     assert nlp["searchPayload"]["page"] == 0
 
 
@@ -3279,7 +3285,10 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
     assert nlp["intent"] == "publication"
     assert nlp["searchPayload"] == {
         "query": "",
-        "filter": {"publicationIds": ["publication-buxton"]},
+        "filter": {
+            "publicationIds": ["publication-buxton"],
+            "isPublication": True,
+        },
         "limit": 3,
         "page": 0,
     }
@@ -3299,7 +3308,11 @@ async def test_publication_choice_replaces_source_filter_with_publication_filter
                 "isLocal": False,
                 "limit": 3,
             "page": 0,
-            "filter": {"publicationIds": ["publication-buxton"]},
+            "sort": "trending",
+            "filter": {
+                "publicationIds": ["publication-buxton"],
+                "isPublication": True,
+            },
         },
         timeout_ms=8000,
     )

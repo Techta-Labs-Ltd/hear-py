@@ -94,7 +94,10 @@
     {
       "Sid": "SsmSecrets",
       "Effect": "Allow",
-      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
       "Resource": "arn:aws:ssm:eu-west-1:692859951746:parameter/hear/*"
     },
     {
@@ -107,6 +110,48 @@
           "kms:ViaService": "ssm.eu-west-1.amazonaws.com"
         }
       }
+    },
+    {
+      "Sid": "AlexaSourceEventBridgeResources",
+      "Effect": "Allow",
+      "Action": [
+        "events:CreateEventBus",
+        "events:DeleteEventBus",
+        "events:DescribeEventBus",
+        "events:TagResource",
+        "events:UntagResource",
+        "events:ListTagsForResource",
+        "events:PutRule",
+        "events:DeleteRule",
+        "events:DescribeRule",
+        "events:EnableRule",
+        "events:DisableRule",
+        "events:PutTargets",
+        "events:RemoveTargets",
+        "events:ListTargetsByRule"
+      ],
+      "Resource": [
+        "arn:aws:events:eu-west-1:692859951746:event-bus/hear-notifications-prod",
+        "arn:aws:events:eu-west-1:692859951746:event-bus/hear-notifications-dev",
+        "arn:aws:events:eu-west-1:692859951746:rule/hear-notifications-prod/*",
+        "arn:aws:events:eu-west-1:692859951746:rule/hear-notifications-dev/*"
+      ]
+    },
+    {
+      "Sid": "AlexaSourcePublisherManagedPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy",
+        "iam:DeletePolicy",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:TagPolicy",
+        "iam:UntagPolicy"
+      ],
+      "Resource": "arn:aws:iam::692859951746:policy/hear-py-*"
     }
   ]
 }

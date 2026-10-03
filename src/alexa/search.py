@@ -521,6 +521,11 @@ class Search:
             start_index=0,
             **Search.search_queue_pagination(search_result),
         )
+        content = PlaybackQueue.apply_publication_context(
+            user.snapshot(handler_input),
+            content,
+            queue_index=0,
+        )
         return await playback.start(
             handler_input, content, intro, 0, {"preserveSessionQueue": True}
         )
@@ -549,6 +554,11 @@ class Search:
                 source=discovery_intent or "search",
                 discovery_label=search_result.get("_request_label") or options.get("q"),
                 start_index=i,
+            )
+            content = PlaybackQueue.apply_publication_context(
+                User.snapshot(handler_input),
+                content,
+                queue_index=i,
             )
             return await playback.start(
                 handler_input, content, intro, 0, {"preserveSessionQueue": True}

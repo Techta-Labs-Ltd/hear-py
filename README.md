@@ -87,12 +87,12 @@ python -m pytest -q
 
 Two independent GitHub Actions workflows keep the release paths explicit:
 
-- `deploy-develop.yml` tests pull requests to `develop` and deploys pushes from
-  `develop` to the `development` GitHub environment.
+- `deploy-develop.yml` manually deploys reviewed `main` to the `development`
+  GitHub environment.
 - `deploy-main.yml` tests pull requests to `main` and deploys pushes from `main`
   to the `production` GitHub environment.
 
-Each workflow can also be run manually, but only from its matching branch.
+Both workflows can be run manually from `main`; development and production retain separate runtime configuration.
 
 Create GitHub environments named `development` and `production` for deployment
 protection. Add these distinctly named secrets and variables at repository or
@@ -119,6 +119,8 @@ stages:
 | Variable | `CANONICAL_IDENTITY_ENABLED_DEV` | `0` until the backend resolve endpoint is live, then `1` | `CANONICAL_IDENTITY_ENABLED_PROD` | `0` until the backend resolve endpoint is live, then `1` |
 | Variable | `PROVISIONED_CONCURRENCY_DEV` | `0` | `PROVISIONED_CONCURRENCY_PROD` | `0` |
 | Deployment setting | Proactive reserved concurrency | fixed at `0` for the current regional quota | Proactive reserved concurrency | fixed at `0` for the current regional quota |
+| Variable | `ALEXA_SOURCE_INFRASTRUCTURE_ENABLED_DEV` | `false` until source infrastructure access is granted | `ALEXA_SOURCE_INFRASTRUCTURE_ENABLED_PROD` | `false` until source infrastructure access is granted |
+| Variable | `ALEXA_SOURCE_PIPELINE_ENABLED_DEV` | `false` until Go routing is verified | `ALEXA_SOURCE_PIPELINE_ENABLED_PROD` | `false` until Go routing is verified |
 | Variable | `SSM_PARAMETER_PREFIX_DEV` | `/hear/development` | None | production secrets come from GitHub |
 
 Development reads sensitive configuration from encrypted SSM parameters:

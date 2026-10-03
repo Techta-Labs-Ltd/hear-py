@@ -1,10 +1,6 @@
 name: Deploy development
 
 on:
-  push:
-    branches: [develop]
-  pull_request:
-    branches: [develop]
   workflow_dispatch:
 
 permissions:
@@ -39,7 +35,7 @@ jobs:
         run: python -c "from src.application import Application; Application.build_skill(); print('main imports + skill builds OK')"
 
   deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
     environment:
@@ -55,11 +51,14 @@ jobs:
       ECR_REPO: ${{ vars.ECR_REPO_DEV || 'hear-python' }}
       STACK_NAME: ${{ vars.STACK_NAME_DEV }}
       STAGE: development
+      NOTIFICATION_SOURCE_PROVISIONED: ${{ vars.ALEXA_SOURCE_INFRASTRUCTURE_ENABLED_DEV || 'false' }}
+      NOTIFICATION_SOURCE_ENABLED: ${{ vars.ALEXA_SOURCE_PIPELINE_ENABLED_DEV || 'false' }}
+      NOTIFICATION_EVENT_BUS_NAME: ${{ vars.ALEXA_EVENT_BUS_NAME_DEV || '' }}
       SHORT_STAGE: ${{ vars.SHORT_STAGE_DEV }}
       ALEXA_SKILL_ID: ${{ vars.ALEXA_SKILL_ID_DEV }}
-      HEAR_API_URL: https://alexa.hear.media/api/v1
+      HEAR_API_URL: ${{ vars.HEAR_API_URL_DEV || 'https://alexa.hear.media/api/v1' }}
       HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_DEV || 'alexa' }}
-      WEBHOOK_OUTBOUND_URL: https://alexa.hear.media/api/v1/webhooks/event
+      WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_DEV || 'https://alexa.hear.media/api/v1/webhooks/event' }}
       HEAR_LOGGING_ENABLED: ${{ vars.HEAR_LOGGING_ENABLED_DEV || 'true' }}
       CANONICAL_IDENTITY_ENABLED: ${{ vars.CANONICAL_IDENTITY_ENABLED_DEV || '1' }}
       RESERVED_CONCURRENCY: '0'
@@ -78,11 +77,15 @@ jobs:
           : "${STACK_NAME:?Set the STACK_NAME_DEV variable}"
           : "${SHORT_STAGE:?Set the SHORT_STAGE_DEV variable}"
           : "${ALEXA_SKILL_ID:?Set the ALEXA_SKILL_ID_DEV variable}"
+      - name: Validate shared Alexa API and webhook endpoints
+        run: python scripts/check_notification_environment.py --environment development
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Validate optional source infrastructure
+        run: python scripts/check_source_infrastructure.py
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -126,6 +129,7 @@ jobs:
             --region "$AWS_REGION" \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
+              NotificationSourceProvisioned="$NOTIFICATION_SOURCE_PROVISIONED" NotificationSourceEnabled="$NOTIFICATION_SOURCE_ENABLED" NotificationEventBusName="$NOTIFICATION_EVENT_BUS_NAME" \
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
