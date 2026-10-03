@@ -19,6 +19,7 @@ from src.services.events import OutboundEventService
 from src.services.logging_control import ApplicationLog
 from src.services.notification_delivery import NotificationDeliveryService
 from src.services.notification_recipient import AlexaNotificationRecipientDirectory
+from src.services.notification_source import NotificationSourceService
 from src.services.observability import ErrorReporter
 from src.services.outbox import OutboxRelayService
 from src.utils.deadline import RequestDeadline
@@ -167,6 +168,25 @@ class NotificationLambdaApplication:
             }
 
 
+class NotificationSourceLambdaApplication:
+    tracer = Tracer(service="hear-notification-sources")
+
+    def __init__(self) -> None:
+        self._runtime = LambdaRuntime()
+        self._service: NotificationSourceService | None = None
+
+    def handle(self, event: dict, context) -> dict:
+        records = (event or {}).get("Records") or []
+        ids = SqsBatch.message_ids(records)
+        try:
+            if self._service is None:
+                self._service = NotificationSourceService()
+            return self._runtime.run(self._service.consume(records, deadline=RequestDeadline.from_context(context)))
+        except Exception as exc:
+            ApplicationLog.warning("Source notification batch failed error=%s", type(exc).__name__)
+            return {"batchItemFailures": [{"itemIdentifier": value} for value in ids]}
+
+
 class OutboxRelayLambdaApplication:
     tracer = Tracer(service="hear-outbox-relay")
 
@@ -209,6 +229,7 @@ class OutboxRelayLambdaApplication:
 _application = LambdaApplication()
 _outbound_application = OutboundLambdaApplication()
 _notification_application = NotificationLambdaApplication()
+_notification_source_application = NotificationSourceLambdaApplication()
 _outbox_relay_application = OutboxRelayLambdaApplication()
 
 
@@ -236,3 +257,8 @@ def outbox_relay_handler(event: dict, context) -> dict:
 @_outbox_relay_application.tracer.capture_lambda_handler
 def outbox_recovery_handler(event: dict, context) -> dict:
     return _outbox_relay_application.recover()
+
+
+@_notification_source_application.tracer.capture_lambda_handler
+def notification_source_handler(event: dict, context) -> dict:
+    return _notification_source_application.handle(event, context)

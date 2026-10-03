@@ -1,0 +1,57 @@
+name: Audit Alexa EventBridge setup
+
+on:
+  push:
+    branches: [feat/eventbridge-source-planner]
+    paths:
+      - .github/workflows/setup-alexa-eventbridge.yml
+      - scripts/audit_alexa_eventbridge.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit ${{ matrix.environment }} AWS source routing
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: development
+            suffix: DEV
+            stage: dev
+          - environment: production
+            suffix: PROD
+            stage: prod
+    environment: ${{ matrix.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SETUP_ENVIRONMENT: ${{ matrix.environment }}
+      AWS_REGION: ${{ vars[format('AWS_REGION_{0}', matrix.suffix)] || 'eu-west-1' }}
+      STACK_NAME: ${{ vars[format('STACK_NAME_{0}', matrix.suffix)] || format('hear-py-{0}', matrix.stage) }}
+      SHORT_STAGE: ${{ matrix.stage }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use existing approved AWS deployment identity
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets[format('AWS_DEPLOY_ROLE_ARN_{0}', matrix.suffix)] }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: HearEventBridgeSetupAudit
+          retry-max-attempts: 2
+      - name: Install read-only inventory dependencies
+        run: python -m pip install boto3
+      - name: Read AWS topology without credentials or listener data
+        run: python scripts/audit_alexa_eventbridge.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: alexa-aws-audit-${{ matrix.environment }}
+          path: aws-setup-report/*.json
+          retention-days: 3
+          if-no-files-found: ignore
