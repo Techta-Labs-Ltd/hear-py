@@ -19,10 +19,10 @@ from src.models.user import User
 from src.utils.content import ContentUtils
 
 
-async def _offer_notification_followup(notifications, handler_input):
+async def _offer_notification_followup(notifications, handler_input, lead: str):
     if notifications is None:
         return None
-    return await notifications.offer(handler_input, followup=True)
+    return await notifications.offer(handler_input, followup=True, lead=lead)
 
 
 class RatingRequest:
@@ -61,7 +61,14 @@ class FeedbackContinuation:
         queue = PlaybackQueue.read(store)
         if not queue:
             return None
-        has_next = int(queue.get("currentIndex") or 0) < len(queue["orderedContentIds"]) - 1
+        active = store.get("activePlayback") or {}
+        if active.get("queueId") and active["queueId"] != queue.get("queueId"):
+            return None
+        ids = queue["orderedContentIds"]
+        index = int(queue.get("currentIndex") or 0)
+        if active.get("contentId") in ids:
+            index = max(index, ids.index(active["contentId"]))
+        has_next = index < len(ids) - 1
         if not has_next and not PlaybackQueue.has_more_pages(queue):
             return None
         discovery = dict(
@@ -88,7 +95,7 @@ class FeedbackContinuation:
             "kind": kind or "topic",
             "name": name,
             "queueId": queue.get("queueId"),
-            "currentIndex": int(queue.get("currentIndex") or 0),
+            "currentIndex": index,
         }
 
     @staticmethod
@@ -141,7 +148,7 @@ class FeedbackContinuation:
         )
         DialogStateManager.clear(handler_input, "feedback_continuation")
         notification_response = await _offer_notification_followup(
-            notifications, handler_input
+            notifications, handler_input, "Ok."
         )
         if notification_response is not None:
             return notification_response
@@ -187,7 +194,7 @@ class EnjoyedFeedback:
                 )
             },
         )
-        if pending.get("requested"):
+        if pending.get("requested") and not pending.get("completed"):
             resume_speech = AlexaFeedback.resuming_speech(pending, store)
             await self._feedback.clear(handler_input)
             return await self._playback_controls.restart_active(
@@ -249,7 +256,9 @@ class EnjoyedFeedback:
             else Speech.FEEDBACK_FOLLOW_DECLINED
         )
         notification_response = await _offer_notification_followup(
-            self._notifications, handler_input
+            self._notifications,
+            handler_input,
+            Speech.FEEDBACK_ENJOYED_ACK(creator_name) if title or creator_name else "Ok.",
         )
         if notification_response is not None:
             return notification_response
@@ -297,7 +306,7 @@ class SomewhatFeedback:
         )
         resume_speech = AlexaFeedback.resuming_speech(pending, store)
         await self._feedback.clear(handler_input)
-        if pending.get("requested"):
+        if pending.get("requested") and not pending.get("completed"):
             return await self._playback_controls.restart_active(
                 handler_input,
                 speech=resume_speech,
@@ -314,7 +323,7 @@ class SomewhatFeedback:
         if continuation:
             return continuation
         notification_response = await _offer_notification_followup(
-            self._notifications, handler_input
+            self._notifications, handler_input, Speech.FEEDBACK_SOMEWHAT_ACK
         )
         if notification_response is not None:
             return notification_response
@@ -353,7 +362,7 @@ class NotEnjoyedFeedback:
             },
         )
         report_context = Report.snapshot_report_context(store) or {}
-        if pending.get("requested"):
+        if pending.get("requested") and not pending.get("completed"):
             report_context["resumeAfterDecision"] = True
         FeedbackService.dismiss(handler_input)
         self._user.update(
@@ -449,7 +458,7 @@ class SkipFeedback:
             if continuation:
                 return continuation
             notification_response = await _offer_notification_followup(
-                self._notifications, handler_input
+                self._notifications, handler_input, "Ok."
             )
             if notification_response is not None:
                 return notification_response
@@ -462,7 +471,7 @@ class SkipFeedback:
                 .response
             )
         pending = store.get("pendingFeedback") or {}
-        requested = bool(pending.get("requested"))
+        requested = bool(pending.get("requested") and not pending.get("completed"))
         resume_speech = AlexaFeedback.resuming_speech(pending, store, skipped=True)
         await self._feedback.submit(
             request, FeedbackCommand("skipped")
@@ -491,7 +500,7 @@ class SkipFeedback:
         if continuation:
             return continuation
         notification_response = await _offer_notification_followup(
-            self._notifications, handler_input
+            self._notifications, handler_input, "Ok."
         )
         if notification_response is not None:
             return notification_response

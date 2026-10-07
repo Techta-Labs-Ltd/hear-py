@@ -936,7 +936,7 @@ def test_search_rejects_low_confidence_source_location():
     )
 
     assert result["searchPayload"] == {
-        "query": "news from early bay",
+        "query": "",
         "filter": {},
     }
     assert result["entities"] == []
@@ -1085,7 +1085,7 @@ def test_ranked_unspecified_location_takes_priority_over_original_query():
     assert [entity["canonicalValue"] for entity in result["entities"]] == ["Rhymney"]
 
 
-def test_latest_multiword_fallback_keeps_sort_out_of_query():
+def test_empty_resolver_query_preserves_sort_without_rebuilding_utterance():
     payload = _response(intent="search")
     payload["entities"] = []
     payload["slots"].update({"residualQuery": "", "latest": True, "sort": "latest"})
@@ -1095,13 +1095,13 @@ def test_latest_multiword_fallback_keeps_sort_out_of_query():
     )
 
     assert result["searchPayload"] == {
-        "query": "sport news",
+        "query": "",
         "sort": "latest",
         "filter": {},
     }
 
 
-def test_one_hundred_multiword_fallback_combinations_remain_searchable():
+def test_one_hundred_resolver_supplied_multiword_queries_remain_searchable():
     topics = (
         "roman history",
         "local heritage",
@@ -1139,7 +1139,7 @@ def test_one_hundred_multiword_fallback_combinations_remain_searchable():
     for utterance, expected_query in combinations:
         payload = _response(intent="search")
         payload["entities"] = []
-        payload["slots"].update({"residualQuery": "", "sort": "relevance"})
+        payload["slots"].update({"residualQuery": expected_query, "sort": "relevance"})
 
         result = ResolverResult.from_payload(payload).to_alexa_payload(original_utterance=utterance)
 

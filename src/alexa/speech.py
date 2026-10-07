@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.constants.discovery import DiscoveryConstants
 from src.utils.content import ContentUtils
+from src.utils.discovery_examples import DiscoveryExamples
 
 
 class Speech:
@@ -101,15 +102,20 @@ class Speech:
     CONTENT_NOT_READY = "That one isn't ready to play yet. Try another number."
     CREATOR_CREDIT_UNKNOWN = "I do not have creator information for the current content."
     FEEDBACK_FOLLOW_DECLINED = "Ok. What would you like to listen to next?"
-    FEEDBACK_SOMEWHAT = "Thanks for the feedback — we'll use that to improve your recommendations. What would you like to listen to next?"
+    FEEDBACK_SOMEWHAT_ACK = (
+        "Thanks for the feedback — we'll use that to improve your recommendations."
+    )
+    FEEDBACK_SOMEWHAT = f"{FEEDBACK_SOMEWHAT_ACK} What would you like to listen to next?"
     FEEDBACK_NOT_ENJOYED = "Sorry to hear that. If you feel the content was inappropriate, say report this content and we'll flag it for review. Otherwise say skip to carry on."
     FEEDBACK_SKIP_INTRO = "Ok. What would you like to listen to next?"
-    FEEDBACK_AWAITING_REPROMPT = (
-        "Did you enjoy that content? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
+    # Short pauses keep the answers from running into one sentence, which made
+    # "Say I enjoyed it" sound like Alexa was describing her own opinion.
+    FEEDBACK_OPTIONS = (
+        'You can say, <break time="250ms"/>I enjoyed it, <break time="250ms"/>'
+        'it was okay, <break time="250ms"/>or I didn\'t enjoy it. Or say skip.'
     )
-    RATE_CONTENT_PROMPT = (
-        "Did you enjoy this? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
-    )
+    FEEDBACK_AWAITING_REPROMPT = f"Did you enjoy that content? {FEEDBACK_OPTIONS}"
+    RATE_CONTENT_PROMPT = f"Did you enjoy this? {FEEDBACK_OPTIONS}"
     RATE_CONTENT_NOTHING = "There isn't any content to rate right now."
     RATE_CONTENT_SAVED_RESUMING = "Thanks for the feedback. Resuming."
     RATE_CONTENT_SKIPPED_RESUMING = "Ok. Resuming."
@@ -132,9 +138,10 @@ class Speech:
     PLAY_NO_PENDING_LIST = (
         "Say what's trending first, then pick the first one or say play number one."
     )
-    FALLBACK_SPEECH = f"Sorry, I didn't catch that. {WELCOME_REPROMPT}"
+    FALLBACK_SPEECH = f"Sorry, I didn't catch that. {DiscoveryExamples.guidance(DiscoveryExamples.DEFAULT_NEWSPAPER)}"
     GOODBYE = "Thanks for listening to Hear. Goodbye."
-    ERROR_GENERIC = f"Sorry, I didn't quite catch that. {WELCOME_REPROMPT}"
+    ERROR_GENERIC = f"Sorry, I didn't quite catch that. {DiscoveryExamples.guidance(DiscoveryExamples.DEFAULT_NEWSPAPER)}"
+
     ONBOARDING_ASK_PERMISSION = "Welcome to Hear Service. This free service is brought to you by volunteers across the UK and is designed for people who are visually impaired or have difficulty reading. You can ask for a talking newspaper or creator, search for topics such as news or sport, hear what's trending, or ask for a recommendation. To find out more, visit hear dot media slash Alexa. To help me find local content for you, may I check the address saved in your Alexa account? Please say yes or no."
     ONBOARDING_LOCATION_DENIED = PROFILE_PERMISSION_SKIPPED
     ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
@@ -200,19 +207,23 @@ class Speech:
             if user_name
             else "Welcome back to Hear Service. Before we continue"
         )
-        return f"{greeting} — did you enjoy content from {creator}? You can say I enjoyed it, it was okay, or I did not enjoy it. Say skip if you'd rather not rate it."
+        return f"{greeting} — did you enjoy content from {creator}? {Speech.FEEDBACK_OPTIONS}"
 
     @staticmethod
-    def _build_enjoyed_following(title, creator_name) -> str:
-        del title
+    def FEEDBACK_ENJOYED_ACK(creator_name=None) -> str:
         safe_creator = (
             Speech.escape_ssml_lite(creator_name)
             if creator_name and (not Speech.is_bad_credit(creator_name))
             else None
         )
         if safe_creator:
-            return f"Thanks for your feedback on {safe_creator}. What would you like to listen to next?"
-        return "Thanks for your feedback. What would you like to listen to next?"
+            return f"Thanks for your feedback on {safe_creator}."
+        return "Thanks for your feedback."
+
+    @staticmethod
+    def _build_enjoyed_following(title, creator_name) -> str:
+        del title
+        return f"{Speech.FEEDBACK_ENJOYED_ACK(creator_name)} What would you like to listen to next?"
 
     @staticmethod
     def _build_community_intro(locality, total_hits) -> str:
@@ -326,8 +337,12 @@ class Speech:
         return f"Say follow to follow {Speech.escape_ssml_lite(creator_name)}, or no thanks to continue."
 
     @staticmethod
+    def FOLLOW_CREATOR_ACK(creator_name):
+        return f"Done! You're now following {Speech.escape_ssml_lite(creator_name)}."
+
+    @staticmethod
     def FOLLOW_CREATOR(creator_name):
-        return f"Done! You're now following {Speech.escape_ssml_lite(creator_name)}. If you'd like to hear something else, just say next."
+        return f"{Speech.FOLLOW_CREATOR_ACK(creator_name)} If you'd like to hear something else, just say next."
 
     @staticmethod
     def ALREADY_FOLLOWING(creator_name):

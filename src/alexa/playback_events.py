@@ -77,6 +77,8 @@ class PlaybackEvents:
         if command.kind == "finished":
             return await self._finish(request, command, state)
         if command.kind == "stopped":
+            if state.get("status") == "completed":
+                return PlaybackEventReceipt(command, accepted=False, state=state)
             observed = self._playback.observe(
                 handler_input,
                 offset_ms=command.offset_ms,
@@ -159,6 +161,7 @@ class PlaybackEvents:
     ) -> PlaybackEventReceipt:
         handler_input = request.handler_input
         state = self._complete_state(handler_input, state, command.offset_ms)
+        self._playback.queue.set_index_for_content(handler_input, command.token)
         self._save_completed_source(handler_input, state)
         FeedbackService.record_candidate(handler_input, state, completed=True)
         FeedbackService.activate_best(handler_input)

@@ -161,7 +161,7 @@ class Decline:
         if store.get("awaitingFollow"):
             await self._feedback.clear(handler_input)
             notification_response = await self._notifications.offer(
-                handler_input, followup=True
+                handler_input, followup=True, lead="Ok."
             )
             if notification_response is not None:
                 return notification_response

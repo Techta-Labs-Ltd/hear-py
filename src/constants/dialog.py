@@ -4,6 +4,7 @@ from src.constants.state import StateSchema
 class DialogConstants:
     VALIDATION_FAILURE = "_dialogValidationFailure"
     DIALOG_TTL_SECONDS = 10 * 60
+    FEEDBACK_TTL_SECONDS = 30 * 60
     CHOICE_DISMISS_INTENTS = frozenset({"DismissChoicesIntent"})
     IDLE_AFFIRMATIVE_PHRASES = frozenset(
         {

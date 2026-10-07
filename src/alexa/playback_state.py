@@ -214,6 +214,9 @@ class PlaybackState:
         state = self.from_store(store)
         if not state or state.get("status") not in PlaybackConstants.ACTIVE_PLAYBACK_STATUSES:
             return False
+        duration = PlaybackUtils.integer(state.get("durationMs"))
+        if duration > 0 and PlaybackUtils.integer(state.get("offsetMs")) >= duration:
+            return False
         audio_url = state.get("audioUrl") or store.get("currentAudioUrl")
         return isinstance(audio_url, str) and audio_url.strip().lower().startswith("https://")
 

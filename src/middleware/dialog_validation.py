@@ -101,11 +101,11 @@ class DialogValidationPolicy:
             Speech.CREATOR_CITY_NOT_RECOGNISED
         ),
         "organization_name": (
-            "I couldn't recognize that talking newspaper. "
+            "I couldn't recognise that talking newspaper. "
             "Say its full name. For example, Tynedale Talking Newspaper."
         ),
         "publication_source": (
-            "I couldn't recognize the publication name. Please say its full name again."
+            "I couldn't recognise the publication name. Please say its full name again."
         ),
     }
 

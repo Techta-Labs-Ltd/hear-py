@@ -1,5 +1,3 @@
-"""Alexa-bound dialog selection and request-state helpers."""
-
 from __future__ import annotations
 
 import re
@@ -274,9 +272,15 @@ class DialogStateManager:
         *,
         context: dict | None = None,
         deferred_request: dict | None = None,
-        ttl_seconds: int = DialogConstants.DIALOG_TTL_SECONDS,
+        ttl_seconds: int | None = None,
     ) -> dict:
         now = DialogStateManager._now()
+        if ttl_seconds is None:
+            ttl_seconds = (
+                DialogConstants.FEEDBACK_TTL_SECONDS
+                if dialog_type == "feedback"
+                else DialogConstants.DIALOG_TTL_SECONDS
+            )
         active = {
             "type": dialog_type,
             "context": deepcopy(context or {}),

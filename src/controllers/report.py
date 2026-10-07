@@ -110,6 +110,9 @@ class ReportContentHandler(AbstractRequestHandler):
             )
             if continuation:
                 return continuation
+        if not self._playback_controls.has_unfinished(store):
+            await self._feedback.clear(handler_input)
+            return AlexaResponse.present_idle_next(handler_input, Speech.REPORT_CONTENT_CONFIRM)
         self._user.update(handler_input, {"awaitingContinueAfterFlag": True})
         directive = await self._playback_controls.pause_active(handler_input)
         question = AlexaFeedback.keep_listening_question(report, store)

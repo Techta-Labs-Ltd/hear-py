@@ -37,7 +37,8 @@ def test_confirmation_policy_returns_a_typed_clarification_for_missing_subject()
     )
 
     assert decision.kind == "clarify"
-    assert decision.clarification["reprompt"] == "Please say your request again."
+    assert "say the name of your city to begin listening" in decision.clarification["reprompt"]
+    assert "You can say play " in decision.clarification["reprompt"]
 
 
 def test_confirmation_policy_rejects_contradictory_decision_data():

@@ -10,11 +10,11 @@ from src.alexa.onboarding import Onboarding
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
-from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.availability_data import AvailabilityData
 from src.models.user import User
 from src.services.logging_control import ApplicationLog
+from src.utils.discovery_examples import DiscoveryExamples
 
 
 class FallbackModule:
@@ -100,10 +100,11 @@ class FallbackModule:
         )
         if redirect is not None:
             return redirect
+        recovery = DiscoveryExamples.recovery()
         return AlexaResponse.present_idle_next(
             handler_input,
-            Speech.FALLBACK_SPEECH,
-            Speech.WELCOME_REPROMPT,
+            recovery["speech"],
+            recovery["reprompt"],
         )
 
 

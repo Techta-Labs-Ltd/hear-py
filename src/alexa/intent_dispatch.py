@@ -22,6 +22,7 @@ from src.alexa.ssml import Ssml
 from src.constants.discovery import DiscoveryConstants
 from src.models.user import User
 from src.services.logging_control import ApplicationLog
+from src.utils.discovery_examples import DiscoveryExamples
 
 
 class IntentDispatcher:
@@ -332,11 +333,12 @@ class IntentDispatcher:
 
     @staticmethod
     def _missing_suggestion_response(handler_input: HandlerInput) -> Response:
+        recovery = DiscoveryExamples.recovery()
         return (
             handler_input.response_builder.speak(
-                Ssml.ssml(Speech.FALLBACK_SPEECH)
+                Ssml.ssml(recovery["speech"])
             )
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+            .reprompt(Ssml.ssml(recovery["reprompt"]))
             .set_should_end_session(False)
             .response
         )
@@ -357,9 +359,10 @@ class IntentDispatcher:
 
     @staticmethod
     def _fallback_response(handler_input: HandlerInput) -> Response:
+        recovery = DiscoveryExamples.recovery()
         return (
-            handler_input.response_builder.speak(Speech.FALLBACK_SPEECH)
-            .reprompt(Speech.WELCOME_REPROMPT)
+            handler_input.response_builder.speak(Ssml.ssml(recovery["speech"]))
+            .reprompt(Ssml.ssml(recovery["reprompt"]))
             .set_should_end_session(False)
             .response
         )

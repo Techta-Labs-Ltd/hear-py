@@ -52,7 +52,12 @@ class AlexaNotificationAdapter:
         self._notification_api_enabled = notification_api_enabled
 
     async def offer(
-        self, handler_input, *, explicit: bool = False, followup: bool = False
+        self,
+        handler_input,
+        *,
+        explicit: bool = False,
+        followup: bool = False,
+        lead: str | None = None,
     ):
         store = self._user.snapshot(handler_input)
         active_dialog = DialogStateManager.get_active(handler_input) or {}
@@ -100,8 +105,11 @@ class AlexaNotificationAdapter:
             "notification",
             context={**item, "question": question},
         )
+        # A follow-up offer must not swallow the acknowledgement of what the
+        # listener just answered, otherwise their feedback sounds discarded.
+        spoken = f"{lead} {question}" if lead else question
         return (
-            handler_input.response_builder.speak(Ssml.ssml(question))
+            handler_input.response_builder.speak(Ssml.ssml(spoken))
             .reprompt(Ssml.ssml(reprompt))
             .set_should_end_session(False)
             .response
