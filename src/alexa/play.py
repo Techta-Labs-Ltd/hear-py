@@ -325,7 +325,7 @@ class PlayOrganization:
     def _name_retry_response(handler_input):
         DialogStateManager.clear(handler_input, "organization_name")
         prompt = (
-            "I couldn't recognize that talking newspaper. "
+            "I couldn't recognise that talking newspaper. "
             "Say its full name. For example, Tynedale Talking Newspaper."
         )
         return (

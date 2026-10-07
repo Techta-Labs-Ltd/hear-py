@@ -27,6 +27,7 @@ class AlexaEntities:
                 "value": "somewhat",
                 "synonyms": [
                     "it was okay",
+                    "it was ok",
                     "it was alright",
                     "not bad",
                     "it was fine",
@@ -42,6 +43,8 @@ class AlexaEntities:
             "name": {
                 "value": "not enjoyed",
                 "synonyms": [
+                    "I didn't enjoy it",
+                    "I did not enjoy it",
                     "did not enjoy it",
                     "didn't enjoy it",
                     "did not like it",

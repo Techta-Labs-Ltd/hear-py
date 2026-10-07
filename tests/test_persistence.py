@@ -288,7 +288,7 @@ class TestPersistence:
             }
         )
 
-        assert merged["activeDialog"]["expiresAt"] == 1_700_000_600
+        assert merged["activeDialog"]["expiresAt"] == 1_700_001_800
         assert merged["awaitingFeedback"] is True
 
     def test_get_store_returns_copy(self, mock_handler_input):

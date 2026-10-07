@@ -62,7 +62,9 @@ class FollowCreator:
                 await self._feedback.clear(handler_input)
                 if self._notifications is not None:
                     notification_response = await self._notifications.offer(
-                        handler_input, followup=True
+                        handler_input,
+                        followup=True,
+                        lead=Speech.ALREADY_FOLLOWING(creator_name),
                     )
                     if notification_response is not None:
                         return notification_response
@@ -99,7 +101,9 @@ class FollowCreator:
                 await self._feedback.clear(handler_input)
                 if self._notifications is not None:
                     notification_response = await self._notifications.offer(
-                        handler_input, followup=True
+                        handler_input,
+                        followup=True,
+                        lead=Speech.FOLLOW_CREATOR_ACK(creator_name),
                     )
                     if notification_response is not None:
                         return notification_response

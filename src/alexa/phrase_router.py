@@ -8,6 +8,7 @@ from functools import cache
 from pathlib import Path
 
 from src.alexa.direct_intents import DirectIntentPolicy
+from src.alexa.entities import AlexaEntities
 from src.constants.intent_routes import INTENT_ROUTE_RULES, INTERRUPT_ROUTE_INTENTS
 from src.utils.filters import SearchFilterUtils
 from src.utils.playback import PlaybackUtils
@@ -200,6 +201,37 @@ class PhraseRouter:
                     expression, captures = pattern
                     routes.append((intent_name, expression, captures, bool(captures)))
         return tuple(routes)
+
+    @classmethod
+    @cache
+    def _feedback_phrases(cls) -> frozenset[str]:
+        model = json.loads(cls._MODEL_PATH.read_text(encoding="utf-8"))
+        entries = [
+            entry
+            for slot_type in model["interactionModel"]["languageModel"]["types"]
+            if slot_type.get("name") == "HEAR_FEEDBACK"
+            for entry in slot_type.get("values") or ()
+        ]
+        # The dynamic entities ship with the Lambda, so phrases added there are
+        # recovered without rebuilding the interaction model.
+        entries.extend(AlexaEntities.build_feedback_dynamic_entities_directive()["types"][0]["values"])
+        phrases: set[str] = set()
+        for entry in entries:
+            name = entry.get("name") or {}
+            for value in (name.get("value"), *(name.get("synonyms") or ())):
+                normalized = cls.normalize(value)
+                if normalized:
+                    phrases.add(normalized)
+        return frozenset(phrases)
+
+    @classmethod
+    def feedback_route(cls, phrase: str) -> PhraseRoute | None:
+        """Recover a feedback answer that Alexa matched to a slot-only sample."""
+        if cls.normalize(phrase) not in cls._feedback_phrases():
+            return None
+        return PhraseRoute(
+            "FeedbackResponseIntent", (("feedback", phrase),), "feedback", "active_feedback"
+        )
 
     @classmethod
     @cache

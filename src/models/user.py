@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from config import settings
+from src.constants.dialog import DialogConstants
 from src.constants.state import StateSchema
 from src.utils.content import ContentIdentity
 from src.utils.playback import PlaybackUtils
@@ -447,7 +448,12 @@ class User:
         active = User.active_dialog({**store, "activeDialog": store.get("activeDialog")})
         if active and not active.get("expiresAt") and active.get("type") != "onboarding":
             now = int(time.time())
-            active = {**active, "createdAt": now, "expiresAt": now + 600}
+            ttl_seconds = (
+                DialogConstants.FEEDBACK_TTL_SECONDS
+                if active.get("type") == "feedback"
+                else DialogConstants.DIALOG_TTL_SECONDS
+            )
+            active = {**active, "createdAt": now, "expiresAt": now + ttl_seconds}
         if active:
             dialog_type = active.get("type")
             fallback_contexts: dict[str, object] = {

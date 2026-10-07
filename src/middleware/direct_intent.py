@@ -128,6 +128,17 @@ class DirectIntentPhraseInterceptor(AbstractRequestInterceptor):
             )
             return
         slot_phrases = self._slot_phrases(intent)
+        if (
+            active_dialog.get("type") == "feedback"
+            and store.get("awaitingFeedback")
+            and source_intent != "FeedbackResponseIntent"
+        ):
+            for slot_name, phrase in slot_phrases:
+                feedback = PhraseRouter.feedback_route(phrase)
+                if feedback:
+                    self._set(intent, feedback)
+                    self._record_route(source_intent, feedback, slot_name)
+                    return
         phrases = tuple(phrase for _, phrase in slot_phrases)
         if not phrases:
             AlexaMetrics.increment("IntentRouteNoText")

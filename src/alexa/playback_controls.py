@@ -30,8 +30,13 @@ class PlaybackControls:
         self._user = user
         self._heara = heara
 
+    def has_unfinished(self, store: dict) -> bool:
+        return self._playback.state.has_unfinished(store)
+
     async def pause_active(self, handler_input: HandlerInput) -> dict:
         state = self._playback.state.current(handler_input)
+        if state and state.get("status") == "completed":
+            return AlexaPlayback.build_stop_directive()
         audio = PlaybackContext.read_audio_player_context(handler_input)
         audio_state: dict = audio if isinstance(audio, dict) else {}
         active_token = str((state or {}).get("token") or (state or {}).get("contentId") or "")

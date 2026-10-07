@@ -362,14 +362,6 @@ class ResolverResult:
         }
         for key, value in defaults.items():
             slots.setdefault(key, value)
-        if (
-            not filters
-            and not str(slots.get("residualQuery") or "").strip()
-            and self.intent in {"search", "tag", "location"}
-        ):
-            fallback_query = ResolverResult._fallback_query(original_utterance)
-            if fallback_query:
-                slots["residualQuery"] = fallback_query
         return SearchFilterUtils.normalize_search_payload(
             {
                 "query": slots["residualQuery"],

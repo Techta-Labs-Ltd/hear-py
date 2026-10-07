@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from src.models.resolver import ResolutionBuilder
+from src.utils.discovery_examples import DiscoveryExamples
 from src.utils.filters import SearchFilterUtils
 from src.utils.search_payload import SearchPayload
 
@@ -141,10 +142,9 @@ class ConfirmationPolicy:
             or slots.get("residualQuery")
             or slots.get("topic")
             or slots.get("query")
-            or raw
         )
-        return bool(payload.get("filter")) or not SearchFilterUtils.is_reserved_discovery_phrase(
-            query
+        return bool(payload.get("filter")) or bool(
+            query and not SearchFilterUtils.is_reserved_discovery_phrase(query)
         )
 
     @staticmethod
@@ -159,7 +159,7 @@ class ConfirmationPolicy:
             or slots.get("publicationSourceQuery"),
             "category": slots.get("category") or slots.get("tags") or slots.get("residualQuery"),
         }
-        if intent == "general":
+        if intent in {"general", "search"}:
             return not ConfirmationPolicy._has_meaningful_general_request(nlp, raw)
         return intent in requirements and not bool(requirements[intent])
 
@@ -359,10 +359,7 @@ class ConfirmationPolicy:
     @staticmethod
     def _clarification(nlp: dict, raw: str | None) -> dict | None:
         if ConfirmationPolicy.requires_clarification(nlp, raw):
-            return {
-                "speech": "Sorry, I didn't catch that. Please say your request again.",
-                "reprompt": "Please say your request again.",
-            }
+            return DiscoveryExamples.recovery()
         return None
 
     @staticmethod
@@ -408,10 +405,7 @@ class ConfirmationPolicy:
             return ConfirmationDecision(
                 kind="clarify",
                 clarification=clarification
-                or {
-                    "speech": "Sorry, I didn't catch that. Please say your request again.",
-                    "reprompt": "Please say your request again.",
-                },
+                or DiscoveryExamples.recovery(),
             )
         search_params = ConfirmationPolicy.search_params(resolved_nlp) or {}
         search_params["confirmText"] = confirm_text

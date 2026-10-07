@@ -71,6 +71,7 @@ class AlexaFeedback:
             for phrase in (
                 "somewhat",
                 "okay",
+                "was ok",
                 "alright",
                 "not bad",
                 "fine",
@@ -226,7 +227,7 @@ class AlexaFeedback:
 
     @staticmethod
     def feedback_question(title: str) -> str:
-        return f"Did you enjoy {Speech.escape_ssml_lite(title)}? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
+        return f"Did you enjoy {Speech.escape_ssml_lite(title)}? {Speech.FEEDBACK_OPTIONS}"
 
     @staticmethod
     def resuming_speech(subject: dict | None, store: dict, *, skipped: bool = False) -> str:
@@ -296,7 +297,7 @@ class AlexaFeedback:
         creator = Speech.escape_ssml_lite(creator_name) if creator_name else "the creator"
         user_name = store.get("userName") or store.get("fullName")
         if pending.get("subjectType") == "publication":
-            speech = f"You listened to {Speech.escape_ssml_lite(title)}. Did you enjoy this publication? Say I enjoyed it, it was okay, I did not enjoy it, or skip."
+            speech = f"You listened to {Speech.escape_ssml_lite(title)}. Did you enjoy this publication? {Speech.FEEDBACK_OPTIONS}"
         else:
             speech = Speech.LAUNCH_PENDING_FEEDBACK(title, creator, user_name)
         return (

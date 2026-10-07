@@ -1,5 +1,3 @@
-"""Alexa adapter for launch orchestration around the pure launch policy."""
-
 from __future__ import annotations
 
 import time
@@ -132,6 +130,9 @@ class LaunchWorkflow:
     ):
         decision = LaunchPolicy.protected(store)
         if decision.kind == "continue_after_flag":
+            if not self._playback.state.has_unfinished(store):
+                self._user.update(handler_input, {"awaitingContinueAfterFlag": False})
+                return None
             subject = store.get("activePlayback") or store.get("reportContext") or {}
             question = AlexaFeedback.keep_listening_question(subject, store)
             reprompt = AlexaFeedback.keep_listening_reprompt(subject, store)

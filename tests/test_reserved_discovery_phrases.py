@@ -181,7 +181,7 @@ async def test_reserved_anything_never_calls_resolver(monkeypatch, mock_handler_
     attrs = mock_handler_input.attributes_manager.request_attributes
     assert attrs["_nlp"]["localResolved"] is True
     assert attrs["_nlp"]["searchPayload"] == {"query": "", "filter": {}}
-    assert attrs["_resolverClarification"]["reprompt"] == "Please say your request again."
+    assert "say the name of your city to begin listening" in attrs["_resolverClarification"]["reprompt"]
     assert "elicitSlot" not in attrs["_resolverClarification"]
 
 
