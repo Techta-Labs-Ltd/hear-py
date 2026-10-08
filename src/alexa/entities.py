@@ -10,7 +10,11 @@ class AlexaEntities:
             "name": {
                 "value": "enjoyed",
                 "synonyms": [
+                    "I enjoyed",
                     "I enjoyed it",
+                    "I enjoy it",
+                    "I like it",
+                    "I love it",
                     "I liked it",
                     "loved it",
                     "that was great",

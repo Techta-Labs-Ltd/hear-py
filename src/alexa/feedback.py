@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from src.alexa.discovery_speech import DiscoverySpeech
 from src.alexa.entities import AlexaEntities
 from src.alexa.request import AlexaRequest
@@ -9,6 +11,26 @@ from src.utils.content import ContentUtils
 
 
 class AlexaFeedback:
+    _NEGATIONS = frozenset(
+        {"not", "didn't", "didnt", "don't", "dont", "wasn't", "wasnt", "never", "no", "nope"}
+    )
+    _DISLIKE_WORDS = frozenset(
+        {"bad", "poor", "boring", "awful", "terrible", "rubbish", "hated", "hate", "dislike", "disliked"}
+    )
+    _LIKE_STEMS = (
+        "enjoy",
+        "joy",
+        "like",
+        "love",
+        "good",
+        "great",
+        "brilliant",
+        "excellent",
+        "fantastic",
+        "lovely",
+        "amazing",
+        "wonderful",
+    )
     _DYNAMIC_FEEDBACK_IDS = {
         "enjoyed": "enjoyed",
         "somewhat": "somewhat",
@@ -66,7 +88,7 @@ class AlexaFeedback:
             )
         ):
             return "not enjoyed"
-        if any(
+        if text in {"ok", "so so", "so-so"} or any(
             phrase in text
             for phrase in (
                 "somewhat",
@@ -82,21 +104,24 @@ class AlexaFeedback:
             )
         ):
             return "somewhat"
-        if any(
-            phrase in text
-            for phrase in (
-                "enjoyed",
-                "liked",
-                "loved",
-                "was good",
-                "was great",
-                "very good",
-                "brilliant",
-                "five stars",
-                "thumbs up",
-            )
+        # Listeners answer in their own words ("I enjoy it", "loved it",
+        # "not really"), and Alexa often drops or mishears a syllable
+        # ("and joyed it"), so judge the words rather than exact phrases.
+        words = re.findall(r"[a-z']+", text)
+        negated = any(word in AlexaFeedback._NEGATIONS for word in words)
+        if text in {"not really", "not at all"} or any(
+            word in AlexaFeedback._DISLIKE_WORDS for word in words
         ):
+            return "not enjoyed"
+        if any(word.startswith(AlexaFeedback._LIKE_STEMS) for word in words) or text in {
+            "five stars",
+            "thumbs up",
+        }:
+            return "not enjoyed" if negated else "enjoyed"
+        if text in {"yes", "yes i did", "yeah", "yep", "i did"}:
             return "enjoyed"
+        if text in {"no", "nope", "no i didn't", "i didn't"}:
+            return "not enjoyed"
         return None
 
     @staticmethod

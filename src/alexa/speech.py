@@ -111,7 +111,7 @@ class Speech:
     # Short pauses keep the answers from running into one sentence, which made
     # "Say I enjoyed it" sound like Alexa was describing her own opinion.
     FEEDBACK_OPTIONS = (
-        'You can say, <break time="250ms"/>I enjoyed it, <break time="250ms"/>'
+        'You can say, <break time="250ms"/>I enjoyed, <break time="250ms"/>'
         'it was okay, <break time="250ms"/>or I didn\'t enjoy it. Or say skip.'
     )
     FEEDBACK_AWAITING_REPROMPT = f"Did you enjoy that content? {FEEDBACK_OPTIONS}"

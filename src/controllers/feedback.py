@@ -12,8 +12,13 @@ from src.alexa.feedback_response import (
     SkipFeedback,
     SomewhatFeedback,
 )
+from src.alexa.feedback_service import FeedbackService
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
+from src.alexa.speech import Speech
+from src.alexa.ssml import Ssml
 from src.models.user import User
+from src.services.logging_control import ApplicationLog
 
 
 class RateContentHandler(AbstractRequestHandler):
@@ -101,8 +106,23 @@ class FeedbackResponseHandler(AbstractRequestHandler):
         action = self._actions.get(feedback) if feedback else None
         if action and hasattr(action, "execute"):
             return await action.execute(request)
-        return AlexaFeedback.present_pending_feedback(
-            handler_input, User.snapshot(handler_input)
+        store = User.snapshot(handler_input)
+        if not store.get("awaitingFeedback"):
+            return AlexaFeedback.present_pending_feedback(handler_input, store)
+        ApplicationLog.info("Hear: feedback answer unmatched slotValuePresent=%s", bool(
+            AlexaRequest.get_spoken_slot_value(AlexaRequest.get_slot(handler_input, "feedback"))
+        ))
+        if FeedbackService.note_unrecognised_answer(handler_input):
+            return AlexaResponse.present_idle_next(
+                handler_input, Speech.FEEDBACK_GIVEN_UP, Speech.WELCOME_REPROMPT
+            )
+        title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(store.get("pendingFeedback") or {}, store))
+        retry = Speech.FEEDBACK_YES_NO_RETRY(title)
+        return (
+            handler_input.response_builder.speak(Ssml.ssml(retry))
+            .reprompt(Ssml.ssml(retry))
+            .set_should_end_session(False)
+            .response
         )
 
 

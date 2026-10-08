@@ -546,6 +546,29 @@ class FeedbackService:
         return selected
 
     @staticmethod
+    def note_unrecognised_answer(handler_input) -> bool:
+        """Count an answer that could not be matched; True once the question is given up.
+
+        The first miss earns one yes/no retry. A second miss ends the question
+        so the listener is never trapped repeating themselves.
+        """
+        active = DialogStateManager.get_active(handler_input) or {}
+        context = dict(active.get("context") or {})
+        if int(context.get("unrecognisedAnswers") or 0) >= 1:
+            FeedbackService.mark_answered(handler_input)
+            return True
+        context["unrecognisedAnswers"] = 1
+        User.update(
+            handler_input,
+            {
+                "activeDialog": {**active, "context": context},
+                "pendingFeedback": context,
+                "_requiresReliableSave": True,
+            },
+        )
+        return False
+
+    @staticmethod
     def mark_answered(handler_input) -> dict:
         store = User.snapshot(handler_input)
         pending = store.get("pendingFeedback") or {}

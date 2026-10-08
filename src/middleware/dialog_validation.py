@@ -322,23 +322,11 @@ class DialogValidationGateHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         failure = RequestContext.request(handler_input)[DialogConstants.VALIDATION_FAILURE]
-        if failure.get("dismissFeedback"):
-            FeedbackService.mark_answered(handler_input)
-            return AlexaResponse.present_idle_next(
-                handler_input, failure["speech"], failure["reprompt"]
-            )
-        if failure.get("countUnrecognised"):
-            active = DialogStateManager.get_active(handler_input) or {}
-            context = dict(active.get("context") or {})
-            context["unrecognisedAnswers"] = int(context.get("unrecognisedAnswers") or 0) + 1
-            User.update(
-                handler_input,
-                {
-                    "activeDialog": {**active, "context": context},
-                    "pendingFeedback": context,
-                    "_requiresReliableSave": True,
-                },
-            )
+        if failure.get("dismissFeedback") or failure.get("countUnrecognised"):
+            if FeedbackService.note_unrecognised_answer(handler_input):
+                return AlexaResponse.present_idle_next(
+                    handler_input, Speech.FEEDBACK_GIVEN_UP, Speech.WELCOME_REPROMPT
+                )
         if failure.get("endSourceCapture"):
             DialogStateManager.clear(handler_input, failure["dialogType"])
             return (

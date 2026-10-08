@@ -240,3 +240,50 @@ async def test_previous_still_returns_to_a_finished_recording(monkeypatch):
     response = await session.say("AMAZON.PreviousIntent")
 
     assert _played(response) == [("REPLACE_ALL", FIRST)]
+
+
+@pytest.mark.parametrize(
+    ("spoken", "expected"),
+    [
+        ("I enjoyed", "enjoyed"),
+        ("I enjoy it", "enjoyed"),
+        ("and joyed it", "enjoyed"),
+        ("I love it", "enjoyed"),
+        ("great", "enjoyed"),
+        ("not really", "not enjoyed"),
+        ("not good", "not enjoyed"),
+        ("I don't like it", "not enjoyed"),
+        ("it was bad", "not enjoyed"),
+        ("not bad", "somewhat"),
+        ("ok", "somewhat"),
+        ("play York Talking News", None),
+    ],
+)
+def test_feedback_answers_are_understood_in_the_listeners_own_words(spoken, expected):
+    from src.alexa.feedback import AlexaFeedback
+
+    assert AlexaFeedback.normalize_value(spoken) == expected
+
+
+@pytest.mark.asyncio
+async def test_unmatched_feedback_response_retries_once_then_moves_on(monkeypatch):
+    session = Session(monkeypatch)
+    await session.finish_last_item()
+    await session.send({"type": "LaunchRequest"}, new=True)
+
+    retry = _speech(await session.say("FeedbackResponseIntent", feedback="mmm hmm"))
+    given_up = _speech(await session.say("FeedbackResponseIntent", feedback="blah"))
+
+    assert "Just say yes or no" in retry
+    assert Speech.FEEDBACK_GIVEN_UP in given_up
+    assert session.state()["awaitingFeedback"] is False
+
+
+@pytest.mark.asyncio
+async def test_feedback_prompt_offers_i_enjoyed(monkeypatch):
+    session = Session(monkeypatch)
+    await session.finish_last_item()
+
+    prompt = _speech(await session.send({"type": "LaunchRequest"}, new=True))
+
+    assert 'I enjoyed, <break time="250ms"/>it was okay' in prompt
