@@ -37,7 +37,9 @@ class Playback:
         queue = PlaybackQueue.read(store)
         if not queue:
             return handler_input.response_builder.response
-        next_index = int(queue.get("currentIndex") or 0) + 1
+        next_index = PlaybackQueue.next_unfinished_index(
+            store, queue, int(queue.get("currentIndex") or 0) + 1
+        )
         if next_index >= len(queue["orderedContentIds"]):
             loaded = await self.queue.load_next_page(handler_input, hear_client)
             if not loaded:
@@ -46,7 +48,9 @@ class Playback:
             queue = PlaybackQueue.read(store)
             if not queue:
                 return handler_input.response_builder.response
-            next_index = int(queue.get("currentIndex") or 0) + 1
+            next_index = PlaybackQueue.next_unfinished_index(
+                store, queue, int(queue.get("currentIndex") or 0) + 1
+            )
             if next_index >= len(queue["orderedContentIds"]):
                 return handler_input.response_builder.response
         next_id = queue["orderedContentIds"][next_index]

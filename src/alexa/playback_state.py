@@ -355,6 +355,9 @@ class PlaybackQueue:
         if not queue:
             return None
         target = int(queue.get("currentIndex", 0)) + delta
+        if delta > 0:
+            # Going forward never lands on a recording already heard to the end.
+            target = self.next_unfinished_index(self._user.snapshot(handler_input), queue, target)
         content_id = self.content_id({"playbackQueue": queue}, target)
         if not content_id:
             return None
@@ -470,6 +473,43 @@ class PlaybackQueue:
                 index = queue["orderedContentIds"].index(content["contentId"])
             contextualized["trackIndex"] = index
         return contextualized
+
+    @staticmethod
+    def finished_content_ids(store: dict) -> frozenset[str]:
+        """Recordings this listener has listened to the end of (publication tracks excluded)."""
+        finished = {
+            str(entry["contentId"])
+            for raw in store.get("playHistory") or []
+            if (entry := PlaybackHistoryUtils.normalize(raw))
+            and entry.get("completed")
+            and entry.get("subjectType") != "publication"
+            and entry.get("contentId")
+        }
+        active = store.get("activePlayback")
+        if (
+            isinstance(active, dict)
+            and active.get("contentId")
+            and not active.get("publicationId")
+            and PlaybackState.is_finished(active)
+        ):
+            finished.add(str(active["contentId"]))
+        return frozenset(finished)
+
+    @staticmethod
+    def next_unfinished_index(store: dict, queue: dict, start: int) -> int:
+        """First queue position at or after ``start`` the listener has not finished.
+
+        Publication queues keep every track in order: a publication's tracks are
+        parts of one item rather than separate recordings.
+        """
+        ids = queue["orderedContentIds"]
+        if queue.get("publicationId"):
+            return start
+        finished = PlaybackQueue.finished_content_ids(store)
+        index = start
+        while 0 <= index < len(ids) and ids[index] in finished:
+            index += 1
+        return index
 
     @staticmethod
     def recent_content_ids(store: dict, limit: int | None = None) -> list:

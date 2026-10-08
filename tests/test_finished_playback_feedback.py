@@ -169,3 +169,74 @@ async def test_rated_recording_is_not_rated_again_when_finished_is_redelivered(m
     assert "keep listening" not in reported
     assert "did you enjoy" not in relaunch
     assert session.state()["awaitingFeedback"] is False
+
+
+THIRD = "cccccccc-0000-0000-0000-000000000003"
+
+
+def _three_item_session(monkeypatch, *, heard: tuple[str, ...]) -> Session:
+    session = Session(monkeypatch)
+    stored = session.persistence._store[USER_ID]
+    stored["playbackQueue"]["orderedContentIds"] = [FIRST, LAST, THIRD]
+    stored["playbackQueue"]["currentIndex"] = 0
+    stored["playbackQueue"]["contentCache"][THIRD] = _item(THIRD, "17_Oct5")
+    stored["activePlayback"].update(
+        {**_item(FIRST, "15_Oct5"), "token": FIRST, "queueIndex": 0, "sessionId": f"{FIRST}:s"}
+    )
+    stored["playHistory"] = [
+        {**_item(content_id, "heard"), "completed": True, "offsetMs": 81685}
+        for content_id in heard
+    ]
+    return session
+
+
+def _played(response: dict) -> list[tuple[str, str]]:
+    return [
+        (directive.get("playBehavior"), directive["audioItem"]["stream"]["token"])
+        for directive in response.get("directives") or []
+        if directive.get("type") == "AudioPlayer.Play"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_next_skips_a_recording_the_listener_already_finished(monkeypatch):
+    session = _three_item_session(monkeypatch, heard=(LAST,))
+
+    response = await session.say("AMAZON.NextIntent")
+
+    assert _played(response) == [("REPLACE_ALL", THIRD)]
+
+
+@pytest.mark.asyncio
+async def test_automatic_advance_skips_a_recording_the_listener_already_finished(monkeypatch):
+    session = _three_item_session(monkeypatch, heard=(LAST,))
+
+    response = await session.send(
+        {"type": "AudioPlayer.PlaybackNearlyFinished", "token": FIRST, "offsetInMilliseconds": 70000}
+    )
+
+    assert _played(response) == [("ENQUEUE", THIRD)]
+
+
+@pytest.mark.asyncio
+async def test_next_ends_the_selection_when_everything_left_was_heard(monkeypatch):
+    session = _three_item_session(monkeypatch, heard=(LAST, THIRD))
+
+    response = await session.say("AMAZON.NextIntent")
+
+    assert _played(response) == []
+    assert "reached the end" in _speech(response)
+
+
+@pytest.mark.asyncio
+async def test_previous_still_returns_to_a_finished_recording(monkeypatch):
+    session = _three_item_session(monkeypatch, heard=(FIRST,))
+    stored = session.persistence._store[USER_ID]
+    stored["playbackQueue"]["currentIndex"] = 1
+    stored["activePlayback"].update(
+        {**_item(LAST, "16_Oct5"), "token": LAST, "queueIndex": 1, "sessionId": f"{LAST}:s"}
+    )
+
+    response = await session.say("AMAZON.PreviousIntent")
+
+    assert _played(response) == [("REPLACE_ALL", FIRST)]

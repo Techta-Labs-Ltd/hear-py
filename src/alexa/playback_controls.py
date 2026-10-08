@@ -164,6 +164,8 @@ class PlaybackControls:
     async def play_queue_delta(
         self, handler_input: HandlerInput, delta: int, speech: str
     ):
+        starting_queue = PlaybackQueue.read(self._user.snapshot(handler_input)) or {}
+        starting_id = PlaybackQueue.content_id({"playbackQueue": starting_queue})
         content_id = self._playback.queue.move(handler_input, delta)
         if not content_id and delta > 0:
             loaded = await self._playback.queue.load_next_page(handler_input, self._heara)
@@ -203,7 +205,8 @@ class PlaybackControls:
                 None,
             )
         if not content:
-            self._playback.queue.move(handler_input, -delta)
+            if starting_id:
+                self._playback.queue.set_index_for_content(handler_input, starting_id)
             return Playback.open_queue_response(handler_input, Speech.NO_CONTENT_AVAILABLE)
         store = self._user.snapshot(handler_input)
         queue = PlaybackQueue.read(store)
