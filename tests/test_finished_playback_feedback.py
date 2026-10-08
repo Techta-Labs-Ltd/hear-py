@@ -219,13 +219,25 @@ async def test_automatic_advance_skips_a_recording_the_listener_already_finished
 
 
 @pytest.mark.asyncio
-async def test_next_ends_the_selection_when_everything_left_was_heard(monkeypatch):
+async def test_next_keeps_queue_order_when_everything_left_was_heard(monkeypatch):
     session = _three_item_session(monkeypatch, heard=(LAST, THIRD))
 
     response = await session.say("AMAZON.NextIntent")
 
-    assert _played(response) == []
-    assert "reached the end" in _speech(response)
+    assert _played(response) == [("REPLACE_ALL", LAST)]
+
+
+@pytest.mark.asyncio
+async def test_replaying_a_fully_heard_source_still_plays_the_whole_queue(monkeypatch):
+    # Production 2026-10-08: every track had been heard, so NearlyFinished
+    # enqueued nothing and playback stopped after the first track.
+    session = _three_item_session(monkeypatch, heard=(FIRST, LAST, THIRD))
+
+    response = await session.send(
+        {"type": "AudioPlayer.PlaybackNearlyFinished", "token": FIRST, "offsetInMilliseconds": 7000}
+    )
+
+    assert _played(response) == [("ENQUEUE", LAST)]
 
 
 @pytest.mark.asyncio

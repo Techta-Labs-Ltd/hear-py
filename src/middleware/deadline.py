@@ -16,9 +16,11 @@ class LambdaDeadlineInterceptor(AbstractRequestInterceptor):
         has_lambda_context = hasattr(handler_input, "context") and callable(
             getattr(handler_input.context, "get_remaining_time_in_millis", None)
         )
+        request_type = AlexaRequest.get_request_type(handler_input)
         ApplicationLog.info(
-            "Hear: request budget requestType=%s remainingMs=%s hasLambdaContext=%s",
-            AlexaRequest.get_request_type(handler_input),
+            "Hear: request budget requestType=%s intent=%s remainingMs=%s hasLambdaContext=%s",
+            request_type,
+            AlexaRequest.get_intent_name(handler_input) if request_type == "IntentRequest" else "-",
             remaining_ms,
             has_lambda_context,
         )

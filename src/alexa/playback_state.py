@@ -509,7 +509,9 @@ class PlaybackQueue:
         index = start
         while 0 <= index < len(ids) and ids[index] in finished:
             index += 1
-        return index
+        # Skipping must never stop a queue: when everything left has already
+        # been heard (a source the listener chose to replay), keep queue order.
+        return index if index < len(ids) else start
 
     @staticmethod
     def recent_content_ids(store: dict, limit: int | None = None) -> list:
