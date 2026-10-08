@@ -6,7 +6,7 @@ from config import settings
 from src.alexa.playback import AlexaPlayback
 from src.alexa.playback_context import PlaybackContext
 from src.alexa.playback_speech import PlaybackSpeech
-from src.alexa.playback_state import PlaybackQueue
+from src.alexa.playback_state import PlaybackQueue, PlaybackState
 from src.alexa.playback_workflow import Playback
 from src.alexa.request import AlexaRequest
 from src.alexa.speech import Speech
@@ -68,6 +68,10 @@ class PlaybackControls:
         state = self._playback.state.current(handler_input)
         if not state:
             return Playback.open_queue_response(handler_input, PlaybackSpeech.NOTHING_TO_RESUME)
+        if PlaybackState.is_finished(state) and offset_ms is None:
+            # Resuming a finished recording replays its last second and
+            # resurrects it as unfinished; move on through the queue instead.
+            return await self.play_queue_delta(handler_input, 1, PlaybackSpeech.PLAYING_NEXT)
         resume_state = {
             **state,
             "offsetMs": state.get("offsetMs", 0) if offset_ms is None else offset_ms,

@@ -127,6 +127,7 @@ class UserStateNormalizer:
         {
             "audioUrl",
             "category",
+            "completedAt",
             "contentId",
             "creatorId",
             "creatorName",
@@ -134,6 +135,7 @@ class UserStateNormalizer:
             "discoveryContext",
             "durationMs",
             "eventTimestamp",
+            "feedbackAnswered",
             "isPublication",
             "lastEventRequestId",
             "lastEventType",

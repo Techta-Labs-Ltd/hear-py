@@ -115,6 +115,17 @@ class Speech:
         'it was okay, <break time="250ms"/>or I didn\'t enjoy it. Or say skip.'
     )
     FEEDBACK_AWAITING_REPROMPT = f"Did you enjoy that content? {FEEDBACK_OPTIONS}"
+    FEEDBACK_GIVEN_UP = (
+        "No problem, let's skip the feedback for now. What would you like to listen to next?"
+    )
+
+    @staticmethod
+    def FEEDBACK_YES_NO_RETRY(title: str) -> str:
+        return (
+            f"Sorry, I didn't catch that. Did you enjoy {title}? "
+            "Just say yes or no. Or say skip."
+        )
+
     RATE_CONTENT_PROMPT = f"Did you enjoy this? {FEEDBACK_OPTIONS}"
     RATE_CONTENT_NOTHING = "There isn't any content to rate right now."
     RATE_CONTENT_SAVED_RESUMING = "Thanks for the feedback. Resuming."

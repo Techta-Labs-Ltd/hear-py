@@ -146,6 +146,11 @@ class PlaybackState:
             duration_ms = max(0, int(current.get("durationMs") or 0))
             changes["offsetMs"] = max(changes["offsetMs"], duration_ms)
             changes["listenedMs"] = max(changes["listenedMs"], duration_ms)
+            # Durable completion: later events may rewrite status, so keep when
+            # it finished and, if the catalogue gave no length, where it ended.
+            changes["completedAt"] = observed_at
+            if not duration_ms and changes["offsetMs"] > 0:
+                changes["durationMs"] = changes["offsetMs"]
         return self.merge(handler_input, changes)
 
     def merge(self, handler_input, changes: dict) -> dict | None:
@@ -210,12 +215,21 @@ class PlaybackState:
             changes["listenedMs"] = max(0, int(listened_ms))
         return self.merge(handler_input, changes)
 
+    @staticmethod
+    def is_finished(state: dict | None) -> bool:
+        """A recording Alexa reported finished stays finished until it is started afresh."""
+        if not isinstance(state, dict):
+            return False
+        if state.get("status") == "completed" or state.get("completedAt"):
+            return True
+        duration = PlaybackUtils.integer(state.get("durationMs"))
+        return duration > 0 and PlaybackUtils.integer(state.get("offsetMs")) >= duration
+
     def has_unfinished(self, store: dict) -> bool:
         state = self.from_store(store)
         if not state or state.get("status") not in PlaybackConstants.ACTIVE_PLAYBACK_STATUSES:
             return False
-        duration = PlaybackUtils.integer(state.get("durationMs"))
-        if duration > 0 and PlaybackUtils.integer(state.get("offsetMs")) >= duration:
+        if self.is_finished(state):
             return False
         audio_url = state.get("audioUrl") or store.get("currentAudioUrl")
         return isinstance(audio_url, str) and audio_url.strip().lower().startswith("https://")

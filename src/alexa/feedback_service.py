@@ -463,7 +463,7 @@ class FeedbackService:
 
     @staticmethod
     def record_candidate(handler_input, state: dict, *, completed: bool) -> dict | None:
-        if not completed:
+        if not completed or state.get("feedbackAnswered"):
             return None
         if state.get("publicationId"):
             FeedbackService.update_publication_progress(handler_input, state, completed=True)
@@ -553,9 +553,20 @@ class FeedbackService:
         answered = list(store.get("answeredFeedbackKeys") or [])
         if key and key not in answered:
             answered.append(key)
+        updates: dict[str, object] = {}
+        active = store.get("activePlayback")
+        if (
+            isinstance(active, dict)
+            and pending.get("contentId")
+            and active.get("contentId") == pending.get("contentId")
+        ):
+            # answeredFeedbackKeys only lives for one request; the playback
+            # record is persisted, so a later finish of this play is not re-rated.
+            updates["activePlayback"] = {**active, "feedbackAnswered": True}
         return User.update(
             handler_input,
             {
+                **updates,
                 "answeredFeedbackKeys": answered[-100:],
                 "pendingFeedback": None,
                 "awaitingFeedback": False,

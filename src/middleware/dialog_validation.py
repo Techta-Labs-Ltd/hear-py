@@ -9,9 +9,11 @@ from src.alexa.availability_speech import AvailabilitySpeech
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
+from src.alexa.feedback_service import FeedbackService
 from src.alexa.help import HelpSpeech
 from src.alexa.playback_state import PlaybackState
 from src.alexa.request import AlexaRequest
+from src.alexa.response import AlexaResponse
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -270,9 +272,25 @@ class DialogValidationPolicy:
             dialog_type == "feedback"
             and intent_name not in DialogValidationPolicy._FEEDBACK_INTENTS
         ):
-            title = AlexaFeedback.subject_title(context)
-            reprompt = AlexaFeedback.feedback_question(title)
-            speech = "Please answer the feedback question first. " + reprompt
+            title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(context))
+            if int(context.get("unrecognisedAnswers") or 0) >= 1:
+                # Never trap the listener: a second answer Alexa could not
+                # match ends the question instead of repeating it forever.
+                return {
+                    "dialogType": dialog_type,
+                    "speech": Speech.FEEDBACK_GIVEN_UP,
+                    "reprompt": Speech.WELCOME_REPROMPT,
+                    "dismissFeedback": True,
+                }
+            # Yes and no are Alexa built-ins, so they are recognised even when
+            # a free-form answer such as "I enjoyed it" falls to FallbackIntent.
+            speech = Speech.FEEDBACK_YES_NO_RETRY(title)
+            return {
+                "dialogType": dialog_type,
+                "speech": speech,
+                "reprompt": speech,
+                "countUnrecognised": True,
+            }
         else:
             return None
         return {"dialogType": dialog_type, "speech": speech, "reprompt": reprompt}
@@ -304,6 +322,23 @@ class DialogValidationGateHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         failure = RequestContext.request(handler_input)[DialogConstants.VALIDATION_FAILURE]
+        if failure.get("dismissFeedback"):
+            FeedbackService.mark_answered(handler_input)
+            return AlexaResponse.present_idle_next(
+                handler_input, failure["speech"], failure["reprompt"]
+            )
+        if failure.get("countUnrecognised"):
+            active = DialogStateManager.get_active(handler_input) or {}
+            context = dict(active.get("context") or {})
+            context["unrecognisedAnswers"] = int(context.get("unrecognisedAnswers") or 0) + 1
+            User.update(
+                handler_input,
+                {
+                    "activeDialog": {**active, "context": context},
+                    "pendingFeedback": context,
+                    "_requiresReliableSave": True,
+                },
+            )
         if failure.get("endSourceCapture"):
             DialogStateManager.clear(handler_input, failure["dialogType"])
             return (
