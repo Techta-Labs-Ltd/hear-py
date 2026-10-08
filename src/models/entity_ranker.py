@@ -69,29 +69,49 @@ class EntityRanker:
         return 0
 
     @classmethod
-    def _entity_key(cls, entity: ResolvedEntity) -> tuple[int, int, int, int, int]:
+    def _evidence_key(cls, entity: ResolvedEntity) -> tuple[int, ...]:
+        """Evidence for choosing between same-type candidates; position is never evidence."""
+        if entity.entity_type == "location":
+            return (
+                ResolverConstants.LOCATION_ROLE_PRIORITY.get(
+                    str(entity.location_role or "").casefold(), 0
+                ),
+                ResolverConstants.LOCATION_TYPE_PRIORITY.get(
+                    str(entity.location_type or "").casefold(), 0
+                ),
+                entity.confidence,
+                cls._method_priority(entity),
+                entity.end - entity.start,
+            )
+        return (entity.confidence, cls._method_priority(entity), entity.end - entity.start)
+
+    @classmethod
+    def _entity_key(cls, entity: ResolvedEntity) -> tuple[int, ...]:
         return (
             ResolverConstants.ENTITY_TYPE_PRIORITY.get(entity.entity_type, 0),
-            entity.confidence,
-            cls._method_priority(entity),
-            entity.end - entity.start,
+            *cls._evidence_key(entity),
+            # Only orders compatible, independently accepted entities; a
+            # genuine competing tie is reported as ambiguity, never decided here.
             -entity.start,
         )
 
     @classmethod
-    def _location_key(cls, entity: ResolvedEntity) -> tuple[int, int, int, int, int, int]:
-        return (
-            ResolverConstants.LOCATION_ROLE_PRIORITY.get(
-                str(entity.location_role or "").casefold(), 0
-            ),
-            ResolverConstants.LOCATION_TYPE_PRIORITY.get(
-                str(entity.location_type or "").casefold(), 0
-            ),
-            entity.confidence,
-            cls._method_priority(entity),
-            entity.end - entity.start,
-            -entity.start,
-        )
+    def _location_key(cls, entity: ResolvedEntity) -> tuple[int, ...]:
+        return cls._evidence_key(entity)
+
+    @staticmethod
+    def _compatible(left: ResolvedEntity, right: ResolvedEntity) -> bool:
+        # Contract 5.2: a category and a tag for the same topic are both kept.
+        return {left.entity_type, right.entity_type} == {"category", "tag"}
+
+    @classmethod
+    def _outranks(cls, left: ResolvedEntity, right: ResolvedEntity) -> bool:
+        """Whether ``left`` wins the words it shares with ``right``."""
+        left_priority = ResolverConstants.ENTITY_TYPE_PRIORITY.get(left.entity_type, 0)
+        right_priority = ResolverConstants.ENTITY_TYPE_PRIORITY.get(right.entity_type, 0)
+        if left_priority != right_priority:
+            return left_priority > right_priority
+        return cls._evidence_key(left) > cls._evidence_key(right)
 
     @classmethod
     def _accepts_phonetic_bare_location(
@@ -124,32 +144,39 @@ class EntityRanker:
                 for organization in organizations
             )
         ]
-        candidates = [
+        # Contract 5.1/5.2: candidates claiming the same words compete, and the
+        # stronger meaning owns them (organisation over a town or topic inside
+        # its name, location over a geographic tag, ...). Compatible pairs and
+        # non-overlapping phrases are never erased. Pairwise comparison keeps
+        # the result independent of input order and of overlap chains.
+        accepted = [
             entity
             for entity in candidates
-            if entity.entity_type not in {"tag", "category"}
-            or not any(
-                cls._overlaps(entity, organization)
-                for organization in organizations
+            if not any(
+                other is not entity
+                and cls._overlaps(entity, other)
+                and not cls._compatible(entity, other)
+                and cls._outranks(other, entity)
+                for other in candidates
             )
         ]
-        accepted: list[ResolvedEntity] = []
-        for candidate in candidates:
-            if candidate.entity_type == "tag" and any(
-                existing.entity_type == "location" and cls._overlaps(candidate, existing)
-                for existing in accepted
-            ):
-                continue
-            if candidate.entity_type == "location":
-                accepted = [
-                    existing
-                    for existing in accepted
-                    if not (
-                        existing.entity_type == "tag"
-                        and cls._overlaps(candidate, existing)
-                    )
-                ]
-            accepted.append(candidate)
+        tied = tuple(
+            sorted(
+                {
+                    entity
+                    for entity in accepted
+                    for other in accepted
+                    if other is not entity
+                    and entity.entity_type == other.entity_type
+                    and entity.entity_id != other.entity_id
+                    and cls._overlaps(entity, other)
+                    and cls._evidence_key(entity) == cls._evidence_key(other)
+                },
+                key=lambda entity: (entity.start, entity.entity_id),
+            )
+        )
+        if tied:
+            return EntityRanking(None, tuple(accepted), tied)
         locations = [entity for entity in accepted if entity.entity_type == "location"]
         if locations:
             ranked_locations = sorted(locations, key=cls._location_key, reverse=True)

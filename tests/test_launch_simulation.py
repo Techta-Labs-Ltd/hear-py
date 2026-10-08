@@ -380,7 +380,7 @@ class TestIsNewUser:
         assert "Comprehensive coverage" not in speech
         assert "Independent Creator" not in speech
 
-    def test_resume_prompt_does_not_use_track_title_without_source_context(self):
+    def test_resume_prompt_names_the_recording_without_source_context(self):
         hi = _build_handler_input(
             store_override={
                 "activePlayback": {
@@ -399,8 +399,9 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        assert "You were listening to a recording." in speech
-        assert "Community news roundup" not in speech
+        # The listener must always hear what they were part-way through.
+        assert "You were listening to Community news roundup." in speech
+        assert "a recording" not in speech
         assert "A detailed description" not in speech
 
     def test_resume_prompt_prefers_organization_for_location_playback(self):

@@ -156,8 +156,10 @@ def test_canonical_entities_drive_all_discovered_facets_without_fake_ambiguity()
     result = ResolverResult.from_payload(_response()).to_alexa_payload()
     assert result["slots"]["creatorIds"] == ["creator-1"]
     assert result["slots"]["creatorName"] == "Adeshina Ayomide"
-    assert result["slots"]["publicationIds"] == ["publication-1"]
-    assert result["slots"]["publicationName"] == "Buxton Talking Sport"
+    # Entity ranking contract 5.1: "sport" is claimed by the Sport category,
+    # the #sport tag and a publication; category outranks publication, so the
+    # incidental publication match is not kept as a constraint.
+    assert "publicationIds" not in result["slots"]
     assert result["slots"]["category"] == "sport"
     assert result["slots"]["categoryName"] == "Sport"
     assert result["slots"]["categorySlugs"] == ["sport"]
@@ -1197,10 +1199,11 @@ def test_overlapping_source_and_location_does_not_overconstrain_search():
         }
     )
     result = ResolverResult.from_payload(payload).to_alexa_payload()
-    assert result["searchPayload"]["filter"] == {"creatorIds": ["creator-wakefield"]}
-    assert result["resolution"]["match"] is None
-    assert "city" not in result["slots"]
-    assert "isLocal" not in result["slots"]
+    # Entity ranking contract: location (500) outranks creator (100) for the
+    # same word, and the losing meaning is not kept as an extra constraint.
+    assert result["searchPayload"]["filter"]["city"] == "Wakefield"
+    assert "creatorIds" not in result["searchPayload"]["filter"]
+    assert "creatorIds" not in result["slots"]
 
 
 def test_location_context_keeps_overlapping_town_for_onboarding():
@@ -1394,17 +1397,34 @@ def test_client_defaults_use_fixed_service_contract_without_resolver_settings():
 
 def test_multiple_entities_of_one_type_remain_distinct_discoveries():
     payload = _response(intent="creator")
+    first = payload["entities"][0]
     payload["entities"] = [
-        payload["entities"][0],
+        first,
         {
-            **payload["entities"][0],
+            **first,
             "entityId": "creator-2",
             "canonicalValue": "Another Creator",
+            "originalText": "another",
+            "start": first["end"] + 5,
+            "end": first["end"] + 12,
         },
     ]
     result = ResolverResult.from_payload(payload).to_alexa_payload()
     assert result["slots"]["creatorIds"] == ["creator-1", "creator-2"]
     assert result["slots"]["ambiguousReferences"] == []
+
+
+def test_two_creators_for_the_same_words_are_ambiguous_not_merged():
+    # Entity ranking contract K14: equally plausible same-type candidates for
+    # the same phrase must be asked about, never silently combined.
+    payload = _response(intent="creator")
+    payload["entities"] = [
+        payload["entities"][0],
+        {**payload["entities"][0], "entityId": "creator-2", "canonicalValue": "Another Creator"},
+    ]
+    result = ResolverResult.from_payload(payload).to_alexa_payload()
+    assert result["status"] == "ambiguous"
+    assert result["slots"]["residualQuery"] == ""
 
 
 def test_resolution_id_is_retained_in_the_normalized_search_payload():

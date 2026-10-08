@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.alexa.discovery_speech import DiscoverySpeech
+from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 
 
@@ -18,6 +19,7 @@ class ResumeSpeech:
             "a recording",
             "independent creator",
             "that creator",
+            "that organisation",
             "that organization",
             "that publication",
             "that recording",
@@ -147,7 +149,38 @@ class ResumeSpeech:
         )
         if publication:
             return cls._question(f"You were listening to {publication}")
+        # Always tell the listener what they were part-way through: the queue
+        # they chose (a place, a topic), then the recording's own title.
+        place_statement = cls._place_statement(active, saved)
+        if place_statement:
+            return cls._question(place_statement)
+        title = cls._safe_label(cls._spoken_title(active.get("title")))
+        if title:
+            return cls._question(f"You were listening to {title}")
+        queue_subject = DiscoverySpeech.subject(context)
+        if queue_subject:
+            return cls._question(f"You were listening to {Speech.escape_ssml_lite(queue_subject)}")
         return cls._question("You were listening to a recording")
+
+    @classmethod
+    def _place_statement(cls, active: dict, store: dict) -> str | None:
+        context = cls._discovery_context(active, store)
+        if str(context.get("kind") or "").strip().casefold() != "location":
+            return None
+        name = " ".join(str(context.get("name") or "").split())
+        _, subject = SearchSpeech.clean_result_subject(name)
+        if not subject:
+            return None
+        spoken = Speech.escape_ssml_lite(subject)
+        # "content on talking newspaper in Otley" keeps its topic; a bare place
+        # ("Otley") is "content from Otley".
+        has_topic = name.casefold().startswith(("content on ", "the latest content on "))
+        return f"You were listening to content {'on' if has_topic else 'from'} {spoken}"
+
+    @staticmethod
+    def _spoken_title(value) -> str | None:
+        # File-style titles ("16_Oct5") read better as words.
+        return " ".join(str(value).replace("_", " ").split()) if isinstance(value, str) else None
 
     @classmethod
     def reprompt(cls, subject: dict | None, store: dict | None = None) -> str:

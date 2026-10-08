@@ -29,6 +29,9 @@ class ConfirmationDecision:
 class ConfirmationPolicy:
     RESOLVED_INTENTS = frozenset(
         {
+            # The ranked semantic intent for a location-primary request; without
+            # it "play otley and districts talking newspaper" played unasked.
+            "location",
             "local",
             "creator",
             "organization",
@@ -208,6 +211,17 @@ class ConfirmationPolicy:
         category = context["category"]
         city = context["city"]
         latest = "the latest " if context["slots"].get("latest") else ""
+        if intent == "location" and city:
+            slots = context["slots"]
+            topic = (
+                SearchPayload.resolved_request_label({**slots, "latest": False})
+                if category or slots.get("tags") or context["residual"]
+                else None
+            )
+            if topic and topic.casefold() != city.casefold():
+                place = "" if city.casefold() in topic.casefold() else f" in {city}"
+                return f"{latest}content on {topic}{place}"
+            return f"{latest}from {city}" if latest else f"content from {city}"
         if intent == "local":
             if category and city:
                 return f"{latest}{category} nearest to {city}"
