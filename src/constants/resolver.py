@@ -28,6 +28,15 @@ class ResolverConstants:
     }
     METHOD_PRIORITY = {"exact": 300, "alias": 200, "fuzzy": 100}
     SECONDARY_FACET_MIN_CONFIDENCE = 75
+    SOURCE_KIND_TAGS = frozenset(
+        {
+            "talking newspaper",
+            "talking newspapers",
+            "talking news",
+            "talking magazine",
+            "talking magazines",
+        }
+    )
     PUBLICATION_SORTS = frozenset({"latest", "trending"})
     CARRIERS = {
         "ChooseSourceKindIntent": "play",

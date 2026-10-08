@@ -52,7 +52,7 @@ def _otley_location_result() -> dict:
     ).to_alexa_payload(original_utterance=utterance)
 
 
-def test_location_primary_request_asks_before_playing():
+def test_location_request_is_sent_without_confirmation():
     nlp = _otley_location_result()
     nlp = {**nlp, "intent": nlp["semanticIntent"]}
     assert nlp["intent"] == "location"
@@ -65,8 +65,14 @@ def test_location_primary_request_asks_before_playing():
         validation_failed=False,
     )
 
-    assert decision.kind == "confirm"
-    assert decision.pending["confirmText"] == "content on talking newspaper in Otley"
+    assert decision.kind != "confirm"
+
+
+def test_talking_newspaper_beside_a_place_is_not_a_topic_filter():
+    nlp = _otley_location_result()
+
+    assert nlp["searchPayload"]["filter"].get("city") == "Otley"
+    assert "tags" not in nlp["searchPayload"]["filter"]
 
 
 @pytest.mark.parametrize(

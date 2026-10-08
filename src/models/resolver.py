@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from src.constants.resolver import ResolverConstants
 from src.models.entity_ranker import EntityRanker
 from src.models.temporal_filter_guard import TemporalFilterGuard
 from src.utils.filters import SearchFilterUtils
@@ -202,6 +203,15 @@ class ResolverResult:
     }
 
     @staticmethod
+    def _is_source_kind_tag(entity: ResolvedEntity) -> bool:
+        names = (entity.entity_id, entity.canonical_value, entity.original_text)
+        return any(
+            " ".join(str(name or "").lstrip("#").replace("-", " ").casefold().split())
+            in ResolverConstants.SOURCE_KIND_TAGS
+            for name in names
+        )
+
+    @staticmethod
     def _label_duplicate_places(candidates: list[dict]) -> list[dict]:
         names = [str(candidate.get("name") or "").casefold() for candidate in candidates]
         labelled = []
@@ -269,6 +279,8 @@ class ResolverResult:
             )
             filters["categorySlugs"] = category_slugs
         tags = self.entities_of_type("tag")
+        if any(entity.entity_type != "tag" for entity in self.entity_ranking().accepted):
+            tags = tuple(entity for entity in tags if not ResolverResult._is_source_kind_tag(entity))
         if tags:
             slots["tags"] = [entity.entity_id for entity in tags]
             slots["tagNames"] = [entity.canonical_value for entity in tags]

@@ -29,7 +29,6 @@ class ConfirmationDecision:
 class ConfirmationPolicy:
     RESOLVED_INTENTS = frozenset(
         {
-            "location",
             "local",
             "creator",
             "organization",
