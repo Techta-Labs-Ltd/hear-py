@@ -88,8 +88,53 @@ class ResolverWorkflow:
     def _normalize_ordinal(value: object) -> str:
         return DialogPolicy.normalize_ordinal(value)
 
+    _PLACE_FILTER_KEYS = ("city", "latitude", "longitude", "countryCode", "isLocal")
+
+    @staticmethod
+    def _resolved_pending_place(pending: dict, candidate: dict) -> dict:
+        name = str(candidate.get("name") or candidate.get("canonicalValue") or "").strip()
+        base_filter = {
+            key: value
+            for key, value in dict((pending.get("searchPayload") or {}).get("filter") or {}).items()
+            if key not in ResolverWorkflow._PLACE_FILTER_KEYS
+        }
+        place = {
+            key: candidate[key]
+            for key in ("latitude", "longitude", "countryCode")
+            if candidate.get(key) is not None
+        }
+        filters = {**base_filter, "city": name, **place}
+        slots = {
+            **dict(pending.get("slots") or {}),
+            "residualQuery": "",
+            "ambiguousReferences": [],
+            "city": name,
+            "placeName": name,
+            **place,
+        }
+        spoken = str(candidate.get("label") or name)
+        return {
+            "status": "resolved",
+            "intent": "location",
+            "ambiguityResolution": True,
+            "confirmationLabel": f"content from {spoken}",
+            "searchPayload": {
+                **dict(pending.get("searchPayload") or {}),
+                "query": "",
+                "filter": filters,
+                "page": 0,
+            },
+            "entities": [
+                {"type": "location", "id": str(candidate.get("id") or ""), "canonicalValue": name}
+            ],
+            "slots": slots,
+            "ambiguities": [],
+        }
+
     @staticmethod
     def _resolved_pending_candidate(pending: dict, candidate: dict) -> dict:
+        if str(candidate.get("type") or candidate.get("entityType") or "") == "location":
+            return ResolverWorkflow._resolved_pending_place(pending, candidate)
         entity_type = str(candidate.get("type") or candidate.get("entityType") or "")
         entity_id = str(candidate.get("id") or candidate.get("entityId") or "")
         name = str(candidate.get("name") or candidate.get("canonicalValue") or "")
@@ -194,18 +239,21 @@ class ResolverWorkflow:
         ):
             return result
 
-        residual = str(
+        normalised_residual = str(
             slots.get("residualQuery")
             or payload.get("query")
             or search_plan.get("query")
             or ""
         ).strip()
+        residual = normalised_residual or str(slots.get("rawResidualQuery") or "").strip()
         date_range, remainder = AlexaDateRange.extract_spoken(
             residual,
             settings.HEAR_RESOLVER_TIMEZONE,
         )
         if not date_range:
             return result
+        if not normalised_residual:
+            remainder = ""
 
         date_filters = {
             key: date_range[key]

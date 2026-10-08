@@ -215,12 +215,15 @@ class OnboardingGateHandler(AbstractRequestHandler):
             }:
                 self._onboarding.begin_town_capture(handler_input)
                 return await self._town_capture.execute(handler_input)
+        question = (
+            Speech.ONBOARDING_CONFIRM_CITY_AGAIN
+            if stage == OnboardingConstants.ONBOARDING_AWAIT_CONFIRM
+            else Speech.ONBOARDING_ASK_PERMISSION_AGAIN
+        )
+        lead = Speech.ONBOARDING_HELP if intent == "AMAZON.HelpIntent" else ""
         return (
-            handler_input.response_builder.speak(
-                Ssml.ssml(
-                    "Please say yes or no."
-                )
-            )
+            handler_input.response_builder.speak(Ssml.ssml(f"{lead}{question}"))
+            .reprompt(Ssml.ssml(question))
             .set_should_end_session(False)
             .response
         )

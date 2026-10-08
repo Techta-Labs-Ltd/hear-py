@@ -146,8 +146,6 @@ class PlaybackState:
             duration_ms = max(0, int(current.get("durationMs") or 0))
             changes["offsetMs"] = max(changes["offsetMs"], duration_ms)
             changes["listenedMs"] = max(changes["listenedMs"], duration_ms)
-            # Durable completion: later events may rewrite status, so keep when
-            # it finished and, if the catalogue gave no length, where it ended.
             changes["completedAt"] = observed_at
             if not duration_ms and changes["offsetMs"] > 0:
                 changes["durationMs"] = changes["offsetMs"]
@@ -217,7 +215,6 @@ class PlaybackState:
 
     @staticmethod
     def is_finished(state: dict | None) -> bool:
-        """A recording Alexa reported finished stays finished until it is started afresh."""
         if not isinstance(state, dict):
             return False
         if state.get("status") == "completed" or state.get("completedAt"):
@@ -356,7 +353,6 @@ class PlaybackQueue:
             return None
         target = int(queue.get("currentIndex", 0)) + delta
         if delta > 0:
-            # Going forward never lands on a recording already heard to the end.
             target = self.next_unfinished_index(self._user.snapshot(handler_input), queue, target)
         content_id = self.content_id({"playbackQueue": queue}, target)
         if not content_id:
@@ -476,7 +472,6 @@ class PlaybackQueue:
 
     @staticmethod
     def finished_content_ids(store: dict) -> frozenset[str]:
-        """Recordings this listener has listened to the end of (publication tracks excluded)."""
         finished = {
             str(entry["contentId"])
             for raw in store.get("playHistory") or []
@@ -497,11 +492,6 @@ class PlaybackQueue:
 
     @staticmethod
     def next_unfinished_index(store: dict, queue: dict, start: int) -> int:
-        """First queue position at or after ``start`` the listener has not finished.
-
-        Publication queues keep every track in order: a publication's tracks are
-        parts of one item rather than separate recordings.
-        """
         ids = queue["orderedContentIds"]
         if queue.get("publicationId"):
             return start
@@ -509,8 +499,6 @@ class PlaybackQueue:
         index = start
         while 0 <= index < len(ids) and ids[index] in finished:
             index += 1
-        # Skipping must never stop a queue: when everything left has already
-        # been heard (a source the listener chose to replay), keep queue order.
         return index if index < len(ids) else start
 
     @staticmethod

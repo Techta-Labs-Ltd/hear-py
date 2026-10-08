@@ -547,11 +547,6 @@ class FeedbackService:
 
     @staticmethod
     def note_unrecognised_answer(handler_input) -> bool:
-        """Count an answer that could not be matched; True once the question is given up.
-
-        The first miss earns one yes/no retry. A second miss ends the question
-        so the listener is never trapped repeating themselves.
-        """
         active = DialogStateManager.get_active(handler_input) or {}
         context = dict(active.get("context") or {})
         if int(context.get("unrecognisedAnswers") or 0) >= 1:
@@ -583,8 +578,6 @@ class FeedbackService:
             and pending.get("contentId")
             and active.get("contentId") == pending.get("contentId")
         ):
-            # answeredFeedbackKeys only lives for one request; the playback
-            # record is persisted, so a later finish of this play is not re-rated.
             updates["activePlayback"] = {**active, "feedbackAnswered": True}
         return User.update(
             handler_input,

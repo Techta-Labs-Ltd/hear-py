@@ -1264,7 +1264,7 @@ async def test_profile_town_uses_spoken_york_instead_of_organization_canonical(
         prefer_location=True,
         timeout_ms=5000,
     )
-    assert "Did you say York" in response["outputSpeech"]["ssml"]
+    assert "Shall I set your location to York" in response["outputSpeech"]["ssml"]
     assert "York Talking News" not in response["outputSpeech"]["ssml"]
 
 

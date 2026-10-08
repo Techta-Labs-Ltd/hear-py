@@ -76,7 +76,11 @@ class SearchSpeech:
 
     @staticmethod
     def _candidate_names(candidates: list[dict]) -> tuple[list[str], list[str]]:
-        raw = [str(item.get("name") or "").strip() for item in candidates if item.get("name")]
+        raw = [
+            str(item.get("label") or item.get("name") or "").strip()
+            for item in candidates
+            if item.get("name")
+        ]
         spoken = list(dict.fromkeys(Speech.escape_ssml_lite(name) for name in raw))
         page_size = DiscoveryConstants.CHOICE_PAGE_SIZE
         return raw[:page_size], spoken[:page_size]
@@ -120,6 +124,8 @@ class SearchSpeech:
             if len({word.casefold() for word in words}) != 1:
                 break
             common.append(words[0])
+        if common and common[-1].casefold() in {"in", "from", "of", "near", "and", "the"}:
+            return ""
         return " ".join(common)
 
     @staticmethod
@@ -361,8 +367,6 @@ class SearchSpeech:
         payload = search_payload if isinstance(search_payload, dict) else {}
         filters = SearchSpeech._search_filter(payload)
         relation, subject = SearchSpeech.clean_result_subject(request_label)
-        # Tag filters hold ids, so they are only a last resort for naming the
-        # subject; a resolved label already says what they are.
         labels = SearchSpeech._filter_labels(
             filters, ("categorySlugs",) if subject else ("categorySlugs", "tags")
         )

@@ -90,13 +90,18 @@ def _permission(deps):
 
 
 @pytest.mark.asyncio
-async def test_first_run_skips_location_when_address_permission_is_missing():
+async def test_yes_without_address_permission_sends_consent_card_and_asks_for_town():
     handler_input = _handler_input()
     deps = _deps()
     deps.locality.detect_device_location.return_value = {"_status": "permission_denied"}
     response = await _permission(deps).complete_first_run(handler_input)
-    assert "don't currently have permission" in response["outputSpeech"]["ssml"]
-    deps.onboarding.complete_without_location.assert_called_once_with(handler_input)
+    assert "which town or city are you in" in response["outputSpeech"]["ssml"]
+    assert response["card"] == {
+        "type": "AskForPermissionsConsent",
+        "permissions": ["read::alexa:device:all:address"],
+    }
+    deps.onboarding.begin_town_capture.assert_called_once_with(handler_input)
+    deps.onboarding.complete_without_location.assert_not_called()
 
 
 def test_notification_permission_gives_app_guidance_without_a_connection():
@@ -161,7 +166,7 @@ async def test_first_run_does_not_open_a_permission_connection_when_address_is_m
     deps.locality.detect_device_location.return_value = {"_status": "permission_denied"}
     response = await _permission(deps).complete_first_run(handler_input)
     speech = response["outputSpeech"]["ssml"]
-    assert "don't currently have permission to read the address" in speech
+    assert "sent a card to your Alexa app" in speech
     assert not any(
         directive.get("type") == "Connections.StartConnection"
         for directive in response.get("directives", [])

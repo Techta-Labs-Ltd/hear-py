@@ -330,7 +330,7 @@ async def test_return_launch_prompts_unfinished_recording_before_new_update(
     assert store["awaitingResume"] is True
     assert hear.statuses == []
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "You were listening to Yesterday's recording" in spoken
+    assert "Yesterday's recording" not in spoken
     assert "new release from Pendle Voice" not in spoken
 
 

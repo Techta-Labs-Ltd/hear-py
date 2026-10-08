@@ -19,7 +19,6 @@ CONTEXT = {"kind": "organization", "name": "Northampton Sound News"}
 
 
 def _item(content_id: str, title: str) -> dict:
-    # The catalogue sent no duration for these recordings in production.
     return {
         "contentId": content_id,
         "title": title,
@@ -229,8 +228,6 @@ async def test_next_keeps_queue_order_when_everything_left_was_heard(monkeypatch
 
 @pytest.mark.asyncio
 async def test_replaying_a_fully_heard_source_still_plays_the_whole_queue(monkeypatch):
-    # Production 2026-10-08: every track had been heard, so NearlyFinished
-    # enqueued nothing and playback stopped after the first track.
     session = _three_item_session(monkeypatch, heard=(FIRST, LAST, THIRD))
 
     response = await session.send(

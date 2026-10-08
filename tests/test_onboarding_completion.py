@@ -239,7 +239,11 @@ def test_third_failed_city_attempt_keeps_manual_location_available(mock_handler_
         mock_handler_input, store, container.onboarding
     )
     speech = result["outputSpeech"]["ssml"]
-    assert "set my location" in speech
+    assert "change my location" in speech
     assert "relaunch Hear" not in speech
-    assert User.snapshot(mock_handler_input)["onboardingComplete"] is False
-    assert User.snapshot(mock_handler_input)["onboardingTownAttempts"] == 3
+    store = User.snapshot(mock_handler_input)
+    assert store["onboardingComplete"] is True
+    assert not store.get("onboardingStage")
+    assert not any(
+        directive.get("type") == "Dialog.ElicitSlot" for directive in result.get("directives") or []
+    )

@@ -49,7 +49,7 @@ class HelpSpeech:
         "- What's this about? / Who made this?\n"
         "- Follow this creator / Unfollow this creator.\n"
         "- Play from my followed creators.\n"
-        "- Rate this recording, then say enjoyed, it was okay, not enjoyed, or skip.\n"
+        "- Rate this recording, then say I enjoyed, it was okay, I didn't enjoy it, or skip.\n"
         "- Report this content / Report this creator.\n- Hear my updates.\n"
         "- Turn notifications on / Turn notifications off.\n"
         "- Change my location to [place].\n- Set up my account.\n- Cancel."

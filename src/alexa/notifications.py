@@ -105,8 +105,6 @@ class AlexaNotificationAdapter:
             "notification",
             context={**item, "question": question},
         )
-        # A follow-up offer must not swallow the acknowledgement of what the
-        # listener just answered, otherwise their feedback sounds discarded.
         spoken = f"{lead} {question}" if lead else question
         return (
             handler_input.response_builder.speak(Ssml.ssml(spoken))

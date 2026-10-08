@@ -380,7 +380,7 @@ class TestIsNewUser:
         assert "Comprehensive coverage" not in speech
         assert "Independent Creator" not in speech
 
-    def test_resume_prompt_names_the_recording_without_source_context(self):
+    def test_resume_prompt_never_speaks_the_track_title(self):
         hi = _build_handler_input(
             store_override={
                 "activePlayback": {
@@ -399,9 +399,7 @@ class TestIsNewUser:
         )
 
         speech = _speak_text(hi)
-        # The listener must always hear what they were part-way through.
-        assert "You were listening to Community news roundup." in speech
-        assert "a recording" not in speech
+        assert "Community news roundup" not in speech
         assert "A detailed description" not in speech
 
     def test_resume_prompt_prefers_organization_for_location_playback(self):
@@ -523,7 +521,8 @@ class TestIsNewUser:
 class TestSpeechStrings:
     def test_onboarding_ask_permission(self):
         speech = Speech.ONBOARDING_ASK_PERMISSION
-        assert speech.startswith("Welcome to Hear Service.")
+        assert speech.startswith("Welcome to Hear Service")
+        assert len(speech.split()) <= 45
         assert "address saved in your Alexa account" in speech
         assert "my city is" not in speech.casefold()
 
@@ -863,7 +862,7 @@ async def test_true_first_launch_uses_full_hear_service_onboarding_not_town_capt
     await gate.handle(hi)
 
     speech = _speak_text(hi) or ""
-    assert "Welcome to Hear Service." in speech
+    assert "Welcome to Hear Service" in speech
     assert "may I check the address saved in your Alexa account?" in speech
     assert "my city is" not in speech.casefold()
     assert User.snapshot(hi)["onboardingStage"] == "ask_permission"

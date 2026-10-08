@@ -99,6 +99,8 @@ class Permission:
             )
             return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
         status = (await self._locality.detect_device_location(handler_input)).get("_status")
+        if status == "permission_denied":
+            return self._ask_town_with_permission_card(handler_input)
         self._onboarding.complete_without_location(handler_input)
         DialogStateManager.clear(handler_input, "onboarding")
         await self._sync(handler_input)
@@ -110,6 +112,21 @@ class Permission:
             else Speech.LOCATION_PERMISSION_UNAVAILABLE
         )
         return AlexaResponse.present_idle_next(handler_input, speech, Speech.WELCOME_REPROMPT)
+
+    def _ask_town_with_permission_card(self, handler_input):
+        self._onboarding.begin_town_capture(handler_input)
+        DialogStateManager.activate(
+            handler_input,
+            "onboarding",
+            context={"stage": OnboardingConstants.ONBOARDING_ASK_TOWN},
+        )
+        return Onboarding._town_retry_response(
+            handler_input,
+            Speech.ONBOARDING_PERMISSION_CARD_SENT,
+            Speech.REPROMPT_ASK_TOWN,
+            capture_profile_town=True,
+            consent_permissions=[permission_scopes.DEVICE_ADDRESS],
+        )
 
     async def _complete_profile(self, handler_input):
         store = await self._listener_profile.apply_listener_profile(handler_input)
@@ -199,15 +216,11 @@ class Permission:
             if with_permission_guidance
             else ""
         )
-        prompt = (
-            "Which town or city should I use for your listener profile? "
-            "You can say, my city is, followed by your town or city."
-        )
+        prompt = "Which town or city should I use for your listener profile?"
         return Onboarding._town_retry_response(
             handler_input,
             f"{guidance}{prompt}",
-            "Please say, my city is, followed by your town or city. "
-            "For example, my city is Manchester.",
+            "Please say the name of your town or city. For example, Manchester.",
             capture_profile_town=True,
         )
 

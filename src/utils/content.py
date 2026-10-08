@@ -38,6 +38,8 @@ class ContentUtils:
                 re.search("\\d{3,}[_-]post", t, re.I),
                 re.search("[_-]post\\d+", t, re.I),
                 re.search("track\\d+", t, re.I) and re.search("post|_", t),
+                re.fullmatch(r"(?:track|audio|file|recording|part)[\s_-]*\d+", t, re.I),
+                re.search(r"[A-Za-z0-9]_+[A-Za-z0-9]", t) and re.search(r"\d", t),
             )
         )
         if encoded_identifier:

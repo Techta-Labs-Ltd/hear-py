@@ -254,7 +254,7 @@ async def test_voice_next_loads_next_page_at_loaded_boundary(monkeypatch, mock_h
     [
         (
             {"contentId": "content-1"},
-            "You've reached the end of this selection.",
+            "You've reached the end of this episode.",
         ),
         (
             {

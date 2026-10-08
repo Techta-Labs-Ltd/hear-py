@@ -144,19 +144,15 @@ class ResumeSpeech:
         creator = cls._safe_label(active.get("creatorName"), credit=True)
         if creator:
             return cls._question(f"You were listening to {creator}")
-        publication = cls._safe_label(
-            active.get("publicationTitle") or active.get("subjectTitle")
+        queue = saved.get("playbackQueue") or {}
+        queue_source = cls._safe_label(
+            queue.get("organizationName") or queue.get("creatorName"), credit=True
         )
-        if publication:
-            return cls._question(f"You were listening to {publication}")
-        # Always tell the listener what they were part-way through: the queue
-        # they chose (a place, a topic), then the recording's own title.
+        if queue_source:
+            return cls._question(f"You were listening to {queue_source}")
         place_statement = cls._place_statement(active, saved)
         if place_statement:
             return cls._question(place_statement)
-        title = cls._safe_label(cls._spoken_title(active.get("title")))
-        if title:
-            return cls._question(f"You were listening to {title}")
         queue_subject = DiscoverySpeech.subject(context)
         if queue_subject:
             return cls._question(f"You were listening to {Speech.escape_ssml_lite(queue_subject)}")
@@ -172,15 +168,8 @@ class ResumeSpeech:
         if not subject:
             return None
         spoken = Speech.escape_ssml_lite(subject)
-        # "content on talking newspaper in Otley" keeps its topic; a bare place
-        # ("Otley") is "content from Otley".
         has_topic = name.casefold().startswith(("content on ", "the latest content on "))
         return f"You were listening to content {'on' if has_topic else 'from'} {spoken}"
-
-    @staticmethod
-    def _spoken_title(value) -> str | None:
-        # File-style titles ("16_Oct5") read better as words.
-        return " ".join(str(value).replace("_", " ").split()) if isinstance(value, str) else None
 
     @classmethod
     def reprompt(cls, subject: dict | None, store: dict | None = None) -> str:

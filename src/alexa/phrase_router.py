@@ -212,8 +212,6 @@ class PhraseRouter:
             if slot_type.get("name") == "HEAR_FEEDBACK"
             for entry in slot_type.get("values") or ()
         ]
-        # The dynamic entities ship with the Lambda, so phrases added there are
-        # recovered without rebuilding the interaction model.
         entries.extend(AlexaEntities.build_feedback_dynamic_entities_directive()["types"][0]["values"])
         phrases: set[str] = set()
         for entry in entries:
@@ -226,7 +224,6 @@ class PhraseRouter:
 
     @classmethod
     def feedback_route(cls, phrase: str) -> PhraseRoute | None:
-        """Recover a feedback answer that Alexa matched to a slot-only sample."""
         if cls.normalize(phrase) not in cls._feedback_phrases():
             return None
         return PhraseRoute(

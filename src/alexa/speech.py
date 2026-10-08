@@ -10,6 +10,19 @@ class Speech:
         "Say no, none of these, or something else to return to search."
     )
     CHOICES_DISMISSED = "Ok. What would you like to listen to instead?"
+    ONBOARDING_ASK_PERMISSION_AGAIN = (
+        "To help me find local content for you, may I check the address saved in your "
+        "Alexa account? Please say yes or no."
+    )
+    ONBOARDING_CONFIRM_CITY_AGAIN = "Is that the right town or city? Please say yes or no."
+    ONBOARDING_HELP = (
+        "Hear Service plays talking newspapers and local recordings. "
+        "Your town or city helps me find content near you. "
+    )
+    ONBOARDING_PERMISSION_CARD_SENT = (
+        "I've sent a card to your Alexa app where you can allow Hear to use your saved address. "
+        "For now, which town or city are you in?"
+    )
     ONBOARDING_LOCATION_REASON = "Your saved Alexa address helps Hear find local content. Alexa will now ask for permission to use it."
     LOCATION_PERMISSION_DENIED = "I don't currently have permission to read the address saved in your Alexa account. You can enable Device Address later in the Alexa app under Hear Service, Settings, Manage Permissions. I'll skip this for now. If you'd like to set up your listener profile later, say set up my account. What would you like to listen to?"
     LOCATION_PERMISSION_EMPTY = "Your Alexa address permission is turned on, but I couldn't find a location saved in your Alexa account. I'll skip this for now. If you'd like to set up your listener profile later, say set up my account. What would you like to listen to?"
@@ -25,14 +38,14 @@ class Speech:
     PROFILE_PERMISSION_GUEST_CONTINUE = "You can still use Hear. What would you like to listen to?"
     PROFILE_PERMISSION_COMPLETE = "Thanks. Your Hear listener account is ready. What would you like to listen to?"
     TOWN_SKIPPED = "Okay. What would you like to listen to?"
-    TOWN_NOT_UNDERSTOOD = "I couldn't identify that city. Please say my city is followed by the full city name, or say skip to continue without one."
+    TOWN_NOT_UNDERSTOOD = "I couldn't identify that town or city. Please say its name again, or say skip to continue without one."
     TOWN_LOOKUP_UNAVAILABLE_RETRY = (
         "I can't check that city right now. Please try the city name again."
     )
     TOWN_LOOKUP_UNAVAILABLE_CONTINUE = "I still can't check cities, so I'll continue without your location. You can set it later. What would you like to listen to?"
-    CITY_SETUP_GUIDANCE = "I still couldn't identify that location. You can set your location later by saying set my location. What would you like to listen to?"
-    REPROMPT_NO_CITY = "Say the latest, what's popular, or what's on."
-    REPROMPT_ASK_TOWN = "Say my city is followed by your city. You can also say skip."
+    CITY_SETUP_GUIDANCE = "I still couldn't identify that location. You can set it later by saying change my location. What would you like to listen to?"
+    REPROMPT_NO_CITY = "Say the name of a talking newspaper, creator, publication, or city you would like to listen to."
+    REPROMPT_ASK_TOWN = "Which town or city are you in? You can also say skip."
     ONBOARDING_DEFER_CONTENT = "Happy to play that for you. First, which city are you in?"
     COMMUNITY_NEEDS_TOWN = "Before I can play content from your city, I need to set up your listener profile. Would you like to set it up now? Please say yes or no."
     COMMUNITY_LOCATION_DECLINED = "No problem. You can still listen to talking newspapers, creators, recommendations and what's trending. What would you like to hear?"
@@ -108,8 +121,6 @@ class Speech:
     FEEDBACK_SOMEWHAT = f"{FEEDBACK_SOMEWHAT_ACK} What would you like to listen to next?"
     FEEDBACK_NOT_ENJOYED = "Sorry to hear that. If you feel the content was inappropriate, say report this content and we'll flag it for review. Otherwise say skip to carry on."
     FEEDBACK_SKIP_INTRO = "Ok. What would you like to listen to next?"
-    # Short pauses keep the answers from running into one sentence, which made
-    # "Say I enjoyed it" sound like Alexa was describing her own opinion.
     FEEDBACK_OPTIONS = (
         'You can say, <break time="250ms"/>I enjoyed, <break time="250ms"/>'
         'it was okay, <break time="250ms"/>or I didn\'t enjoy it. Or say skip.'
@@ -153,7 +164,11 @@ class Speech:
     GOODBYE = "Thanks for listening to Hear. Goodbye."
     ERROR_GENERIC = f"Sorry, I didn't quite catch that. {DiscoveryExamples.guidance(DiscoveryExamples.DEFAULT_NEWSPAPER)}"
 
-    ONBOARDING_ASK_PERMISSION = "Welcome to Hear Service. This free service is brought to you by volunteers across the UK and is designed for people who are visually impaired or have difficulty reading. You can ask for a talking newspaper or creator, search for topics such as news or sport, hear what's trending, or ask for a recommendation. To find out more, visit hear dot media slash Alexa. To help me find local content for you, may I check the address saved in your Alexa account? Please say yes or no."
+    ONBOARDING_ASK_PERMISSION = (
+        "Welcome to Hear Service, free talking newspapers and local recordings from volunteers "
+        "across the UK. To help me find local content for you, may I check the address saved "
+        "in your Alexa account? Please say yes or no."
+    )
     ONBOARDING_LOCATION_DENIED = PROFILE_PERMISSION_SKIPPED
     ONBOARDING_FETCHING_LOCATION = "Bear with me a second, just finding you on the map..."
     CONSENT_CARD_THANKS = "Thanks — you're all set. What would you like to listen to?"
@@ -177,7 +192,8 @@ class Speech:
 
     @staticmethod
     def _build_content_about(title, summary, main_topic, creator) -> str:
-        safe_title = Speech.humanize_spoken_title(title)
+        del title
+        safe_title = None
         safe_summary = Speech.escape_ssml_lite(summary) if summary else None
         safe_topic = Speech.escape_ssml_lite(main_topic) if main_topic else None
         safe_creator = (
@@ -193,11 +209,9 @@ class Speech:
             if safe_title:
                 return f"{safe_title} is about {safe_topic}."
             return f"This is about {safe_topic}."
-        if safe_title and safe_creator:
-            return f"I don't have a description for this one, but it's {safe_title}, by {safe_creator}."
-        if safe_title:
-            return f"I don't have a description for this one, but it's {safe_title}."
-        return "I don't have a description for this recording."
+        if safe_creator:
+            return f"I don't have a description for this one, but it's from {safe_creator}."
+        return "I don't have a description for this one."
 
     @staticmethod
     def build_now_playing_phrase(title, creator=None) -> str:
@@ -325,11 +339,8 @@ class Speech:
 
     @staticmethod
     def CREATOR_CREDIT(title, creator):
-        return (
-            f"You are listening to {Speech.humanize_spoken_title(title)}, created by {creator}."
-            if Speech.humanize_spoken_title(title)
-            else f"You are listening to a recording created by {creator}."
-        )
+        del title
+        return f"You are listening to content from {creator}."
 
     @staticmethod
     def LAUNCH_PENDING_FEEDBACK(title, creator, user_name=None):
@@ -381,7 +392,7 @@ class Speech:
 
     @staticmethod
     def ONBOARDING_TOWN_CONFIRM(city):
-        return f"Did you say {Speech.escape_ssml_lite(city)}?"
+        return f"Shall I set your location to {Speech.escape_ssml_lite(city)}? Please say yes or no."
 
     @staticmethod
     def ONBOARDING_DEVICE_TOWN_CONFIRM(city):

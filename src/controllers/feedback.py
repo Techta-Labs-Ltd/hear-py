@@ -109,8 +109,6 @@ class FeedbackResponseHandler(AbstractRequestHandler):
         store = User.snapshot(handler_input)
         if not store.get("awaitingFeedback"):
             return AlexaFeedback.present_pending_feedback(handler_input, store)
-        # A rating phrase is not personal data; logging it shows which
-        # wordings still need to be understood.
         spoken = AlexaRequest.get_spoken_slot_value(AlexaRequest.get_slot(handler_input, "feedback"))
         ApplicationLog.info("Hear: feedback answer unmatched heard=%r", str(spoken or "")[:40])
         if FeedbackService.note_unrecognised_answer(handler_input):

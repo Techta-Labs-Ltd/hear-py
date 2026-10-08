@@ -64,6 +64,15 @@ def _event(request: dict, *, new: bool = False) -> dict:
     }
 
 
+def _interrupted(event: dict) -> dict:
+    event["context"]["AudioPlayer"] = {
+        "token": CONTENT_ID,
+        "offsetInMilliseconds": 42000,
+        "playerActivity": "STOPPED",
+    }
+    return event
+
+
 def _playback_state(*, status: str = "paused", offset_ms: int = 42000) -> dict:
     return {
         "contentId": CONTENT_ID,
@@ -547,12 +556,12 @@ async def test_increase_speed_restarts_paused_track_at_saved_offset():
         "activePlayback": _playback_state(status="paused", offset_ms=42000),
     }
     result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
-        _event(
+        _interrupted(_event(
             {
                 "type": "IntentRequest",
                 "intent": {"name": "IncreaseSpeedIntent", "slots": {}},
             }
-        ),
+        )),
         None,
     )
     response = result["response"]
@@ -941,12 +950,12 @@ async def test_bare_normal_speed_resets_to_base_audio_without_speed_slot():
         },
     }
     result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
-        _event(
+        _interrupted(_event(
             {
                 "type": "IntentRequest",
                 "intent": {"name": "SetPlaybackSpeedIntent", "slots": {}},
             }
-        ),
+        )),
         None,
     )
     response = result["response"]
@@ -1985,3 +1994,22 @@ async def test_new_completion_replaces_old_feedback_before_relaunch():
     assert "Pendle weekly update" not in speech
     assert "Pendle Voice" in speech
     assert "029_Car_park" not in speech
+
+
+@pytest.mark.asyncio
+async def test_speed_change_with_nothing_playing_only_saves_the_preference():
+    persistence = MemoryPersistenceAdapter()
+    persistence._store[USER_ID] = {
+        "onboardingComplete": True,
+        "playbackSpeed": 1.0,
+        "currentPlaybackSpeeds": [{"speed": 1.0, "audioUrl": "https://cdn.hear.media/normal.mp3"}],
+        "activePlayback": _playback_state(status="paused", offset_ms=42000),
+    }
+    result = await Application.build_skill(persistence, container=ApplicationContainer()).invoke(
+        _event({"type": "IntentRequest", "intent": {"name": "IncreaseSpeedIntent", "slots": {}}}),
+        None,
+    )
+    response = result["response"]
+    assert _stored_state(persistence)["playbackSpeed"] == 1.25
+    assert not any(d.get("type") == "AudioPlayer.Play" for d in response.get("directives") or [])
+    assert "does not have faster" not in response["outputSpeech"]["ssml"]

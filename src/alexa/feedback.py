@@ -104,9 +104,6 @@ class AlexaFeedback:
             )
         ):
             return "somewhat"
-        # Listeners answer in their own words ("I enjoy it", "loved it",
-        # "not really"), and Alexa often drops or mishears a syllable
-        # ("and joyed it"), so judge the words rather than exact phrases.
         words = re.findall(r"[a-z']+", text)
         negated = any(word in AlexaFeedback._NEGATIONS for word in words)
         if text in {"not really", "not at all"} or any(
@@ -228,10 +225,12 @@ class AlexaFeedback:
                 active.get("organizationName") if active_matches else None,
                 current.get("creatorName"),
                 active.get("creatorName") if active_matches else None,
+                queue.get("organizationName"),
+                queue.get("creatorName"),
             ),
             False,
         )
-        if source:
+        if source and not Speech.is_bad_credit(source):
             return source
 
         discovery_subject = cls._discovery_subject(current, active, queue)
@@ -322,7 +321,7 @@ class AlexaFeedback:
         creator = Speech.escape_ssml_lite(creator_name) if creator_name else "the creator"
         user_name = store.get("userName") or store.get("fullName")
         if pending.get("subjectType") == "publication":
-            speech = f"You listened to {Speech.escape_ssml_lite(title)}. Did you enjoy this publication? {Speech.FEEDBACK_OPTIONS}"
+            speech = AlexaFeedback.feedback_question(title)
         else:
             speech = Speech.LAUNCH_PENDING_FEEDBACK(title, creator, user_name)
         return (

@@ -6,8 +6,6 @@ from src.models.resolver import ResolverResult
 
 
 def _otley_location_result() -> dict:
-    # Production 2026-10-08: "otley and districts" missed the organisation, so the
-    # resolver returned the town and a "talking newspaper" tag.
     utterance = "play otley and districts talking newspaper"
     return ResolverResult.from_payload(
         {
@@ -90,11 +88,21 @@ def test_location_primary_request_asks_before_playing():
             {"playbackQueue": {"discoveryContext": {"kind": "topic", "name": "Cancer Support"}}},
             "content on Cancer Support",
         ),
-        ({"title": "Living with cancer"}, {}, "Living with cancer"),
-        ({"title": "16_Oct5"}, {}, "16 Oct5"),
+        (
+            {"title": "Track__001"},
+            {"playbackQueue": {"organizationName": "Ipswich Sound"}},
+            "Ipswich Sound",
+        ),
     ],
 )
 def test_resume_prompt_always_names_what_was_playing(active, store, expected):
     prompt = ResumeSpeech.prompt(active, store)
 
     assert prompt == f"You were listening to {expected}. Would you like to continue?"
+
+
+@pytest.mark.parametrize("title", ["Living with cancer", "Track__001", "16_Oct5"])
+def test_resume_prompt_never_speaks_the_track_title(title):
+    prompt = ResumeSpeech.prompt({"title": title}, {})
+
+    assert title not in prompt

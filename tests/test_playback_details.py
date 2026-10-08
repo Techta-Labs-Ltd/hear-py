@@ -72,7 +72,8 @@ async def test_creator_uses_active_playback_not_legacy_credit(mock_handler_input
     await details.creator(mock_handler_input)
 
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "Local history, created by Jane Smith." in spoken
+    assert "You are listening to content from Jane Smith." in spoken
+    assert "Local history" not in spoken
     assert "Stale" not in spoken
     controls.pause_active.assert_awaited_once_with(mock_handler_input)
 
@@ -110,7 +111,7 @@ async def test_feedback_prompt_is_restored_without_replacing_its_dialog(
 
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
     store = User.snapshot(mock_handler_input)
-    assert "created by Jane Smith" in spoken
+    assert "content from Jane Smith" in spoken
     assert "Did you enjoy Blackpool Gazette?" in spoken
     assert store["activeDialog"]["type"] == "feedback"
     assert store["awaitingFeedback"] is True

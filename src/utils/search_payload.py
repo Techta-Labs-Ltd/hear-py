@@ -67,9 +67,8 @@ class SearchPayload:
     @staticmethod
     def _request_facets(slots: dict) -> tuple[list[str], str, str]:
         category = str(slots.get("category") or "").strip()
-        # Speak the resolver's tag names; tag ids are only readable when slugs.
         tags = [
-            str(tag).strip().replace("-", " ")
+            str(tag).strip().lstrip("#").replace("-", " ")
             for tag in slots.get("tagNames") or slots.get("tags") or []
             if str(tag or "").strip()
         ]
@@ -289,7 +288,7 @@ class SearchPayload:
     def request_label(slots: dict, query: str) -> str | None:
         category = str(slots.get("category") or "").strip().replace("-", " ")
         tags = [
-            str(value).strip().replace("-", " ")
+            str(value).strip().lstrip("#").replace("-", " ")
             for value in slots.get("tagNames") or slots.get("tags") or []
             if str(value).strip()
         ]

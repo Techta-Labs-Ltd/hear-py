@@ -156,9 +156,6 @@ def test_canonical_entities_drive_all_discovered_facets_without_fake_ambiguity()
     result = ResolverResult.from_payload(_response()).to_alexa_payload()
     assert result["slots"]["creatorIds"] == ["creator-1"]
     assert result["slots"]["creatorName"] == "Adeshina Ayomide"
-    # Entity ranking contract 5.1: "sport" is claimed by the Sport category,
-    # the #sport tag and a publication; category outranks publication, so the
-    # incidental publication match is not kept as a constraint.
     assert "publicationIds" not in result["slots"]
     assert result["slots"]["category"] == "sport"
     assert result["slots"]["categoryName"] == "Sport"
@@ -1199,8 +1196,6 @@ def test_overlapping_source_and_location_does_not_overconstrain_search():
         }
     )
     result = ResolverResult.from_payload(payload).to_alexa_payload()
-    # Entity ranking contract: location (500) outranks creator (100) for the
-    # same word, and the losing meaning is not kept as an extra constraint.
     assert result["searchPayload"]["filter"]["city"] == "Wakefield"
     assert "creatorIds" not in result["searchPayload"]["filter"]
     assert "creatorIds" not in result["slots"]
@@ -1415,8 +1410,6 @@ def test_multiple_entities_of_one_type_remain_distinct_discoveries():
 
 
 def test_two_creators_for_the_same_words_are_ambiguous_not_merged():
-    # Entity ranking contract K14: equally plausible same-type candidates for
-    # the same phrase must be asked about, never silently combined.
     payload = _response(intent="creator")
     payload["entities"] = [
         payload["entities"][0],

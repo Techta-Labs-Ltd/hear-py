@@ -1,4 +1,3 @@
-"""Recovery examples drawn from the canonical names in the shipped Alexa model."""
 
 import json
 import random

@@ -116,7 +116,6 @@ def _speech(response: dict) -> str:
 
 @pytest.mark.asyncio
 async def test_a_topic_tag_request_is_handled_instead_of_falling_back(monkeypatch):
-    # Production 2026-10-08: the resolver's semantic intent "tag" had no handler.
     session = TopicSession(monkeypatch)
 
     response = await session.say(

@@ -29,8 +29,6 @@ class ConfirmationDecision:
 class ConfirmationPolicy:
     RESOLVED_INTENTS = frozenset(
         {
-            # The ranked semantic intent for a location-primary request; without
-            # it "play otley and districts talking newspaper" played unasked.
             "location",
             "local",
             "creator",

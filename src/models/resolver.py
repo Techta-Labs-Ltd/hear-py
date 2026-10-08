@@ -185,7 +185,31 @@ class ResolverResult:
         name = str(candidate.get("name") or candidate.get("canonicalValue") or "").strip()
         if not entity_type or not entity_id or not name:
             return None
-        return {"type": str(entity_type), "id": str(entity_id), "name": name}
+        normalized = {"type": str(entity_type), "id": str(entity_id), "name": name}
+        for target, sources in ResolverResult._PLACE_FIELDS.items():
+            value = next((candidate.get(key) for key in sources if candidate.get(key) is not None), None)
+            if value is not None:
+                normalized[target] = value
+        return normalized
+
+    _PLACE_FIELDS = {
+        "county": ("county",),
+        "latitude": ("latitude",),
+        "longitude": ("longitude",),
+        "countryCode": ("countryCode",),
+        "locationType": ("locationType",),
+        "label": ("label",),
+    }
+
+    @staticmethod
+    def _label_duplicate_places(candidates: list[dict]) -> list[dict]:
+        names = [str(candidate.get("name") or "").casefold() for candidate in candidates]
+        labelled = []
+        for candidate, name in zip(candidates, names):
+            if names.count(name) > 1 and candidate.get("county") and not candidate.get("label"):
+                candidate = {**candidate, "label": f"{candidate['name']} in {candidate['county']}"}
+            labelled.append(candidate)
+        return labelled
 
     def _ambiguity_payload(self, original_utterance: str = "") -> list[dict]:
         ambiguities = []
@@ -257,14 +281,25 @@ class ResolverResult:
         return [
             {
                 "phrase": ranking.ambiguous[0].original_text,
-                "candidates": [
-                    {
-                        "type": entity.entity_type,
-                        "id": entity.entity_id,
-                        "name": entity.canonical_value,
-                    }
-                    for entity in ranking.ambiguous
-                ],
+                "candidates": ResolverResult._label_duplicate_places(
+                    [
+                        {
+                            key: value
+                            for key, value in {
+                                "type": entity.entity_type,
+                                "id": entity.entity_id,
+                                "name": entity.canonical_value,
+                                "county": entity.county,
+                                "latitude": entity.latitude,
+                                "longitude": entity.longitude,
+                                "countryCode": entity.country_code,
+                                "locationType": entity.location_type,
+                            }.items()
+                            if value is not None
+                        }
+                        for entity in ranking.ambiguous
+                    ]
+                ),
             }
         ]
 
@@ -388,6 +423,9 @@ class ResolverResult:
             )
         slots["ambiguousReferences"] = list(ambiguities)
         if ranking.accepted or ambiguities:
+            raw_residual = str(slots.get("residualQuery") or "").strip()
+            if raw_residual:
+                slots["rawResidualQuery"] = raw_residual
             slots["residualQuery"] = ""
         search_plan = self._search_plan(slots, filters, original_utterance)
         if self.resolution_id:

@@ -319,8 +319,6 @@ class Affirmative:
         result = await self._heara.search(
             payload, timeout_ms=DeadlineBudget.compute_search_timeout_ms(handler_input)
         )
-        # "The latest" must be something new to this listener, not any of the
-        # recordings they already finished from this source.
         heard = PlaybackQueue.finished_content_ids(store) | {str(source.get("contentId") or "")}
         result["results"] = [
             item for item in result.get("results", []) if str(item.get("contentId")) not in heard

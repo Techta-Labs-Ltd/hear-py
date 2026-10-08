@@ -748,8 +748,6 @@ class ResolverWorkflowRunner:
             result = {"intent": expected, "confidence": "high", "slots": {}}
         actual = str(result.get("semanticIntent") or result["intent"])
         if actual == "tag":
-            # A topic tag is a search facet, exactly as the resolver payload's own
-            # intent says; "tag" has no handler and fell through to the fallback.
             actual = "search"
         result = {**result, "intent": actual}
         if (
@@ -856,8 +854,6 @@ class ResolverWorkflowRunner:
                 AlexaRequest.get_spoken_slot_value(context["slots"].get("recommendationQuery"))
             )
             if topic:
-                # "Find me something on cancer support" asks for that topic;
-                # generic recommendations would silently drop it.
                 await self._resolve_default(
                     handler_input,
                     "SearchContentIntent",

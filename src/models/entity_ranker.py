@@ -70,7 +70,6 @@ class EntityRanker:
 
     @classmethod
     def _evidence_key(cls, entity: ResolvedEntity) -> tuple[int, ...]:
-        """Evidence for choosing between same-type candidates; position is never evidence."""
         if entity.entity_type == "location":
             return (
                 ResolverConstants.LOCATION_ROLE_PRIORITY.get(
@@ -90,8 +89,6 @@ class EntityRanker:
         return (
             ResolverConstants.ENTITY_TYPE_PRIORITY.get(entity.entity_type, 0),
             *cls._evidence_key(entity),
-            # Only orders compatible, independently accepted entities; a
-            # genuine competing tie is reported as ambiguity, never decided here.
             -entity.start,
         )
 
@@ -101,12 +98,10 @@ class EntityRanker:
 
     @staticmethod
     def _compatible(left: ResolvedEntity, right: ResolvedEntity) -> bool:
-        # Contract 5.2: a category and a tag for the same topic are both kept.
         return {left.entity_type, right.entity_type} == {"category", "tag"}
 
     @classmethod
     def _outranks(cls, left: ResolvedEntity, right: ResolvedEntity) -> bool:
-        """Whether ``left`` wins the words it shares with ``right``."""
         left_priority = ResolverConstants.ENTITY_TYPE_PRIORITY.get(left.entity_type, 0)
         right_priority = ResolverConstants.ENTITY_TYPE_PRIORITY.get(right.entity_type, 0)
         if left_priority != right_priority:
@@ -144,11 +139,6 @@ class EntityRanker:
                 for organization in organizations
             )
         ]
-        # Contract 5.1/5.2: candidates claiming the same words compete, and the
-        # stronger meaning owns them (organisation over a town or topic inside
-        # its name, location over a geographic tag, ...). Compatible pairs and
-        # non-overlapping phrases are never erased. Pairwise comparison keeps
-        # the result independent of input order and of overlap chains.
         accepted = [
             entity
             for entity in candidates

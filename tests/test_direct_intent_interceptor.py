@@ -128,7 +128,6 @@ async def test_global_interceptor_routes_every_declared_locked_phrase(
     if target in DirectIntentPolicy.BYPASS_RESOLVER_INTENTS and not recommendation_topic:
         assert ResolverWorkflowRunner._request(mock_intent_request) is None
     if recommendation_topic:
-        # A recommendation with a topic is resolved, so the topic is searched.
         assert ResolverWorkflowRunner._request(mock_intent_request) is not None
 
 

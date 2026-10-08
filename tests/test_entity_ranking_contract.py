@@ -1,4 +1,3 @@
-"""Executable fixtures for HEAR_ALEXA_ENTITY_RANKING_CONTRACT.md section 12."""
 
 from __future__ import annotations
 
@@ -137,7 +136,6 @@ def test_k06_source_name_words_beat_a_matching_topic():
 
 
 def test_k07_town_inside_an_organisation_name_is_not_a_location():
-    # "York Talking News": York is part of the source name, not a place request.
     ranking = EntityRanker.rank(
         (
             _entity("location", "york", start=0, end=4, location_type="city"),
@@ -148,7 +146,6 @@ def test_k07_town_inside_an_organisation_name_is_not_a_location():
 
 
 def test_k08_organisation_and_separately_requested_topic_both_survive():
-    # "play sport from York Talking News"
     ranking = EntityRanker.rank(
         (
             _entity("category", "sport", start=5, end=10),
@@ -178,7 +175,6 @@ def test_k10_location_beats_a_geographic_tag_on_the_same_word(order):
 
 
 def test_k11_location_category_and_tag_on_separate_phrases_all_survive():
-    # "play sport #football near Sevenoaks"
     ranking = EntityRanker.rank(
         (
             _entity("category", "sport", start=5, end=10),
@@ -191,7 +187,6 @@ def test_k11_location_category_and_tag_on_separate_phrases_all_survive():
 
 
 def test_k12_indirect_overlap_chain_keeps_compatible_endpoints():
-    # A overlaps B and B overlaps C, but A and C are compatible with each other.
     ranking = EntityRanker.rank(
         (
             _entity("category", "a", start=0, end=6),
@@ -232,7 +227,6 @@ def test_k14_equally_plausible_same_type_candidates_are_ambiguous():
 
 
 def test_k14_position_never_breaks_a_genuine_tie():
-    # Same evidence, different phrase positions: earliest must not silently win.
     ranking = EntityRanker.rank(
         (
             _entity("creator", "first", start=0, end=5),

@@ -274,16 +274,12 @@ class DialogValidationPolicy:
         ):
             title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(context))
             if int(context.get("unrecognisedAnswers") or 0) >= 1:
-                # Never trap the listener: a second answer Alexa could not
-                # match ends the question instead of repeating it forever.
                 return {
                     "dialogType": dialog_type,
                     "speech": Speech.FEEDBACK_GIVEN_UP,
                     "reprompt": Speech.WELCOME_REPROMPT,
                     "dismissFeedback": True,
                 }
-            # Yes and no are Alexa built-ins, so they are recognised even when
-            # a free-form answer such as "I enjoyed it" falls to FallbackIntent.
             speech = Speech.FEEDBACK_YES_NO_RETRY(title)
             return {
                 "dialogType": dialog_type,

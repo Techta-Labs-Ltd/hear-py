@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 class AlexaDateRange:
     _SPOKEN_RELATIVE = re.compile(
-        r"\b(?P<period>today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month|this\s+year|last\s+year)\b",
+        r"\b(?P<period>today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month|this\s+year|last\s+year)(?:'s|’s)?\b",
         re.IGNORECASE,
     )
 

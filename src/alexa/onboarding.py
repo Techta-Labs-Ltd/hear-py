@@ -115,11 +115,16 @@ class SetLocation:
                 town,
             )
         self._onboarding.request_location_change(handler_input)
-        return (
-            handler_input.response_builder.speak(Ssml.ssml("Sure. Which city are you in now?"))
-            .reprompt(Ssml.ssml("Which city should I set as your location?"))
-            .set_should_end_session(False)
-            .response
+        DialogStateManager.activate(
+            handler_input,
+            "onboarding",
+            context={"stage": OnboardingConstants.ONBOARDING_ASK_TOWN},
+        )
+        return Onboarding._town_retry_response(
+            handler_input,
+            "Sure. Which town or city are you in now?",
+            "Which town or city should I set as your location?",
+            capture_profile_town=True,
         )
 
 
@@ -190,6 +195,7 @@ class Onboarding(OnboardingService):
                     ("longitude", "longitude"),
                     ("county", "county"),
                     ("locationType", "locationType"),
+                    ("label", "label"),
                 ):
                     if candidate.get(source_key) is not None:
                         normalized[target_key] = candidate[source_key]
@@ -222,7 +228,9 @@ class Onboarding(OnboardingService):
     @staticmethod
     def _town_ambiguity_speech(candidates: list[dict]) -> tuple[str, str]:
         names = [
-            Speech.escape_ssml_lite(str(candidate.get("name") or "").strip())
+            Speech.escape_ssml_lite(
+                str(candidate.get("label") or candidate.get("name") or "").strip()
+            )
             for candidate in candidates
             if str(candidate.get("name") or "").strip()
         ]
@@ -249,11 +257,14 @@ class Onboarding(OnboardingService):
         speech: str,
         reprompt: str,
         capture_profile_town: bool = False,
+        consent_permissions: list[str] | None = None,
     ):
         """Keep Alexa's active location intent open so a bare town fills its slot."""
         builder = handler_input.response_builder.speak(Ssml.ssml(speech)).reprompt(
             Ssml.ssml(reprompt)
         )
+        if consent_permissions:
+            builder = builder.with_ask_for_permissions_consent_card(consent_permissions)
         intent_name = AlexaRequest.get_intent_name(handler_input)
         slot_name = {
             "TownCaptureIntent": "location",
@@ -408,20 +419,21 @@ class Onboarding(OnboardingService):
         store: Dict[str, Any],
         onboarding: OnboardingService,
         attempted_city: str | None = None,
+        speech_override: str | None = None,
     ):
         """Retry city capture, then give actionable setup guidance without auto-skipping."""
         attempts = onboarding.record_town_attempt(handler_input, store)
         if attempts >= OnboardingConstants.MAX_TOWN_ATTEMPTS:
-            if store.get("profileSetupActive"):
-                onboarding.complete_without_location(handler_input, reliable=False)
-                DialogStateManager.clear(handler_input, "onboarding")
-                return (
-                    handler_input.response_builder.speak(Ssml.ssml(Speech.CITY_SETUP_GUIDANCE))
-                    .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-                    .set_should_end_session(False)
-                    .response
-                )
-            speech = Speech.CITY_SETUP_GUIDANCE
+            onboarding.complete_without_location(handler_input, reliable=False)
+            DialogStateManager.clear(handler_input, "onboarding")
+            return (
+                handler_input.response_builder.speak(Ssml.ssml(Speech.CITY_SETUP_GUIDANCE))
+                .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
+                .set_should_end_session(False)
+                .response
+            )
+        if speech_override:
+            speech = speech_override
         elif attempted_city:
             speech = Speech.CITY_NOT_FOUND(attempted_city)
         else:
@@ -487,11 +499,8 @@ class Onboarding(OnboardingService):
         if normalized_phrase in OnboardingConstants.TOWN_SKIP_PHRASES:
             return finalize_town_skipped(handler_input, store)
         if normalized_phrase in OnboardingConstants.CONTENT_REQUEST_PHRASES:
-            return (
-                handler_input.response_builder.speak(Ssml.ssml(Speech.ONBOARDING_DEFER_CONTENT))
-                .reprompt(Ssml.ssml(Speech.REPROMPT_ASK_TOWN))
-                .set_should_end_session(False)
-                .response
+            return Onboarding.resume_town_capture(
+                handler_input, store, onboarding, speech_override=Speech.ONBOARDING_DEFER_CONTENT
             )
 
         pending = store.get("pendingTownAmbiguity")
@@ -505,11 +514,9 @@ class Onboarding(OnboardingService):
                 phrase = str(selected_candidate.get("name") or phrase).strip()
                 onboarding.clear_town_ambiguity(handler_input)
             elif DialogSelection.normalize_ordinal(phrase) in DiscoveryConstants.ORDINAL_INDEX:
-                speech, reprompt = Onboarding._town_ambiguity_speech(
-                    pending_candidates
-                )
-                return Onboarding._town_retry_response(
-                    handler_input, speech, reprompt, capture_profile_town=True
+                speech, _ = Onboarding._town_ambiguity_speech(pending_candidates)
+                return Onboarding.resume_town_capture(
+                    handler_input, store, onboarding, speech_override=speech
                 )
             else:
                 onboarding.clear_town_ambiguity(handler_input)

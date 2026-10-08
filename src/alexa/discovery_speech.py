@@ -32,7 +32,5 @@ class DiscoverySpeech:
         subject = DiscoverySpeech.subject(discovery_context)
         if subject:
             return f"{lead} {Speech.escape_ssml_lite(subject)}."
-        title = Speech.humanize_spoken_title(fallback_title)
-        if title:
-            return f"{lead} {title}."
+        del fallback_title
         return f"{lead} the next recording."

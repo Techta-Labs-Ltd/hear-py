@@ -69,8 +69,6 @@ class PlaybackControls:
         if not state:
             return Playback.open_queue_response(handler_input, PlaybackSpeech.NOTHING_TO_RESUME)
         if PlaybackState.is_finished(state) and offset_ms is None:
-            # Resuming a finished recording replays its last second and
-            # resurrects it as unfinished; move on through the queue instead.
             return await self.play_queue_delta(handler_input, 1, PlaybackSpeech.PLAYING_NEXT)
         resume_state = {
             **state,
@@ -79,15 +77,32 @@ class PlaybackControls:
         await self._playback.emit(handler_input, "resumed", resume_state)
         return await self._playback.resume(handler_input, resume_state, speech)
 
+    def _live_state(self, handler_input: HandlerInput) -> dict | None:
+        state = self._playback.state.current(handler_input)
+        if not state or PlaybackState.is_finished(state):
+            return None
+        status = state.get("status")
+        if status in {"starting", "playing"}:
+            return state
+        if status != "paused":
+            return None
+        audio = PlaybackContext.read_audio_player_context(handler_input) or {}
+        token = str(state.get("token") or state.get("contentId") or "")
+        held = audio.get("playerActivity") in {"PLAYING", "PAUSED", "STOPPED", "BUFFER_UNDERRUN"}
+        return state if token and held and str(audio.get("token") or "") == token else None
+
+    async def _keep_playing(self, handler_input: HandlerInput, speech: str):
+        return await self.restart_active(handler_input, speech=speech)
+
     async def apply_speed(self, handler_input: HandlerInput, speed: float):
         store = self._user.snapshot(handler_input)
-        state = self._playback.state.current(handler_input)
+        state = self._live_state(handler_input)
         decision = PlaybackControlPolicy.apply_speed(
             state, store, speed, default_speed=settings.default_speed
         )
         if decision.kind == "unavailable":
             available = ", ".join(f"{value}x" for value in decision.available_speeds)
-            return Playback.open_queue_response(
+            return await self._keep_playing(
                 handler_input, PlaybackSpeech.speed_unavailable(speed, available)
             )
         self._playback.state.set_speed(handler_input, speed)
@@ -102,30 +117,27 @@ class PlaybackControls:
         )
 
     async def invalid_speed(self, handler_input: HandlerInput):
-        state = self._playback.state.current(handler_input)
-        if state and state.get("status") in {"starting", "playing"}:
-            return await self.restart_active(
-                handler_input,
-                speech=PlaybackSpeech.SPEED_INVALID,
-            )
+        if self._live_state(handler_input):
+            return await self._keep_playing(handler_input, PlaybackSpeech.SPEED_NOT_CAUGHT)
         return Playback.open_queue_response(handler_input, PlaybackSpeech.SPEED_INVALID)
 
     async def step_speed(self, handler_input: HandlerInput, direction: str):
         store = self._user.snapshot(handler_input)
-        state = self._playback.state.current(handler_input)
+        state = self._live_state(handler_input)
         decision = PlaybackControlPolicy.step_speed(
             state, store, direction, default_speed=settings.default_speed
         )
-        if decision.kind == "unsupported":
-            return Playback.open_queue_response(handler_input, PlaybackSpeech.SPEED_NOT_SUPPORTED)
-        if decision.kind == "limit":
-            return Playback.open_queue_response(
-                handler_input,
-                PlaybackSpeech.SPEED_MAX if direction == "up" else PlaybackSpeech.SPEED_MIN,
-            )
-        if decision.speed is None:
-            return Playback.open_queue_response(handler_input, PlaybackSpeech.SPEED_NOT_SUPPORTED)
-        return await self.apply_speed(handler_input, decision.speed)
+        limit = PlaybackSpeech.SPEED_MAX if direction == "up" else PlaybackSpeech.SPEED_MIN
+        message = {
+            "unsupported": PlaybackSpeech.SPEED_NOT_SUPPORTED,
+            "limit": limit,
+        }.get(decision.kind)
+        if message is None and decision.speed is not None:
+            return await self.apply_speed(handler_input, decision.speed)
+        message = message or PlaybackSpeech.SPEED_NOT_SUPPORTED
+        if state:
+            return await self._keep_playing(handler_input, message)
+        return Playback.open_queue_response(handler_input, message)
 
     async def seek(self, handler_input: HandlerInput, direction: int):
         state = self._playback.state.current(handler_input)
