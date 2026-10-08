@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 
 from src.alexa.context import RequestContext
@@ -185,9 +186,14 @@ class ResolverWorkflowRunner:
         alexa_intent = AlexaRequest.read(intent, "name")
         if not alexa_intent:
             return None
-        if alexa_intent in ResolverWorkflowRunner.DIRECT_HANDLER_INTENTS:
-            return None
         slots = AlexaRequest.read(intent, "slots") or {}
+        if alexa_intent in ResolverWorkflowRunner.DIRECT_HANDLER_INTENTS and not (
+            alexa_intent == "PlayRecommendationIntent"
+            and ResolverWorkflowRunner._recommendation_topic(
+                AlexaRequest.get_spoken_slot_value(slots.get("recommendationQuery"))
+            )
+        ):
+            return None
         store = User.snapshot(handler_input)
         dialog = DialogStateManager.active_from_store(store)
         active_dialog: dict = dialog if isinstance(dialog, dict) else {}
@@ -339,6 +345,26 @@ class ResolverWorkflowRunner:
             },
         )
         return True
+
+    @staticmethod
+    def _recommendation_topic(value: str | None) -> str | None:
+        spoken = " ".join(str(value or "").split())
+        if spoken.casefold() in {
+            "",
+            "good",
+            "new",
+            "nice",
+            "interesting",
+            "for me",
+            "for us",
+            "something",
+            "something new",
+            "something good",
+            "anything",
+        }:
+            return None
+        topic = re.sub(r"^(?:on|about|for|in|around|regarding)\s+", "", spoken, flags=re.I)
+        return topic if topic.casefold() not in {"", "me", "us"} else None
 
     @staticmethod
     def _resolver_utterance(raw: str, alexa_intent: str | None = None) -> str:
@@ -721,6 +747,10 @@ class ResolverWorkflowRunner:
                 return
             result = {"intent": expected, "confidence": "high", "slots": {}}
         actual = str(result.get("semanticIntent") or result["intent"])
+        if actual == "tag":
+            # A topic tag is a search facet, exactly as the resolver payload's own
+            # intent says; "tag" has no handler and fell through to the fallback.
+            actual = "search"
         result = {**result, "intent": actual}
         if (
             alexa_intent in ResolverWorkflow.SEARCH_INTENTS
@@ -821,6 +851,21 @@ class ResolverWorkflowRunner:
         if creator_city:
             await self._resolve_creator_location_query(handler_input, creator_city, alexa_intent)
             return
+        if alexa_intent == "PlayRecommendationIntent" and not dialog_type:
+            topic = ResolverWorkflowRunner._recommendation_topic(
+                AlexaRequest.get_spoken_slot_value(context["slots"].get("recommendationQuery"))
+            )
+            if topic:
+                # "Find me something on cancer support" asks for that topic;
+                # generic recommendations would silently drop it.
+                await self._resolve_default(
+                    handler_input,
+                    "SearchContentIntent",
+                    topic,
+                    {"searchQuery": {"value": topic}},
+                    reported_alexa_intent=alexa_intent,
+                )
+                return
         carrierless_slot = ResolverWorkflow.CARRIERLESS_SELECTOR_SLOTS.get(alexa_intent)
         if carrierless_slot and not dialog_type:
             spoken = AlexaRequest.get_spoken_slot_value(context["slots"].get(carrierless_slot))

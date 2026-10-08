@@ -303,9 +303,9 @@ class SearchSpeech:
         )
 
     @staticmethod
-    def _filter_labels(filters: dict) -> list[str]:
+    def _filter_labels(filters: dict, keys: tuple[str, ...] = ("categorySlugs", "tags")) -> list[str]:
         values: list[str] = []
-        for key in ("categorySlugs", "tags"):
+        for key in keys:
             raw = filters.get(key) or []
             raw = raw if isinstance(raw, (list, tuple, set)) else [raw]
             values.extend(
@@ -361,7 +361,11 @@ class SearchSpeech:
         payload = search_payload if isinstance(search_payload, dict) else {}
         filters = SearchSpeech._search_filter(payload)
         relation, subject = SearchSpeech.clean_result_subject(request_label)
-        labels = SearchSpeech._filter_labels(filters)
+        # Tag filters hold ids, so they are only a last resort for naming the
+        # subject; a resolved label already says what they are.
+        labels = SearchSpeech._filter_labels(
+            filters, ("categorySlugs",) if subject else ("categorySlugs", "tags")
+        )
         query = str(payload.get("query") or payload.get("q") or "").strip()
         if query and query.casefold() not in {value.casefold() for value in labels}:
             labels.append(query)

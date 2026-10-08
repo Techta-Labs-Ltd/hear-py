@@ -67,9 +67,10 @@ class SearchPayload:
     @staticmethod
     def _request_facets(slots: dict) -> tuple[list[str], str, str]:
         category = str(slots.get("category") or "").strip()
+        # Speak the resolver's tag names; tag ids are only readable when slugs.
         tags = [
             str(tag).strip().replace("-", " ")
-            for tag in slots.get("tags") or []
+            for tag in slots.get("tagNames") or slots.get("tags") or []
             if str(tag or "").strip()
         ]
         facets = list(dict.fromkeys(([category.replace("-", " ")] if category else []) + tags))
@@ -289,7 +290,7 @@ class SearchPayload:
         category = str(slots.get("category") or "").strip().replace("-", " ")
         tags = [
             str(value).strip().replace("-", " ")
-            for value in slots.get("tags") or []
+            for value in slots.get("tagNames") or slots.get("tags") or []
             if str(value).strip()
         ]
         facet = category or " and ".join(tags)

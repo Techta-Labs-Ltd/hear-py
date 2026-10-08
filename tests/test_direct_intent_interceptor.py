@@ -120,8 +120,16 @@ async def test_global_interceptor_routes_every_declared_locked_phrase(
     await DirectIntentPhraseInterceptor().process(mock_intent_request)
 
     assert intent["name"] == target
-    if target in DirectIntentPolicy.BYPASS_RESOLVER_INTENTS:
+    recommendation_topic = target == "PlayRecommendationIntent" and (
+        ResolverWorkflowRunner._recommendation_topic(
+            (intent["slots"].get("recommendationQuery") or {}).get("value")
+        )
+    )
+    if target in DirectIntentPolicy.BYPASS_RESOLVER_INTENTS and not recommendation_topic:
         assert ResolverWorkflowRunner._request(mock_intent_request) is None
+    if recommendation_topic:
+        # A recommendation with a topic is resolved, so the topic is searched.
+        assert ResolverWorkflowRunner._request(mock_intent_request) is not None
 
 
 @pytest.mark.parametrize(
@@ -479,7 +487,7 @@ async def test_global_interceptor_preserves_a_specific_source_search(mock_intent
         ("top content", "WhatsTrendingIntent", {}, True),
         ("what is trending in sport", "WhatsTrendingIntent", {"topic": "sport"}, True),
         ("recommend something", "PlayRecommendationIntent", {}, True),
-        ("recommend sport", "PlayRecommendationIntent", {"recommendationQuery": "sport"}, True),
+        ("recommend sport", "PlayRecommendationIntent", {"recommendationQuery": "sport"}, False),
         ("surprise me", "PlayRecommendationIntent", {}, True),
         ("what should i listen to", "PlayRecommendationIntent", {}, True),
         ("change my location", "SetLocationIntent", {}, False),
