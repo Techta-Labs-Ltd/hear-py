@@ -476,6 +476,7 @@ class User:
             store["pendingFeedback"] = None
             store["reportContext"] = None
             store["pendingResolution"] = None
+            store["pendingPublicationTopic"] = None
             store["pendingAmbiguity"] = None
             store["pendingLatestSource"] = None
             store["pendingNotification"] = None
@@ -483,6 +484,8 @@ class User:
             return store
         dialog_type = active.get("type")
         context = deepcopy(active.get("context") or {})
+        if dialog_type != "search_confirmation" or not context.get("publicationChoice"):
+            store["pendingPublicationTopic"] = None
         for kind, flag in StateSchema.DIALOG_LEGACY_FLAGS.items():
             store[flag] = dialog_type == kind
         if dialog_type == "feedback":

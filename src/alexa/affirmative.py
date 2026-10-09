@@ -394,6 +394,7 @@ class Affirmative:
             {
                 "awaitingSearchConfirmation": False,
                 "pendingResolution": None,
+                "pendingPublicationTopic": None,
                 "awaitingLocationConfirm": False,
                 "pendingLocationConfirm": None,
                 "lastExecutedResolutionId": resolution.get("requestId"),

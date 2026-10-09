@@ -9,6 +9,7 @@ from src.alexa.feedback_response import FeedbackContinuation
 from src.alexa.feedback_service import FeedbackService
 from src.alexa.playback import AlexaPlayback
 from src.alexa.response import AlexaResponse
+from src.alexa.search_confirmation import SearchConfirmationPrompt
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 
@@ -200,6 +201,9 @@ class Decline:
 
     def _handle_search_no(self, handler_input, store, session_attrs):
         """Cycle through search suggestions or give up."""
+        topic = SearchConfirmationPrompt.declined_publication_topic(handler_input, self._user)
+        if topic:
+            return SearchConfirmationPrompt.present(handler_input, self._user, topic)
         if store.get("pendingResolution") or session_attrs.get("pendingResolution"):
             self._user.update(
                 handler_input,

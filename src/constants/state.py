@@ -115,6 +115,7 @@ class StateSchema:
         "locationSource": (None, CORE_SCOPE),
         "awaitingSearchConfirmation": (False, DIALOG_SCOPE),
         "pendingResolution": (None, DIALOG_SCOPE),
+        "pendingPublicationTopic": (None, DIALOG_SCOPE),
         "pendingAmbiguity": (None, DIALOG_SCOPE),
         "pendingSuggestions": ([], DIALOG_SCOPE),
         "suggestionIndex": (0, DIALOG_SCOPE),

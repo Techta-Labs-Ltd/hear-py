@@ -131,6 +131,20 @@ class Speech:
     )
 
     @staticmethod
+    def PUBLICATION_CHOICE(name: str) -> str:
+        return (
+            f"I've found a publication called {Speech.escape_ssml_lite(name)}. "
+            "Would you like to listen to it? Please say yes or no."
+        )
+
+    @staticmethod
+    def PUBLICATION_CHOICE_RETRY(name: str) -> str:
+        return (
+            f"Would you like to listen to the publication {Speech.escape_ssml_lite(name)}? "
+            "Please say yes or no."
+        )
+
+    @staticmethod
     def FEEDBACK_YES_NO_RETRY(title: str) -> str:
         return (
             f"Sorry, I didn't catch that. Did you enjoy {title}? "

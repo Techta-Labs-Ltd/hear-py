@@ -16,6 +16,7 @@ from src.alexa.entities import AlexaEntities
 from src.alexa.playback import AlexaPlayback
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
+from src.alexa.search_confirmation import SearchConfirmationPrompt
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
@@ -268,41 +269,8 @@ class IntentDispatcher:
     def _confirmation_response(
         self, handler_input: HandlerInput, nlp_data: dict, pending: dict
     ) -> Response:
-        confirm_text = pending.get("confirmText")
-        resolution = pending.get("resolution") or {}
-        self._user.update(
-            handler_input,
-            {
-                "awaitingSearchConfirmation": True,
-                "pendingResolution": resolution,
-                "awaitingCommunityPlayback": False,
-                "_requiresReliableSave": True,
-            },
-        )
-        DialogStateManager.activate(
-            handler_input,
-            "search_confirmation",
-            context={**resolution, "confirmationLabel": confirm_text},
-        )
-        ApplicationLog.info(
-            "Hear: search confirmation asked intent=%s",
-            pending.get("intent"),
-        )
-        escaped = Speech.escape_ssml_lite(
-            str(pending.get("ambiguityCandidateName") or confirm_text)
-        )
-        prompt = (
-            f"Did you mean {escaped}?"
-            if pending.get("ambiguityResolution")
-            else f"Did you want me to play {escaped}?"
-        )
-        prompt = f"{prompt} Please say yes or no."
-        return (
-            handler_input.response_builder.speak(Ssml.ssml(prompt))
-            .reprompt(Ssml.ssml(prompt))
-            .set_should_end_session(False)
-            .response
-        )
+        del nlp_data
+        return SearchConfirmationPrompt.present(handler_input, self._user, pending)
 
     def _unclear_response(self, handler_input: HandlerInput, nlp_data: dict) -> Response:
         suggestions = nlp_data.get("suggestions") or []

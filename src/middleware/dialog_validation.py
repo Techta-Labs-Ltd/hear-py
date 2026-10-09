@@ -11,15 +11,18 @@ from src.alexa.dialog import DialogSelection, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.feedback_service import FeedbackService
 from src.alexa.help import HelpSpeech
+from src.alexa.phrase_router import PhraseRoute
 from src.alexa.playback_state import PlaybackState
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
+from src.alexa.search_confirmation import SearchConfirmationPrompt
 from src.alexa.search_speech import SearchSpeech
 from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.constants.dialog import DialogConstants
 from src.constants.notifications import NotificationConstants
 from src.constants.playback import PlaybackConstants
+from src.middleware.direct_intent import DirectIntentPhraseInterceptor
 from src.models.user import User
 from src.services.logging_control import ApplicationLog
 
@@ -302,6 +305,10 @@ class DialogValidationInterceptor(AbstractRequestInterceptor):
         failure = DialogValidationPolicy.dialog_validation_failure(handler_input)
         if not failure:
             return
+        if failure["dialogType"] == "search_confirmation":
+            failure = DialogValidationInterceptor._publication_choice_retry(handler_input, failure)
+            if failure is None:
+                return
         attrs = RequestContext.request(handler_input)
         attrs[DialogConstants.VALIDATION_FAILURE] = failure
         RequestContext.replace_request(handler_input, attrs)
@@ -310,6 +317,29 @@ class DialogValidationInterceptor(AbstractRequestInterceptor):
             failure["dialogType"],
             AlexaRequest.get_intent_name(handler_input),
         )
+
+
+    @staticmethod
+    def _publication_choice_retry(handler_input, failure: dict) -> dict | None:
+        active = DialogStateManager.get_active(handler_input) or {}
+        context = dict(active.get("context") or {})
+        choice = SearchConfirmationPrompt.publication_choice(context)
+        if not choice:
+            return failure
+        if int(context.get("unrecognisedAnswers") or 0) >= 1:
+            intent = AlexaRequest.read(
+                AlexaRequest.read(handler_input.request_envelope, "request"), "intent"
+            )
+            DirectIntentPhraseInterceptor._set(intent, PhraseRoute("AMAZON.YesIntent"))
+            ApplicationLog.info("Hear: publication choice unclear twice; playing the publication")
+            return None
+        context["unrecognisedAnswers"] = 1
+        User.update(
+            handler_input,
+            {"activeDialog": {**active, "context": context}, "_requiresReliableSave": True},
+        )
+        retry = Speech.PUBLICATION_CHOICE_RETRY(choice["name"])
+        return {**failure, "speech": retry, "reprompt": retry}
 
 
 class DialogValidationGateHandler(AbstractRequestHandler):

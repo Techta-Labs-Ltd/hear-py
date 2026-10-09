@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from src.constants.resolver import ResolverConstants
@@ -422,6 +422,8 @@ class ResolverResult:
     ) -> dict[str, Any]:
         slots = dict(self.slots)
         ranking = self.entity_ranking()
+        if ranking.publication_choice:
+            slots["isPublication"] = False
         ambiguities = self._ambiguity_payload(original_utterance)
         ambiguities.extend(self._ranking_ambiguity_payload())
         resolution: dict[str, Any]
@@ -439,7 +441,8 @@ class ResolverResult:
             if raw_residual:
                 slots["rawResidualQuery"] = raw_residual
             slots["residualQuery"] = ""
-        search_plan = self._search_plan(slots, filters, original_utterance)
+        planner = replace(self, intent="search") if ranking.publication_choice else self
+        search_plan = planner._search_plan(slots, filters, original_utterance)
         if self.resolution_id:
             search_plan["resolutionId"] = self.resolution_id
         slots["searchPlan"] = search_plan
@@ -447,6 +450,13 @@ class ResolverResult:
         entities = [entity.to_payload() for entity in accepted]
         semantic_intent = ranking.primary.entity_type if ranking.primary else self.intent
         intent = "search" if self.intent in {"tag", "location"} else self.intent
+        if (
+            intent in {"creator", "organization", "publication"}
+            and ranking.primary
+            and not any(entity.entity_type == intent for entity in accepted)
+        ):
+            primary_type = ranking.primary.entity_type
+            intent = "search" if primary_type in {"tag", "location"} else primary_type
         primary = ranking.primary.to_payload() if ranking.primary and not ambiguities else None
         secondary = [
             entity.to_payload()
@@ -469,7 +479,26 @@ class ResolverResult:
             "confidence": "high",
             "searchPayload": search_plan,
         }
+        if ranking.publication_choice and not ambiguities:
+            payload["publicationChoice"] = self._publication_choice_payload(
+                ranking.publication_choice, prefer_location, original_utterance
+            )
         return TemporalFilterGuard.apply(payload, original_utterance)
+
+    def _publication_choice_payload(
+        self, publication: ResolvedEntity, prefer_location: bool, original_utterance: str
+    ) -> dict[str, Any]:
+        alternative = replace(
+            self,
+            intent="publication",
+            entities=(publication,),
+            slots={**self.slots, "isPublication": True},
+        ).to_alexa_payload(prefer_location=prefer_location, original_utterance=original_utterance)
+        return {
+            "id": publication.entity_id,
+            "name": publication.canonical_value,
+            "nlp": {**alternative, "intent": "publication"},
+        }
     @staticmethod
     def _fallback_query(original_utterance: str) -> str:
         query = str(original_utterance or "").strip()

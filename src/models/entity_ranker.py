@@ -14,6 +14,7 @@ class EntityRanking:
     primary: ResolvedEntity | None
     accepted: tuple[ResolvedEntity, ...]
     ambiguous: tuple[ResolvedEntity, ...]
+    publication_choice: ResolvedEntity | None = None
 
 
 class EntityRanker:
@@ -109,6 +110,30 @@ class EntityRanker:
         return cls._evidence_key(left) > cls._evidence_key(right)
 
     @classmethod
+    def _publication_choice(
+        cls, candidates: list[ResolvedEntity], accepted: list[ResolvedEntity]
+    ) -> ResolvedEntity | None:
+        if any(entity.entity_type in {"organization", "location", "publication"} for entity in accepted):
+            return None
+        topics = [entity for entity in accepted if entity.entity_type in {"category", "tag"}]
+        publications = [
+            entity
+            for entity in candidates
+            if entity.entity_type == "publication"
+            and any(cls._overlaps(entity, topic) for topic in topics)
+        ]
+        if not publications:
+            return None
+        best = max(publications, key=cls._evidence_key)
+        if any(
+            entity.entity_id != best.entity_id
+            and cls._evidence_key(entity) == cls._evidence_key(best)
+            for entity in publications
+        ):
+            return None
+        return best
+
+    @classmethod
     def _accepts_phonetic_bare_location(
         cls, entity: ResolvedEntity, candidates: list[ResolvedEntity]
     ) -> bool:
@@ -184,4 +209,6 @@ class EntityRanker:
                 if entity.entity_type != "location" or entity == best
             ]
         primary = max(accepted, key=cls._entity_key, default=None)
-        return EntityRanking(primary, tuple(accepted), ())
+        return EntityRanking(
+            primary, tuple(accepted), (), cls._publication_choice(candidates, accepted)
+        )

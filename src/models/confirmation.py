@@ -437,4 +437,35 @@ class ConfirmationPolicy:
                 ),
                 confirm_text,
             )
+        publication_choice = ConfirmationPolicy._publication_choice(
+            resolved_nlp,
+            request_type=request_type,
+            alexa_intent=alexa_intent,
+            raw_utterance=raw_utterance,
+        )
+        if publication_choice:
+            search_params["publicationChoice"] = publication_choice
         return ConfirmationDecision(kind="confirm", pending=search_params)
+
+    @staticmethod
+    def _publication_choice(
+        nlp: dict,
+        *,
+        request_type: str | None,
+        alexa_intent: str | None,
+        raw_utterance: str | None,
+    ) -> dict | None:
+        choice = nlp.get("publicationChoice")
+        if not isinstance(choice, dict) or not isinstance(choice.get("nlp"), dict):
+            return None
+        decision = ConfirmationPolicy.decide(
+            choice["nlp"],
+            request_type=request_type,
+            alexa_intent=alexa_intent,
+            raw_utterance=raw_utterance,
+            validation_failed=False,
+        )
+        name = str(choice.get("name") or "").strip()
+        if decision.kind != "confirm" or not decision.pending or not name:
+            return None
+        return {"name": name, "pending": decision.pending}
