@@ -275,7 +275,7 @@ class DialogValidationPolicy:
             dialog_type == "feedback"
             and intent_name not in DialogValidationPolicy._FEEDBACK_INTENTS
         ):
-            title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(context))
+            title = Speech.escape_ssml_lite(AlexaFeedback.feedback_subject(context, store))
             if int(context.get("unrecognisedAnswers") or 0) >= 1:
                 return {
                     "dialogType": dialog_type,

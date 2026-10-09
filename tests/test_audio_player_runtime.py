@@ -732,7 +732,7 @@ async def test_publication_rating_names_publication_when_prompting_and_resuming(
         None,
     )
 
-    assert "Did you enjoy The Weekly Edition?" in prompted["response"]["outputSpeech"]["ssml"]
+    assert "Did you enjoy The Weekly Edition from Sheffield Talking Newspaper?" in prompted["response"]["outputSpeech"]["ssml"]
     assert "Track seven" not in prompted["response"]["outputSpeech"]["ssml"]
     assert persistence._store[USER_ID]["pendingFeedback"]["subjectType"] == "publication"
     assert (

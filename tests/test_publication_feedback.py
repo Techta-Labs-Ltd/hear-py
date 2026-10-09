@@ -390,7 +390,7 @@ def test_selected_publication_label_survives_queue_and_relaunch_feedback(
         mock_handler_input, User.snapshot(mock_handler_input)
     )
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "Did you enjoy Test Pub for the seventh of September?" in spoken
+    assert "Did you enjoy Test Pub for the seventh of September from Talking News Federation?" in spoken
     assert "that publication" not in spoken
 
 
@@ -480,3 +480,34 @@ async def test_feedback_value_and_publication_subject_are_not_duplicated_locally
     store = mock_handler_input.attributes_manager.request_attributes["_store"]
     assert "feedbackHistory" not in store
     assert "publication:publication-1" in store["answeredFeedbackKeys"]
+
+
+@pytest.mark.parametrize(
+    ("subject", "store", "expected"),
+    [
+        (
+            {"subjectType": "publication", "publicationId": "p", "publicationTitle": "Tree Planting", "organizationName": "Green Voices"},
+            {},
+            "Tree Planting from Green Voices",
+        ),
+        (
+            {"subjectType": "publication", "publicationId": "p", "publicationTitle": "Tree Planting"},
+            {"playbackQueue": {"organizationName": "Kings Lynn Talking Newspaper"}},
+            "Tree Planting from Kings Lynn Talking Newspaper",
+        ),
+        (
+            {"subjectType": "publication", "publicationId": "p", "publicationTitle": "York Talking News Weekly", "organizationName": "York Talking News"},
+            {},
+            "York Talking News Weekly",
+        ),
+        (
+            {"subjectType": "content", "contentId": "c", "organizationName": "Sheffield Talking Newspaper"},
+            {},
+            "Sheffield Talking Newspaper",
+        ),
+    ],
+)
+def test_publication_feedback_names_the_organisation(subject, store, expected):
+    from src.alexa.feedback import AlexaFeedback
+
+    assert AlexaFeedback.feedback_subject(subject, store) == expected

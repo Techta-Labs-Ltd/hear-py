@@ -115,7 +115,9 @@ class FeedbackResponseHandler(AbstractRequestHandler):
             return AlexaResponse.present_idle_next(
                 handler_input, Speech.FEEDBACK_GIVEN_UP, Speech.WELCOME_REPROMPT
             )
-        title = Speech.escape_ssml_lite(AlexaFeedback.subject_title(store.get("pendingFeedback") or {}, store))
+        title = Speech.escape_ssml_lite(
+            AlexaFeedback.feedback_subject(store.get("pendingFeedback") or {}, store)
+        )
         retry = Speech.FEEDBACK_YES_NO_RETRY(title)
         return (
             handler_input.response_builder.speak(Ssml.ssml(retry))

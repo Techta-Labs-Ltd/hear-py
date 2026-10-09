@@ -128,7 +128,7 @@ class PlaybackDetails:
         dialog_type = dialog.get("type")
         if dialog_type == "feedback":
             prompt = AlexaFeedback.feedback_question(
-                AlexaFeedback.subject_title(context, store)
+                AlexaFeedback.feedback_subject(context, store)
             )
             return prompt, prompt
         if dialog_type == "feedback_continuation":

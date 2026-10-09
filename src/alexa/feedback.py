@@ -249,6 +249,35 @@ class AlexaFeedback:
                 return "your recommendations"
         return "this recording"
 
+    @classmethod
+    def feedback_subject(cls, subject: dict | None, store: dict | None = None) -> str:
+        title = cls.subject_title(subject, store)
+        current = subject if isinstance(subject, dict) else {}
+        saved = store if isinstance(store, dict) else {}
+        active = saved.get("activePlayback") or {}
+        queue = saved.get("playbackQueue") or {}
+        _, is_publication = cls._publication_identity(current, active)
+        if not is_publication:
+            return title
+        publisher = next(
+            (
+                str(value).strip()
+                for value in (
+                    current.get("organizationName"),
+                    active.get("organizationName"),
+                    queue.get("organizationName"),
+                    current.get("creatorName"),
+                    active.get("creatorName"),
+                    queue.get("creatorName"),
+                )
+                if value and str(value).strip() and not Speech.is_bad_credit(value)
+            ),
+            None,
+        )
+        if publisher and publisher.casefold() not in title.casefold():
+            return f"{title} from {publisher}"
+        return title
+
     @staticmethod
     def feedback_question(title: str) -> str:
         return f"Did you enjoy {Speech.escape_ssml_lite(title)}? {Speech.FEEDBACK_OPTIONS}"
@@ -298,7 +327,7 @@ class AlexaFeedback:
         store: dict,
     ):
         prompt = AlexaFeedback.feedback_question(
-            AlexaFeedback.subject_title(pending, store)
+            AlexaFeedback.feedback_subject(pending, store)
         )
         return (
             handler_input.response_builder.speak(Ssml.ssml(prompt))
@@ -312,7 +341,7 @@ class AlexaFeedback:
     @staticmethod
     def present_pending_feedback(handler_input, store: dict):
         pending = store.get("pendingFeedback") or {}
-        title = AlexaFeedback.subject_title(pending, store)
+        title = AlexaFeedback.feedback_subject(pending, store)
         creator_name = (
             pending.get("organizationName")
             or pending.get("creatorName")

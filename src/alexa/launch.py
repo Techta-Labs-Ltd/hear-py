@@ -175,7 +175,7 @@ class LaunchWorkflow:
         self, handler_input: HandlerInput, store: dict, user_name: str | None
     ):
         pending = dict(store.get("pendingFeedback") or {})
-        subject = AlexaFeedback.subject_title(pending, store)
+        subject = AlexaFeedback.feedback_subject(pending, store)
         greeting = (
             f"Welcome back, {Speech.escape_ssml_lite(user_name)}. Before we continue. "
             if user_name
