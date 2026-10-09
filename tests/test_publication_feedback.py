@@ -511,3 +511,29 @@ def test_publication_feedback_names_the_organisation(subject, store, expected):
     from src.alexa.feedback import AlexaFeedback
 
     assert AlexaFeedback.feedback_subject(subject, store) == expected
+
+
+@pytest.mark.parametrize(
+    ("subject", "store", "expected"),
+    [
+        (
+            {"subjectType": "publication", "publicationId": "p", "publicationTitle": "Tree Planting", "organizationName": "Green Voices", "creatorName": "Jane Smith"},
+            {},
+            "Tree Planting from Green Voices",
+        ),
+        (
+            {"subjectType": "publication", "publicationId": "p", "publicationTitle": "Tree Planting", "organizationName": "Independent", "creatorName": "Adeshina Ayomide"},
+            {},
+            "Tree Planting from Adeshina Ayomide",
+        ),
+        (
+            {"subjectType": "publication", "publicationId": "p", "publicationTitle": "Tree Planting", "creatorName": "Adeshina Ayomide"},
+            {"playbackQueue": {"organizationName": "Kings Lynn Talking Newspaper"}},
+            "Tree Planting from Adeshina Ayomide",
+        ),
+    ],
+)
+def test_publication_feedback_names_whoever_published_it(subject, store, expected):
+    from src.alexa.feedback import AlexaFeedback
+
+    assert AlexaFeedback.feedback_subject(subject, store) == expected

@@ -260,23 +260,23 @@ class AlexaFeedback:
         if not is_publication:
             return title
         publisher = next(
-            (
-                str(value).strip()
-                for value in (
-                    current.get("organizationName"),
-                    active.get("organizationName"),
-                    queue.get("organizationName"),
-                    current.get("creatorName"),
-                    active.get("creatorName"),
-                    queue.get("creatorName"),
-                )
-                if value and str(value).strip() and not Speech.is_bad_credit(value)
-            ),
+            (owner for record in (current, active, queue) if (owner := cls._publication_owner(record))),
             None,
         )
         if publisher and publisher.casefold() not in title.casefold():
             return f"{title} from {publisher}"
         return title
+
+    @staticmethod
+    def _publication_owner(record: dict) -> str | None:
+        if not isinstance(record, dict) or not record:
+            return None
+        if ContentUtils._is_organization_publisher(record):
+            name = ContentUtils._pick_organization_name(record)
+        else:
+            name = ContentUtils._extract_creator_name(record)
+        name = str(name or "").strip()
+        return name if name and not Speech.is_bad_credit(name) else None
 
     @staticmethod
     def feedback_question(title: str) -> str:
