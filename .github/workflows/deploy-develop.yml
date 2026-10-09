@@ -51,9 +51,6 @@ jobs:
       ECR_REPO: ${{ vars.ECR_REPO_DEV || 'hear-python' }}
       STACK_NAME: ${{ vars.STACK_NAME_DEV }}
       STAGE: development
-      NOTIFICATION_SOURCE_PROVISIONED: ${{ vars.ALEXA_SOURCE_INFRASTRUCTURE_ENABLED_DEV || 'false' }}
-      NOTIFICATION_SOURCE_ENABLED: ${{ vars.ALEXA_SOURCE_PIPELINE_ENABLED_DEV || 'false' }}
-      NOTIFICATION_EVENT_BUS_NAME: ${{ vars.ALEXA_EVENT_BUS_NAME_DEV || '' }}
       SHORT_STAGE: ${{ vars.SHORT_STAGE_DEV }}
       ALEXA_SKILL_ID: ${{ vars.ALEXA_SKILL_ID_DEV }}
       HEAR_API_URL: ${{ vars.HEAR_API_URL_DEV || 'https://alexa.hear.media/api/v1' }}
@@ -63,7 +60,6 @@ jobs:
       CANONICAL_IDENTITY_ENABLED: ${{ vars.CANONICAL_IDENTITY_ENABLED_DEV || '1' }}
       RESERVED_CONCURRENCY: '0'
       PROVISIONED_CONCURRENCY: ${{ vars.PROVISIONED_CONCURRENCY_DEV || '0' }}
-      PROACTIVE_RESERVED_CONCURRENCY: '0'
       SSM_PARAMETER_PREFIX: ${{ vars.SSM_PARAMETER_PREFIX_DEV || '/hear/development' }}
     steps:
       - uses: actions/checkout@v4
@@ -84,8 +80,6 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Validate optional source infrastructure
-        run: python scripts/check_source_infrastructure.py
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -113,13 +107,9 @@ jobs:
               --query 'Parameter.Value' --output text --region "$AWS_REGION" 2>/dev/null || true
           }
           HEAR_API_KEY=$(get_required HEAR_API_KEY)
-          ALEXA_PROACTIVE_CLIENT_ID=$(get_required ALEXA_PROACTIVE_CLIENT_ID)
-          ALEXA_PROACTIVE_CLIENT_SECRET=$(get_required ALEXA_PROACTIVE_CLIENT_SECRET)
           WEBHOOK_OUTBOUND_SECRET=$(get_optional WEBHOOK_OUTBOUND_SECRET)
           SENTRY_DSN=$(get_optional SENTRY_DSN)
           echo "::add-mask::$HEAR_API_KEY"
-          echo "::add-mask::$ALEXA_PROACTIVE_CLIENT_ID"
-          echo "::add-mask::$ALEXA_PROACTIVE_CLIENT_SECRET"
           [[ -z "$WEBHOOK_OUTBOUND_SECRET" ]] || echo "::add-mask::$WEBHOOK_OUTBOUND_SECRET"
           [[ -z "$SENTRY_DSN" ]] || echo "::add-mask::$SENTRY_DSN"
           aws cloudformation deploy \
@@ -129,16 +119,13 @@ jobs:
             --region "$AWS_REGION" \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              NotificationSourceProvisioned="$NOTIFICATION_SOURCE_PROVISIONED" NotificationSourceEnabled="$NOTIFICATION_SOURCE_ENABLED" NotificationEventBusName="$NOTIFICATION_EVENT_BUS_NAME" \
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
               AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
-              AlexaProactiveClientId="$ALEXA_PROACTIVE_CLIENT_ID" AlexaProactiveClientSecret="$ALEXA_PROACTIVE_CLIENT_SECRET" \
               WebhookOutboundUrl="$WEBHOOK_OUTBOUND_URL" WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
               SentryDsn="$SENTRY_DSN" HearLoggingEnabled="$HEAR_LOGGING_ENABLED" \
               CanonicalIdentityEnabled="$CANONICAL_IDENTITY_ENABLED" \
-              ReservedConcurrency="$RESERVED_CONCURRENCY" ProvisionedConcurrency="$PROVISIONED_CONCURRENCY" \
-              ProactiveReservedConcurrency="$PROACTIVE_RESERVED_CONCURRENCY"
+              ReservedConcurrency="$RESERVED_CONCURRENCY" ProvisionedConcurrency="$PROVISIONED_CONCURRENCY"
       - name: Show development stack outputs
         if: steps.cloudformation.outcome == 'success'
         run: |

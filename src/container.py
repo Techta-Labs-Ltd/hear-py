@@ -33,7 +33,6 @@ from src.clients.alexa_settings import AlexaSettingsClient
 from src.clients.events import SqsEventClient, WebhookEventClient
 from src.clients.hear import HearApiClient, HearRequestIdentity, ListenerBoundHearClient
 from src.clients.notifications import NotificationApiClient
-from src.clients.proactive import ProactiveEventsClient
 from src.clients.progressive import ProgressiveResponseClient
 from src.clients.resolver import ResolverClient, ResolverOptions
 from src.middleware.onboarding_gate import OnboardingGateHandler
@@ -47,8 +46,6 @@ from src.services.events import OutboundEventService
 from src.services.listener_identity import ListenerIdentityService
 from src.services.listener_repository import Listener
 from src.services.listener_sync import ListenerSyncService
-from src.services.notification_delivery import NotificationDeliveryService
-from src.services.notification_recipient import AlexaNotificationRecipientDirectory
 from src.services.observability import ErrorReporter
 
 
@@ -82,8 +79,6 @@ class ApplicationContainer:
         "error_reporter",
         "permission",
         "notification_api",
-        "proactive_events",
-        "notification_delivery",
         "notification_workflow",
         "notifications",
         "request_availability",
@@ -117,8 +112,6 @@ class ApplicationContainer:
         progressive: ProgressiveResponseClient | None = None,
         permission: Permission | None = None,
         notification_api: NotificationApiClient | None = None,
-        proactive_events: ProactiveEventsClient | None = None,
-        notification_delivery: NotificationDeliveryService | None = None,
         notifications: AlexaNotificationAdapter | None = None,
         error_reporter: ErrorReporter | None = None,
     ) -> None:
@@ -160,16 +153,6 @@ class ApplicationContainer:
             settings_client,
             enabled=settings.HEAR_CANONICAL_IDENTITY_ENABLED,
             timeout_ms=settings.identity_timeout_ms,
-        )
-        self.proactive_events = proactive_events or ProactiveEventsClient(
-            client_id=settings.ALEXA_PROACTIVE_CLIENT_ID,
-            client_secret=settings.ALEXA_PROACTIVE_CLIENT_SECRET,
-            stage=settings.STAGE,
-        )
-        self.notification_delivery = notification_delivery or NotificationDeliveryService(
-            self.notification_api,
-            self.proactive_events,
-            AlexaNotificationRecipientDirectory(),
         )
         self.listener_sync = listener_sync or ListenerSyncService(
             self.heara,
@@ -460,6 +443,7 @@ class ApplicationContainer:
             self.events,
             play_followed_creators,
             self.notifications,
+            heara=heara,
         )
 
     def build_request_enjoyed_feedback(self, handler_input):
@@ -468,6 +452,7 @@ class ApplicationContainer:
             self.build_playback_controls(handler_input),
             self.user,
             self.notifications,
+            heara=self.bind_hear_client(handler_input),
         )
 
     def build_request_somewhat_feedback(self, handler_input):

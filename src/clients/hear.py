@@ -98,6 +98,23 @@ class ListenerBoundHearClient:
     ) -> dict:
         return await self._client.availability(self._with_identity(payload), timeout_ms=timeout_ms)
 
+    async def check_follow(
+        self,
+        *,
+        listener_id: str | None,
+        alexa_user_id: str | None,
+        source_id: str,
+        source_type: str,
+        timeout_ms: int | None = None,
+    ) -> bool | None:
+        return await self._client.check_follow(
+            listener_id=listener_id or self._identity.listener_id,
+            alexa_user_id=alexa_user_id or self._identity.alexa_user_id,
+            source_id=source_id,
+            source_type=source_type,
+            timeout_ms=timeout_ms,
+        )
+
 
 class HearApiClient:
     __slots__ = (
@@ -441,6 +458,31 @@ class HearApiClient:
         )
         return data if status == 200 and isinstance(data, dict) else None
 
+    async def check_follow(
+        self,
+        *,
+        listener_id: str | None,
+        alexa_user_id: str | None,
+        source_id: str,
+        source_type: str,
+        timeout_ms: int | None = None,
+    ) -> bool | None:
+        target = "organizationId" if source_type == "organization" else "creatorId"
+        body: dict[str, str] = {target: source_id}
+        if listener_id:
+            body["listenerId"] = listener_id
+        elif alexa_user_id:
+            body["alexaUserId"] = alexa_user_id
+        else:
+            return None
+        status, data = await self._raw_request(
+            "POST",
+            self._build_alexa_relative_path("listeners/follows/check"),
+            body,
+            timeout_ms,
+        )
+        return data if status == 200 and isinstance(data, bool) else None
+
     async def register_listener(
         self, profile: dict, *, timeout_ms: int | None = None
     ) -> dict | None:
@@ -454,11 +496,3 @@ class HearApiClient:
             timeout_ms,
         )
         return data if status == 200 and isinstance(data, dict) else None
-
-    async def notification_source_candidates(self, payload: dict, *, timeout_ms: int = 6000) -> dict:
-        status, data = await self._raw_request(
-            "POST", self._build_alexa_relative_path("notification-source/candidates"), payload, timeout_ms
-        )
-        if status != 200 or not isinstance(data, dict):
-            raise RuntimeError("source_planner_unavailable")
-        return data

@@ -116,6 +116,7 @@ class StateSchema:
         "awaitingSearchConfirmation": (False, DIALOG_SCOPE),
         "pendingResolution": (None, DIALOG_SCOPE),
         "pendingPublicationTopic": (None, DIALOG_SCOPE),
+        "notificationPermissionPromptedAt": (0, CORE_SCOPE),
         "pendingAmbiguity": (None, DIALOG_SCOPE),
         "pendingSuggestions": ([], DIALOG_SCOPE),
         "suggestionIndex": (0, DIALOG_SCOPE),

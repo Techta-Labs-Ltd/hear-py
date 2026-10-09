@@ -104,13 +104,17 @@ async def test_yes_without_address_permission_sends_consent_card_and_asks_for_to
     deps.onboarding.complete_without_location.assert_not_called()
 
 
-def test_notification_permission_gives_app_guidance_without_a_connection():
+def test_notification_permission_sends_the_consent_card_without_a_connection():
     handler_input = _handler_input()
     deps = _deps()
 
     response = _permission(deps).start_notifications(handler_input)
 
-    assert "Manage Permissions" in response["outputSpeech"]["ssml"]
+    assert "sent a card to your Alexa app" in response["outputSpeech"]["ssml"]
+    assert response["card"] == {
+        "type": "AskForPermissionsConsent",
+        "permissions": ["alexa::devices:all:notifications:write"],
+    }
     assert not any(
         directive.get("type") == "Connections.StartConnection"
         for directive in response.get("directives", [])

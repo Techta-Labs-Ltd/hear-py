@@ -90,7 +90,6 @@ from src.middleware.persistence import (
     SavePersistenceInterceptor,
 )
 from src.middleware.resolver import ResolverInterceptor
-from src.services.notification_recipient import AlexaNotificationRecipientDirectory
 
 
 class RouteRegistry:
@@ -197,11 +196,7 @@ class RouteRegistry:
         builder.add_exception_handler(ErrorHandler(container.error_reporter))
         for interceptor in (
             LambdaDeadlineInterceptor(),
-            IdentityInterceptor(
-                container.listener_identity,
-                container.user,
-                AlexaNotificationRecipientDirectory(),
-            ),
+            IdentityInterceptor(container.listener_identity, container.user),
             LoadPersistenceInterceptor(),
             DirectIntentPhraseInterceptor(),
             DialogValidationInterceptor(),

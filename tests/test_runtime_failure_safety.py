@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from main import LambdaApplication, NotificationLambdaApplication, OutboundLambdaApplication
+from main import LambdaApplication, OutboundLambdaApplication
 from src.alexa.response import AlexaResponse
 from src.alexa.runtime import AsyncSkill, AttrDict, AttributesManager, HandlerInput, ResponseBuilder
 from src.database.persistence import MemoryPersistenceAdapter
@@ -155,19 +155,11 @@ def test_outer_fallback_never_speaks_for_callbacks(monkeypatch, request_type):
     assert response == {"version": "1.0", "response": {}}
 
 
-@pytest.mark.parametrize(
-    "application_type", [OutboundLambdaApplication, NotificationLambdaApplication]
-)
-def test_worker_boundary_never_acknowledges_records_without_identifiers(application_type):
-    application = application_type()
-    if isinstance(application, OutboundLambdaApplication):
-        application._events = SimpleNamespace(
-            consume=AsyncMock(side_effect=ValueError("missing messageId"))
-        )
-    else:
-        application._delivery = SimpleNamespace(
-            consume=AsyncMock(side_effect=ValueError("missing messageId"))
-        )
+def test_worker_boundary_never_acknowledges_records_without_identifiers():
+    application = OutboundLambdaApplication()
+    application._events = SimpleNamespace(
+        consume=AsyncMock(side_effect=ValueError("missing messageId"))
+    )
     with pytest.raises(ValueError, match="messageId"):
         application.handle({"Records": [{"body": "{}"}]}, None)
 

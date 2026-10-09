@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from src.alexa.context import RequestContext
+from src.alexa.request import AlexaRequest
+from src.services.logging_control import ApplicationLog
 
 
 class FollowingSessionState:
@@ -143,3 +145,39 @@ class FollowingSessionState:
             session[cls.SNAPSHOT_KEY] = cls._apply_overrides(snapshot, overrides)
 
         RequestContext.replace_session(handler_input, session)
+
+
+class FollowCheck:
+    TIMEOUT_MS = 1500
+
+    @staticmethod
+    async def already_following(
+        handler_input, heara, store: dict, source_id: str, source_type: str
+    ) -> bool:
+        if FollowingSessionState.status(handler_input, source_id, source_type) is True:
+            return True
+        if any(
+            source.get("id") == source_id and source.get("type", "creator") == source_type
+            for source in store.get("followedCreators") or []
+            if isinstance(source, dict)
+        ):
+            return True
+        check = getattr(heara, "check_follow", None)
+        if check is None:
+            return False
+        try:
+            following = await check(
+                listener_id=store.get("listenerId"),
+                alexa_user_id=AlexaRequest.get_user_id(handler_input),
+                source_id=source_id,
+                source_type=source_type,
+                timeout_ms=FollowCheck.TIMEOUT_MS,
+            )
+        except Exception as exc:
+            ApplicationLog.warning("Hear: follow check failed error=%s", type(exc).__name__)
+            return False
+        if following is True:
+            FollowingSessionState.record(
+                handler_input, source_id=source_id, source_type=source_type, followed=True
+            )
+        return following is True

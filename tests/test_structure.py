@@ -592,33 +592,12 @@ def test_backend_contract_schemas_match_v3_ownership():
     assert {"eventId", "schemaVersion", "data"}.issubset(backend_event["required"])
 
 
-def test_template_has_scaling_guards_and_operational_alarms():
-    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
-    assert "HasReservedConcurrency: !Not" in template
-    assert "ReservedConcurrentExecutions: !If" in template
-    assert "ProvisionedConcurrencyConfig: !If" in template
-    assert "HasProactiveReservedConcurrency: !Not" in template
-    assert "ProactiveReservedConcurrency:" in template
-    assert "ReservedConcurrentExecutions: 5" not in template
-    assert "HearSkillErrorAlarm:" in template
-    assert "HearSkillThrottleAlarm:" in template
-    assert "HearSkillDurationAlarm:" in template
-    assert "HearPersistenceLoadFailureAlarm:" in template
-    assert "HearPersistenceSaveFailureAlarm:" in template
-    assert "OutboundQueueAgeAlarm:" in template
-    assert "OutboundDeadLetterAlarm:" in template
-    assert "OutboxRelayErrorAlarm:" in template
-    assert "OutboxRelayIteratorAgeAlarm:" in template
-    assert "OutboxRelayDeadLetterAlarm:" in template
-
-
-def test_deployments_disable_proactive_reservations_and_report_early_validation():
+def test_deployments_report_early_validation():
     root = Path(__file__).resolve().parents[1]
     for workflow_name in ("deploy-develop.yml", "deploy-main.yml"):
         workflow = (root / ".github" / "workflows" / workflow_name).read_text(
             encoding="utf-8"
         )
-        assert "PROACTIVE_RESERVED_CONCURRENCY: '0'" in workflow
         assert "aws cloudformation describe-events" in workflow
         assert "EventType=='VALIDATION_ERROR'" in workflow
 
@@ -643,43 +622,6 @@ def test_template_bounds_and_dead_letters_outbox_stream_relay():
     assert "MaximumRecordAgeInSeconds: 3600" in template
     assert "DestinationConfig:" in template
     assert "Destination: !GetAtt OutboxRelayDeadLetterQueue.Arn" in template
-
-
-def test_template_owns_sqs_notification_delivery_worker_without_notification_dynamodb():
-    root = Path(__file__).resolve().parents[1]
-    template = (root / "template.yaml").read_text(encoding="utf-8")
-    schema = json.loads(
-        (root / "schemas" / "notification-item.schema.json").read_text()
-    )
-    message_schema = json.loads(
-        (root / "schemas" / "notification-delivery-message.schema.json").read_text()
-    )
-    assert "HearNotificationInboxTable:" not in template
-    assert "ActiveByListener" not in template
-    assert "DynamoDBStreamReadPolicy" not in template
-    assert "ProactiveNotificationQueue:" in template
-    assert "ProactiveNotificationDeadLetterQueue:" in template
-    assert "ProactiveNotificationFunction:" in template
-    assert 'Command: ["main.notification_handler"]' in template
-    assert "SQSPollerPolicy: { QueueName: !GetAtt ProactiveNotificationQueue.QueueName }" in template
-    assert "Queue: !GetAtt ProactiveNotificationQueue.Arn" in template
-    assert "FunctionResponseTypes: [ReportBatchItemFailures]" in template
-    assert "ALEXA_PROACTIVE_CLIENT_ID" in template
-    assert "ALEXA_PROACTIVE_CLIENT_SECRET" in template
-    assert "AMAZON.MediaContent.Available" not in template
-    assert schema["properties"]["schemaVersion"]["const"] == 1
-    assert {"creator_update", "organization_update"} == set(
-        schema["properties"]["notificationType"]["enum"]
-    )
-    assert "contentId" not in schema["properties"]
-    assert "publicationId" not in schema["properties"]
-    assert schema["properties"]["publication"]["required"] == ["id"]
-    assert set(message_schema["required"]) == {
-        "schemaVersion",
-        "notificationId",
-        "listenerId",
-    }
-    assert set(message_schema["properties"]) == set(message_schema["required"])
 
 
 def test_deployment_role_can_manage_table_recovery_configuration():
@@ -812,37 +754,6 @@ def test_feedback_service_owns_pending_feedback_policy():
     assert response["shouldEndSession"] is False
 
 
-def test_development_issue_verifier_role_is_least_privilege():
-    root = Path(__file__).resolve().parents[1]
-    template = (root / "template.yaml").read_text(encoding="utf-8")
-    workflow = (root / ".github" / "workflows" / "deploy-develop.yml").read_text(
-        encoding="utf-8"
-    )
-
-    assert "IssueReportVerifierRole:" in template
-    assert "Condition: IsDevelopment" in template
-    assert "repo:Techta-Labs-Ltd/hear-py:environment:development" in template
-    assert "dynamodb:Query" in template
-    assert "dynamodb:GetItem" in template
-    assert "dynamodb:PutItem" in template
-    assert "dynamodb:DeleteItem" in template
-    assert "dynamodb:BatchWriteItem" in template
-    assert "lambda:InvokeFunction" in template
-    assert "IssueReportVerifierRoleArn:" in template
-
-    verifier_block = template.split("IssueReportVerifierRole:", 1)[1].split(
-        "ProactiveNotificationDeadLetterQueue:", 1
-    )[0]
-    assert 'Resource: "*"' not in verifier_block
-    assert "dynamodb:*" not in verifier_block
-    assert "lambda:*" not in verifier_block
-
-    assert "Configure AWS credentials for stateful Lambda verification" in workflow
-    assert "steps.verifier_resources.outputs.role_arn" in workflow
-    assert "unset-current-credentials: true" in workflow
-    assert "Restore development deploy credentials" in workflow
-
-
 def test_stateful_issue_verifier_uses_real_alexa_intent_request_envelope():
     root = Path(__file__).resolve().parents[1]
     source = (root / "scripts" / "verify_issue_report_lambda.py").read_text(
@@ -854,3 +765,77 @@ def test_stateful_issue_verifier_uses_real_alexa_intent_request_envelope():
     assert '"type": "IntentRequest"' in idle_speed
     assert '"type": "IncreaseSpeedIntent"' not in idle_speed
     assert '"type": "DecreaseSpeedIntent"' not in idle_speed
+
+
+def test_template_has_scaling_guards_and_operational_alarms():
+    template = (Path(__file__).resolve().parents[1] / "template.yaml").read_text(encoding="utf-8")
+    assert "HasReservedConcurrency: !Not" in template
+    assert "ReservedConcurrentExecutions: !If" in template
+    assert "ProvisionedConcurrencyConfig: !If" in template
+    assert "ReservedConcurrentExecutions: 5" not in template
+    for alarm in (
+        "HearSkillErrorAlarm:",
+        "HearSkillThrottleAlarm:",
+        "HearSkillDurationAlarm:",
+        "HearPersistenceLoadFailureAlarm:",
+        "HearPersistenceSaveFailureAlarm:",
+        "OutboundQueueAgeAlarm:",
+        "OutboundDeadLetterAlarm:",
+        "OutboxRelayErrorAlarm:",
+        "OutboxRelayIteratorAgeAlarm:",
+        "OutboxRelayDeadLetterAlarm:",
+    ):
+        assert alarm in template
+
+
+def test_template_no_longer_owns_the_push_notification_pipeline():
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "template.yaml").read_text(encoding="utf-8")
+    workflows = "".join(
+        (root / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        for name in ("deploy-main.yml", "deploy-develop.yml")
+    )
+    for removed in (
+        "ProactiveNotification",
+        "NotificationSource",
+        "NotificationEventBus",
+        "GoSourceEventBridgePolicy",
+        "AlexaProactiveClient",
+    ):
+        assert removed not in template
+    assert "ALEXA_PROACTIVE" not in workflows
+    assert "check_source_infrastructure" not in workflows
+
+
+def test_development_issue_verifier_role_is_least_privilege():
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "template.yaml").read_text(encoding="utf-8")
+    workflow = (root / ".github" / "workflows" / "deploy-develop.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "IssueReportVerifierRole:" in template
+    assert "Condition: IsDevelopment" in template
+    assert "repo:Techta-Labs-Ltd/hear-py:environment:development" in template
+    for action in (
+        "dynamodb:Query",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:BatchWriteItem",
+        "lambda:InvokeFunction",
+    ):
+        assert action in template
+    assert "IssueReportVerifierRoleArn:" in template
+
+    verifier_block = template.split("IssueReportVerifierRole:", 1)[1].split(
+        "OutboundDeadLetterQueue:", 1
+    )[0]
+    assert 'Resource: "*"' not in verifier_block
+    assert "dynamodb:*" not in verifier_block
+    assert "lambda:*" not in verifier_block
+
+    assert "Configure AWS credentials for stateful Lambda verification" in workflow
+    assert "steps.verifier_resources.outputs.role_arn" in workflow
+    assert "unset-current-credentials: true" in workflow
+    assert "Restore development deploy credentials" in workflow

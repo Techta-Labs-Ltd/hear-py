@@ -86,25 +86,6 @@ def test_outbound_lambda_returns_partial_batch_response():
     assert isinstance(consume.await_args.kwargs["deadline"], RequestDeadline)
 
 
-def test_notification_lambda_returns_sqs_partial_batch_response():
-    application = main.NotificationLambdaApplication()
-    consume = AsyncMock(return_value={"batchItemFailures": [{"itemIdentifier": "message-2"}]})
-    application._delivery = SimpleNamespace(consume=consume)
-    event = {
-        "Records": [
-            {"messageId": "message-1", "body": "{}"},
-            {"messageId": "message-2", "body": "{}"},
-        ]
-    }
-
-    result = application.handle(event, None)
-
-    assert result == {"batchItemFailures": [{"itemIdentifier": "message-2"}]}
-    consume.assert_awaited_once()
-    assert consume.await_args.args == (event["Records"],)
-    assert isinstance(consume.await_args.kwargs["deadline"], RequestDeadline)
-
-
 def test_workers_build_only_their_delivery_graph(monkeypatch):
     def fail_if_full_container_is_built(*_args, **_kwargs):
         raise AssertionError("worker constructed the full application container")
@@ -112,7 +93,6 @@ def test_workers_build_only_their_delivery_graph(monkeypatch):
     monkeypatch.setattr(main, "ApplicationContainer", fail_if_full_container_is_built)
 
     assert main.OutboundLambdaApplication().events() is not None
-    assert main.NotificationLambdaApplication().delivery() is not None
 
 
 async def _running_loop():

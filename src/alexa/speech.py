@@ -90,7 +90,11 @@ class Speech:
         "That update is no longer available. What would you like to listen to instead?"
     )
     NOTIFICATION_DECLINED = "Ok. I'll leave that update for now."
-    NOTIFICATION_PERMISSION_REASON = "To receive Alexa notifications from Hear Service outside the skill, open the Alexa app, go to Hear Service, Settings, then Manage Permissions, and turn on notifications. Even without that permission, Hear Service can still show you updates from the creators and talking newspapers you follow when you use the skill. What would you like to listen to?"
+    NOTIFICATION_PERMISSION_CARD_SENT = (
+        "I've sent a card to your Alexa app where you can allow notifications from Hear Service. "
+        "Once you've allowed them, I'll let you know when the sources you follow publish something new. "
+        "What would you like to listen to?"
+    )
     NOTIFICATIONS_ENABLED = (
         "Notifications are on. Hear can now let you know when followed sources publish."
     )
@@ -371,6 +375,11 @@ class Speech:
     @staticmethod
     def FEEDBACK_FOLLOW_REPROMPT(creator_name):
         return f"Say follow to follow {Speech.escape_ssml_lite(creator_name)}, or no thanks to continue."
+
+    NOTIFICATION_PERMISSION_AFTER_FOLLOW = (
+        "To hear when they publish something new, I've sent a card to your Alexa app "
+        "where you can allow notifications from Hear Service."
+    )
 
     @staticmethod
     def FOLLOW_CREATOR_ACK(creator_name):

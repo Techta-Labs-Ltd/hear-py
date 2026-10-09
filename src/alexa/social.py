@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Literal
 
 from src.alexa.context import RequestContext
-from src.alexa.following_state import FollowingSessionState
+from src.alexa.following_state import FollowCheck, FollowingSessionState
+from src.alexa.notification_permission import NotificationPermissionPrompt
 from src.alexa.playback_details import PlaybackDetails
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
@@ -27,13 +28,14 @@ class FollowCreator:
     """Alexa request/state/response adapter around the pure follow transition."""
 
     def __init__(
-        self, user, feedback, events, play_followed, notifications=None
+        self, user, feedback, events, play_followed, notifications=None, heara=None
     ) -> None:
         self._user = user
         self._feedback = feedback
         self._events = events
         self._play_followed = play_followed
         self._notifications = notifications
+        self._heara = heara
 
     async def execute(self, request: RequestContext):
         handler_input = request.handler_input
@@ -54,10 +56,9 @@ class FollowCreator:
         )
         if not creator_id or not creator_name or Speech.is_bad_credit(creator_name):
             return handler_input.response_builder.speak(Speech.NO_CREATOR_TO_FOLLOW).response
-        session_status = FollowingSessionState.status(
-            handler_input, creator_id, source_type
-        )
-        if session_status is True:
+        if await FollowCheck.already_following(
+            handler_input, self._heara, store, creator_id, source_type
+        ):
             if was_awaiting_follow:
                 await self._feedback.clear(handler_input)
                 if self._notifications is not None:
@@ -107,6 +108,10 @@ class FollowCreator:
                     )
                     if notification_response is not None:
                         return notification_response
+            if NotificationPermissionPrompt.due(handler_input, self._user.snapshot(handler_input)):
+                return NotificationPermissionPrompt.after_follow(
+                    handler_input, self._user, creator_name
+                )
             return AlexaResponse.present_idle_next(
                 handler_input,
                 Speech.FOLLOW_CREATOR(creator_name),

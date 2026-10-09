@@ -4,7 +4,7 @@ from src.alexa.context import RequestContext
 from src.alexa.dialog import DeferredIntentManager, DialogStateManager
 from src.alexa.feedback import AlexaFeedback
 from src.alexa.feedback_service import FeedbackService
-from src.alexa.following_state import FollowingSessionState
+from src.alexa.following_state import FollowCheck
 from src.alexa.playback_controls import PlaybackControls
 from src.alexa.playback_speech import PlaybackSpeech
 from src.alexa.playback_state import PlaybackQueue
@@ -14,7 +14,7 @@ from src.alexa.speech import Speech
 from src.alexa.ssml import Ssml
 from src.models.feedback_contracts import FeedbackCommand
 from src.models.report import Report
-from src.models.social import FollowingManager, ListeningTracker
+from src.models.social import ListeningTracker
 from src.models.user import User
 from src.utils.content import ContentUtils
 
@@ -162,11 +162,13 @@ class EnjoyedFeedback:
         playback_controls: PlaybackControls,
         user: User,
         notifications=None,
+        heara=None,
     ) -> None:
         self._feedback = feedback
         self._playback_controls = playback_controls
         self._user = user
         self._notifications = notifications
+        self._heara = heara
 
     async def execute(self, request: RequestContext):
         handler_input = request.handler_input
@@ -223,11 +225,9 @@ class EnjoyedFeedback:
             creator_id
             and creator_name
             and (not Speech.is_bad_credit(creator_name))
-            and (
-                FollowingSessionState.status(handler_input, creator_id, source_type)
-                is not True
+            and not await FollowCheck.already_following(
+                handler_input, self._heara, updated_store, creator_id, source_type
             )
-            and (not FollowingManager.is_following(updated_store, creator_id, source_type))
         ):
             self._user.update(
                 handler_input,

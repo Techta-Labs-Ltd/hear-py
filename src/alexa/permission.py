@@ -5,6 +5,7 @@ from __future__ import annotations
 import config.permission_scopes as permission_scopes
 from src.alexa.context import RequestContext
 from src.alexa.dialog import DialogStateManager
+from src.alexa.notification_permission import NotificationPermissionPrompt
 from src.alexa.onboarding import Onboarding
 from src.alexa.request import AlexaRequest
 from src.alexa.response import AlexaResponse
@@ -71,13 +72,11 @@ class Permission:
         )
 
     def start_notifications(self, handler_input):
-        return (
-            handler_input.response_builder.speak(
-                Ssml.ssml(Speech.NOTIFICATION_PERMISSION_REASON)
-            )
-            .reprompt(Ssml.ssml(Speech.WELCOME_REPROMPT))
-            .set_should_end_session(False)
-            .response
+        return NotificationPermissionPrompt.respond(
+            handler_input,
+            self._user,
+            Speech.NOTIFICATION_PERMISSION_CARD_SENT,
+            Speech.WELCOME_REPROMPT,
         )
 
     async def complete_first_run(self, handler_input):
