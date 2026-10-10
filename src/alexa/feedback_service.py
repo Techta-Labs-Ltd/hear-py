@@ -399,9 +399,6 @@ class FeedbackService:
         all_progress.pop(str(publication_id), None)
         updates: dict[str, object] = {"publicationFeedbackProgress": all_progress}
         publication_title = ContentUtils.publication_title(progress)
-        if not publication_title:
-            User.update(handler_input, updates)
-            return None
         listened_ms = sum(
             (
                 FeedbackService._safe_int(track.get("listenedMs"))
@@ -463,7 +460,7 @@ class FeedbackService:
 
     @staticmethod
     def record_candidate(handler_input, state: dict, *, completed: bool) -> dict | None:
-        if not completed or state.get("feedbackAnswered"):
+        if not completed:
             return None
         if state.get("publicationId"):
             FeedbackService.update_publication_progress(handler_input, state, completed=True)
@@ -471,6 +468,8 @@ class FeedbackService:
                 return FeedbackService.finalize_publication(
                     handler_input, str(state["publicationId"])
                 )
+            return None
+        if state.get("feedbackAnswered"):
             return None
         key = FeedbackService._feedback_key(state)
         listened_ms = max(0, int(state.get("listenedMs") or 0))

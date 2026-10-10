@@ -108,3 +108,37 @@ async def test_finishing_a_multi_track_publication_asks_for_feedback(monkeypatch
     launch = await send({"type": "LaunchRequest"}, new=True)
 
     assert "Did you enjoy Tree Planting from Green Voices Talking News?" in launch["outputSpeech"]["ssml"]
+
+
+def test_rating_a_track_does_not_hide_it_from_publication_progress(mock_handler_input):
+    from src.alexa.feedback_service import FeedbackService
+
+    state = {
+        **_track(0),
+        "status": "completed",
+        "listenedMs": 120000,
+        "feedbackAnswered": True,
+        "startedAt": 1,
+    }
+    FeedbackService.record_candidate(mock_handler_input, state, completed=True)
+
+    progress = User.snapshot(mock_handler_input)["publicationFeedbackProgress"][PUBLICATION_ID]
+    assert TRACKS[0] in progress["tracks"]
+
+
+def test_publication_with_a_file_style_title_still_gets_feedback(mock_handler_input):
+    from src.alexa.feedback import AlexaFeedback
+    from src.alexa.feedback_service import FeedbackService
+
+    for index in range(len(TRACKS)):
+        state = {
+            **_track(index),
+            "publicationTitle": "Weekly_Edition_12",
+            "status": "completed",
+            "listenedMs": 120000,
+            "startedAt": index + 1,
+        }
+        candidate = FeedbackService.record_candidate(mock_handler_input, state, completed=True)
+
+    assert candidate is not None
+    assert AlexaFeedback.feedback_subject(candidate, {}) == "a publication from Green Voices Talking News"
