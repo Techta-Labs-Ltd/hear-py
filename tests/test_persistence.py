@@ -152,7 +152,7 @@ class TestPersistence:
         assert "reportHistory" not in snapshot
         assert "sessions" not in snapshot["playHistory"][0]
 
-    def test_feedback_and_following_state_stays_out_of_dynamodb(self):
+    def test_feedback_and_following_state_stays_out_of_dynamodb_except_publication_progress(self):
         snapshot = User.persisted_snapshot(
             {
                 **StateSchema.DEFAULT_STORE,
@@ -164,11 +164,11 @@ class TestPersistence:
         )
 
         assert StateSchema.scope_for("feedbackCandidates") is None
-        assert StateSchema.scope_for("publicationFeedbackProgress") is None
+        assert StateSchema.scope_for("publicationFeedbackProgress") == StateSchema.PLAYBACK_SCOPE
         assert StateSchema.scope_for("answeredFeedbackKeys") is None
         assert StateSchema.scope_for("followedCreators") is None
         assert "feedbackCandidates" not in snapshot
-        assert "publicationFeedbackProgress" not in snapshot
+        assert snapshot["publicationFeedbackProgress"] == {"publication-1": {"completed": 1}}
         assert "answeredFeedbackKeys" not in snapshot
         assert "followedCreators" not in snapshot
 
@@ -181,7 +181,7 @@ class TestPersistence:
             }
         )
         assert rehydrated["feedbackCandidates"] == []
-        assert rehydrated["publicationFeedbackProgress"] == {}
+        assert rehydrated["publicationFeedbackProgress"] == {"publication-1": {"completed": 1}}
         assert rehydrated["answeredFeedbackKeys"] == []
         assert rehydrated["followedCreators"] == []
 

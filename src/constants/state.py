@@ -43,7 +43,7 @@ class StateSchema:
         "reportContext": (None, DIALOG_SCOPE),
         "pendingFeedback": (None, DIALOG_SCOPE),
         "feedbackCandidates": ([], None),
-        "publicationFeedbackProgress": ({}, None),
+        "publicationFeedbackProgress": ({}, PLAYBACK_SCOPE),
         "answeredFeedbackKeys": ([], None),
         "feedbackContentId": (None, None),
         "feedbackCategory": (None, None),
@@ -135,7 +135,6 @@ class StateSchema:
             "feedbackHistory",
             "reportHistory",
             "feedbackCandidates",
-            "publicationFeedbackProgress",
             "answeredFeedbackKeys",
             "followedCreators",
         }
