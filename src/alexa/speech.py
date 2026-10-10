@@ -244,13 +244,25 @@ class Speech:
         return "Now playing the next recording."
 
     @staticmethod
-    def _build_launch_pending(title, creator, user_name) -> str:
-        greeting = (
+    def _launch_greeting(user_name) -> str:
+        return (
             f"Welcome back, {Speech.escape_ssml_lite(user_name)}. Before we continue"
             if user_name
             else "Welcome back to Hear Service. Before we continue"
         )
+
+    @staticmethod
+    def _build_launch_pending(title, creator, user_name) -> str:
+        greeting = Speech._launch_greeting(user_name)
         return f"{greeting} — did you enjoy content from {creator}? {Speech.FEEDBACK_OPTIONS}"
+
+    @staticmethod
+    def LAUNCH_PENDING_PUBLICATION_FEEDBACK(subject, user_name=None) -> str:
+        greeting = Speech._launch_greeting(user_name)
+        return (
+            f"{greeting} — did you enjoy {Speech.escape_ssml_lite(subject)}? "
+            f"{Speech.FEEDBACK_OPTIONS}"
+        )
 
     @staticmethod
     def FEEDBACK_ENJOYED_ACK(creator_name=None) -> str:

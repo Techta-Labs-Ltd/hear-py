@@ -255,7 +255,7 @@ def test_publication_prompt_uses_publication_wording(mock_handler_input):
         mock_handler_input.attributes_manager.request_attributes["_store"],
     )
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "Did you enjoy The Weekly Edition?" in spoken
+    assert "Before we continue — did you enjoy The Weekly Edition?" in spoken
 
 
 def test_publication_feedback_prefers_publication_title_in_speech_and_reprompt(
@@ -311,7 +311,7 @@ def test_legacy_publication_placeholder_is_never_spoken(mock_handler_input):
     )
 
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "Did you enjoy a publication from Talking News Federation?" in spoken
+    assert "Before we continue — did you enjoy a publication from Talking News Federation?" in spoken
     assert "that publication" not in spoken
 
 
@@ -390,7 +390,7 @@ def test_selected_publication_label_survives_queue_and_relaunch_feedback(
         mock_handler_input, User.snapshot(mock_handler_input)
     )
     spoken = mock_handler_input.response_builder.speak.call_args.args[0]
-    assert "Did you enjoy Test Pub for the seventh of September from Talking News Federation?" in spoken
+    assert "Before we continue — did you enjoy Test Pub for the seventh of September from Talking News Federation?" in spoken
     assert "that publication" not in spoken
 
 

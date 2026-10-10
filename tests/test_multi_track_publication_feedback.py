@@ -107,7 +107,8 @@ async def test_finishing_a_multi_track_publication_asks_for_feedback(monkeypatch
     await send(audio("PlaybackFinished", TRACKS[1], 120000))
     launch = await send({"type": "LaunchRequest"}, new=True)
 
-    assert "Did you enjoy Tree Planting from Green Voices Talking News?" in launch["outputSpeech"]["ssml"]
+    spoken = launch["outputSpeech"]["ssml"]
+    assert "Before we continue — did you enjoy Tree Planting from Green Voices Talking News?" in spoken
 
 
 def test_rating_a_track_does_not_hide_it_from_publication_progress(mock_handler_input):
