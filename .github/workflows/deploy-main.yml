@@ -167,7 +167,7 @@ jobs:
           : "${ALEXA_REFRESH_TOKEN:?Set the ALEXA_REFRESH_TOKEN_PROD secret}"
           python scripts/upload_alexa_model.py \
             --skill-id "$ALEXA_SKILL_ID" \
-            --invocation-name "y. h. e. a. r. service" \
+            --invocation-name "hear media service" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
