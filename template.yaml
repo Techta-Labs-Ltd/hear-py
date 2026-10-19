@@ -16,6 +16,10 @@ Parameters:
   AlexaSkillId:
     Type: String
     Default: ""
+  AlexaSkillIdLegacy:
+    Type: String
+    Default: ""
+    Description: Previous skill ID kept authorised while a replacement skill is certified.
   HearApiUrl:
     Type: String
     Default: https://alexa.hear.media/api/v1
@@ -55,6 +59,7 @@ Parameters:
     MinValue: 0
 Conditions:
   HasAlexaSkillId: !Not [!Equals [!Ref AlexaSkillId, ""]]
+  HasAlexaSkillIdLegacy: !Not [!Equals [!Ref AlexaSkillIdLegacy, ""]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
   HasProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
   IsDevelopment: !Equals [!Ref Stage, development]
@@ -507,6 +512,15 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: alexa-appkit.amazon.com
       EventSourceToken: !Ref AlexaSkillId
+
+  AlexaInvokePermissionLegacy:
+    Type: AWS::Lambda::Permission
+    Condition: HasAlexaSkillIdLegacy
+    Properties:
+      FunctionName: !Ref HearSkillFunction
+      Action: lambda:InvokeFunction
+      Principal: alexa-appkit.amazon.com
+      EventSourceToken: !Ref AlexaSkillIdLegacy
 
 Outputs:
   PersistenceTableName:

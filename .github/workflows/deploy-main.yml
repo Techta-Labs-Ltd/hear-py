@@ -57,6 +57,7 @@ jobs:
       STAGE: production
       SHORT_STAGE: ${{ vars.SHORT_STAGE_PROD || 'prod' }}
       ALEXA_SKILL_ID: ${{ vars.ALEXA_SKILL_ID_PROD }}
+      ALEXA_SKILL_ID_LEGACY: ${{ vars.ALEXA_SKILL_ID_PROD_LEGACY }}
       HEAR_API_URL: ${{ vars.HEAR_API_URL_PROD || 'https://alexa.hear.media/api/v1' }}
       HEAR_API_PATH_PREFIX: ${{ vars.HEAR_API_PATH_PREFIX_PROD || 'alexa' }}
       WEBHOOK_OUTBOUND_URL: ${{ vars.WEBHOOK_OUTBOUND_URL_PROD || 'https://alexa.hear.media/api/v1/webhooks/event' }}
@@ -121,7 +122,7 @@ jobs:
             --no-fail-on-empty-changeset \
             --parameter-overrides \
               Stage="$STAGE" ShortStage="$SHORT_STAGE" ImageUri="$IMAGE" \
-              AlexaSkillId="$ALEXA_SKILL_ID" HearApiUrl="$HEAR_API_URL" \
+              AlexaSkillId="$ALEXA_SKILL_ID" AlexaSkillIdLegacy="$ALEXA_SKILL_ID_LEGACY" HearApiUrl="$HEAR_API_URL" \
               HearApiPathPrefix="$HEAR_API_PATH_PREFIX" HearApiKey="$HEAR_API_KEY" \
               WebhookOutboundUrl="$WEBHOOK_OUTBOUND_URL" WebhookOutboundSecret="$WEBHOOK_OUTBOUND_SECRET" \
               SentryDsn="$SENTRY_DSN" HearLoggingEnabled="$HEAR_LOGGING_ENABLED" \
@@ -166,7 +167,7 @@ jobs:
           : "${ALEXA_REFRESH_TOKEN:?Set the ALEXA_REFRESH_TOKEN_PROD secret}"
           python scripts/upload_alexa_model.py \
             --skill-id "$ALEXA_SKILL_ID" \
-            --invocation-name "hear service" \
+            --invocation-name "y. h. e. a. r. service" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
