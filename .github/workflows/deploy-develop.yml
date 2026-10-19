@@ -522,7 +522,7 @@ jobs:
           : "${ALEXA_REFRESH_TOKEN:?Set the ALEXA_REFRESH_TOKEN_DEV secret}"
           python scripts/upload_alexa_model.py \
             --skill-id "$ALEXA_SKILL_ID" \
-            --invocation-name "test development" \
+            --invocation-name "y. h. e. a. r. service dev" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
@@ -535,7 +535,7 @@ jobs:
         run: |
           python scripts/smoke_test_alexa_development.py \
             --skill-id "$ALEXA_SKILL_ID" \
-            --invocation-name "test development" \
+            --invocation-name "y. h. e. a. r. service dev" \
             --client-id "$ALEXA_LWA_CLIENT_ID" \
             --client-secret "$ALEXA_LWA_CLIENT_SECRET" \
             --refresh-token "$ALEXA_REFRESH_TOKEN"
