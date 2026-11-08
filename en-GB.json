@@ -1408,6 +1408,25 @@
             "complete account setup",
             "manage my account"
           ]
+        },
+        {
+          "name": "LinkPhoneIntent",
+          "slots": [],
+          "samples": [
+            "link my phone",
+            "link my phone app",
+            "connect my phone",
+            "connect my phone app",
+            "link the app",
+            "link the phone app",
+            "link the Hear Service app",
+            "give me a link code",
+            "give me a code for my phone",
+            "link my account to my phone",
+            "connect my account to my phone",
+            "I want to link my phone",
+            "pair my phone"
+          ]
         }
       ],
       "types": [

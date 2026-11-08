@@ -23,6 +23,7 @@ from src.controllers.feedback import (
 )
 from src.controllers.intent_dispatch import IntentDispatchGateHandler
 from src.controllers.launch import LaunchRequestHandler, TownCaptureHandler
+from src.controllers.link_phone import LinkPhoneHandler
 from src.controllers.notifications import (
     DisableNotificationsHandler,
     EnableNotificationsHandler,
@@ -157,6 +158,7 @@ class RouteRegistry:
         YesIntentHandler,
         NoIntentHandler,
         NavigateHomeHandler,
+        LinkPhoneHandler,
         UnsupportedIntentHandler,
         HelpIntentHandler,
         CancelIntentHandler,
@@ -310,6 +312,7 @@ class RouteRegistry:
             lambda request: NavigateHomeHandler(
                 container.build_request_components(request).browse
             ),
+            lambda _request: LinkPhoneHandler(container.bind_hear_client),
             lambda _request: UnsupportedIntentHandler(),
             lambda _request: HelpIntentHandler(),
             lambda _request: CancelIntentHandler(container.user, container.playback),

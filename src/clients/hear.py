@@ -98,6 +98,13 @@ class ListenerBoundHearClient:
     ) -> dict:
         return await self._client.availability(self._with_identity(payload), timeout_ms=timeout_ms)
 
+    async def create_link_code(self, timeout_ms: int | None = None) -> dict | None:
+        return await self._client.create_link_code(
+            listener_id=self._identity.listener_id,
+            alexa_user_id=self._identity.alexa_user_id,
+            timeout_ms=timeout_ms,
+        )
+
     async def check_follow(
         self,
         *,
@@ -482,6 +489,28 @@ class HearApiClient:
             timeout_ms,
         )
         return data if status == 200 and isinstance(data, bool) else None
+
+    async def create_link_code(
+        self,
+        *,
+        listener_id: str | None,
+        alexa_user_id: str | None,
+        timeout_ms: int | None = None,
+    ) -> dict | None:
+        body = {
+            key: value
+            for key, value in {"listenerId": listener_id, "alexaUserId": alexa_user_id}.items()
+            if value
+        }
+        if not body:
+            return None
+        status, data = await self._raw_request(
+            "POST",
+            self._build_alexa_relative_path("listeners/link-code"),
+            body,
+            timeout_ms,
+        )
+        return data if status == 200 and isinstance(data, dict) else None
 
     async def register_listener(
         self, profile: dict, *, timeout_ms: int | None = None
